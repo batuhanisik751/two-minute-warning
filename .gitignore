@@ -1,0 +1,32 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# data: raw cache, warehouses, league data are local only. data/manual/ is committed.
+data/*
+!data/manual/
+!data/schemas/
+models/
+reports/league/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.ipynb_checkpoints/
+
+# web
+web/node_modules/
+web/.next/
+web/.vercel/
+
+# os / editors
+.DS_Store
+.idea/
+.vscode/

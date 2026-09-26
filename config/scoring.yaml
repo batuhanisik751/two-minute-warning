@@ -1,0 +1,17 @@
+# Default full-PPR scoring. Overridden by the ESPN league settings when connected.
+passing:
+  yards: 0.04
+  touchdowns: 4
+  interceptions: -2
+  two_point_conversions: 2
+rushing:
+  yards: 0.1
+  touchdowns: 6
+  two_point_conversions: 2
+receiving:
+  receptions: 1
+  yards: 0.1
+  touchdowns: 6
+  two_point_conversions: 2
+misc:
+  fumbles_lost: -2

@@ -1,0 +1,37 @@
+# Global settings. Times are UTC.
+project_name: "Two-Minute Warning"
+current_season: 2026
+seasons:
+  pbp_start: 1999          # play-by-play coverage
+  snaps_start: 2012        # snap counts begin here (Waiver Radar training)
+  waiver_radar_eval: [2014, 2025]   # walk-forward evaluation seasons
+  hot_seat_eval: [2006, 2025]
+
+# Official as-of points (Section 6.1). "tuesday" = Tuesday after week N.
+as_of:
+  weekly:
+    weekday: tuesday
+    time: "14:00"
+  hot_seat_end_of_season: "day_after_week_18"
+  board:
+    post_draft: "06-01"
+    preseason: "tuesday_before_week_1"
+
+horizons:
+  waiver_radar_weeks: 3
+
+garbage_time:
+  wp_low: 0.05
+  wp_high: 0.95
+  exclude_final_seconds_half: 120
+  one_possession_points: 8
+neutral:
+  wp_low: 0.20
+  wp_high: 0.80
+  min_half_seconds_remaining: 120
+
+paths:
+  raw_cache: data/raw
+  schemas: data/schemas
+  warehouse: data/warehouse.duckdb
+  league_db: data/league.duckdb

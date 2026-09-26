@@ -1,0 +1,17 @@
+# Default league shape (12-team ESPN standard). Verified against ESPN when connected.
+teams: 12
+lineup:
+  QB: 1
+  RB: 2
+  WR: 2
+  TE: 1
+  FLEX: 1       # RB/WR/TE
+  bench: 7
+# Weekly "starter" thresholds derive from teams x starters; flex share added to RB/WR.
+starter_rank_threshold:
+  QB: 12
+  RB: 24
+  WR: 24
+  TE: 12
+flex_worthy_rank: 36    # RB/WR top-36
+candidate_pool_multiplier: 1.5   # "likely available" = outside top N*1.5 by ADP and PPG

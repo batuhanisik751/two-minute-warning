@@ -49,6 +49,7 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "N"]
+ignore = ["B008"]  # typer.Option/Argument defaults are the idiom
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

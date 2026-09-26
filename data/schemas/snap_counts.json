@@ -1,0 +1,25 @@
+{
+  "dataset": "snap_counts",
+  "nflreadpy_version": "0.1.5",
+  "captured_at": "2026-09-26T23:21:31+00:00",
+  "sample_season": 2026,
+  "n_rows_sample": 3086,
+  "columns": {
+    "game_id": "String",
+    "pfr_game_id": "String",
+    "season": "Int32",
+    "game_type": "String",
+    "week": "Int32",
+    "player": "String",
+    "pfr_player_id": "String",
+    "position": "String",
+    "team": "String",
+    "opponent": "String",
+    "offense_snaps": "Float64",
+    "offense_pct": "Float64",
+    "defense_snaps": "Float64",
+    "defense_pct": "Float64",
+    "st_snaps": "Float64",
+    "st_pct": "Float64"
+  }
+}

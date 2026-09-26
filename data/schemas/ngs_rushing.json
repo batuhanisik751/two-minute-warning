@@ -1,0 +1,31 @@
+{
+  "dataset": "ngs_rushing",
+  "nflreadpy_version": "0.1.5",
+  "captured_at": "2026-09-26T23:21:31+00:00",
+  "sample_season": 2026,
+  "n_rows_sample": 112,
+  "columns": {
+    "season": "Int32",
+    "season_type": "String",
+    "week": "Int32",
+    "player_display_name": "String",
+    "player_position": "String",
+    "team_abbr": "String",
+    "efficiency": "Float64",
+    "percent_attempts_gte_eight_defenders": "Float64",
+    "avg_time_to_los": "Float64",
+    "rush_attempts": "Int32",
+    "rush_yards": "Int32",
+    "avg_rush_yards": "Float64",
+    "rush_touchdowns": "Int32",
+    "player_gsis_id": "String",
+    "player_first_name": "String",
+    "player_last_name": "String",
+    "player_jersey_number": "Int32",
+    "player_short_name": "String",
+    "expected_rush_yards": "Float64",
+    "rush_yards_over_expected": "Float64",
+    "rush_yards_over_expected_per_att": "Float64",
+    "rush_pct_over_expected": "Float64"
+  }
+}

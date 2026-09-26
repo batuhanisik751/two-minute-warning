@@ -1,0 +1,32 @@
+{
+  "dataset": "ngs_receiving",
+  "nflreadpy_version": "0.1.5",
+  "captured_at": "2026-09-26T23:21:31+00:00",
+  "sample_season": 2026,
+  "n_rows_sample": 236,
+  "columns": {
+    "season": "Int32",
+    "season_type": "String",
+    "week": "Int32",
+    "player_display_name": "String",
+    "player_position": "String",
+    "team_abbr": "String",
+    "avg_cushion": "Float64",
+    "avg_separation": "Float64",
+    "avg_intended_air_yards": "Float64",
+    "percent_share_of_intended_air_yards": "Float64",
+    "receptions": "Int32",
+    "targets": "Int32",
+    "catch_percentage": "Float64",
+    "yards": "Int32",
+    "rec_touchdowns": "Int32",
+    "avg_yac": "Float64",
+    "avg_expected_yac": "Float64",
+    "avg_yac_above_expectation": "Float64",
+    "player_gsis_id": "String",
+    "player_first_name": "String",
+    "player_last_name": "String",
+    "player_jersey_number": "Int32",
+    "player_short_name": "String"
+  }
+}

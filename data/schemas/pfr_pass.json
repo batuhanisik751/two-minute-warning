@@ -1,0 +1,33 @@
+{
+  "dataset": "pfr_pass",
+  "nflreadpy_version": "0.1.5",
+  "captured_at": "2026-09-26T23:21:31+00:00",
+  "sample_season": 2026,
+  "n_rows_sample": 77,
+  "columns": {
+    "game_id": "String",
+    "pfr_game_id": "String",
+    "season": "Int32",
+    "week": "Int32",
+    "game_type": "String",
+    "team": "String",
+    "opponent": "String",
+    "pfr_player_name": "String",
+    "pfr_player_id": "String",
+    "passing_drops": "Float64",
+    "passing_drop_pct": "Float64",
+    "receiving_drop": "Float64",
+    "receiving_drop_pct": "Float64",
+    "passing_bad_throws": "Float64",
+    "passing_bad_throw_pct": "Float64",
+    "times_sacked": "Float64",
+    "times_blitzed": "Float64",
+    "times_hurried": "Float64",
+    "times_hit": "Float64",
+    "times_pressured": "Float64",
+    "times_pressured_pct": "Float64",
+    "def_times_blitzed": "Float64",
+    "def_times_hurried": "Float64",
+    "def_times_hitqb": "Float64"
+  }
+}

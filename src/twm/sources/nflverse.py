@@ -48,31 +48,60 @@ class Dataset:
     first_season: int | None = None
 
 
+# first_season values were verified against real downloads in Step A3 (docs/assumptions.md).
 DATASETS: dict[str, Dataset] = {
     d.name: d
     for d in [
         Dataset("pbp", "load_pbp", first_season=1999),
-        Dataset("player_stats", "load_player_stats", kwargs={"summary_level": "week"}),
-        Dataset("team_stats", "load_team_stats", kwargs={"summary_level": "week"}),
+        Dataset(
+            "player_stats", "load_player_stats", kwargs={"summary_level": "week"}, first_season=1999
+        ),
+        Dataset(
+            "team_stats", "load_team_stats", kwargs={"summary_level": "week"}, first_season=1999
+        ),
         Dataset("schedules", "load_schedules", first_season=1999),
-        Dataset("snap_counts", "load_snap_counts", first_season=2012),
+        Dataset("snap_counts", "load_snap_counts", first_season=2013),
         Dataset("injuries", "load_injuries", first_season=2009),
         Dataset("depth_charts", "load_depth_charts", first_season=2001),
         Dataset("rosters", "load_rosters", first_season=1999),
         Dataset("rosters_weekly", "load_rosters_weekly", first_season=2002),
-        Dataset("ngs_passing", "load_nextgen_stats", kwargs={"stat_type": "passing"}),
-        Dataset("ngs_receiving", "load_nextgen_stats", kwargs={"stat_type": "receiving"}),
-        Dataset("ngs_rushing", "load_nextgen_stats", kwargs={"stat_type": "rushing"}),
-        Dataset("pfr_pass", "load_pfr_advstats", kwargs={"stat_type": "pass"}),
-        Dataset("pfr_rush", "load_pfr_advstats", kwargs={"stat_type": "rush"}),
-        Dataset("pfr_rec", "load_pfr_advstats", kwargs={"stat_type": "rec"}),
+        Dataset(
+            "ngs_passing", "load_nextgen_stats", kwargs={"stat_type": "passing"}, first_season=2016
+        ),
+        Dataset(
+            "ngs_receiving",
+            "load_nextgen_stats",
+            kwargs={"stat_type": "receiving"},
+            first_season=2016,
+        ),
+        Dataset(
+            "ngs_rushing", "load_nextgen_stats", kwargs={"stat_type": "rushing"}, first_season=2016
+        ),
+        Dataset("pfr_pass", "load_pfr_advstats", kwargs={"stat_type": "pass"}, first_season=2018),
+        Dataset("pfr_rush", "load_pfr_advstats", kwargs={"stat_type": "rush"}, first_season=2018),
+        Dataset("pfr_rec", "load_pfr_advstats", kwargs={"stat_type": "rec"}, first_season=2018),
         Dataset("ftn_charting", "load_ftn_charting", first_season=2022),
         Dataset("participation", "load_participation", first_season=2016),
-        Dataset("ff_opportunity", "load_ff_opportunity", kwargs={"stat_type": "weekly"}),
-        Dataset("ff_opportunity_pass", "load_ff_opportunity", kwargs={"stat_type": "pbp_pass"}),
-        Dataset("ff_opportunity_rush", "load_ff_opportunity", kwargs={"stat_type": "pbp_rush"}),
-        Dataset("draft_picks", "load_draft_picks"),
-        Dataset("combine", "load_combine"),
+        Dataset(
+            "ff_opportunity",
+            "load_ff_opportunity",
+            kwargs={"stat_type": "weekly"},
+            first_season=2006,
+        ),
+        Dataset(
+            "ff_opportunity_pass",
+            "load_ff_opportunity",
+            kwargs={"stat_type": "pbp_pass"},
+            first_season=2006,
+        ),
+        Dataset(
+            "ff_opportunity_rush",
+            "load_ff_opportunity",
+            kwargs={"stat_type": "pbp_rush"},
+            first_season=2006,
+        ),
+        Dataset("draft_picks", "load_draft_picks", first_season=1980),
+        Dataset("combine", "load_combine", first_season=2000),
         # Not per season: one file each, refreshed like the current season.
         Dataset("ff_playerids", "load_ff_playerids", per_season=False),
         Dataset("ff_rankings_draft", "load_ff_rankings", False, {"type": "draft"}),
@@ -214,7 +243,10 @@ def fetch(
     immutable = season is not None and season < current
 
     if not force and path.exists() and (immutable or _is_fresh(path, max_age_hours)):
-        return pl.read_parquet(path)
+        df = pl.read_parquet(path)
+        if snapshot and load_snapshot(name) is None:
+            save_snapshot(name, df, season=season)
+        return df
 
     _configure_nflreadpy()
     fn = _loader(ds)
@@ -227,7 +259,11 @@ def fetch(
     if snapshot:
         if load_snapshot(name) is None:
             save_snapshot(name, df, season=season)
-        else:
+        elif not immutable:
+            # Drift is checked on current-season and non-seasonal loads only: older seasons
+            # legitimately lack columns that were added later (e.g. rosters 1999 vs 2026,
+            # depth charts before/after 2025). The legacy depth-chart schema has its own
+            # snapshot, ``depth_charts_legacy``.
             check_drift(name, df)
     return df
 

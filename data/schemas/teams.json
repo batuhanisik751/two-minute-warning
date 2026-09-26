@@ -1,0 +1,25 @@
+{
+  "dataset": "teams",
+  "nflreadpy_version": "0.1.5",
+  "captured_at": "2026-09-26T23:21:32+00:00",
+  "sample_season": null,
+  "n_rows_sample": 36,
+  "columns": {
+    "team_abbr": "String",
+    "team_name": "String",
+    "team_id": "String",
+    "team_nick": "String",
+    "team_conf": "String",
+    "team_division": "String",
+    "team_color": "String",
+    "team_color2": "String",
+    "team_color3": "String",
+    "team_color4": "String",
+    "team_logo_wikipedia": "String",
+    "team_logo_espn": "String",
+    "team_wordmark": "String",
+    "team_conference_logo": "String",
+    "team_league_logo": "String",
+    "team_logo_squared": "String"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "dataset": "ff_rankings_all",
+  "nflreadpy_version": "0.1.5",
+  "captured_at": "2026-09-26T23:21:31+00:00",
+  "sample_season": null,
+  "n_rows_sample": 1845918,
+  "columns": {
+    "fp_page": "String",
+    "page_type": "String",
+    "player": "String",
+    "id": "String",
+    "pos": "String",
+    "team": "String",
+    "ecr": "Float64",
+    "sd": "Float64",
+    "best": "Float64",
+    "worst": "Float64",
+    "mergename": "String",
+    "tm": "String",
+    "sportsdata_id": "String",
+    "player_filename": "String",
+    "yahoo_id": "String",
+    "cbs_id": "String",
+    "player_owned_avg": "Float64",
+    "player_owned_espn": "Float64",
+    "player_owned_yahoo": "Float64",
+    "player_image_url": "String",
+    "player_square_image_url": "String",
+    "rank_delta": "Float64",
+    "ecr_type": "String",
+    "scrape_date": "String"
+  }
+}

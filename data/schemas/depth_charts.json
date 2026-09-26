@@ -1,0 +1,21 @@
+{
+  "dataset": "depth_charts",
+  "nflreadpy_version": "0.1.5",
+  "captured_at": "2026-09-26T23:21:31+00:00",
+  "sample_season": 2026,
+  "n_rows_sample": 567492,
+  "columns": {
+    "dt": "String",
+    "team": "String",
+    "player_name": "String",
+    "espn_id": "String",
+    "gsis_id": "String",
+    "pos_grp_id": "String",
+    "pos_grp": "String",
+    "pos_id": "String",
+    "pos_name": "String",
+    "pos_abb": "String",
+    "pos_slot": "Int32",
+    "pos_rank": "Int32"
+  }
+}

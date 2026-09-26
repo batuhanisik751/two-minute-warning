@@ -1,0 +1,26 @@
+{
+  "dataset": "pfr_rec",
+  "nflreadpy_version": "0.1.5",
+  "captured_at": "2026-09-26T23:21:31+00:00",
+  "sample_season": 2026,
+  "n_rows_sample": 508,
+  "columns": {
+    "game_id": "String",
+    "pfr_game_id": "String",
+    "season": "Int32",
+    "week": "Int32",
+    "game_type": "String",
+    "team": "String",
+    "opponent": "String",
+    "pfr_player_name": "String",
+    "pfr_player_id": "String",
+    "rushing_broken_tackles": "Float64",
+    "receiving_broken_tackles": "Float64",
+    "passing_drops": "Float64",
+    "passing_drop_pct": "Float64",
+    "receiving_drop": "Float64",
+    "receiving_drop_pct": "Float64",
+    "receiving_int": "Float64",
+    "receiving_rat": "Float64"
+  }
+}

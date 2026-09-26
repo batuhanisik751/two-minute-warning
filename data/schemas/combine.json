@@ -1,0 +1,27 @@
+{
+  "dataset": "combine",
+  "nflreadpy_version": "0.1.5",
+  "captured_at": "2026-09-26T23:21:31+00:00",
+  "sample_season": 2026,
+  "n_rows_sample": 319,
+  "columns": {
+    "season": "Int32",
+    "draft_year": "Float64",
+    "draft_team": "String",
+    "draft_round": "Float64",
+    "draft_ovr": "Float64",
+    "pfr_id": "String",
+    "cfb_id": "String",
+    "player_name": "String",
+    "pos": "String",
+    "school": "String",
+    "ht": "String",
+    "wt": "Float64",
+    "forty": "Float64",
+    "bench": "Float64",
+    "vertical": "Float64",
+    "broad_jump": "Float64",
+    "cone": "Float64",
+    "shuttle": "Float64"
+  }
+}

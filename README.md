@@ -8,7 +8,7 @@ Built on the open-source [nflverse](https://nflverse.nflverse.com/) data ecosyst
 
 ## Requirements
 
-Python **3.13** and [uv](https://docs.astral.sh/uv/). On macOS the venv is built from Homebrew's `python3.13`; if `import twm` ever fails with `ModuleNotFoundError`, see the gotchas in `docs/progress.md`.
+Python **3.13** and [uv](https://docs.astral.sh/uv/). If your checkout lives in a cloud-synced folder (on macOS, `~/Desktop` and `~/Documents` sync to iCloud Drive), run `scripts/local_storage.sh` once: it keeps the virtualenv, the raw data cache and the warehouse outside the synced folder and leaves symlinks in the project, so nothing else changes.
 
 ## First run
 

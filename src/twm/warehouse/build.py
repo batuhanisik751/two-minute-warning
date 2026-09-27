@@ -654,7 +654,11 @@ def build_warehouse(
         )
         for name, t in specs.items()
     }
-    path = Path(db_path) if db_path is not None else settings().path("warehouse")
+    link = Path(db_path) if db_path is not None else settings().path("warehouse")
+    # A symlinked warehouse (e.g. kept outside a cloud-synced folder, see
+    # scripts/local_storage.sh) is rebuilt at its target: the scratch file, lock and rename
+    # all live next to the real file, and the link keeps pointing at it.
+    path = link.resolve() if link.is_symlink() else link
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".building")
     # DuckDB's write-ahead log, a sidecar file it may leave next to a database.
@@ -695,6 +699,8 @@ def build_warehouse(
             finally:
                 con.close()
             _discard_stale_wal(path)
+            if link != path:
+                _discard_stale_wal(link)  # a reader that opened the link name writes its WAL there
             # Atomic on the same filesystem; anyone who already opened the old file keeps
             # reading the old contents until they reopen.
             os.replace(tmp, path)

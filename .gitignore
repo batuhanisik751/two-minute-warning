@@ -13,7 +13,7 @@ reports/league/
 # python
 __pycache__/
 *.pyc
-.venv/
+.venv
 .pytest_cache/
 .ruff_cache/
 *.egg-info/

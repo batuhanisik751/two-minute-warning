@@ -948,3 +948,23 @@ def test_real_schedules_placeholder_kickoffs_are_exactly_the_2000_2005_rows():
         per_season[season] = sum(wk.kickoff_utc(d, t, w)[1] for d, t, w in df.iter_rows())
     assert per_season == {1999: 259, 2000: 17, 2001: 17, 2002: 17, 2003: 17, 2004: 17,
                           2005: 17, 2006: 0}  # fmt: skip
+
+
+def test_symlinked_warehouse_is_rebuilt_at_its_target(raw, tmp_path):
+    """The owner keeps data outside iCloud via symlinks; a rebuild must keep the link intact."""
+    raw.write_season(2025, season_2025_games())
+    target_dir = tmp_path / "elsewhere"
+    target_dir.mkdir()
+    target = target_dir / "warehouse.duckdb"
+    link = tmp_path / "warehouse.duckdb"
+    link.symlink_to(target)
+    (tmp_path / "warehouse.duckdb.wal").write_bytes(b"stale")  # WAL left under the link name
+
+    wb.build_warehouse([2025], db_path=link)
+    wb.build_warehouse([2025], db_path=link)
+
+    assert link.is_symlink() and link.resolve() == target.resolve()
+    assert target.is_file()
+    assert not (tmp_path / "warehouse.duckdb.wal").exists()
+    assert not list(tmp_path.glob("*.building*")) and not list(target_dir.glob("*.building*"))
+    assert dict(wb.table_counts(link))["fact_game"] > 0

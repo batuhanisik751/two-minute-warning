@@ -115,7 +115,12 @@ def test_every_table_builds_from_fixtures(raw, db_path):
     assert tz == 0
     for name, spec in sc.tables().items():  # available_at is the last column of event tables
         assert list(_types(con, name)) == av.stored_column_names(spec), name
-    assert list(_types(con, "fact_play")) == [*sc.FACT_PLAY_COLUMNS, "available_at"]
+    assert list(_types(con, "fact_play")) == [
+        *sc.FACT_PLAY_COLUMNS,
+        "is_garbage_time",
+        "is_neutral",
+        "available_at",
+    ]
     t = _types(con, "fact_play")
     assert (t["play_id"], t["goal_to_go"], t["epa"], t["game_date"]) == (
         "INTEGER", "INTEGER", "DOUBLE", "DATE",

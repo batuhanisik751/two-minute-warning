@@ -670,6 +670,42 @@ all, or whose `ff_playerids` row names a gsis_id that nflverse's player table do
 linked through the override file once verified, and newer `players`/`ff_playerids` files close
 most of them by themselves.
 
+## Garbage time and neutral situations (`fact_play` flags, B5)
+
+Late in a blowout, the losing team throws against soft coverage and the winning team runs out
+the clock. Those stats say little about next week, so every play carries two flags, computed
+from its own pre-snap state (so they cannot leak the future). Code: `src/twm/situations.py`;
+thresholds: `config/settings.yaml` (`garbage_time`, `neutral`), per PROJECT_SPEC 7.3.
+
+| Flag | TRUE when | Share of runs and passes |
+|---|---|---|
+| `is_garbage_time` | the offense's win probability is below 0.05 or above 0.95, **except** in the final 120 seconds of a half when the score is within 8 points | 16% (13.3%-17.4% per season) |
+| `is_neutral` | win probability from 0.20 to 0.80 and **more than** 120 seconds left in the half | 55% (52.7%-58.1% per season) |
+
+- The exception matters: a one-score game in its last two minutes is not decided, whatever the
+  model says. It spares 3,373 runs and passes (1999-2026) that the win probability alone would
+  call garbage.
+- A play is never both. A play without a win probability (12 runs and passes in 28 seasons) is
+  neither; the flags are never NULL, so `WHERE NOT is_garbage_time` keeps it.
+- Overtime follows the same rule (its last 120 seconds, one-score game).
+- The win probability is nflfastR's `wp`, a model output (Section 6.3 caveat). Step G1 trains our
+  own walk-forward model; the flag can switch to it then.
+
+Example: in 2025, 25% of Zach Charbonnet's rushing yards (752 on 190 carries) came in garbage
+time, the most of any running back with 150+ carries. Query:
+
+```sql
+SELECT rusher_player_name, count(*) AS carries, sum(yards_gained) AS yards,
+       sum(yards_gained) FILTER (WHERE is_garbage_time) / sum(yards_gained) AS garbage_share
+FROM fact_play
+WHERE season = 2025 AND play_type = 'run' AND rusher_player_id IS NOT NULL
+GROUP BY 1 HAVING count(*) >= 150 ORDER BY garbage_share DESC
+```
+
+Tests: `tests/test_situations.py` (every boundary: 0.05/0.95 exactly, 120 s exactly, 8 points
+exactly, overtime, missing inputs; SQL and polars agree; the stored flags equal the rule on all
+1.29M real plays with `-m realdata`).
+
 ## Determinism and the manifest
 
 Building twice from the same cache gives the same table content (per-table `content_hash` and

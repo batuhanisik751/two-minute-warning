@@ -60,6 +60,8 @@ PBP_DTYPES: dict[str, pl.DataType] = {
     "pass": pl.Float64(),
     "epa": pl.Float64(),
     "wp": pl.Float64(),
+    "half_seconds_remaining": pl.Float64(),
+    "score_differential": pl.Float64(),
     "xyac_median_yardage": pl.Int32(),
     # integer-typed in the warehouse but DOUBLE upstream: exercises the DOUBLE -> INTEGER cast
     "yards_gained": pl.Float64(),
@@ -272,6 +274,8 @@ def plays_for(games: list[dict[str, Any]], n: int = 2) -> list[dict[str, Any]]:
                     "pass": float(i % 2),
                     "epa": 0.5 * i,
                     "wp": 0.5,
+                    "half_seconds_remaining": 1500.0,
+                    "score_differential": 0.0,
                     "xyac_median_yardage": 3,
                     "yards_gained": float(4 + i),
                     "air_yards": 7.0,

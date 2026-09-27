@@ -24,6 +24,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache
 
+from twm import situations
 from twm.sources import nflverse as nv
 
 # Historical abbreviation -> abbreviation used today (dim_team.current_abbr).
@@ -136,7 +137,9 @@ class Column:
     name: name in the warehouse. type: DuckDB type. source: source column (defaults to name).
     computed: True for columns the builder computes in Python (not read from the source view).
     transform: optional function applied to the cast source expression (e.g. team
-    normalization). doc: plain-language meaning.
+    normalization). derived: SQL computed from OTHER source columns of the same row (e.g. the
+    garbage-time flag from wp, clock and score); ``requires`` lists those columns. doc:
+    plain-language meaning.
     """
 
     name: str
@@ -145,9 +148,16 @@ class Column:
     transform: Callable[[str], str] | None = None
     computed: bool = False
     doc: str = ""
+    derived: Callable[[], str] | None = None
+    requires: tuple[str, ...] = ()
 
     def sql(self, available: Mapping[str, str]) -> str:
         """The SELECT expression for this column given the source view's column types."""
+        if self.derived is not None:
+            missing = [c for c in self.requires if c not in available]
+            if missing:
+                raise KeyError(f"{self.name} needs source columns {missing}")
+            return f"CAST({self.derived()} AS {self.type}) AS {q(self.name)}"
         src = self.source or self.name
         if src not in available:
             expr = f"CAST(NULL AS {self.type})"
@@ -390,6 +400,27 @@ def fact_play_spec() -> Table:
             typ = duckdb_type_of(snap[name])
         transform = normalize_team_sql if name in FACT_PLAY_TEAM_COLUMNS else None
         cols.append(Column(name, typ, transform=transform))
+    rules = situations.SituationRules.from_config()
+    cols += [
+        Column(
+            "is_garbage_time",
+            "BOOLEAN",
+            derived=lambda: situations.garbage_time_sql(rules),
+            requires=situations.INPUT_COLUMNS,
+            doc="Garbage time (config garbage_time, PROJECT_SPEC 7.3): "
+            + rules.describe_garbage_time()
+            + ". Never NULL; FALSE when the play has no win probability.",
+        ),
+        Column(
+            "is_neutral",
+            "BOOLEAN",
+            derived=lambda: situations.neutral_sql(rules),
+            requires=situations.INPUT_COLUMNS,
+            doc="Neutral situation (config neutral, PROJECT_SPEC 7.3): "
+            + rules.describe_neutral()
+            + ". Never NULL; never TRUE together with is_garbage_time.",
+        ),
+    ]
     return Table(
         name="fact_play",
         source="pbp",

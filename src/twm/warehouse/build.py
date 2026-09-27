@@ -223,7 +223,9 @@ def _select_list(table: sc.Table, available: Mapping[str, str], *, transforms: b
 
 
 def _null_columns(table: sc.Table, available: Mapping[str, str]) -> list[str]:
-    return [c.name for c in table.columns if (c.source or c.name) not in available]
+    return [
+        c.name for c in table.columns if c.derived is None and (c.source or c.name) not in available
+    ]
 
 
 def _pk(table: sc.Table) -> str:

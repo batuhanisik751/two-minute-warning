@@ -164,14 +164,60 @@ class AvailabilityConfig(BaseModel):
         return v
 
 
+def _check_wp_band(low: float, high: float, name: str) -> None:
+    if not 0.0 < low < high < 1.0:
+        raise ValueError(f"{name}: need 0 < wp_low < wp_high < 1, got {low} and {high}")
+
+
+class GarbageTimeConfig(BaseModel):
+    """PROJECT_SPEC 7.3: a play is garbage time when the offense's win probability is below
+    ``wp_low`` or above ``wp_high``, except in the final ``exclude_final_seconds_half`` seconds
+    of a half when the score is within ``one_possession_points``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    wp_low: float
+    wp_high: float
+    exclude_final_seconds_half: int
+    one_possession_points: int
+
+    @model_validator(mode="after")
+    def _valid(self) -> GarbageTimeConfig:
+        _check_wp_band(self.wp_low, self.wp_high, "garbage_time")
+        if not 0 <= self.exclude_final_seconds_half <= 1800:
+            raise ValueError("garbage_time.exclude_final_seconds_half must be 0-1800 seconds")
+        if not 0 <= self.one_possession_points <= 30:
+            raise ValueError("garbage_time.one_possession_points must be 0-30")
+        return self
+
+
+class NeutralConfig(BaseModel):
+    """PROJECT_SPEC 7.3: the stricter "neutral situation" filter (rbsdm style): the offense's
+    win probability within [wp_low, wp_high] and more than ``min_half_seconds_remaining``
+    seconds left in the half."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    wp_low: float
+    wp_high: float
+    min_half_seconds_remaining: int
+
+    @model_validator(mode="after")
+    def _valid(self) -> NeutralConfig:
+        _check_wp_band(self.wp_low, self.wp_high, "neutral")
+        if not 0 <= self.min_half_seconds_remaining <= 1800:
+            raise ValueError("neutral.min_half_seconds_remaining must be 0-1800 seconds")
+        return self
+
+
 class Settings(BaseModel):
     project_name: str
     current_season: int
     seasons: dict[str, Any]
     as_of: dict[str, Any]
     horizons: dict[str, int]
-    garbage_time: dict[str, float]
-    neutral: dict[str, float]
+    garbage_time: GarbageTimeConfig
+    neutral: NeutralConfig
     paths: Paths
     availability: AvailabilityConfig
 

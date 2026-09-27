@@ -97,11 +97,17 @@ availability:
 horizons:
   waiver_radar_weeks: 3
 
+# Garbage time (PROJECT_SPEC 7.3): the game is effectively decided, so stats pile up against
+# soft defenses. A play is garbage time when the offense's pre-snap win probability (nflfastR
+# `wp`) is below wp_low or above wp_high, EXCEPT in the final exclude_final_seconds_half seconds
+# of a half when the score is within one_possession_points (then every snap still matters).
 garbage_time:
   wp_low: 0.05
   wp_high: 0.95
   exclude_final_seconds_half: 120
   one_possession_points: 8
+# The stricter "neutral situation" filter: win probability between wp_low and wp_high
+# (inclusive) with more than min_half_seconds_remaining seconds left in the half.
 neutral:
   wp_low: 0.20
   wp_high: 0.80

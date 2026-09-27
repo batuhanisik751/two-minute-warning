@@ -1,17 +1,27 @@
 """Step A3: verify every nflverse loader, coverage year and column the spec relies on.
 
-Downloads real data (current season, 2025, each dataset's claimed first season, and the year
-before it to confirm the coverage start). Writes reports/verify_sources.json. The human-readable
-conclusions go into docs/assumptions.md.
+Probes, for each per-season dataset, the current season, the previous season, a mid-range
+season (2015), the dataset's claimed first season and the year before it (to confirm where
+coverage starts); one-file datasets are probed once. Records rows/cols/errors per probe, the
+expected-column check and the column differences across eras, plus data checks (currently the
+``spread_line`` sign) under a "checks" key. Writes reports/verify_sources.json. The
+human-readable conclusions go into docs/assumptions.md.
 
-Run: uv run python scripts/verify_sources.py [dataset ...]
+Cache-only by default: seasons that are not in data/raw are skipped (no network) and a guard
+makes any attempted download fail loudly. Pass --allow-download to probe missing seasons.
+
+Run: uv run python scripts/verify_sources.py [--allow-download] [dataset ...]
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import time
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 import polars as pl
 
@@ -19,6 +29,12 @@ from twm.config import ROOT, settings
 from twm.sources import nflverse as nv
 
 CURRENT = settings().current_season
+MID_SEASON = 2015  # mid-history probe: catches columns that exist only in middle years
+SKIP_NOTE = "not cached; pass --allow-download to probe it"
+
+# Set by main(). When False, nv._loader is replaced by a guard that refuses to download.
+ALLOW_DOWNLOAD = False
+_downloads = 0
 
 # Columns the spec (or our planned features) rely on. Best-known names; the report says which
 # actually exist. Missing ones must be renamed in the spec/assumptions, never invented.
@@ -715,87 +731,193 @@ CLAIMED_FIRST: dict[str, int] = {
 }
 
 
-def try_fetch(name: str, season: int | None, **kw) -> tuple[pl.DataFrame | None, str | None]:
+def _install_download_guard() -> bool:
+    """Route every loader lookup through a counter; refuse downloads in cache-only mode."""
+    real = getattr(nv, "_loader", None)
+    if real is None:
+        return False
+
+    def guarded(ds: nv.Dataset) -> Callable[..., pl.DataFrame]:
+        global _downloads
+        if not ALLOW_DOWNLOAD:
+            raise RuntimeError(f"{ds.name}: download blocked (cache-only mode; {SKIP_NOTE})")
+        _downloads += 1
+        return real(ds)
+
+    nv._loader = guarded
+    return True
+
+
+def _cached(name: str, season: int | None) -> bool:
+    return nv.cache_path(name, season).exists()
+
+
+def _fetch_kwargs() -> dict[str, Any]:
+    # Cache-only mode: a cached file is never stale, so fetch() never reaches for the network.
+    # With --allow-download, fetch()'s defaults apply (the current season and one-file
+    # datasets are refreshed after max_age_hours).
+    return {} if ALLOW_DOWNLOAD else {"max_age_hours": float("inf")}
+
+
+def try_fetch(name: str, season: int | None, **kw: Any) -> tuple[pl.DataFrame | None, str | None]:
     t0 = time.time()
     try:
         df = nv.fetch(name, season, snapshot=False, **kw)
         return df, None
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return None, f"{type(e).__name__}: {str(e)[:200]}"
     finally:
         print(f"  {name} {season}: {time.time() - t0:.1f}s", file=sys.stderr)
 
 
-def probe(name: str) -> dict:
+def _describe(df: pl.DataFrame) -> dict[str, Any]:
+    rec: dict[str, Any] = {"rows": df.height, "cols": df.width}
+    if "week" in df.columns and df.height:
+        rec["week_min"] = df["week"].min()
+        rec["week_max"] = df["week"].max()
+    if "season" in df.columns and df.height:
+        rec["season_values"] = sorted(df["season"].unique().to_list())[:5]
+    return rec
+
+
+def probe(name: str) -> dict[str, Any]:
     ds = nv.DATASETS[name]
-    out: dict = {
+    out: dict[str, Any] = {
         "dataset": name,
         "loader": ds.loader,
         "kwargs": ds.kwargs,
         "per_season": ds.per_season,
+        "probes": {},
+        "errors": {},
+        "skipped": [],
     }
-    frames: dict[str, pl.DataFrame] = {}
-    if not ds.per_season:
-        df, err = try_fetch(name, None, max_age_hours=0)  # always fresh for non-seasonal
-        out["error"] = err
-        if df is not None:
-            frames["all"] = df
-    else:
+    if ds.per_season:
         first = CLAIMED_FIRST.get(name, ds.first_season or 1999)
-        seasons = {
+        probes: dict[str, int | None] = {
             "current": CURRENT,
             "prev": CURRENT - 1,
+            "mid": MID_SEASON,
             "first": first,
             "before_first": first - 1,
         }
-        # draft_picks/combine: "before_first" of 1980/2000 is meaningful too
-        out["seasons"] = {}
-        for label, season in seasons.items():
-            df, err = try_fetch(name, season)
-            rec = {"season": season, "error": err}
+        if not first < MID_SEASON < CURRENT - 1:
+            del probes["mid"]
+    else:
+        probes = {"all": None}
+
+    frames: dict[str, pl.DataFrame] = {}
+    for label, season in probes.items():
+        rec: dict[str, Any] = {"season": season}
+        if not (ALLOW_DOWNLOAD or _cached(name, season)):
+            rec["skipped"] = SKIP_NOTE
+            out["skipped"].append(label)
+        else:
+            df, err = try_fetch(name, season, **_fetch_kwargs())
+            rec["error"] = err
+            if err is not None:
+                out["errors"][label] = err
             if df is not None:
-                rec.update(rows=df.height, cols=df.width)
-                if "week" in df.columns and df.height:
-                    wk = df["week"]
-                    rec["week_min"] = wk.min()
-                    rec["week_max"] = wk.max()
-                if "season" in df.columns and df.height:
-                    rec["season_values"] = sorted(df["season"].unique().to_list())[:5]
+                rec.update(_describe(df))
                 frames[label] = df
-            out["seasons"][label] = rec
+        out["probes"][label] = rec
+
     # Column check against the freshest frame that loaded, and note differences across eras.
-    ref = next((frames[k] for k in ("current", "prev", "all", "first") if k in frames), None)
+    order = ("current", "prev", "all", "mid", "first")
+    ref = next((frames[k] for k in order if k in frames), None)
     if ref is not None:
         cols = set(ref.columns)
         exp = EXPECTED.get(name, [])
         out["expected_present"] = [c for c in exp if c in cols]
         out["expected_missing"] = [c for c in exp if c not in cols]
         out["actual_columns"] = {c: str(t) for c, t in ref.schema.items()}
-        if "first" in frames and frames["first"] is not ref:
-            fcols = set(frames["first"].columns)
-            out["cols_only_in_first"] = sorted(fcols - cols)
-            out["cols_only_in_current"] = sorted(cols - fcols)
-        if "prev" in frames and "current" in frames:
-            pc, cc = set(frames["prev"].columns), set(frames["current"].columns)
-            out["cols_only_in_prev"] = sorted(pc - cc)
-            out["cols_only_in_current_vs_prev"] = sorted(cc - pc)
+        for label in ("prev", "mid", "first"):
+            if label in frames and frames[label] is not ref:
+                other = set(frames[label].columns)
+                out[f"cols_only_in_{label}"] = sorted(other - cols)
+                out[f"cols_absent_in_{label}"] = sorted(cols - other)
+    return out
+
+
+def spread_sign_check() -> dict[str, Any]:
+    """Is ``spread_line`` the home team's expected margin? (docs/assumptions.md section 7)
+
+    For the two cached seasons before the current one, over played games: the correlation of
+    ``spread_line`` with ``result`` (home minus away score), the mean ``result`` when
+    ``spread_line`` > 0, and how often the moneyline agrees (home is the moneyline favourite
+    when ``spread_line`` > 0). All three should point the same way.
+    """
+    out: dict[str, Any] = {}
+    for season in (CURRENT - 2, CURRENT - 1):
+        key = str(season)
+        if not (ALLOW_DOWNLOAD or _cached("schedules", season)):
+            out[key] = {"skipped": SKIP_NOTE}
+            continue
+        df, err = try_fetch("schedules", season, **_fetch_kwargs())
+        if df is None:
+            out[key] = {"error": err}
+            continue
+        played = df.filter(pl.col("result").is_not_null() & pl.col("spread_line").is_not_null())
+        fav = played.filter(pl.col("spread_line") > 0)
+        ml = fav.filter(
+            pl.col("home_moneyline").is_not_null() & pl.col("away_moneyline").is_not_null()
+        )
+        agree = ml.filter(pl.col("home_moneyline") < pl.col("away_moneyline")).height
+        out[key] = {
+            "games": played.height,
+            "corr_spread_result": round(played.select(pl.corr("spread_line", "result")).item(), 3),
+            "n_spread_positive": fav.height,
+            "mean_result_when_spread_positive": round(fav["result"].mean(), 2),
+            "moneyline_agreement_share": round(agree / ml.height, 3) if ml.height else None,
+        }
+    out["interpretation"] = "spread_line > 0 means the home team is favoured by that margin"
     return out
 
 
 def main(argv: list[str]) -> None:
-    names = argv or list(nv.DATASETS)
+    global ALLOW_DOWNLOAD
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument("datasets", nargs="*", help="dataset names to probe (default: all)")
+    ap.add_argument(
+        "--allow-download",
+        action="store_true",
+        help="probe seasons that are not in data/raw (uses the network; default: skip them)",
+    )
+    args = ap.parse_args(argv)
+    ALLOW_DOWNLOAD = args.allow_download
+    unknown = [n for n in args.datasets if n not in nv.DATASETS]
+    if unknown:
+        ap.error(f"unknown dataset(s) {unknown}; known: {sorted(nv.DATASETS)}")
+    guard = _install_download_guard()
+    names = args.datasets or list(nv.DATASETS)
+
     results = []
     for name in names:
         print(f"== {name}", file=sys.stderr)
         results.append(probe(name))
+    print("== checks", file=sys.stderr)
+    checks = {"spread_sign": spread_sign_check()}
+
+    report = {
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "current_season": CURRENT,
+        "allow_download": ALLOW_DOWNLOAD,
+        "downloads": _downloads,
+        "datasets": results,
+        "checks": checks,
+    }
     out = ROOT / "reports" / "verify_sources.json"
     out.parent.mkdir(exist_ok=True)
-    out.write_text(json.dumps(results, indent=1, default=str))
+    out.write_text(json.dumps(report, indent=1, default=str) + "\n")
     print(f"wrote {out}")
     for r in results:
         miss = r.get("expected_missing", "?")
-        err = r.get("error")
-        print(f"{r['dataset']:22s} missing={miss} err={err}")
+        failed = sorted(r["errors"])
+        print(f"{r['dataset']:22s} missing={miss} failed={failed} skipped={r['skipped']}")
+    mode = "downloads allowed" if ALLOW_DOWNLOAD else "cache-only mode"
+    guard_note = "" if guard else " (download guard unavailable: nv._loader not found)"
+    print(f"downloads: {_downloads} ({mode}){guard_note}")
 
 
 if __name__ == "__main__":

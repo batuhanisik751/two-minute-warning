@@ -53,7 +53,9 @@ ignore = ["B008"]  # typer.Option/Argument defaults are the idiom
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# Offline by default: a plain `uv run pytest` never downloads. `uv run pytest -m network` runs
+# the live drift check (a later -m on the command line overrides this one).
+addopts = "-q -m 'not network'"
 markers = [
     "network: tests that download nflverse data (skipped in CI)",
 ]

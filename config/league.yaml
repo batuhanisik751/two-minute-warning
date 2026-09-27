@@ -7,11 +7,15 @@ lineup:
   TE: 1
   FLEX: 1       # RB/WR/TE
   bench: 7
-# Weekly "starter" thresholds derive from teams x starters; flex share added to RB/WR.
+# Weekly "starter" threshold = teams x starters at that position (QB 12, RB 24, WR 24, TE 12).
+# The FLEX slot is NOT folded into RB/WR here; it is expressed separately as flex_worthy_rank
+# (tests/test_config.py asserts both relationships).
 starter_rank_threshold:
   QB: 12
   RB: 24
   WR: 24
   TE: 12
-flex_worthy_rank: 36    # RB/WR top-36
-candidate_pool_multiplier: 1.5   # "likely available" = outside top N*1.5 by ADP and PPG
+flex_worthy_rank: 36    # teams x (RB + FLEX) = 36: a RB/WR ranked top-36 is worth a FLEX start
+# "Likely available on waivers" = outside the top (starters x 1.5) by ADP (average draft
+# position, i.e. where real drafts took the player) and PPG (fantasy points per game).
+candidate_pool_multiplier: 1.5

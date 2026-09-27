@@ -2,8 +2,11 @@
 
 **Verified on:** 2026-09-26 (Saturday of NFL Week 3; only the Thursday game of Week 3 had been played).
 **Tooling:** `nflreadpy` 0.1.5, Python 3.13. Re-run with `uv run python scripts/verify_sources.py`
-(writes `reports/verify_sources.json`). Column snapshots live in `data/schemas/*.json` and are
-checked on every current-season download (`SchemaDriftError` if a column disappears).
+(cache-only by default; `--allow-download` probes seasons missing from `data/raw`; writes
+`reports/verify_sources.json`). Column snapshots live in `data/schemas/*.json` and are checked on
+every current-season or one-file load, download or cache read (`SchemaDriftError` if a column
+disappears; a logged warning if a column changes dtype or is added). Snapshots are refreshed
+deliberately with `uv run python scripts/refresh_snapshots.py`, never by `twm ingest`.
 
 Everything below was observed in the data, not taken from docs. Where the spec (Section 4.1)
 said something different, the spec is wrong and this file wins.
@@ -13,7 +16,7 @@ said something different, the spec is wrong and this file wins.
 ## 1. Loaders: names, coverage, current-season status
 
 All 20 loader functions named in the spec exist in `nflreadpy` with exactly those names, plus
-`load_team_stats`, `load_officials`, `load_trades` (unused). Our dataset registry is in
+`load_team_stats` (used), `load_stats`, `load_ffverse`, `load_officials`, `load_trades` (unused). Our dataset registry is in
 `src/twm/sources/nflverse.py` (`DATASETS`).
 
 | Our name | nflreadpy call | Spec said | **Verified first season** | 2026 status on 2026-09-26 | Notes |
@@ -23,8 +26,8 @@ All 20 loader functions named in the spec exist in `nflreadpy` with exactly thos
 | `team_stats` | `load_team_stats(season, summary_level="week")` | not in spec | 1999 | weeks 1–3 | team-week EPA etc.; handy for context features |
 | `schedules` | `load_schedules(season)` | 1999+ | **1999** (1998 returns 0 rows) | 272 games, 33 with results | 46 columns |
 | `snap_counts` | `load_snap_counts(season)` | **2012+** | **2013** — the 2012 file exists but has **0 rows** | weeks 1–3 | 16 columns; PFR IDs |
-| `injuries` | `load_injuries(season)` | 2009+ | **2009** | weeks 1–3 | no report date column in modern data (see §4) |
-| `depth_charts` | `load_depth_charts(season)` | 2001+ | **2001** | 200 daily snapshots since 2026-03-22 | **two formats** (see §3) |
+| `injuries` | `load_injuries(season)` | 2009+ | **2009** | weeks 1–3 | `date_modified` UTC report timestamp 2010–2024; 2009 ~all null; absent 2025+ (see §4) |
+| `depth_charts` | `load_depth_charts(season)` | 2001+ | **2001** | 200 league-wide snapshots since 2026-03-22 | **two formats** (see §3) |
 | `rosters` | `load_rosters(season)` | 2002+ (weekly) | 1999 (1998 also loads) | has `week` 1–3 in 2026 | now looks like a rolling weekly extract; use `rosters_weekly` |
 | `rosters_weekly` | `load_rosters_weekly(season)` | 2002+ | **2002** | weeks 1–3 | 36 columns incl. `pfr_id`, `espn_id`, `status`, `draft_number` |
 | `ngs_passing/receiving/rushing` | `load_nextgen_stats(season, stat_type=…)` | 2016+ | **2016** | weeks 0–3 | **week 0 = season-to-date aggregate**; drop it for weekly work |
@@ -42,8 +45,11 @@ All 20 loader functions named in the spec exist in `nflreadpy` with exactly thos
 | `teams` | `load_teams()` | — | one file, 36 rows | | logo URL columns exist; **not used** in the public app |
 
 Coverage was verified by loading the claimed first season and the year before it. For most
-datasets `nflreadpy` raises `ValueError: Season must be between …` for the year before; for
-`schedules`, `draft_picks`, `combine` it returns an empty frame instead.
+datasets `nflreadpy` raises `ValueError: Season must be between …` for the year before (a range
+check inside nflreadpy, not evidence about the files). `player_stats` and `team_stats` have no
+range check and their 1998 file simply does not exist upstream (HTTP 404). `schedules`,
+`draft_picks` and `combine` filter one combined file and return 0 rows. `load_rosters` accepts
+1920+ and 1998 loads (1,964 rows). The 0-row probe files are not kept in the cache (§10).
 
 ## 2. Column names that differ from the spec
 
@@ -57,8 +63,10 @@ datasets `nflreadpy` raises `ValueError: Season must be between …` for the yea
 | per-play expected columns | pass: `pass_completion_exp`, `yards_after_catch_exp`, `yardline_exp`, `pass_touchdown_exp`, `pass_first_down_exp`, `pass_interception_exp`, `two_point_conv_exp`; rush: `rush_yards_exp`, `rushing_yards_exp`, `rush_touchdown_exp`, `rushing_td_exp`, `rushing_fd_exp` | ff_opportunity_pass / _rush |
 | `fantasypros_id`, `player_name`, `rank` | `id` (string), `player`, no rank (use `ecr`) | ff_rankings_draft / _all |
 | `page_type`, `id` | `page`, `page_pos`, `fantasypros_id` (int) | ff_rankings_week |
-| `date_modified` | present only in early seasons (2009) and null; absent from 2025/2026 | injuries |
+| `date_modified` | present 2009–2024: real UTC timestamps on essentially every row 2010–2024, one junk stamp in 2009 (§4); absent from 2025/2026 | injuries |
 | `season` | absent (one file for all teams) | teams |
+| `cols` (nflreadr's nested contract-details column) | `season_history`, `contract_history` | contracts |
+| `espn_id` as an integer everywhere | Int64 in `ff_playerids`; a **string** in `rosters_weekly`, `rosters`, `players`, `depth_charts`. Cast one side before the ESPN join (spec 7.5) | ff_playerids vs rosters |
 
 Everything else the spec relies on exists under the expected name (full lists in
 `data/schemas/`).
@@ -69,27 +77,61 @@ Everything else the spec relies on exists under the expected name (full lists in
   `week` (1–22 incl. playoffs), `game_type`, `depth_team` ("1","2","3" = string rank),
   `formation` (Offense/Defense/Special Teams), `position`, `depth_position`, `gsis_id`, names.
   ~59 rows per team-week. Snapshot: `data/schemas/depth_charts_legacy.json`.
-- **2025+ (new):** one row per **daily snapshot** × team × slot. Columns: `dt` (ISO-8601 UTC
-  string, e.g. `2026-09-26T12:12:29Z`), `team`, `player_name`, `espn_id`, `gsis_id`,
-  `pos_grp_id`, `pos_grp` ("3WR 1TE", "Base 4-3 D", "Base 3-4 D", "Special Teams"), `pos_id`,
-  `pos_name`, `pos_abb`, `pos_slot`, `pos_rank`. **No `season` or `week` column**; the season
-  is the file you loaded, and the 2025 file's snapshots run from 2025-08-03 to 2026-03-14
-  (the offseason after the season belongs to the earlier season's file). 2026: 200 snapshots
-  so far, one per team per day, ~2,800 rows per snapshot.
+- **2025+ (new):** one row per **league-wide pull** (`dt`) × team × slot. Columns (12): `dt`
+  (ISO-8601 UTC string, e.g. `2026-09-26T12:12:29Z`), `team`, `player_name`, `espn_id`,
+  `gsis_id`, `pos_grp_id`, `pos_grp` ("3WR 1TE", "Base 4-3 D", "Base 3-4 D", "Special Teams"),
+  `pos_id`, `pos_name`, `pos_abb`, `pos_slot`, `pos_rank`. **No `season` or `week` column**;
+  the season is the file you loaded, and the 2025 file's pulls run from 2025-08-03 to
+  2026-03-14 (the offseason after the season belongs to the earlier season's file).
+  **Cadence (verified):** every `dt` value covers all 32 teams; it is roughly one pull per day
+  but not exactly: 2026 has 200 distinct `dt` over 188 distinct dates (352 team-days with two
+  pulls) and 2025 has 221 over 219 dates (64 team-days with two pulls). Rows per pull:
+  2,169–3,289 in 2026 (median 3,117, i.e. ~97 slots per team), 2,095–3,264 in 2025 (median
+  2,350, ~73 per team). 567,492 rows in 2026 so far, 554,215 in 2025.
 - **Point-in-time rule:** legacy rows for week N are treated as available at the start of week
   N (so at the Tuesday as-of after week N we use week N's chart); new rows use `dt ≤ as_of`
-  directly.
+  directly, and the chart in force is the **latest `dt ≤ as_of` per team**. Dedupe on
+  `(team, dt)`, never on `(team, date)`, because some days have two pulls.
+- **Snapshots:** `depth_charts.json` is the 2025+ schema; `depth_charts_legacy.json` is written
+  from the 2024 file by `scripts/refresh_snapshots.py`. Loads of 2001–2024 are not drift-checked
+  (historical seasons never are).
 
-## 4. Injury reports have no publication date
+## 4. Injury reports carry a report timestamp for 2010–2024 (`date_modified`)
 
-Modern injury rows (`season`, `week`, `team`, `gsis_id`, `report_status`, `practice_status`,
-`report_primary_injury`, …) carry **no date**. `date_modified` exists only in old files and is
-null. `report_status` values: `Out`, `Doubtful`, `Questionable`, null.
+Injury rows (`season`, `week`, `team`, `gsis_id`, `report_status`, `practice_status`,
+`report_primary_injury`, …) have a `date_modified` column, a **UTC datetime**
+(`Datetime(us, UTC)`), in the 2009–2024 files; it is **absent from 2025 and 2026**. Verified
+on the cache:
 
-**Assumption for backtests:** the week-N report is available at the end of week N (Friday
-before the games at the latest), so at the Tuesday as-of after week N it is fully usable, and
-the week-N+1 report is **not** available (it publishes Wed–Fri). Live: nflverse refreshes
-injuries daily at 07:00 UTC.
+- **2010–2024: populated on essentially every row** (0 nulls in 2011–2024; 62 nulls of 4,491
+  rows in 2010). It is the row's last-modified time: injury reports are updated after each
+  practice, so a team-week has several distinct stamps (median 6 per team-week, 10th–90th
+  percentile 3–10, max 23).
+- **When:** the stamps fall inside the game week. Over the 79,801 stamped rows of 2010–2024,
+  81.4% are Fridays, 99.5% are Wed–Sat, and Mon/Tue/Sun together are 0.5% (e.g. 2024 week 1
+  spans 09-04 12:55Z to 09-07 20:56Z, Wednesday–Saturday). None is more than 6 days before
+  the week's first kickoff, and only **16 rows** (2013: 1, 2015: 1, 2018: 1, 2020: 13) are
+  after the week's last game (kickoff + 4 h). The earliest stamp of each season is Sep 3–9
+  (week 1's Tuesday or Wednesday in every season except 2018, which starts on Monday 09-03,
+  Labor Day).
+- **2009:** 4,804 of 4,821 rows are null and the 17 non-null values are one junk stamp
+  (`2010-01-01 09:23:14 UTC`); treat the whole season as null.
+- `report_status` values across eras: `Out`, `Doubtful`, `Questionable` and null in every
+  season 2009–2026; **`Probable`** in 2009–2015 only (2,231 / 1,874 / 2,251 / 2,963 / 2,772 /
+  2,607 / 2,702 rows per season; the NFL dropped it in 2016); **`Note`** in 2024 only (6 rows).
+  Suggested mapping: `Probable` → active (expected to play); `Note` → null.
+- 2009–2020 store `season` and `week` as **Float64**; 2021+ as Int32 (see §10).
+- `season_type` exists upstream only in 2025–2026; the warehouse derives it from `game_type`
+  for every season. The 2024 file has **2 duplicated player-weeks** (week 15, NYJ `00-0034270`
+  and HOU `00-0039359`; no other season has any); the warehouse keeps `date_modified` as a
+  naive UTC `TIMESTAMP` in `fact_injury_report` and resolves those with "latest stamp wins".
+
+**Availability rule (B2):** for 2010–2024 use the observed `date_modified` as `available_at`
+(the moment the row reached its final weekly state, before the games). For 2009, the 62 null
+rows of 2010 and 2025+, **assume** Friday 23:59 UTC of the report week (the last practice
+report, before the week's games). Either way, at the Tuesday as-of after week N the week-N
+report is fully usable and the week-N+1 report is **not** (it publishes Wed–Fri). Live:
+nflverse refreshes injuries daily at 07:00 UTC, and the pipeline records the real arrival time.
 
 ## 5. Snap counts use PFR IDs; the join works
 
@@ -102,13 +144,18 @@ injuries daily at 07:00 UTC.
 
 Use `ff_playerids` first, `rosters_weekly` as fallback, and report the unmatched remainder
 (spec 7.5). `ff_playerids` ID dtypes: `gsis_id`/`pfr_id` strings; `espn_id`, `sleeper_id`,
-`fantasypros_id` integers.
+`fantasypros_id` Int64. The roster-side `espn_id` (`rosters_weekly`, `rosters`, `players`,
+`depth_charts`) is a **string**, so cast one side before the ESPN join.
 
 ## 6. FantasyPros rankings archive starts December 2019
 
-`load_ff_rankings(type="all")` has 1.85M rows, 366 scrape dates from **2019-12-27** to
-2026-09-25. `ecr_type` codes: `ro`/`rp` redraft overall/positional, `do`/`dp` dynasty,
-`wo`/`wp` weekly, `bo`/`bp` best-ball, `*sf` superflex, `drk` dynasty rookies. Weekly PPR pages
+`load_ff_rankings(type="all")` has 1,845,918 rows, 366 scrape dates from **2019-12-27** to
+2026-09-25. All 14 `ecr_type` codes (rows in the archive): redraft `ro` overall 229,402 /
+`rp` positional 332,979 / `rsf` superflex 100,759; dynasty `do` overall 243,827 / `dp`
+positional 387,751 / `dsf` superflex 151,134 / `drk` rookies 33,045 (plus `dr` 123 rows and
+`rookies` 3,563 rows, both early labels for the same rookie page, last seen 2020-10-16 and
+2020-10-12); weekly `wo` overall 17,901 / `wp` positional 86,701 / `wsf` superflex 45,672;
+best-ball `bo` overall 95,327 / `bp` positional 117,734 (from 2021-01-01). Weekly PPR pages
 (`weekly-rb`, `weekly-wr`, `weekly-te`, `weekly-qb`) exist from the 2020 season.
 
 Preseason redraft positional (`rp`) scrapes in Aug/Sep, usable as "preseason ECR" for the
@@ -138,11 +185,22 @@ home = (`total_line` + `spread_line`) / 2, away = (`total_line` − `spread_line
 ## 8. `fantasy_points_ppr` in player_stats
 
 Recomputing full PPR from components on 2025 QB/RB/WR/TE weeks (6,321 rows) matches
-`fantasy_points_ppr` within 0.01 on 99.7% of rows. All 20 mismatches are exactly +6.0 and are
-players with `special_teams_tds = 1` (return touchdowns), which nflverse counts. Adding
-`special_teams_tds × 6` leaves 2 rows (99.97% match) still off, which we'll inspect in B4.
-Our scoring engine will compute from components (spec 7.1) and include a configurable
-`special_teams_td` line (default 6, matching ESPN standard scoring).
+`fantasy_points_ppr` within 0.01 on 99.7% of rows (6,301 of 6,321; REG+POST). All 20 mismatches
+are exactly +6.0 and are players with `special_teams_tds = 1` (return touchdowns), which
+nflverse counts. `special_teams_tds × 6` reconciles every row exactly (**0 remaining**), so
+`fantasy_points_ppr` = components + 6 × `special_teams_tds`, with fumbles taken as
+`sack_fumbles_lost + rushing_fumbles_lost + receiving_fumbles_lost`. Our scoring engine will
+compute from components (spec 7.1) and include a configurable `special_teams_td` line
+(default 6, matching ESPN standard scoring).
+
+Note for B4: `fumbles_lost_total` differs from that three-column sum on **31 of 6,321** rows in
+2025 (return-game fumbles by returners, e.g. DJ Moore week 1 = 1 vs 0; Riley Leonard week 18
+= 2 vs 1). nflverse's `fantasy_points_ppr` does **not** deduct those. B4 must choose which
+column the `misc.fumbles_lost` line in `config/scoring.yaml` reads — `fumbles_lost_total`
+(every lost fumble, probably what a league's "fumbles lost" setting means; verify against the
+ESPN league settings when connected) or the three-column sum (matches nflverse exactly) — and
+document the choice. The cross-check against `fantasy_points_ppr` must use the three-column
+sum either way.
 
 ## 9. `ff_opportunity` details
 
@@ -172,8 +230,67 @@ Our scoring engine will compute from components (spec 7.1) and include a configu
 - **PFR advanced stats** lag pbp by a few days (Week 2 only while pbp had Week 3's Thursday
   game); safe by the Tuesday as-of, but treated as optional features anyway.
 - **Participation** is confirmed unavailable in season; offseason modules only.
-- Raw cache size after this verification (three or four seasons of each dataset): 184 MB.
-  Full history will be a few GB as the spec expects.
+- **Raw cache:** the full 1999–2026 history of all 29 datasets is 443 Parquet files, ~500 MB
+  (`du`, 2026-09-26), far less than the "few GB" the spec expected. nflreadpy's own cache is
+  **off** (`update_config(cache_mode="off")`): spec 4.1 says to enable it, but the wrapper's
+  Parquet layer is the cache of record, and nflreadpy's 24 h default silently served stale
+  bytes to `--force` and to the 12 h current-season refresh while doubling disk use (its
+  ~500 MB copy was deleted).
+- **Schedule coach columns stop recording mid-season changes after 2023.** `home_coach` /
+  `away_coach` are per game, and through 2023 they change when a team changes coach in season
+  (e.g. 2022 IND: Frank Reich weeks 1-9, Jeff Saturday weeks 10-18). From 2024 on they are
+  season-constant: 2024 shows one coach per team although NYJ, CHI and NO fired theirs in season,
+  and 2025 lists Brian Callahan for TEN all 18 weeks (fired 2025-10-13, Mike McCoy interim) and
+  Brian Daboll for NYG all 18 weeks (fired 2025-11-10, Mike Kafka interim). Team-seasons with
+  more than one coach, counted on the cache (2026-09-26): 1999 0, 2000 4, 2001 1, 2002 0,
+  2003 1, 2004 2, 2005 2, 2006 0, 2007 1, 2008 3, 2009 1, 2010 4, 2011 3, 2012 1, 2013 1,
+  2014 1, 2015 1, 2016 2, 2017 1, 2018 2, 2019 1, 2020 3, 2021 2, 2022 3, 2023 3, 2024 0,
+  2025 0, 2026 0 (so far). Query, per season file:
+  `SELECT count(*) FROM (SELECT season, team FROM (SELECT season, home_team AS team, home_coach AS
+  coach FROM s UNION ALL SELECT season, away_team, away_coach FROM s) WHERE coach IS NOT NULL
+  GROUP BY season, team HAVING count(DISTINCT coach) > 1)`. Consequence for the warehouse:
+  `coach_game` / `coach_team_season` / `dim_coach` are exact for 2000-2023 and miss interim
+  coaches from 2024 on; the Hot-Seat firing labels must combine them with an owner-verified
+  manual file (`data/manual/coach_departures.csv`, Hot-Seat step) for 2024+. The build records
+  `n_team_seasons_multi_coach` in `build_manifest.notes` so the gap stays visible.
+- **End-of-regular-season as-of vs Sunday-evening announcements.** `dim_week.
+  asof_end_of_regular_season_utc` is the morning after the last REG game date (12:00 UTC), per
+  config and spec 6.1. Some departures are announced on the Sunday evening of the finale (New
+  England's on 2025-01-05, hours after the game), i.e. *before* that as-of; with spec 6.2's
+  "outcomes strictly after as_of" rule they would fall out of the label. The Hot-Seat step must
+  define the label window relative to the last REG kickoff (or move the as-of to after the last
+  game's estimated end) and record the choice; see docs/warehouse.md.
+- **0-row probes are not cached.** Loading the year before coverage (`snap_counts` 2012,
+  `schedules` 1998, `draft_picks` 1979, `combine` 1999) returns an empty frame; those files
+  were deleted and `fetch()` no longer caches an empty immutable season, so `cached_seasons()`
+  reports real coverage only.
+
+### Dtype drift to cast at warehouse load (B1)
+
+The raw cache and `data/schemas` keep upstream dtypes untouched (that is how drift is
+detected), and `fetch_seasons()` concatenates with `diagonal_relaxed`, which widens a column to
+the common supertype without telling the caller. All casts happen in the warehouse loader,
+with a test asserting `season`/`week`/`play_id` are INTEGER in every fact table. Verified per
+season on the cache (`pl.read_parquet_schema` over every file):
+
+| Dataset | Column | Seasons and dtypes | Cast to |
+|---|---|---|---|
+| `injuries` | `season`, `week` | Float64 2009–2020; Int32 2021–2026 | INTEGER |
+| `ff_opportunity` (weekly) | `season` | **String** (`"2026"`) in every season 2006–2026 | INTEGER |
+| `ff_opportunity` (weekly) | `week` | Float64 in every season 2006–2026 | INTEGER |
+| `participation` | `play_id` | Int32 2016–2022; Float64 2023–2025 | INTEGER |
+| `pbp` | `play_id` | Float64 in every season 1999–2026 | INTEGER |
+| `pbp` | `goal_to_go` | Float64 1999–2002, 2020, 2024–2026; Int32 otherwise | INTEGER |
+| `pbp` | `xyac_median_yardage` | Float64 1999–2005; Int32 2006–2026 | INTEGER |
+| `rosters_weekly`, `rosters` | `draft_number` | String 2002–2015; Int32 2016–2026 (absent in `rosters` 1998–2001) | INTEGER |
+| `rosters_weekly`, `rosters` | `jersey_number` | String 2002–2015; Int32 2016–2026 (and `rosters` 1998–2001) | **VARCHAR**: 2002–2015 contain values such as `69B` that are not integers |
+| `rosters_weekly`, `rosters` | `height` | Float64 through 2024; Int32 2025–2026 | INTEGER |
+| `ff_playerids` vs rosters | `espn_id` | Int64 in `ff_playerids`; String in `rosters_weekly`/`rosters`/`players`/`depth_charts` | VARCHAR on the `ff_playerids` side |
+
+`pbp`, `player_stats` and `schedules` store `season` and `week` as Int32 everywhere; those are
+the reference. Because drift checks compare only the current season with its snapshot, none of
+the above is flagged by `SchemaDriftError`; a "retyped" warning appears only if the current
+season itself changes.
 
 ## 11. Upstream update schedule (nflverse article, read 2026-09-26)
 
@@ -199,7 +316,7 @@ are never recomputed for a past as-of (time-machine rule).
 |---|---|
 | plays, player-week, team-week, snap counts, ff_opportunity | game end ≈ kickoff + 4 h; conservatively: Tuesday 09:00 UTC after the week for all of week N (nightly run) |
 | schedules (results, closing lines) | results: game end; **lines: kickoff** (closing line), never earlier |
-| injuries week N | Friday 23:59 UTC of week N (last practice report), i.e. before week-N games |
+| injuries week N | `date_modified` when present (2010–2024, observed); otherwise Friday 23:59 UTC of week N, the last practice report before the games (2009, 2025+, and the 62 null rows of 2010) |
 | depth charts legacy week N | Wednesday 12:00 UTC of week N (start of the week's practice) |
 | depth charts 2025+ | `dt` |
 | rosters_weekly week N | same as depth charts legacy |
@@ -216,9 +333,48 @@ These are conservative estimates; live ingestion will record the real arrival ti
    2014–2025 unchanged.
 2. The FantasyPros archive starts **2020** → the candidate-pool proxy needs a pre-2020 fallback
    (⚖️ at C1).
-3. Injury reports have **no date column** → availability is assumed, not observed (§4).
+3. Injury availability is **observed** for 2010–2024 via `date_modified` and assumed only for
+   2009 and 2025+ (§4).
 4. Depth charts have two schemas (§3); `dt` replaces `season`/`week` from 2025.
 5. `receive_2h_ko` is not in pbp; derive it in P2.
 6. `load_rosters` is not a season roster in 2026; use `rosters_weekly`.
 7. `fantasy_points_ppr` counts return touchdowns; our engine gets a `special_teams_td` line.
 8. `team_stats` exists and can feed team-context features cheaply.
+9. The ingestion layer stays dtype-agnostic; B1 owns type normalisation (§10 drift table).
+10. nflreadpy's own cache is **off** (spec 4.1 said to enable it); the Parquet cache supersedes
+    it (§10).
+
+## 14. Glossary (one line each)
+
+- **PPR** — points per reception: a scoring format that adds 1 point per catch (full PPR) on
+  top of yards and touchdowns; `config/scoring.yaml` is full PPR.
+- **PPG** — fantasy points per game.
+- **ECR** — Expert Consensus Rank: FantasyPros' average of many experts' rankings; lower is
+  better (`sd`, `best`, `worst` describe how much the experts disagree).
+- **ADP** — average draft position: where real drafts took a player; a proxy for how the
+  public values him.
+- **Redraft / dynasty / best-ball** — one-season leagues (rosters reset every year) /
+  keep-your-roster leagues (youth and rookies matter) / leagues with no weekly lineup
+  decisions (the best scorers count automatically).
+- **Superflex** — a lineup slot that may hold a second QB, which makes QBs far more valuable;
+  rankings for it carry the `sf` codes.
+- **IDP / K / DST** — individual defensive players, kickers, team defenses (out of scope in P1).
+- **gsis_id** — the NFL's own player ID (a string starting with `00-00`), the key nflverse uses
+  everywhere; **espn_id**, **pfr_id**, **sleeper_id**, **fantasypros_id** are other sites' IDs,
+  mapped in `ff_playerids`.
+- **PFR** — Pro Football Reference, the site snap counts and advanced stats come from; its
+  player IDs look like `BankKe01`.
+- **Snap share** — the share of the team's offensive plays a player was on the field for
+  (`offense_pct` in snap counts): opportunity before production.
+- **xFP / ffopportunity** — expected fantasy points: what an average player would have scored
+  from the same opportunities (targets, carries, field position), from the ffopportunity
+  model; **FPOE** is actual minus expected.
+- **EPA / WP** — expected points added per play / win probability, nflfastR model outputs used
+  as features (Section 6.3 caveat).
+- **Closing line / spread / total / moneyline** — the betting market right before kickoff:
+  `spread_line` is the home team's expected margin (positive = home favored), `total_line` the
+  expected combined score, the moneyline the odds on who wins outright.
+- **REG / POST** — regular season / playoffs (the `season_type` / `game_type` columns).
+- **IR** — injured reserve (`RES` in roster `status`).
+- **As-of / time-machine rule** — every prediction is stamped with the moment it was made and
+  uses only data available then; a past week's prediction is never recomputed with later data.

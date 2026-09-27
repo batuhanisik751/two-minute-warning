@@ -3,7 +3,7 @@ project_name: "Two-Minute Warning"
 current_season: 2026
 seasons:
   pbp_start: 1999          # play-by-play coverage
-  snaps_start: 2012        # snap counts begin here (Waiver Radar training)
+  snaps_start: 2013        # snap counts begin here (the 2012 file has 0 rows; Waiver Radar training)
   waiver_radar_eval: [2014, 2025]   # walk-forward evaluation seasons
   hot_seat_eval: [2006, 2025]
 

@@ -12,7 +12,10 @@ SNAPSHOT_NAMES = [*nv.DATASETS, "depth_charts_legacy"]
 @pytest.mark.parametrize("name", SNAPSHOT_NAMES)
 def test_snapshot_exists_and_is_well_formed(name):
     path = nv.snapshot_path(name)
-    assert path.exists(), f"missing snapshot {path}; run scripts/verify_sources.py"
+    assert path.exists(), (
+        f"missing snapshot {path}; regenerate it from the cache with "
+        f"`uv run python scripts/refresh_snapshots.py {name}`"
+    )
     snap = json.loads(path.read_text())
     assert snap["dataset"] == name
     assert snap["nflreadpy_version"]

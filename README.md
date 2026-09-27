@@ -2,20 +2,49 @@
 
 **Two-Minute Warning** is an open, point-in-time NFL early-warning app. It reads every play of every NFL game since 1999 and flags what is about to change: players about to break into fantasy lineups, hot streaks that won't last, coaches whose decisions are costing their teams wins, coaches about to be fired, and players about to break out, or fall off a cliff, next season.
 
-Every flag comes with a **track record**. Each model is tested the honest way: trained only on seasons before the one it predicts, using only data that was available at the moment of the prediction. A **time machine** lets you pick any week since 2012 and see exactly what the app would have said then, and what actually happened.
+Every flag comes with a **track record**. Each model is tested the honest way: trained only on seasons before the one it predicts, using only data that was available at the moment of the prediction. A **time machine** lets you pick any week since 2013 (the first season with snap counts, which the earliest fantasy modules need) and see exactly what the app would have said then, and what actually happened.
 
 Built on the open-source [nflverse](https://nflverse.nflverse.com/) data ecosystem. Unofficial, educational, not affiliated with the NFL or ESPN, and not betting advice.
 
-## Setup
+## Requirements
+
+Python **3.13** and [uv](https://docs.astral.sh/uv/). On macOS the venv is built from Homebrew's `python3.13`; if `import twm` ever fails with `ModuleNotFoundError`, see the gotchas in `docs/progress.md`.
+
+## First run
 
 ```bash
-uv sync --all-extras
-cp .env.example .env   # fill in locally; never commit
+uv sync --all-extras          # creates .venv (Python 3.13) with all dependencies
+cp .env.example .env          # fill in locally; never commit
+uv run pre-commit install     # ruff + file-hygiene hooks on every commit
 uv run twm --help
+uv run twm doctor             # config, data and environment checks
+
+# Quick start: two small datasets, a few MB, under a minute
+uv run twm ingest schedules player_stats --start 2024
+
+# Full history: all 29 datasets, 1999-2026, roughly 10-15 minutes on a home connection
+# (an estimate, not yet timed end to end) and about 0.5 GB of Parquet under data/raw
+# (gitignored). participation for the current
+# season is expected to fail: nflverse publishes it only after the season.
+uv run twm ingest
+
+uv run pytest                 # offline tests (the default); `uv run pytest -m network` runs the live drift check
 ```
+
+Dataset names: `uv run twm ingest --help` or `DATASETS` in `src/twm/sources/nflverse.py`.
+
+## Data and schema snapshots
+
+- `data/raw/<dataset>/<season>.parquet` is the only cache. Historical seasons are immutable once fetched; the current season and one-file datasets are refreshed after 12 hours. nflreadpy's own cache is switched off so nothing is stored twice.
+- `data/schemas/<dataset>.json` (committed) records each dataset's columns and dtypes. Every current-season or one-file load is compared with it: a missing column raises `SchemaDriftError`, a changed dtype or a new column is logged. Snapshots are written on the first current-season fetch of a dataset and refreshed **deliberately** with `uv run python scripts/refresh_snapshots.py` (review the diff, then commit), never by `twm ingest`.
+- What we verified about the data, and where it differs from the spec: `docs/assumptions.md`. Re-verify from the cache with `uv run python scripts/verify_sources.py` (no network unless you pass `--allow-download`).
 
 See `PROJECT_SPEC.md` for the full specification and `docs/progress.md` for the build log.
 
 ## Attribution
 
 Data from nflverse; rankings and player ID maps from DynastyProcess / FantasyPros; snap counts originate from Pro Football Reference.
+
+## License
+
+MIT, see `LICENSE`.

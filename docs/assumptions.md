@@ -219,7 +219,16 @@ sum either way.
 
 - **pbp `game_date`** is a string date; **schedules `gameday`/`gametime`** are strings
   (`2026-09-10`, `20:20`), kickoff in US Eastern time per nflverse convention. `available_at`
-  derivation (B2) will convert to UTC.
+  derivation (B2) will convert to UTC. **1999 has no `gametime` at all** (259 games), and
+  **2000-2005 record all but one Monday-night game (2005_02_NYG_NO, the relocated Katrina game,
+  has a real `19:30`), two 2001 Saturday games and one Thursday game each in 2003-2005 as
+  `09:00`** (102 rows, 17 per season): a 12-hour-clock placeholder for the true
+  21:00/20:30 ET kickoffs (verified 2026-09-26; no other season has a `gametime` before `09:30`,
+  the London slot that first appears in 2014). The warehouse treats any `gametime` before 09:30
+  as missing and flags the row (`fact_game.kickoff_is_estimated`).
+- **Upstream gaps that are not build bugs:** three played games have no play-by-play rows
+  (`1999_01_BAL_STL`, `2000_03_SD_KC`, `2000_06_BUF_MIA`); the 2013 injury file has no Super
+  Bowl rows and the 2023 one only REG and WC; the 2005 legacy depth-chart file is REG only.
 - **pbp** has `home_coach`/`away_coach` on every play (same as schedules), all WP variants
   (`wp`, `home_wp`, `vegas_wp`, `wpa`, `vegas_wpa`, …), `xpass`, `cpoe`, `xyac_*`.
 - **NGS** weekly rows include `week = 0` season aggregates and POST rows; filter both.
@@ -280,6 +289,7 @@ season on the cache (`pl.read_parquet_schema` over every file):
 | `ff_opportunity` (weekly) | `week` | Float64 in every season 2006–2026 | INTEGER |
 | `participation` | `play_id` | Int32 2016–2022; Float64 2023–2025 | INTEGER |
 | `pbp` | `play_id` | Float64 in every season 1999–2026 | INTEGER |
+| `pbp` | the 58 of the 67 `FACT_PLAY_INTEGER` columns (counts, yard lines, seconds, 0/1 flags) that arrive as Float64 in some season (the other 9 are Int32 everywhere) and `injuries` `season`/`week` | Float64 in some or all seasons; **verified integral on every non-null value 1999–2026** (0 fractional, 0 NaN, 0 inf), so the INTEGER cast loses nothing. The build refuses a non-integral value rather than round it | INTEGER |
 | `pbp` | `goal_to_go` | Float64 1999–2002, 2020, 2024–2026; Int32 otherwise | INTEGER |
 | `pbp` | `xyac_median_yardage` | Float64 1999–2005; Int32 2006–2026 | INTEGER |
 | `rosters_weekly`, `rosters` | `draft_number` | String 2002–2015; Int32 2016–2026 (absent in `rosters` 1998–2001) | INTEGER |
@@ -314,7 +324,7 @@ are never recomputed for a past as-of (time-machine rule).
 
 | Table | `available_at` (UTC) for historical rows |
 |---|---|
-| plays, player-week, team-week, snap counts, ff_opportunity | game end ≈ kickoff + 4 h; conservatively: Tuesday 09:00 UTC after the week for all of week N (nightly run) |
+| plays, player-week, team-week, snap counts | `available_at` = `fact_game.game_end_utc_est` (kickoff + 4 h) of the row's `game_id`. Weekly tables without a `game_id` (ff_opportunity): `dim_week.last_game_end_utc_est`. Never a per-week Tuesday constant: in the five split weeks (`dim_week.is_split_week`: 2010 W16, 2020 W5/W12/W13, 2021 W15) the moved game (two games in 2021 W15) kicks off after that week's `asof_weekly_utc`, so a Tuesday 09:00 rule would leak it (see docs/warehouse.md, dim_week). Rows with `fact_game.kickoff_is_estimated` (1999, and the 102 placeholder rows of 2000-2005) need a conservative end (e.g. 04:30 UTC of the day after `gameday`) |
 | schedules (results, closing lines) | results: game end; **lines: kickoff** (closing line), never earlier |
 | injuries week N | `date_modified` when present (2010–2024, observed); otherwise Friday 23:59 UTC of week N, the last practice report before the games (2009, 2025+, and the 62 null rows of 2010) |
 | depth charts legacy week N | Wednesday 12:00 UTC of week N (start of the week's practice) |

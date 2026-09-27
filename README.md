@@ -28,6 +28,8 @@ uv run twm ingest schedules player_stats --start 2024
 # season is expected to fail: nflverse publishes it only after the season.
 uv run twm ingest
 
+uv run twm build 2025 2026    # DuckDB warehouse data/warehouse.duckdb from the cache, never downloads
+                              # (see docs/warehouse.md); `twm doctor` then lists its tables
 uv run pytest                 # offline tests (the default); `uv run pytest -m network` runs the live drift check
 ```
 
@@ -39,7 +41,7 @@ Dataset names: `uv run twm ingest --help` or `DATASETS` in `src/twm/sources/nflv
 - `data/schemas/<dataset>.json` (committed) records each dataset's columns and dtypes. Every current-season or one-file load is compared with it: a missing column raises `SchemaDriftError`, a changed dtype or a new column is logged. Snapshots are written on the first current-season fetch of a dataset and refreshed **deliberately** with `uv run python scripts/refresh_snapshots.py` (review the diff, then commit), never by `twm ingest`.
 - What we verified about the data, and where it differs from the spec: `docs/assumptions.md`. Re-verify from the cache with `uv run python scripts/verify_sources.py` (no network unless you pass `--allow-download`).
 
-See `PROJECT_SPEC.md` for the full specification and `docs/progress.md` for the build log.
+See `PROJECT_SPEC.md` for the full specification, `docs/warehouse.md` for the DuckDB warehouse and `docs/progress.md` for the build log.
 
 ## Attribution
 

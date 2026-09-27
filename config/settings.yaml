@@ -12,7 +12,14 @@ as_of:
   weekly:
     weekday: tuesday
     time: "14:00"
-  hot_seat_end_of_season: "day_after_week_18"
+  # End-of-regular-season snapshot for the Hot-Seat Meter: <days_after> days after the last
+  # game day (US Eastern date) of the last regular-season week, at <time> UTC. 12:00 UTC is
+  # 07:00 EST Monday (the last REG week is always in standard time), before Black Monday
+  # announcements. Generalizes to 17-week seasons.
+  hot_seat_end_of_season:
+    anchor: last_reg_week
+    days_after: 1
+    time: "12:00"
   board:
     post_draft: "06-01"
     preseason: "tuesday_before_week_1"

@@ -28,6 +28,12 @@ are identical; the DuckDB file itself is not byte-identical, so never compare th
   text rendering is DuckDB's, so compare hashes only across builds with the same
   ``duckdb_version``, which the manifest records);
 - nothing in table content comes from now()/random; only ``build_manifest.built_at`` does.
+
+Point-in-time (B2): every *event* table (see :mod:`twm.warehouse.available`) gets an
+``available_at`` column, computed in SQL by the same ``CREATE TABLE`` that materializes the
+table (last column, table still ordered by its key). A NULL ``available_at`` stops the build
+with :class:`~twm.warehouse.available.AvailabilityError`; the manifest notes record which rule
+placed how many rows and ``n_available_after_week_asof``.
 """
 
 from __future__ import annotations
@@ -49,6 +55,7 @@ import polars as pl
 from twm import __version__
 from twm.config import settings
 from twm.sources import nflverse as nv
+from twm.warehouse import available as av
 from twm.warehouse import schema as sc
 from twm.warehouse import weeks as wk
 
@@ -223,9 +230,17 @@ def _pk(table: sc.Table) -> str:
 
 
 def _materialize(
-    con: duckdb.DuckDBPyConnection, table: sc.Table, stage_sql: str, stats: TableStats
+    con: duckdb.DuckDBPyConnection,
+    table: sc.Table,
+    stage_sql: str,
+    stats: TableStats,
+    arules: av.AvailabilityRules | None = None,
 ) -> TableStats:
-    """Create ``table.name`` from ``stage_sql`` (a SELECT producing the spec's typed columns)."""
+    """Create ``table.name`` from ``stage_sql`` (a SELECT producing the spec's typed columns).
+
+    Event tables (``available.TABLE_AVAILABILITY``) get ``available_at`` appended as the last
+    column in the same statement; ``arules`` is required for them.
+    """
     con.execute(f"CREATE OR REPLACE TEMP TABLE _stage AS {stage_sql}")
     stats.n_source_rows = con.execute("SELECT count(*) FROM _stage").fetchone()[0]
     src = "_stage"
@@ -248,16 +263,29 @@ def _materialize(
             f" QUALIFY row_number() OVER "
             f"(PARTITION BY {_pk(table)} ORDER BY {', '.join(order)}) = 1"
         )
+    body = f"SELECT * FROM {src} WHERE {not_null}{qualify}"
+    avail = None
+    a = av.TABLE_AVAILABILITY[table.name]
+    time_col = av.AVAILABLE_AT if a.kind == "event" else a.row_visible_column
+    if time_col is not None:
+        if arules is None:
+            raise ValueError(f"{table.name} has a time rule: availability rules are required")
+        avail = (
+            av.available_at_sql(table.name, arules)
+            if a.kind == "event"
+            else av.row_visibility_sql(table.name, arules)
+        )
+        extra = "".join(f"{expr} AS {sc.q(name)}, " for name, expr in avail.extra)
+        body = f"SELECT s.*, {extra}{avail.expr} AS {sc.q(time_col)} FROM ({body}) s {avail.joins}"
     con.execute(f"DROP TABLE IF EXISTS {sc.q(table.name)}")
-    con.execute(
-        f"CREATE TABLE {sc.q(table.name)} AS SELECT * FROM {src} WHERE {not_null}{qualify} "
-        f"ORDER BY {_pk(table)}"
-    )
+    con.execute(f"CREATE TABLE {sc.q(table.name)} AS SELECT * FROM ({body}) ORDER BY {_pk(table)}")
     con.execute("DROP TABLE IF EXISTS _stage")
     con.execute("DROP TABLE IF EXISTS _stage_d")
     stats.n_rows = con.execute(f"SELECT count(*) FROM {sc.q(table.name)}").fetchone()[0]
     stats.n_dropped_duplicates += n_kept - stats.n_rows
     assert_primary_key(con, table)
+    if avail is not None:
+        _check_available_at(con, table, avail, stats, time_col, allow_null=a.kind != "event")
     stats.content_hash = content_hash(con, table.name)
     if stats.n_dropped_null_key or stats.n_dropped_duplicates:
         log.info(
@@ -267,6 +295,94 @@ def _materialize(
             stats.n_dropped_duplicates,
         )
     return stats
+
+
+def _check_available_at(
+    con: duckdb.DuckDBPyConnection,
+    table: sc.Table,
+    avail: av.AvailabilitySQL,
+    stats: TableStats,
+    column: str = av.AVAILABLE_AT,
+    *,
+    allow_null: bool = False,
+) -> None:
+    """Refuse NULL ``available_at`` (naming table, count, examples); note rule-branch counts.
+
+    ``allow_null``: a hindsight row time (``dim_player.public_from_utc``) may be NULL, which
+    means "never visible point-in-time"."""
+    name = sc.q(table.name)
+    n_null = con.execute(f"SELECT count(*) FROM {name} WHERE {sc.q(column)} IS NULL").fetchone()[0]
+    if n_null and not allow_null:
+        cols = ", ".join(sc.q(c) for c in table.primary_key)
+        extra = [c for c in ("season", "week", "game_type", "source_format") if c in
+                 table.column_names and c not in table.primary_key]  # fmt: skip
+        sel = ", ".join([cols, *(sc.q(c) for c in extra)])
+        examples = con.execute(
+            f"SELECT {sel} FROM {name} WHERE {sc.q(column)} IS NULL ORDER BY {cols} LIMIT 3"
+        ).fetchall()
+        raise av.AvailabilityError(
+            f"{table.name}: {n_null} row(s) have no {column} (no rule could place them in "
+            f"time, so no prediction could ever use them safely). Examples ({sel}): "
+            f"{examples}. See docs/warehouse.md 'When is a row available?'."
+        )
+    if avail.branch or avail.flags:
+        base = f"FROM {name} s {avail.joins}"
+        if avail.branch:
+            rows = con.execute(
+                f"SELECT {avail.branch} AS b, count(*) {base} GROUP BY b ORDER BY b"
+            ).fetchall()
+            # every known branch is recorded, 0 included, so "0" and "not computed" differ
+            counts = dict.fromkeys(sorted(avail.branches), 0)
+            counts.update({b: n for b, n in rows})
+            stats.notes[f"{column}_rule_counts"] = counts
+        for note, cond in avail.flags:
+            stats.notes[note] = con.execute(
+                f"SELECT count(*) FILTER (WHERE {cond}) {base}"
+            ).fetchone()[0]
+
+
+def _note_after_week_asof(con: duckdb.DuckDBPyConnection, stats: dict[str, TableStats]) -> None:
+    """``n_available_after_week_asof``: rows that are not yet available at their own week's
+    Tuesday as-of (split-week games, late injury stamps, fired coaches' stints ...)."""
+    for name, a in av.TABLE_AVAILABILITY.items():
+        if a.kind != "event" or a.week_key is None:
+            continue
+        season, week = a.week_key
+        stats[name].notes["n_available_after_week_asof"] = con.execute(
+            f"SELECT count(*) FROM (SELECT {season} AS _season, {week} AS _week, available_at "
+            f"FROM {sc.q(name)}) s JOIN dim_week w ON w.season = s._season AND w.week = s._week "
+            "WHERE s.available_at > w.asof_weekly_utc"
+        ).fetchone()[0]
+
+
+def _assert_official_snapshots_complete(con: duckdb.DuckDBPyConnection) -> None:
+    """Every game-data row of a non-split week must be visible at that week's Tuesday as-of,
+    and every row of the regular-season finale at the end-of-season snapshot.
+
+    The margins are small (7.6 h for a Monday-night game, 0 h for a 1999-2002 Monday-night
+    finale at the end-of-season snapshot), so a larger lag in config would otherwise drop
+    Monday-night games from the official snapshots silently.
+    """
+    problems = []
+    for name in [*av.GAME_DATA_TABLES, "fact_game"]:
+        weekly, finale = con.execute(f"""
+            SELECT
+              count(*) FILTER (WHERE NOT w.is_split_week AND x.available_at > w.asof_weekly_utc),
+              count(*) FILTER (WHERE w.is_last_reg_week
+                               AND x.available_at > w.asof_end_of_regular_season_utc)
+            FROM {sc.q(name)} x JOIN fact_game g ON g.game_id = x.game_id
+            JOIN dim_week w ON w.season = g.season AND w.week = g.week
+             AND w.season_type = g.season_type""").fetchone()
+        if weekly:
+            problems.append(f"{name}: {weekly} row(s) of non-split weeks miss their Tuesday as-of")
+        if finale:
+            problems.append(f"{name}: {finale} finale row(s) miss the end-of-season snapshot")
+    if problems:
+        raise av.AvailabilityError(
+            "the availability lags in config/settings.yaml (availability.game_data_lag_hours, "
+            "game_result_lag_hours, estimated_kickoff_for_availability_et) push rows past an "
+            "official as-of: " + "; ".join(problems) + ". Lower the lag or change the as-of."
+        )
 
 
 def assert_primary_key(con: duckdb.DuckDBPyConnection, table: sc.Table) -> None:
@@ -294,13 +410,19 @@ def assert_primary_key(con: duckdb.DuckDBPyConnection, table: sc.Table) -> None:
 
 def write_comments(con: duckdb.DuckDBPyConnection, table: sc.Table) -> None:
     """Store the spec's table and column docs in the file (``duckdb_columns().comment``),
-    so any DuckDB client can read what a column means."""
+    so any DuckDB client can read what a column means (``available_at``: its rule)."""
     con.execute(f"COMMENT ON TABLE {sc.q(table.name)} IS {sc.sql_str(table.doc)}")
     for c in table.columns:
         if c.doc:
             con.execute(
                 f"COMMENT ON COLUMN {sc.q(table.name)}.{sc.q(c.name)} IS {sc.sql_str(c.doc)}"
             )
+    a = av.TABLE_AVAILABILITY[table.name]
+    for name, doc in a.extra_columns.items():
+        con.execute(f"COMMENT ON COLUMN {sc.q(table.name)}.{sc.q(name)} IS {sc.sql_str(doc)}")
+    if a.kind == "event":
+        doc = f"UTC time this row counts as public (use it when available_at <= as_of). {a.rule}"
+        con.execute(f"COMMENT ON COLUMN {sc.q(table.name)}.available_at IS {sc.sql_str(doc)}")
 
 
 def content_hash(con: duckdb.DuckDBPyConnection, table_name: str) -> str:
@@ -343,12 +465,16 @@ def _source_select(
 
 
 def _build_from_source(
-    con: duckdb.DuckDBPyConnection, table: sc.Table, src: SourceFiles, stats: TableStats
+    con: duckdb.DuckDBPyConnection,
+    table: sc.Table,
+    src: SourceFiles,
+    stats: TableStats,
+    arules: av.AvailabilityRules | None = None,
 ) -> TableStats:
     if not src.paths[table.source]:  # every requested season predates the dataset
-        return _materialize(con, table, _empty_select(table), stats)
+        return _materialize(con, table, _empty_select(table), stats, arules)
     _, sql = _source_select(con, table, src, stats)
-    return _materialize(con, table, sql, stats)
+    return _materialize(con, table, sql, stats, arules)
 
 
 def _without_computed(table: sc.Table) -> sc.Table:
@@ -357,18 +483,22 @@ def _without_computed(table: sc.Table) -> sc.Table:
 
 
 def _build_fact_game(
-    con: duckdb.DuckDBPyConnection, src: SourceFiles, stats: TableStats
+    con: duckdb.DuckDBPyConnection,
+    src: SourceFiles,
+    stats: TableStats,
+    arules: av.AvailabilityRules,
 ) -> TableStats:
     table = sc.tables()["fact_game"]
     _, sql = _source_select(con, _without_computed(table), src, stats)
     df = con.execute(sql).pl()
-    kick, est, end, home_it, away_it, stype = [], [], [], [], [], []
+    kick, est, end, avail_end, home_it, away_it, stype = [], [], [], [], [], [], []
     cols = ("gameday", "gametime", "weekday", "spread_line", "total_line", "game_type")
     for gameday, gametime, weekday, spread, total, game_type in df.select(*cols).iter_rows():
         k, e = wk.kickoff_utc(gameday.isoformat(), gametime, weekday)
         kick.append(k)
         est.append(e)
         end.append(k + wk.GAME_DURATION_EST)
+        avail_end.append(av.availability_game_end(gameday, end[-1], e, arules))
         h, a = wk.implied_totals(spread, total)
         home_it.append(h)
         away_it.append(a)
@@ -380,13 +510,42 @@ def _build_fact_game(
         pl.Series("game_end_utc_est", end, dtype=pl.Datetime("us")),
         pl.Series("home_implied_total", home_it, dtype=pl.Float64),
         pl.Series("away_implied_total", away_it, dtype=pl.Float64),
+        pl.Series("availability_game_end_utc", avail_end, dtype=pl.Datetime("us")),
     )
     stats.notes["n_kickoff_estimated"] = int(sum(est))
     types = _register(con, "df_fact_game", df)
     sql = f"SELECT\n  {_select_list(table, types, transforms=False)}\nFROM df_fact_game"
-    out = _materialize(con, table, sql, stats)
+    out = _materialize(con, table, sql, stats, arules)
     con.unregister("df_fact_game")
     return out
+
+
+def _build_fact_schedule(
+    con: duckdb.DuckDBPyConnection, stats: TableStats, arules: av.AvailabilityRules
+) -> TableStats:
+    """The pre-game view of fact_game: only the columns public when the schedule is out."""
+    table = sc.tables()["fact_schedule"]
+    cols = ", ".join(sc.q(c) for c in table.column_names)
+    out = _materialize(con, table, f"SELECT {cols} FROM fact_game", stats, arules)
+    # Listed schedule changes of the built seasons: cancelled games (absent from nflverse,
+    # feature code must add them back for "games remaining" before the announcement) and
+    # listed games the schedule does not have (a typo in the config, or an nflverse change).
+    built = {r[0] for r in con.execute("SELECT DISTINCT season FROM fact_game").fetchall()}
+    ids = {r[0] for r in con.execute("SELECT game_id FROM fact_game").fetchall()}
+    listed = [x for x in arules.schedule_exceptions if _season_of(x.game_id) in built]
+    cancelled = [x.game_id for x in listed if x.cancelled]
+    missing = [x.game_id for x in listed if not x.cancelled and x.game_id not in ids]
+    if cancelled:
+        out.notes["cancelled_games"] = cancelled
+    if missing:
+        out.notes["schedule_exceptions_not_found"] = missing
+        log.warning("fact_schedule: listed schedule exceptions not in the schedule: %s", missing)
+    return out
+
+
+def _season_of(game_id: str) -> int | None:
+    head = game_id.split("_", 1)[0]
+    return int(head) if head.isdigit() else None
 
 
 def _build_dim_week(
@@ -415,7 +574,9 @@ COACH_NAMES_SQL = """(
         ) WHERE coach_name IS NOT NULL"""
 
 
-def _build_coaches(con: duckdb.DuckDBPyConnection, stats: dict[str, TableStats]) -> None:
+def _build_coaches(
+    con: duckdb.DuckDBPyConnection, stats: dict[str, TableStats], arules: av.AvailabilityRules
+) -> None:
     slug_home, slug_away = SLUG_SQL.format(x="home_coach"), SLUG_SQL.format(x="away_coach")
     coach_game_sql = f"""
         SELECT game_id, season, week, season_type, home_team AS team,
@@ -425,7 +586,7 @@ def _build_coaches(con: duckdb.DuckDBPyConnection, stats: dict[str, TableStats])
         SELECT game_id, season, week, season_type, away_team AS team,
                {slug_away} AS coach_id, FALSE AS is_home
         FROM fact_game WHERE away_coach IS NOT NULL"""
-    _materialize(con, sc.COACH_GAME, coach_game_sql, stats["coach_game"])
+    _materialize(con, sc.COACH_GAME, coach_game_sql, stats["coach_game"], arules)
     # Two spellings of one name ('Sean McVay' / 'Sean Mcvay', a double space) share a slug and
     # therefore a coach_id; the bridge tables already merge them, so dim_coach must too. The
     # canonical coach_name is the whitespace-collapsed, alphabetically (byte order) first
@@ -444,12 +605,12 @@ def _build_coaches(con: duckdb.DuckDBPyConnection, stats: dict[str, TableStats])
             SELECT {slug_name} AS coach_id, {CLEAN_NAME_SQL.format(x="coach_name")} AS coach_name
             FROM {COACH_NAMES_SQL}
         ) GROUP BY coach_id"""
-    _materialize(con, sc.DIM_COACH, dim_coach_sql, stats["dim_coach"])
+    _materialize(con, sc.DIM_COACH, dim_coach_sql, stats["dim_coach"], arules)
     cts_sql = """
         SELECT coach_id, team, season, CAST(min(week) AS INTEGER) AS first_week,
                CAST(max(week) AS INTEGER) AS last_week, CAST(count(*) AS INTEGER) AS n_games
         FROM coach_game GROUP BY coach_id, team, season"""
-    _materialize(con, sc.COACH_TEAM_SEASON, cts_sql, stats["coach_team_season"])
+    _materialize(con, sc.COACH_TEAM_SEASON, cts_sql, stats["coach_team_season"], arules)
     # How many team-seasons show more than one coach: the schedule columns record in-season
     # changes only through 2023 (see docs/assumptions.md), so this makes the gap visible.
     stats["coach_team_season"].notes["n_team_seasons_multi_coach"] = con.execute(
@@ -475,7 +636,10 @@ def _week_at_dt_frame(con: duckdb.DuckDBPyConnection, pairs: pl.DataFrame) -> pl
 
 
 def _build_fact_depth_chart(
-    con: duckdb.DuckDBPyConnection, src: SourceFiles, stats: TableStats
+    con: duckdb.DuckDBPyConnection,
+    src: SourceFiles,
+    stats: TableStats,
+    arules: av.AvailabilityRules,
 ) -> TableStats:
     table = sc.tables()["fact_depth_chart"]
     legacy_types, daily_types = _depth_chart_views(
@@ -538,7 +702,7 @@ def _build_fact_depth_chart(
     if not parts:
         parts.append(_empty_select(table))
     sql = " UNION ALL BY NAME ".join(f"({p})" for p in parts)
-    out = _materialize(con, table, f"SELECT * FROM ({sql})", stats)
+    out = _materialize(con, table, f"SELECT * FROM ({sql})", stats, arules)
     if daily_types is not None:
         con.unregister("df_week_at_dt")
     n_other = con.execute("SELECT count(*) FROM fact_depth_chart WHERE unit = 'other'").fetchone()[
@@ -645,6 +809,7 @@ def build_warehouse(
             "schedule; nothing to build"
         )
     rules = wk.AsOfRules.from_config(settings().as_of)
+    arules = av.AvailabilityRules.from_settings()
     specs = sc.tables()
     stats = {
         name: TableStats(
@@ -674,10 +839,11 @@ def build_warehouse(
                 con.execute("BEGIN TRANSACTION")
                 log.info("building warehouse for seasons %s into %s", seasons, tmp)
                 _build_dim_team(con, src, stats["dim_team"])
-                _build_fact_game(con, src, stats["fact_game"])
+                _build_fact_game(con, src, stats["fact_game"], arules)
                 _build_dim_week(con, rules, stats["dim_week"])
                 _assert_week_windows(con)  # before anything maps timestamps to weeks
-                _build_coaches(con, stats)
+                _build_fact_schedule(con, stats["fact_schedule"], arules)
+                _build_coaches(con, stats, arules)
                 for name in (
                     "fact_play",
                     "fact_player_week",
@@ -685,10 +851,13 @@ def build_warehouse(
                     "fact_snaps",
                     "fact_injury_report",
                 ):
-                    _build_from_source(con, specs[name], src, stats[name])
-                _build_fact_depth_chart(con, src, stats["fact_depth_chart"])
-                _build_from_source(con, specs["dim_player"], src, stats["dim_player"])
+                    _build_from_source(con, specs[name], src, stats[name], arules)
+                _build_fact_depth_chart(con, src, stats["fact_depth_chart"], arules)
+                # after every event table: an undrafted player exists from his first row
+                _build_from_source(con, specs["dim_player"], src, stats["dim_player"], arules)
                 _assert_no_timestamptz(con)
+                _note_after_week_asof(con, stats)
+                _assert_official_snapshots_complete(con)
                 for table in specs.values():
                     write_comments(con, table)
                 manifest = _write_manifest(con, [stats[n] for n in specs])

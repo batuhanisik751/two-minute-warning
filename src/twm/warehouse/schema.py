@@ -253,6 +253,19 @@ FACT_GAME_EXTRA = [
     Column("game_end_utc_est", "TIMESTAMP", computed=True, doc="kickoff_utc + 4 h (estimate)"),
     Column("home_implied_total", "DOUBLE", computed=True, doc="(total_line + spread_line) / 2"),
     Column("away_implied_total", "DOUBLE", computed=True, doc="(total_line - spread_line) / 2"),
+    Column(
+        "availability_game_end_utc",
+        "TIMESTAMP",
+        computed=True,
+        doc=(
+            "the game end used by the available_at rules (B2): game_end_utc_est, except for "
+            "kickoff_is_estimated games, where the kickoff is assumed to be the latest normal "
+            "night slot for that weekday (config availability.estimated_kickoff_for_availability"
+            "_et: 21:00 ET on Mondays, 20:30 ET otherwise) + 4 h, so the estimate errs late; "
+            "never earlier than game_end_utc_est. The row itself (final score) is available "
+            "game_result_lag_hours after this"
+        ),
+    ),
 ]
 
 
@@ -273,6 +286,48 @@ def fact_game_spec() -> Table:
             "gametime converted to UTC, DST-aware), game_end_utc_est (kickoff + 4 h) and the "
             "closing-line implied team totals. Team columns use current abbreviations; "
             "home_team_raw/away_team_raw keep the original spelling (e.g. SD, STL, OAK)."
+        ),
+    )
+
+
+# ---- fact_schedule ----------------------------------------------------------------------
+
+# Only the columns that are public when the fixture list is published: who plays whom, where
+# and when. Deliberately NOT here: scores/result/total/overtime (known after the game), betting
+# lines/odds/moneylines (closing lines are set just before kickoff), coaches (a future game's
+# listed coach can reveal a firing), referee, starting QBs, temp/wind, and roof (open/closed is
+# decided on game day for retractable roofs, so it hints at the weather). The values are
+# nflverse's FINAL schedule: the date/time/venue ("slot") columns are masked in the as-of view
+# until slot_available_at, and the curated availability.schedule_exceptions (moved or relocated
+# games) wait for their announcement; other later changes cannot be detected (docs/warehouse.md).
+FACT_SCHEDULE_COLUMNS = (
+    "game_id", "season", "week", "game_type", "season_type", "gameday", "weekday", "gametime",
+    "kickoff_utc", "kickoff_is_estimated", "home_team", "away_team", "home_team_raw",
+    "away_team_raw", "location", "div_game", "surface", "stadium_id", "stadium", "away_rest",
+    "home_rest",
+)  # fmt: skip
+
+
+def fact_schedule_spec() -> Table:
+    game_cols = {c.name: c for c in fact_game_spec().columns}
+    missing = [n for n in FACT_SCHEDULE_COLUMNS if n not in game_cols]
+    if missing:
+        raise ValueError(f"fact_schedule: columns not in fact_game: {missing}")
+    cols = tuple(Column(n, game_cols[n].type, doc=game_cols[n].doc) for n in FACT_SCHEDULE_COLUMNS)
+    return Table(
+        name="fact_schedule",
+        primary_key=("game_id",),
+        columns=cols,
+        doc=(
+            "One row per scheduled game with ONLY what is public once the schedule is announced "
+            "(teams, week, date/time, venue, rest days): no scores, no betting lines, no coaches, "
+            "no weather. Use it for upcoming opponents, byes and games remaining. Regular-season "
+            "rows are available from the spring schedule release; playoff rows once the previous "
+            "round is over (see available_at); the date/time/venue columns only from "
+            "slot_available_at. It is nflverse's FINAL schedule: games postponed, flexed or "
+            "moved after the release show their final week/slot (listed changes in "
+            "availability.schedule_exceptions wait for their announcement; the cancelled 2022 "
+            "W17 BUF-CIN game is absent)."
         ),
     )
 
@@ -632,14 +687,19 @@ COACH_TEAM_SEASON = Table(
             "INTEGER",
             doc=(
                 "games scheduled for this coach-team stint that season (played or not, playoffs "
-                "included); for the in-progress season this includes future games. Use "
-                "coach_game + asof_filter (B2) for games-coached-to-date."
+                "included). Point-in-time the row only appears once the stint is over, so this "
+                "count never includes future games there (only a direct read of "
+                "wh.coach_team_season does). For games coached to date, count coach_game rows "
+                "through twm.asof (AsOfView / asof_filter)."
             ),
         ),
     ),
     doc=(
-        "One row per coach-team-season as listed in the schedule (first/last week, games). A "
-        "schedule-derived stint table, not point-in-time. A team has >1 row only when nflverse "
+        "One row per coach-team-season as listed in the schedule (first/last week, games). "
+        "Point-in-time since B2: a stint row appears only once the stint is over (season end, "
+        "or the next coach's first kickoff), so at an in-season as-of the current coach has no "
+        "row here; count coach_game rows through AsOfView for games coached to date. A team "
+        "has >1 row only when nflverse "
         "records the change; 2024+ seasons show one coach per team even after in-season "
         "firings. Interim flags are P2."
     ),
@@ -714,6 +774,7 @@ def tables() -> dict[str, Table]:
         dim_team_spec(),
         fact_game_spec(),
         DIM_WEEK,
+        fact_schedule_spec(),
         DIM_COACH,
         COACH_GAME,
         COACH_TEAM_SEASON,

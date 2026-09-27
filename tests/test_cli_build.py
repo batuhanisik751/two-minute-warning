@@ -126,3 +126,38 @@ def test_doctor_reports_not_built(db_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "not built" in result.output and "run `twm build 2025 2026`" in result.output
     assert result.output.rstrip().endswith("ok")
+
+
+def test_asof_cli_explains_a_warehouse_built_before_b2(tmp_path):
+    """A B1-built file: a one-line hint to rebuild, not a traceback."""
+    import duckdb
+
+    old = tmp_path / "b1.duckdb"
+    con = duckdb.connect(str(old))
+    con.execute("CREATE TABLE fact_play AS SELECT 'g' AS game_id, 1 AS play_id")
+    con.execute(
+        "CREATE TABLE dim_week AS SELECT 2025 AS season, 5 AS week, 'REG' AS season_type, "
+        "TIMESTAMP '2025-10-07 14:00:00' AS asof_weekly_utc"
+    )
+    con.close()
+    result = runner.invoke(app, ["asof", "2025", "5", "--db", str(old)])
+    assert result.exit_code == 1
+    assert "cannot show the as-of" in result.output and "twm build" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_asof_cli_shows_visible_rows(raw, db_path, monkeypatch):
+    raw.write_season(2025, season_2025_games())
+    wb.build_warehouse([2025], db_path=db_path)
+    result = runner.invoke(app, ["asof", "2025", "1", "--db", str(db_path)])
+    assert result.exit_code == 0, result.output
+    assert "as-of for 2025 week 1: 2025-09-09 14:00 UTC (Tuesday)" in result.output
+    rows = {ln.split()[0]: ln.split()[1:3] for ln in result.output.splitlines()[2:]}
+    assert rows["fact_game"] == ["4", "14"] and rows["fact_play"] == ["8", "28"]
+    # a playoff week number works too; an unknown week is a one-line error
+    assert runner.invoke(app, ["asof", "2025", "5", "--db", str(db_path)]).exit_code == 0
+    result = runner.invoke(app, ["asof", "2025", "30", "--db", str(db_path)])
+    assert result.exit_code == 1 and "no week 30 of 2025" in result.output
+    _point_warehouse_at(monkeypatch, db_path.with_name("missing.duckdb"))
+    result = runner.invoke(app, ["asof", "2025", "1"])
+    assert result.exit_code == 1 and "twm build" in result.output

@@ -180,5 +180,45 @@ def build(
         )
 
 
+@app.command()
+def asof(
+    season: int = typer.Argument(..., help="Season, e.g. 2025."),
+    week: int = typer.Argument(..., help="Week number (regular season or playoffs)."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+) -> None:
+    """Show what the warehouse looked like at a week's official Tuesday as-of.
+
+    Prints the as-of moment and, per event table, how many of that season's rows were already
+    available then (a learning aid for the point-in-time rules in docs/warehouse.md).
+    """
+    import duckdb
+
+    from twm.asof import AsOfView, WarehouseTooOldError, weekly_as_of
+    from twm.config import settings
+    from twm.warehouse import available as av
+
+    path = db if db is not None else settings().path("warehouse")
+    if not Path(path).exists():
+        typer.echo(f"warehouse not found: {path}; run `twm build` first", err=True)
+        raise typer.Exit(code=1)
+    try:
+        when = weekly_as_of(path, season, week, season_type=None)
+        with AsOfView(path, when) as view:
+            typer.echo(f"as-of for {season} week {week}: {when:%Y-%m-%d %H:%M} UTC ({when:%A})")
+            typer.echo(f"{'table':24s} {'visible':>10s} {'of':>10s}  (rows of season {season})")
+            for name in av.event_tables():
+                if name not in view.tables:
+                    continue
+                cols = set(view.sql(f"SELECT * FROM {name} LIMIT 0").columns)
+                where = f"WHERE season = {int(season)}" if "season" in cols else ""
+                seen = view.sql(f"SELECT count(*) AS n FROM {name} {where}").item()
+                total = view.sql(f"SELECT count(*) AS n FROM wh.{name} {where}").item()
+                label = name if where else f"{name} (all seasons)"
+                typer.echo(f"{label:24s} {seen:>10,} {total:>10,}")
+    except (LookupError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot show the as-of: {e}", err=True)
+        raise typer.Exit(code=1) from e
+
+
 if __name__ == "__main__":
     app()

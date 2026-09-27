@@ -24,6 +24,76 @@ as_of:
     post_draft: "06-01"
     preseason: "tuesday_before_week_1"
 
+# When does a warehouse row become public? (B2; docs/warehouse.md "When is a row available?")
+# Every event-table row gets an `available_at` (UTC) from these rules; a prediction at as_of may
+# use a row only if available_at <= as_of. When unsure, the rules pick the LATER time.
+availability:
+  # nflverse publishes game data in a nightly run after the game ends (kickoff + 4 h est.).
+  # 6 h keeps a Monday-night game inside the Tuesday 14:00 UTC as-of (smallest real gap: 7.6 h)
+  # and the regular-season finale inside the end-of-season snapshot (smallest gap: 6.7 h in
+  # 2021-2025, only 0.5 h for the 1999-2005 guessed night kickoffs and exactly 0 h for the
+  # 1999-2002 Monday-night finales). The build stops if a lag drops any row of a non-split week
+  # from its Tuesday as-of, or a finale row from the end-of-season snapshot.
+  game_data_lag_hours: {pbp: 6, player_stats: 6, team_stats: 6, snap_counts: 6}
+  # A fact_game row (final score) is public this long after the estimated game end
+  # (kickoff + 4 h): weather delays and overtime can push real games past kickoff + 4 h, so the
+  # final score waits 3 h more. Checked on the data: for every 2020+ game with a reliable play
+  # clock, the last play is before fact_game.available_at (realdata test in test_available.py).
+  game_result_lag_hours: 3
+  # Regular-season schedules are released in spring (April-May); this date is later than every
+  # release, so the fixture list (who plays whom, which week) counts as public from
+  # <season>-05-20 00:00 UTC.
+  schedule_release_month_day: "05-20"
+  # The date/time/venue of a game ("slot": gameday, gametime, kickoff, location, rest days) can
+  # still change after the release (flexed games, Week 17/18 time slots picked late), so those
+  # columns stay hidden until this many days before kickoff (the NFL's 12-day flex notice); the
+  # last two regular-season weeks also wait for the previous week's as-of.
+  schedule_slot_lead_days: 12
+  # Games without a real kickoff time (1999; 2000-2005 placeholders) are assumed to be night
+  # games for availability purposes: the latest normal slot FOR THAT WEEKDAY (Monday nights
+  # kicked off at 21:00 ET in 1999-2005, every other night game by 20:30 ET), so the estimate
+  # errs late. Keys: weekday names and `default`.
+  estimated_kickoff_for_availability_et: {Monday: "21:00", default: "20:30"}
+  # 2010-2020 injury `date_modified` stamps are not true UTC (their time of day does not move
+  # with daylight saving time, unlike 2021-2024); this many hours are added to them so the rows
+  # count as public only after the real afternoon release (docs/assumptions.md section 4).
+  injury_legacy_stamp_offset_hours: 9
+  # A drafted player "exists" point-in-time from this day of his draft year (00:00 UTC); later
+  # than the last day of every NFL draft (2014 ended on May 10) and before the June 1 board.
+  draft_public_month_day: "05-15"
+  # Schedule changes made after the release that nflverse's FINAL schedule bakes in (a game
+  # moved to another week, day or stadium, or cancelled). Game ids are checked against the
+  # data by the build. No announcement dates: they cannot be verified from nflverse, so each
+  # listed game's row and slot count as public only from the game's own kickoff (a game is
+  # always announced before it is played). To use an earlier, verified date, add
+  # `announced: YYYY-MM-DD` together with `source: <url>`; the row is then public from 12:00 UTC
+  # the day after. Changes not listed here cannot be detected from nflverse.
+  schedule_exceptions:
+    - {game_id: 2003_08_MIA_SD, what: "wildfires: moved to Tempe, AZ"}
+    - {game_id: 2005_02_NYG_NO, what: "Katrina: moved to Giants Stadium, Monday"}
+    - {game_id: 2008_10_BAL_HOU, what: "Hurricane Ike: week 2 moved to week 10"}
+    - {game_id: 2010_14_NYG_MIN, what: "Metrodome roof collapse: Monday at Ford Field"}
+    - {game_id: 2010_16_MIN_PHI, what: "blizzard: Sunday moved to Tuesday"}
+    - {game_id: 2014_12_NYJ_BUF, what: "snowstorm: Monday at Ford Field"}
+    - {game_id: 2017_11_TB_MIA, what: "Hurricane Irma: week 1 moved to week 11"}
+    - {game_id: 2020_04_NE_KC, what: "COVID-19: Sunday moved to Monday"}
+    - {game_id: 2020_05_BUF_TEN, what: "COVID-19: moved to Tuesday"}
+    - {game_id: 2020_06_DEN_NE, what: "COVID-19: week 5 moved to week 6"}
+    - {game_id: 2020_06_KC_BUF, what: "COVID-19: Thursday moved to Monday"}
+    - {game_id: 2020_07_PIT_TEN, what: "COVID-19: week 4 moved to week 7"}
+    - {game_id: 2020_12_BAL_PIT, what: "COVID-19: Thursday moved to Wednesday"}
+    - {game_id: 2020_13_BUF_SF, what: "Santa Clara ban: moved to Glendale, AZ"}
+    - {game_id: 2020_13_DAL_BAL, what: "COVID-19: Thursday moved to Tuesday"}
+    - {game_id: 2020_14_WAS_SF, what: "Santa Clara ban: moved to Glendale, AZ"}
+    - {game_id: 2020_17_SEA_SF, what: "Santa Clara ban: moved to Glendale, AZ"}
+    - {game_id: 2021_01_GB_NO, what: "Hurricane Ida: moved to Jacksonville"}
+    - {game_id: 2021_15_LV_CLE, what: "COVID-19: Saturday moved to Monday"}
+    - {game_id: 2021_15_SEA_LA, what: "COVID-19: Sunday moved to Tuesday"}
+    - {game_id: 2021_15_WAS_PHI, what: "COVID-19: Sunday moved to Tuesday"}
+    - {game_id: 2022_11_CLE_BUF, what: "snowstorm: moved to Ford Field"}
+    - {game_id: 2022_17_BUF_CIN, cancelled: true, what: "cancelled after the Hamlin injury: not in nflverse, BUF and CIN show 16 games"}
+    - {game_id: 2023_19_PIT_BUF, what: "snowstorm: Sunday moved to Monday"}
+
 horizons:
   waiver_radar_weeks: 3
 

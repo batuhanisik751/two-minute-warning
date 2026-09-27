@@ -63,7 +63,7 @@ range check and their 1998 file simply does not exist upstream (HTTP 404). `sche
 | per-play expected columns | pass: `pass_completion_exp`, `yards_after_catch_exp`, `yardline_exp`, `pass_touchdown_exp`, `pass_first_down_exp`, `pass_interception_exp`, `two_point_conv_exp`; rush: `rush_yards_exp`, `rushing_yards_exp`, `rush_touchdown_exp`, `rushing_td_exp`, `rushing_fd_exp` | ff_opportunity_pass / _rush |
 | `fantasypros_id`, `player_name`, `rank` | `id` (string), `player`, no rank (use `ecr`) | ff_rankings_draft / _all |
 | `page_type`, `id` | `page`, `page_pos`, `fantasypros_id` (int) | ff_rankings_week |
-| `date_modified` | present 2009–2024: real UTC timestamps on essentially every row 2010–2024, one junk stamp in 2009 (§4); absent from 2025/2026 | injuries |
+| `date_modified` | present 2009–2024: a timestamp labelled UTC on essentially every row 2010–2024 (real UTC from 2021; 2010–2020 behave like a wall-clock time of unknown zone, §4), one junk stamp in 2009; absent from 2025/2026 | injuries |
 | `season` | absent (one file for all teams) | teams |
 | `cols` (nflreadr's nested contract-details column) | `season_history`, `contract_history` | contracts |
 | `espn_id` as an integer everywhere | Int64 in `ff_playerids`; a **string** in `rosters_weekly`, `rosters`, `players`, `depth_charts`. Cast one side before the ESPN join (spec 7.5) | ff_playerids vs rosters |
@@ -99,9 +99,9 @@ Everything else the spec relies on exists under the expected name (full lists in
 ## 4. Injury reports carry a report timestamp for 2010–2024 (`date_modified`)
 
 Injury rows (`season`, `week`, `team`, `gsis_id`, `report_status`, `practice_status`,
-`report_primary_injury`, …) have a `date_modified` column, a **UTC datetime**
-(`Datetime(us, UTC)`), in the 2009–2024 files; it is **absent from 2025 and 2026**. Verified
-on the cache:
+`report_primary_injury`, …) have a `date_modified` column, typed as a **UTC datetime**
+(`Datetime(us, UTC)`), in the 2009–2024 files; it is **absent from 2025 and 2026**. Only the
+2021–2024 values behave like true UTC (below). Verified on the cache:
 
 - **2010–2024: populated on essentially every row** (0 nulls in 2011–2024; 62 nulls of 4,491
   rows in 2010). It is the row's last-modified time: injury reports are updated after each
@@ -114,6 +114,18 @@ on the cache:
   after the week's last game (kickoff + 4 h). The earliest stamp of each season is Sep 3–9
   (week 1's Tuesday or Wednesday in every season except 2018, which starts on Monday 09-03,
   Labor Day).
+- **Two regimes (B2 review, 2026-09-27).** 2021–2024 stamps are afternoon UTC (Friday median
+  19.5–19.9 h UTC; 5–36 morning rows per season) and their time of day moves with daylight
+  saving time (Friday median 19.35 h UTC in Sep–Oct vs 20.13 h in Dec–Jan, i.e. about
+  15:15–15:20 ET all season, the real afternoon release). 2010–2020 stamps are not: the Friday
+  median is 11.6–12.3 h "UTC" every season (1,959–3,147 morning rows per season) and does
+  **not** move with DST (11.88 h in Sep–Oct, 11.85 h in Dec–Jan), i.e. before Friday practice
+  if read as UTC. They behave like a wall-clock time labelled UTC; the true zone is unknown.
+  Read as UTC they are several hours earlier than the real publication, so the availability
+  rule adds a conservative **9 h** (`availability.injury_legacy_stamp_offset_hours`): 8 h covers
+  a Pacific-standard-time reading, the extra hour the gap to the observed ~15:15–16:00 ET
+  release and PDT. Later is safe: with +9 h only 6 of 5,870 team-week last stamps pass their
+  kickoff. At the official as-ofs this changes the visibility of 2 rows (2010–2020).
 - **2009:** 4,804 of 4,821 rows are null and the 17 non-null values are one junk stamp
   (`2010-01-01 09:23:14 UTC`); treat the whole season as null.
 - `report_status` values across eras: `Out`, `Doubtful`, `Questionable` and null in every
@@ -126,12 +138,15 @@ on the cache:
   and HOU `00-0039359`; no other season has any); the warehouse keeps `date_modified` as a
   naive UTC `TIMESTAMP` in `fact_injury_report` and resolves those with "latest stamp wins".
 
-**Availability rule (B2):** for 2010–2024 use the observed `date_modified` as `available_at`
-(the moment the row reached its final weekly state, before the games). For 2009, the 62 null
-rows of 2010 and 2025+, **assume** Friday 23:59 UTC of the report week (the last practice
-report, before the week's games). Either way, at the Tuesday as-of after week N the week-N
-report is fully usable and the week-N+1 report is **not** (it publishes Wed–Fri). Live:
-nflverse refreshes injuries daily at 07:00 UTC, and the pipeline records the real arrival time.
+**Availability rule (B2, implemented; §12):** for 2021–2024 the observed `date_modified` is
+`available_at` (the moment the row reached its final weekly state); for 2010–2020 it is
+`date_modified` + 9 h (the stamps are not true UTC, above; manifest branch
+`date_modified_legacy_shifted`). For 2009, the 62 null rows of 2010 and 2025+, the team's
+kickoff that week (the final report is always out by then; A3's
+"Friday 23:59 of the report week" was dropped because it lands after Thursday games and is
+ill-defined for weeks that start on a Saturday or Wednesday). In
+every case a week-N+1 row is never available at the Tuesday as-of after week N. Live: nflverse
+refreshes injuries daily at 07:00 UTC, and the pipeline records the real arrival time.
 
 ## 5. Snap counts use PFR IDs; the join works
 
@@ -218,8 +233,8 @@ sum either way.
 ## 10. Other observations
 
 - **pbp `game_date`** is a string date; **schedules `gameday`/`gametime`** are strings
-  (`2026-09-10`, `20:20`), kickoff in US Eastern time per nflverse convention. `available_at`
-  derivation (B2) will convert to UTC. **1999 has no `gametime` at all** (259 games), and
+  (`2026-09-10`, `20:20`), kickoff in US Eastern time per nflverse convention. The warehouse
+  (B1) converts them to UTC (`fact_game.kickoff_utc`). **1999 has no `gametime` at all** (259 games), and
   **2000-2005 record all but one Monday-night game (2005_02_NYG_NO, the relocated Katrina game,
   has a real `19:30`), two 2001 Saturday games and one Thursday game each in 2003-2005 as
   `09:00`** (102 rows, 17 per season): a 12-hour-clock placeholder for the true
@@ -320,22 +335,54 @@ run (by ~09:00 UTC Tuesday), snap counts by the 12:00 UTC PFR pull, injuries/dep
 keep refreshing the current season so backfilled corrections are picked up, and predictions
 are never recomputed for a past as-of (time-machine rule).
 
-## 12. Proposed `available_at` rules for backtests (to implement and test in B2)
+## 12. `available_at` rules for backtests (implemented in B2)
 
-| Table | `available_at` (UTC) for historical rows |
-|---|---|
-| plays, player-week, team-week, snap counts | `available_at` = `fact_game.game_end_utc_est` (kickoff + 4 h) of the row's `game_id`. Weekly tables without a `game_id` (ff_opportunity): `dim_week.last_game_end_utc_est`. Never a per-week Tuesday constant: in the five split weeks (`dim_week.is_split_week`: 2010 W16, 2020 W5/W12/W13, 2021 W15) the moved game (two games in 2021 W15) kicks off after that week's `asof_weekly_utc`, so a Tuesday 09:00 rule would leak it (see docs/warehouse.md, dim_week). Rows with `fact_game.kickoff_is_estimated` (1999, and the 102 placeholder rows of 2000-2005) need a conservative end (e.g. 04:30 UTC of the day after `gameday`) |
-| schedules (results, closing lines) | results: game end; **lines: kickoff** (closing line), never earlier |
-| injuries week N | `date_modified` when present (2010–2024, observed); otherwise Friday 23:59 UTC of week N, the last practice report before the games (2009, 2025+, and the 62 null rows of 2010) |
-| depth charts legacy week N | Wednesday 12:00 UTC of week N (start of the week's practice) |
-| depth charts 2025+ | `dt` |
-| rosters_weekly week N | same as depth charts legacy |
-| rankings | `scrape_date` 12:00 UTC |
-| draft picks, combine | draft day / March of that year |
-| participation | Feb 15 of the following year (offseason) |
+The rules live in `src/twm/warehouse/available.py`; docs/warehouse.md "When is a row
+available?" explains each one with a worked example. Principle: `available_at` is the earliest
+moment the whole row was public, and every estimate errs late.
 
-These are conservative estimates; live ingestion will record the real arrival time in
-`pipeline_runs` so the estimates can be checked against reality this season.
+| Table | `available_at` (UTC) | Evidence (full 1999-2026 cache, probed 2026-09-27) |
+|---|---|---|
+| `fact_play`, `fact_player_week`, `fact_team_week`, `fact_snaps` | the row's game (`game_id`) end + 6 h (`availability.game_data_lag_hours`) | Every row's `game_id` joins `fact_game`. The tightest non-split week (a 22:25 ET week-1 Monday game, 2007) ends 7.6 h before its Tuesday 14:00 as-of: 1.6 h to spare after the lag (2 h for the guessed 1999-2005 Monday games). The regular-season finale ends 6.5-6.7 h before the end-of-season snapshot (Sunday-night finales 2006-2025): 0.5 h to spare; 0.5 h for the guessed 1999-2005 Sunday night slot and exactly 0 h for the 1999-2002 Monday-night finales (inclusive boundary). The build stops if a lag drops any such row. Split weeks (2010 W16, 2020 W5/W12/W13, 2021 W15): the moved games are available after their week's as-of, by construction. |
+| game end | `game_end_utc_est`, or for guessed kickoffs (1999; 2000-2005 placeholders) the latest normal night slot for that weekday + 4 h (`availability.estimated_kickoff_for_availability_et`: 21:00 ET on Mondays, 20:30 ET otherwise), never earlier than the guess | The guesses (13:00 ET Sunday default, 20:00 ET weekdays) can be ~7 h early for night games; Monday-night games of 1999-2005 kicked off at 21:00 ET (114 guessed Monday games), every other night game by 20:30 ET, so the estimate errs late. |
+| `fact_game` (results, closing lines, coaches) | game end + 3 h (`availability.game_result_lag_hours`) | Weather delays (up to 77 min) and overtime push real endings past kickoff + 4 h. On the 1,722 games of 2020-2025 with a reliable play clock (first play within 30 min of kickoff, last within 6 h) the last play is never after kickoff + 7 h (6 end after kickoff + 4 h; the longest runs 5.3 h). `time_of_day` itself is not the rule: it has junk values and nothing before 2001. |
+| `fact_schedule` (pre-game columns only) | REG: May 20 of the season, 00:00 UTC; POST: when the previous round is final (game end + 3 h). Slot columns (date, time, venue, rest days): from `slot_available_at` = the latest of that, kickoff - 12 days, the previous week's as-of for the last two REG weeks. Listed changes (`availability.schedule_exceptions`): not before the game's own kickoff (no typed-in announcement dates; a date is accepted only with a source link) | Schedule releases fall in April–May; flexed games get 12 days' notice; Week 17/18 slots are set after the previous week. nflverse holds only the FINAL schedule; the 24 curated changes (Irma 2017, the 2020 COVID moves, snowstorm and wildfire relocations, the snow-delayed 2023 Wild Card game, the cancelled 2022 W17 BUF-CIN game) are the ones we can correct; others cannot be detected. |
+| `dim_week` (static) | always visible; the columns computed from a week's final games (`n_games`, first/last gameday and kickoff, `n_games_after_asof`, `is_split_week` ...) are NULL in the as-of view until that week's own as-of | Built from the FINAL schedule: a future week's counts reveal postponements (2020) and the 2022 W17 cancellation. |
+| `dim_player` (hindsight) | a row exists point-in-time from May 15 of its `draft_year` (`availability.draft_public_month_day`; drafts ended by May 10) or, undrafted, from the player's first data row; never otherwise. Visible columns: ids, name, birth date, draft, college; position, size and today's status hidden | Otherwise every later draft class is visible in-season (the next draft's order mirrors the final standings); `position` is today's value (Patterson WR → RB 2021, Taysom Hill QB → TE). |
+| `fact_injury_report` | `date_modified` (2021-2024), `date_modified` + 9 h (2010-2020, `availability.injury_legacy_stamp_offset_hours`), else the team's kickoff, else (no game that week) the week's as-of; never before 1 s after the previous week's as-of | The 2010-2020 stamps are not true UTC (§4). Last stamp per team-week vs kickoff (2010-2024, stamps as stored): Sunday games median 53.8 h before, p01 20.9 h; Thursday median 35.5 h, p01 10.1 h; only 8 of ~8,100 team-weeks have a stamp after kickoff (6 of 5,870 for 2010-2020 after the +9 h); 16 rows are available after their own week's as-of. 125 rows are raised to just after the previous week's as-of (mostly Monday reports for the next week; spec 6.1). The 17 rows of the cancelled 2022 W17 BUF-CIN game have stamps; the no-game branch is a guard. |
+| `fact_depth_chart` legacy week N | week N's as-of minus 6 days (Wednesday 14:00 UTC before the games); the post-finale REG week 18/19 charts use the Wild Card week, SBBYE the Super Bowl week | Week N's chart is visible at the as-of after week N; week N+1's never is. Verified on 2013-2025: 0 rows of a later week visible at any non-split week's as-of. |
+| `fact_depth_chart` daily (2025+) | `dt` | Snapshot time. |
+| `coach_game` | kickoff | A future game's listed coach can reveal a firing. |
+| `coach_team_season` | when the stint's last game is final (game end + 3 h), or the next coach's first kickoff when the team changed coach (43 stints) | A finished stint mid-season means a firing. |
+| `dim_coach` | first kickoff | |
+| ff_opportunity, rankings, rosters, draft, combine, participation (not in the warehouse yet) | A3 proposals, to implement when those tables are added: ff_opportunity `dim_week.last_game_end_utc_est` + lag; rosters_weekly like legacy depth charts; rankings `scrape_date` 12:00 UTC; draft/combine the draft day / March; participation Feb 15 of the next year (never in-season) | |
+
+Verified on a full 1999-2026 build (2026-09-27, rebuilt after the B2 review): no event row has
+a NULL `available_at`; for
+every non-split regular-season week 2013-2025 (222 weeks) all of that week's plays, player
+stats, team stats and snaps are visible at its Tuesday as-of and nothing from a later week is
+(plays, stats, snaps, games, injury reports, legacy depth charts).
+
+Known, accepted imperfections (values baked into rows that are already visible; neither
+`available_at` nor the leakage harness can catch them):
+
+- nflverse's Wednesday–Thursday stat-correction reloads are baked into the cache, so
+  historical backtests see corrected week-N stats at the Tuesday as-of (a mild, unavoidable
+  leak);
+- `fact_schedule` and `dim_week` hold nflverse's FINAL schedule. Postponements, reschedules
+  and cancellations (the 2020 COVID moves, the cancelled 2022 W17 CIN-BUF game, flexes) are
+  baked into rows visible from May 20. The slot masking, the `dim_week` masking and the 24
+  curated changes reduce this; a change outside the list is not detectable, so features must
+  not treat future-week counts, byes or split flags as known in advance for those seasons;
+- today's snapshots: `fact_player_week.position`/`position_group`/`headshot_url`,
+  `fact_depth_chart.player_position` and `dim_player.position`/`height`/`weight` are current
+  values (Cordarrelle Patterson is an RB and Taysom Hill a TE for every past season). The
+  as-of view hides them; a point-in-time position must be derived in B3/C1 from the
+  as-of-visible depth-chart slot (`fact_depth_chart.position`) or `rosters_weekly` once it is
+  ingested. `dim_team.team_division` is today's alignment and team codes are today's.
+
+These are conservative estimates for history; live runs record the real arrival time of each
+dataset in the run log (`pipeline_runs`, step E4) so the estimates can be checked this season.
 
 ## 13. What changes in the spec because of this verification
 
@@ -343,8 +390,8 @@ These are conservative estimates; live ingestion will record the real arrival ti
    2014–2025 unchanged.
 2. The FantasyPros archive starts **2020** → the candidate-pool proxy needs a pre-2020 fallback
    (⚖️ at C1).
-3. Injury availability is **observed** for 2010–2024 via `date_modified` and assumed only for
-   2009 and 2025+ (§4).
+3. Injury availability is **observed** for 2010–2024 via `date_modified` and assumed (kickoff)
+   only for 2009 and 2025+ (§4, §12).
 4. Depth charts have two schemas (§3); `dt` replaces `season`/`week` from 2025.
 5. `receive_2h_ko` is not in pbp; derive it in P2.
 6. `load_rosters` is not a season roster in 2026; use `rosters_weekly`.

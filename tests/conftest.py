@@ -36,6 +36,7 @@ SCHEDULE_DTYPES: dict[str, pl.DataType] = {
     "total_line": pl.Float64(),
     "away_coach": pl.String(),
     "home_coach": pl.String(),
+    "gsis": pl.Int32(),
 }
 
 PBP_DTYPES: dict[str, pl.DataType] = {
@@ -73,6 +74,7 @@ PLAYER_STATS_DTYPES: dict[str, pl.DataType] = {
     "season": pl.Int32(),
     "week": pl.Int32(),
     "season_type": pl.String(),
+    "game_id": pl.String(),
     "team": pl.String(),
     "opponent_team": pl.String(),
     "receptions": pl.Int32(),
@@ -151,7 +153,11 @@ PLAYERS_DTYPES: dict[str, pl.DataType] = {
     "position_group": pl.String(),
     "birth_date": pl.String(),
     "rookie_season": pl.Int32(),
+    "draft_year": pl.Int32(),
+    "draft_round": pl.Int32(),
+    "draft_pick": pl.Int32(),
     "draft_team": pl.String(),
+    "pfr_id": pl.String(),
     "latest_team": pl.String(),
 }
 
@@ -308,7 +314,8 @@ class RawCache:
                 {"player_id": "00-0000001", "player_name": "A.One", "position": "QB",
                  "season": g["season"], "week": g["week"],
                  "season_type": "REG" if g["game_type"] == "REG" else "POST",
-                 "team": g["home_team"], "opponent_team": g["away_team"], "receptions": 0,
+                 "game_id": g["game_id"], "team": g["home_team"],
+                 "opponent_team": g["away_team"], "receptions": 0,
                  "fantasy_points_ppr": 10.0}
                 for g in first_per_week.values()
             ]  # fmt: skip
@@ -409,6 +416,88 @@ def season_2025_games() -> list[dict[str, Any]]:
         game(2025, 8, "2025-11-02", "18:30", "KC", "PHI", game_type="SB", result=None),
     ]
     return g
+
+
+def season_2020_split_games() -> list[dict[str, Any]]:
+    """2020 W11-W13 with the real W12 shape: a Thursday-to-Monday week plus one game moved to
+    Wednesday (BAL at PIT), which ends after W12's Tuesday as-of (a split week)."""
+    return [
+        game(2020, 11, "2020-11-19", "20:20", "ARI", "SEA", result=7),
+        game(2020, 11, "2020-11-22", "13:00", "TEN", "BAL", result=-6),
+        game(2020, 12, "2020-11-26", "12:30", "HOU", "DET", result=-16),
+        game(2020, 12, "2020-11-29", "13:00", "TEN", "IND", result=-19),
+        game(2020, 12, "2020-11-30", "20:15", "SEA", "PHI", result=-6),
+        game(2020, 12, "2020-12-02", "15:40", "BAL", "PIT", result=5),
+        game(2020, 13, "2020-12-06", "13:00", "IND", "HOU", result=None),
+    ]
+
+
+INJURY_DM_DTYPES: dict[str, pl.DataType] = {
+    **{k: v for k, v in INJURY_DTYPES.items() if k != "season_type"},
+    "date_modified": pl.Datetime("us", "UTC"),
+}
+
+
+def injury(
+    season: int, week: int, team: str, gsis: str, dm: datetime | None = None, **kw: Any
+) -> dict[str, Any]:
+    """One injury-report row in the 2009-2024 layout (with date_modified, UTC-aware)."""
+    return {"season": season, "game_type": "REG", "team": team, "week": week, "gsis_id": gsis,
+            "position": "WR", "full_name": "Player", "report_status": "Questionable",
+            "practice_status": None, "date_modified": dm, **kw}  # fmt: skip
+
+
+def draft_class_players() -> pl.DataFrame:
+    """dim_player rows for the point-in-time row rule: two drafted players (2014, 2016), an
+    undrafted one seen in player stats (00-UDFA01), one seen only in snap counts (pfr_id
+    UdfaSn00) and one with no data row at all (never visible)."""
+    return frame(
+        [
+            {
+                "gsis_id": "00-D2014",
+                "display_name": "Drafted 2014",
+                "position": "WR",
+                "draft_year": 2014,
+                "draft_round": 1,
+                "draft_pick": 5,
+                "draft_team": "SD",
+            },
+            {
+                "gsis_id": "00-D2016",
+                "display_name": "Drafted 2016",
+                "position": "QB",
+                "draft_year": 2016,
+                "draft_round": 1,
+                "draft_pick": 1,
+                "draft_team": "LA",
+            },
+            {"gsis_id": "00-UDFA01", "display_name": "Undrafted Stats", "position": "RB"},
+            {
+                "gsis_id": "00-UDFA02",
+                "display_name": "Undrafted Snaps",
+                "position": "TE",
+                "pfr_id": "UdfaSn00",
+            },
+            {"gsis_id": "00-GHOST", "display_name": "No Rows", "position": "K"},
+        ],  # fmt: skip
+        PLAYERS_DTYPES,
+    )
+
+
+def season_2015_draft_games() -> list[dict[str, Any]]:
+    return [
+        game(2015, 5, "2015-10-11", "13:00", "MIA", "HOU", result=3),
+        game(2015, 6, "2015-10-18", "13:00", "HOU", "KC", result=-3),
+    ]
+
+
+def player_week(g: dict[str, Any], player_id: str, receptions: int, **kw: Any) -> dict[str, Any]:
+    """One fact_player_week source row for a player of the home team in game ``g``."""
+    return {"player_id": player_id, "player_name": player_id, "position": "WR",
+            "season": g["season"], "week": g["week"],
+            "season_type": "REG" if g["game_type"] == "REG" else "POST",
+            "game_id": g["game_id"], "team": g["home_team"], "opponent_team": g["away_team"],
+            "receptions": receptions, "fantasy_points_ppr": float(receptions), **kw}  # fmt: skip
 
 
 @pytest.fixture

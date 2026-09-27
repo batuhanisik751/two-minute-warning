@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import functools
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "config"
@@ -20,6 +21,148 @@ class Paths(BaseModel):
     league_db: str
 
 
+# Datasets whose rows are stamped "game end + lag" (twm.warehouse.available).
+GAME_DATA_DATASETS = ("pbp", "player_stats", "team_stats", "snap_counts")
+MAX_GAME_DATA_LAG_HOURS = 48
+WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def _check_month_day(name: str, v: str) -> str:
+    try:
+        # 2001 is not a leap year: 02-29 would not exist in most seasons
+        datetime.strptime(f"2001-{v}", "%Y-%m-%d")
+    except ValueError as e:
+        raise ValueError(f"{name} {v!r} is not a valid 'MM-DD'") from e
+    return v
+
+
+def _check_hhmm(name: str, v: str) -> str:
+    try:
+        datetime.strptime(v, "%H:%M")
+    except ValueError as e:
+        raise ValueError(f"{name} {v!r} is not a valid 'HH:MM'") from e
+    return v
+
+
+class ScheduleException(BaseModel):
+    """One schedule change baked into nflverse's final schedule (``schedule_exceptions``).
+
+    Without ``announced``, the game's row and slot count as public only from its own kickoff:
+    a game is always announced before it is played, so this is safe with no date at all.
+    ``announced`` (the day the change was made public, or a later day) may be added only with a
+    ``source`` link that shows it; the row is then public from 12:00 UTC the day after.
+    ``cancelled``: the game was never played and is absent from nflverse (2022 W17 BUF-CIN).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    game_id: str
+    what: str
+    announced: str | None = None
+    source: str | None = None
+    cancelled: bool = False
+
+    @field_validator("announced")
+    @classmethod
+    def _date(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+        except ValueError as e:
+            raise ValueError(f"schedule_exceptions announced {v!r} is not 'YYYY-MM-DD'") from e
+        return v
+
+    @model_validator(mode="after")
+    def _dated_needs_source(self) -> ScheduleException:
+        if self.announced is not None and not (self.source or "").startswith("http"):
+            raise ValueError(
+                f"schedule_exceptions {self.game_id}: an announced date needs a source URL "
+                "(dates are never typed from memory; without one the kickoff rule applies)"
+            )
+        return self
+
+
+class AvailabilityConfig(BaseModel):
+    """``availability:`` in settings.yaml: the knobs of the ``available_at`` rules (B2).
+
+    Validated strictly (unknown keys are refused) because a typo here would silently change
+    what every backtest is allowed to see.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    game_data_lag_hours: dict[str, float]
+    game_result_lag_hours: float
+    schedule_release_month_day: str
+    schedule_slot_lead_days: int
+    estimated_kickoff_for_availability_et: dict[str, str]
+    injury_legacy_stamp_offset_hours: float
+    draft_public_month_day: str
+    schedule_exceptions: list[ScheduleException]
+
+    @field_validator("game_data_lag_hours")
+    @classmethod
+    def _lags(cls, v: dict[str, float]) -> dict[str, float]:
+        if set(v) != set(GAME_DATA_DATASETS):
+            raise ValueError(
+                f"game_data_lag_hours needs exactly the keys {list(GAME_DATA_DATASETS)}, "
+                f"got {sorted(v)}"
+            )
+        for name, hours in v.items():
+            if not 0 <= hours <= MAX_GAME_DATA_LAG_HOURS:
+                raise ValueError(
+                    f"game_data_lag_hours.{name} = {hours}: must be between 0 and "
+                    f"{MAX_GAME_DATA_LAG_HOURS} hours"
+                )
+        return v
+
+    @field_validator("game_result_lag_hours", "injury_legacy_stamp_offset_hours")
+    @classmethod
+    def _hours(cls, v: float, info: Any) -> float:
+        if not 0 <= v <= MAX_GAME_DATA_LAG_HOURS:
+            raise ValueError(
+                f"{info.field_name} = {v}: must be between 0 and {MAX_GAME_DATA_LAG_HOURS} hours"
+            )
+        return v
+
+    @field_validator("schedule_slot_lead_days")
+    @classmethod
+    def _lead(cls, v: int) -> int:
+        if not 0 <= v <= 60:
+            raise ValueError(f"schedule_slot_lead_days = {v}: must be between 0 and 60")
+        return v
+
+    @field_validator("schedule_release_month_day", "draft_public_month_day")
+    @classmethod
+    def _month_day(cls, v: str, info: Any) -> str:
+        return _check_month_day(info.field_name, v)
+
+    @field_validator("estimated_kickoff_for_availability_et")
+    @classmethod
+    def _slots(cls, v: dict[str, str]) -> dict[str, str]:
+        if "default" not in v:
+            raise ValueError("estimated_kickoff_for_availability_et needs a 'default' slot")
+        unknown = sorted(set(v) - {"default", *WEEKDAY_NAMES})
+        if unknown:
+            raise ValueError(
+                f"estimated_kickoff_for_availability_et: unknown keys {unknown} (use weekday "
+                "names such as Monday, or default)"
+            )
+        for day, hhmm in v.items():
+            _check_hhmm(f"estimated_kickoff_for_availability_et.{day}", hhmm)
+        return v
+
+    @field_validator("schedule_exceptions")
+    @classmethod
+    def _unique(cls, v: list[ScheduleException]) -> list[ScheduleException]:
+        ids = [x.game_id for x in v]
+        dupes = sorted({i for i in ids if ids.count(i) > 1})
+        if dupes:
+            raise ValueError(f"schedule_exceptions lists {dupes} more than once")
+        return v
+
+
 class Settings(BaseModel):
     project_name: str
     current_season: int
@@ -29,6 +172,7 @@ class Settings(BaseModel):
     garbage_time: dict[str, float]
     neutral: dict[str, float]
     paths: Paths
+    availability: AvailabilityConfig
 
     def path(self, key: str) -> Path:
         return ROOT / getattr(self.paths, key)

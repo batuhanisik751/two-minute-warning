@@ -29,6 +29,7 @@ from tests.conftest import (
     season_2025_games,
 )
 from twm.sources import nflverse as nv
+from twm.warehouse import available as av
 from twm.warehouse import build as wb
 from twm.warehouse import schema as sc
 from twm.warehouse import weeks as wk
@@ -109,8 +110,9 @@ def test_every_table_builds_from_fixtures(raw, db_path):
         "WHERE data_type LIKE 'TIMESTAMP WITH TIME ZONE%'"
     ).fetchone()[0]
     assert tz == 0
-    assert list(_types(con, "fact_game")) == sc.tables()["fact_game"].column_names
-    assert list(_types(con, "fact_play")) == sc.FACT_PLAY_COLUMNS
+    for name, spec in sc.tables().items():  # available_at is the last column of event tables
+        assert list(_types(con, name)) == av.stored_column_names(spec), name
+    assert list(_types(con, "fact_play")) == [*sc.FACT_PLAY_COLUMNS, "available_at"]
     t = _types(con, "fact_play")
     assert (t["play_id"], t["goal_to_go"], t["epa"], t["game_date"]) == (
         "INTEGER", "INTEGER", "DOUBLE", "DATE",
@@ -164,7 +166,7 @@ def test_every_table_builds_from_fixtures(raw, db_path):
     ).fetchone() == (1, 8, 4)
     # the fixture's "Home Coach"/"Away Coach" means every team playing both home and away
     # shows two coaches; the manifest counts those team-seasons (8 of 10 teams here)
-    assert json.loads(m["coach_team_season"]["notes"]) == {"n_team_seasons_multi_coach": 8}
+    assert json.loads(m["coach_team_season"]["notes"])["n_team_seasons_multi_coach"] == 8
 
     # daily depth charts map each snapshot to the week whose window contains dt
     assert con.execute(
@@ -477,7 +479,7 @@ def test_null_coach_null_line_and_empty_daily_dt(raw, db_path):
         game(2025, 1, "2025-09-04", "20:20", "DAL", "PHI", spread=None, home_coach=None),
         game(2025, 1, "2025-09-07", "13:00", "KC", "LAC", spread=-2.5, total=44.5),
     ]
-    dc = frame(
+    empty_dt, good = frame(
         [
             {
                 "dt": "",
@@ -505,8 +507,15 @@ def test_null_coach_null_line_and_empty_daily_dt(raw, db_path):
             },
         ],  # fmt: skip
         DAILY_DC_DTYPES,
-    )
-    raw.write_season(2025, games, depth_charts=dc)
+    ).iter_slices(1)
+    # A daily row without a snapshot time cannot be placed in time (B2): the build stops and
+    # names the table instead of keeping a row no point-in-time reader could ever use safely.
+    raw.write_season(2025, games, depth_charts=pl.concat([empty_dt, good]))
+    with pytest.raises(av.AvailabilityError, match=r"fact_depth_chart: 1 row\(s\) have no"):
+        wb.build_warehouse([2025], db_path=db_path)
+    assert not db_path.exists()
+
+    raw.write_season(2025, games, depth_charts=good)
     wb.build_warehouse([2025], db_path=db_path)
     con = _open(db_path)
     assert con.execute(
@@ -519,10 +528,9 @@ def test_null_coach_null_line_and_empty_daily_dt(raw, db_path):
     assert con.execute(
         "SELECT count(*) FROM dim_coach WHERE coach_id IS NULL OR coach_id = ''"
     ).fetchone() == (0,)
-    # an empty dt is kept as a NULL dt with no week (the key allows NULL dt)
-    assert con.execute(
-        "SELECT dt, week_at_dt FROM fact_depth_chart ORDER BY dt NULLS FIRST"
-    ).fetchall() == [(None, None), (datetime(2025, 9, 8, 12, 0), 1)]
+    assert con.execute("SELECT dt, week_at_dt, available_at FROM fact_depth_chart").fetchall() == [
+        (datetime(2025, 9, 8, 12, 0), 1, datetime(2025, 9, 8, 12, 0))
+    ]
 
 
 # --------------------------------------------------------------------------------------
@@ -540,11 +548,13 @@ def _legacy_row(**kw):
 
 def test_legacy_depth_chart_dedupe_keys_and_null_week(raw, db_path):
     games = [game(2019, 17, "2019-12-29", "16:25", "JAX", "OAK"),
-             game(2019, 18, "2020-01-04", "16:35", "TEN", "NE", game_type="WC")]  # fmt: skip
+             game(2019, 18, "2020-01-04", "16:35", "TEN", "NE", game_type="WC"),
+             game(2019, 21, "2020-02-02", "18:30", "SF", "KC", game_type="SB")]  # fmt: skip
     rows = [
         _legacy_row(),
         _legacy_row(),  # exact duplicate
-        _legacy_row(game_type="WC"),  # same week, different chart -> its own row
+        _legacy_row(week=18),  # REG chart pulled in the Wild Card week (the real 2007-2020 shape)
+        _legacy_row(week=18, game_type="WC"),  # same week, different chart -> its own row
         _legacy_row(week=None, game_type="SBBYE", depth_team="2"),  # NULL week
         _legacy_row(depth_team="2", gsis_id="00-0000002", full_name="Backup", formation="Defense"),
         _legacy_row(formation="Practice Squad"),  # unknown unit -> 'other'
@@ -562,7 +572,8 @@ def test_legacy_depth_chart_dedupe_keys_and_null_week(raw, db_path):
         (17, "REG", "REG", "LV", "OAK", "defense", "Defense", 2),
         (17, "REG", "REG", "LV", "OAK", "offense", "Offense", 1),
         (17, "REG", "REG", "LV", "OAK", "other", "Practice Squad", 1),
-        (17, "WC", "POST", "LV", "OAK", "offense", "Offense", 1),
+        (18, "REG", "REG", "LV", "OAK", "offense", "Offense", 1),
+        (18, "WC", "POST", "LV", "OAK", "offense", "Offense", 1),
         (None, "SBBYE", "POST", "LV", "OAK", "offense", "Offense", 2),
     ]
     m = {r["table_name"]: r for r in manifest}["fact_depth_chart"]
@@ -757,12 +768,20 @@ def test_injury_duplicate_without_date_modified_resolves_deterministically(raw, 
 def test_player_stats_null_player_id_dropped_and_counted(raw, db_path):
     games = [game(2026, 1, "2026-09-13", "13:00", "LV", "KC")]
     stats = [
-        {"player_id": "00-0000001", "season": 2026, "week": 1, "season_type": "REG", "team": "KC"},
+        {
+            "player_id": "00-0000001",
+            "season": 2026,
+            "week": 1,
+            "season_type": "REG",
+            "game_id": "2026_01_LV_KC",
+            "team": "KC",
+        },  # fmt: skip
         {
             "player_id": None,
             "season": 2026,
             "week": 1,
             "season_type": "REG",
+            "game_id": "2026_01_LV_KC",
             "team": "KC",
             "fantasy_points_ppr": 0.0,
         },  # fmt: skip

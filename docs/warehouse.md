@@ -1,4 +1,4 @@
-# The warehouse (Step B1)
+# The warehouse (Steps B1-B2)
 
 `twm build 2025 2026` (or `--start 1999`) turns the Parquet cache in `data/raw/` into one
 DuckDB file, `data/warehouse.duckdb` (gitignored). The build is written to
@@ -18,19 +18,26 @@ explanation inside the file: `SELECT column_name, comment FROM duckdb_columns() 
 table_name = 'fact_game'` (or `duckdb_tables()` for the table docs).
 
 Code: `src/twm/warehouse/schema.py` (what each table is), `weeks.py` (the as-of rules, pure
-functions), `build.py` (the builder). Tests: `tests/test_weeks.py`, `tests/test_warehouse_build.py`,
-`tests/test_cli_build.py` (offline, tiny synthetic fixtures in `tests/conftest.py`), plus two
-opt-in `realdata` tests in `tests/test_warehouse_build.py` that read the real cache
-(`uv run pytest -m realdata`, never download).
+functions), `available.py` (when each row becomes public, B2), `build.py` (the builder),
+`src/twm/asof.py` (point-in-time reading) and `src/twm/backtest/leakage.py` (the leakage
+harness). Tests: `tests/test_weeks.py`, `tests/test_warehouse_build.py`, `tests/test_available.py`,
+`tests/test_asof.py`, `tests/test_leakage.py`, `tests/test_cli_build.py` (offline, tiny synthetic
+fixtures in `tests/conftest.py`), plus opt-in `realdata` tests in `tests/test_warehouse_build.py`
+and `tests/test_available.py` that read the real cache (`uv run pytest -m realdata`, never
+download; they build into a temporary file).
 
 ## Tables
 
 "PK" is the primary key: the columns that identify one row. Uniqueness is checked after every build
 and a violation stops the build with `PrimaryKeyError` naming the table, the key and example rows.
+Every *event* table (all `fact_*` and `coach_*` tables and `dim_coach`) also has an
+`available_at` column, always the last one (`fact_schedule` stores `slot_available_at` just
+before it, `dim_player` stores `public_from_utc` last): see "When is a row available?" below.
 
 | Table | One row is... | PK | Source |
 |---|---|---|---|
-| `fact_game` | one scheduled game, played or not (`result` NULL until played), with `kickoff_utc`, `game_end_utc_est` (= kickoff + 4 h, an estimate), `home_implied_total`/`away_implied_total` from the closing line (the betting market's expected margin and combined score right before kickoff; a team's implied total is the points the market expects it to score), `season_type` | `game_id` | schedules |
+| `fact_game` | one scheduled game, played or not (`result` NULL until played), with `kickoff_utc`, `game_end_utc_est` (= kickoff + 4 h, an estimate), `home_implied_total`/`away_implied_total` from the closing line (the betting market's expected margin and combined score right before kickoff; a team's implied total is the points the market expects it to score), `season_type`, `availability_game_end_utc` (the game end the `available_at` rules use) | `game_id` | schedules |
+| `fact_schedule` | the pre-game view of one scheduled game: only what is public once the schedule is announced (teams, week, date and time, venue, rest days). No scores, lines, coaches, weather or roof state. It is nflverse's FINAL schedule; the date/time/venue columns have their own `slot_available_at` | `game_id` | fact_game |
 | `fact_play` | one play, 128 curated columns (identifiers, game state, play descriptors, main players, nflverse model columns, context). All 128 names exist in `data/schemas/pbp.json`; nothing was dropped | `game_id, play_id` | pbp |
 | `fact_player_week` | one player in one game week, every weekly stat column | `player_id, season, week, season_type` | player_stats |
 | `fact_team_week` | one team in one game week | `team, season, week, season_type` | team_stats |
@@ -38,12 +45,12 @@ and a violation stops the build with `PrimaryKeyError` naming the table, the key
 | `fact_injury_report` | one player on one team's injury report for one week; `date_modified` is the report row's last-modified time where the source has it (2010-2024; NULL for 2025+ and effectively 2009, see assumptions section 4) | `season, week, team, gsis_id` | injuries |
 | `fact_depth_chart` | one depth-chart slot, from either upstream format (`source_format` = `legacy` weekly charts 2001-2024, or `daily` snapshots 2025+) | see below | depth_charts |
 | `dim_team` | one of the 36 nflverse team rows; `current_abbr` maps OAK→LV, SD→LAC, STL→LA, LAR→LA; `is_current` is false for those four | `team_abbr` | teams |
-| `dim_player` | one player (skeleton; B3 adds the cross-source id map). `dim_team` and `dim_player` are snapshots of the one-file datasets (`all.parquet`): they do not depend on the seasons built (manifest `seasons` = `[]`) and change whenever `twm ingest` refreshes them | `gsis_id` | players |
+| `dim_player` | one player (skeleton; B3 adds the cross-source id map) and `public_from_utc`, the moment he exists point-in-time (his draft, or his first public data row). `dim_team` and `dim_player` are snapshots of the one-file datasets (`all.parquet`): they do not depend on the seasons built (manifest `seasons` = `[]`) and change whenever `twm ingest` refreshes them | `gsis_id` | players |
 | `dim_coach` | one head coach; `coach_id` is a slug (`mike_mccarthy`) and spellings that share a slug are merged into one row (`coach_name` = whitespace collapsed, alphabetically first spelling; merges listed in `build_manifest.notes.merged_spellings`). Interim coaches the schedule never names (2024+) are absent | `coach_id` | fact_game |
 | `coach_game` | one team in one game and the head coach the schedule lists for it (unplayed games included). The schedule columns record mid-season changes through 2023 but not in 2024-2025 (TEN/NYG 2025, NYJ/CHI/NO 2024 show the fired coach all season), so interim coaches are missing there | `game_id, team` | fact_game |
-| `coach_team_season` | one coach-team-season as listed in the schedule: first/last scheduled week and `n_games` = games scheduled (played or not, playoffs included; 17 already for every 2026 coach). Schedule-derived, not point-in-time: use `coach_game` with the B2 as-of filter for games coached to date. A team has more than one row only when nflverse recorded the change (2000-2023) | `coach_id, team, season` | coach_game |
-| `dim_week` | one (season, week, season_type) that appears in the schedule, with the official as-of timestamps | `season, week, season_type` | fact_game |
-| `build_manifest` | one built table: rows, content hash, seasons, dropped-row counts, versions | `table_name` | the build |
+| `coach_team_season` | one coach-team-season as listed in the schedule: first/last scheduled week and `n_games` = games scheduled (played or not, playoffs included; 17 already for every 2026 coach). Point-in-time since B2: a stint row appears only once the stint is over (season end, or the next coach's first kickoff), so at an in-season as-of the current coach has no row here; count `coach_game` rows through `AsOfView` for games coached to date. A team has more than one row only when nflverse recorded the change (2000-2023) | `coach_id, team, season` | coach_game |
+| `dim_week` | one (season, week, season_type) that appears in the schedule, with the official as-of timestamps (point-in-time, a week's game counts are masked until its own as-of) | `season, week, season_type` | fact_game |
+| `build_manifest` | one built table: rows, content hash, seasons, dropped-row counts, versions (bookkeeping: not part of the as-of view) | `table_name` | the build |
 
 Hot-Seat firing labels (H1/H2) must therefore combine the schedule's coach changes (reliable
 2000-2023) with an owner-verified manual file (`data/manual/coach_departures.csv`, to be created
@@ -51,11 +58,15 @@ in the Hot-Seat step) for 2024 onward; `build_manifest.notes.n_team_seasons_mult
 `coach_team_season` shows how many team-seasons the schedule itself splits. Evidence per season
 is in `docs/assumptions.md` section 10.
 
-A `fact_game` row mixes three availabilities, which B2 must keep apart: the fixture itself is
-known months ahead; `spread_line`, `total_line` and the implied totals are *closing* lines, so
-B2 assigns them `available_at = kickoff_utc` (using an upcoming game's closing line at a
-Tuesday as-of is leakage, spec 6.4); `result`, `total` and the scores become available at game
-end (`game_end_utc_est`).
+A schedule row mixes three availabilities: the fixture itself is known months ahead; the
+closing lines (`spread_line`, `total_line`, the implied totals) exist only just before kickoff
+(using an upcoming game's closing line at a Tuesday as-of is leakage, spec 6.4); `result`,
+`total` and the scores exist after the game. B2 keeps them apart with two tables: the whole
+`fact_game` row becomes available when the game is over (every column is public by then), and
+`fact_schedule` carries only the pre-game columns, available from the schedule release (regular
+season) or the end of the previous playoff round, with the date/time/venue columns public only
+from `slot_available_at` (they can still change). Features that need "upcoming opponents", byes
+or games remaining read `fact_schedule`; nothing in P1 reads an unplayed game's line.
 
 Season types: schedules `game_type` is REG (regular season), WC (Wild Card), DIV (Divisional),
 CON (Conference championship) or SB (Super Bowl); legacy depth charts add SBBYE, the idle week
@@ -117,10 +128,11 @@ date can have up to three pulls, so rows are keyed and mapped to a week by `dt`,
 
 Legacy charts carry rows that match no schedule week: REG week 18 in 2007-2013 and 2015-2020,
 REG week 19 in 2021-2024 (a chart pulled the week after the finale), and SBBYE rows with NULL
-`week` (2001, 2007-2013 and 2015-2024). B2 maps them by `game_type` first, `week` second, and must decide
-whether the post-finale REG charts belong to the Wild Card window or are dropped. `week_at_dt`
-(daily rows) is a window label for grouping and inspection only; B2's `available_at` for daily
-charts is `dt` itself (assumptions section 12).
+`week` (2001, 2007-2013 and 2015-2024). B2 keeps them and places them in time: a REG row whose
+week has no REG week belongs to the week with the same number (the Wild Card week), and an
+SBBYE row to the season's Super Bowl week (both later than the chart really appeared, so safe).
+`week_at_dt` (daily rows) is a window label for grouping and inspection only; the daily charts'
+`available_at` is `dt` itself.
 
 ## As-of rules (`dim_week`)
 
@@ -173,8 +185,9 @@ Every prediction has an as-of time, and only rows available at that time may be 
   late-afternoon or Sunday-night game gets an estimated end up to ~7 h too early, and the 20:00
   ET weekday default is an hour before the 21:00 ET Monday-night kickoffs of that era. No official
   as-of (Tuesday 14:00 UTC, Monday 12:00 UTC end-of-season) falls inside those gaps, so nothing
-  leaks; B2 should give flagged rows a conservative `available_at` (e.g. 04:30 UTC of the day
-  after `gameday`) rather than trust `game_end_utc_est`.
+  leaks; B2 does not trust `game_end_utc_est` for flagged rows anyway: their
+  `availability_game_end_utc` assumes the latest normal night kickoff for that weekday (21:00 ET
+  on Mondays, 20:30 ET otherwise; see below).
 
 Worked example, 2025 week 1: first game Thursday 2025-09-04 (DAL at PHI), last game Monday
 2025-09-08 20:15 ET (MIN at CHI; `kickoff_utc` 2025-09-09 00:15, `game_end_utc_est` 04:15).
@@ -188,6 +201,255 @@ Tuesday 2026-02-10 14:00 UTC; the 86,102 daily depth-chart rows dated after that
 Kickoff conversion: `gameday` + `gametime` are US Eastern wall-clock strings; `zoneinfo`
 converts them, so 2026-09-10 20:35 ET → 2026-09-11 00:35 UTC (daylight time) and 2027-01-10
 13:00 ET → 18:00 UTC (standard time). International 09:30 ET kickoffs become 13:30 UTC.
+
+## When is a row available? (`available_at`)
+
+**The principle.** Every prediction is made at a moment, its *as-of* (for example the Tuesday
+14:00 UTC after week 5). A backtest is honest only if the prediction uses what was public at
+that moment and nothing later. So every *event* row in the warehouse carries `available_at`:
+the earliest moment (UTC) we are confident the **whole row, every column of it**, was public.
+A prediction at `as_of` may use a row only if `available_at <= as_of` (inclusive: a row stamped
+exactly at the as-of counts as known).
+
+We rarely know the true publication time, so the rules are estimates, and **every estimate
+errs late**. A late estimate costs a few hours of information; an early one lets the future
+leak into the backtest and makes a model look better than it will be live. Every event row must
+get an `available_at`: if a rule cannot place a row in time, the build stops with
+`AvailabilityError` naming the table, the number of rows and examples (for instance a daily
+depth-chart row without a `dt`, or a stat row whose `game_id` is not in the schedule).
+
+**Four kinds of tables** (`twm.warehouse.available.TABLE_AVAILABILITY`, which also holds the
+one-line rule stored as the `available_at` column comment in the file):
+
+- *event* tables have `available_at` (last column): all `fact_*` tables, `coach_game`,
+  `coach_team_season`, `dim_coach`. A few of their columns are snapshots taken **today**
+  (`hindsight_columns`): `fact_player_week.position`, `position_group` and `headshot_url`, and
+  `fact_depth_chart.player_position`. A player who changed position shows the later one for
+  every past season (Cordarrelle Patterson WR → RB in 2021, Taysom Hill QB → TE), so the as-of
+  view leaves those columns out. A point-in-time position must be derived later (B3/C1) from
+  the as-of-visible depth-chart slot (`fact_depth_chart.position`) or from weekly rosters;
+- *static* tables are always visible: `dim_team` and `dim_week` (the calendar of as-of times).
+  `dim_week`'s columns computed from a week's final game list (`n_games`,
+  `n_kickoff_estimated`, first/last gameday and kickoff, `last_game_end_utc_est`,
+  `n_games_after_asof`, `is_split_week`) reveal later postponements and cancellations, so the
+  as-of view shows them as NULL until that week's own `asof_weekly_utc` (the calendar columns,
+  `asof_weekly_utc`, `prev_week`, `window_*`, stay visible). Accepted hindsight in `dim_team`:
+  `team_division` is today's alignment (Seattle shows NFC West for 1999-2001), and every team
+  column in the warehouse uses today's franchise code (a 2014 STL row reads LA), which reveals
+  later relocations;
+- *hindsight* tables are snapshots taken today: `dim_player`. A player **exists point-in-time**
+  only from `public_from_utc`: May 15 (config `availability.draft_public_month_day`, later than
+  every draft's last day, before the June 1 board) of his `draft_year`, or, undrafted, the
+  earliest `available_at` of his rows in `fact_player_week`, `fact_snaps` (via `pfr_id`),
+  `fact_injury_report` and `fact_depth_chart`. An undrafted player with no such row never
+  appears (6,925 of 24,833 on the full build, mostly pre-1999 players). Without this row rule a
+  2015 as-of would list every later draft class, and the top of next year's draft order is this
+  season's final standings. The visible columns are those that do not change later:
+  `gsis_id`, `display_name`, `birth_date`, `draft_year`, `draft_round`, `draft_pick`,
+  `draft_team` (today's franchise code: a 2016 San Diego pick reads LAC), `college_name`,
+  `espn_id`, `pfr_id`. Hidden: `last_season` (tells you in 2019 whether a player retires after
+  2019), `status` (later injuries, retirements), `latest_team` (every later trade or signing),
+  `rookie_season` (a player who has not debuted yet would already "exist"), `position` and
+  `position_group` (today's, see above), `height` and `weight` (today's listing);
+- *meta*: `build_manifest` (row counts of the whole warehouse, future rows included): not part
+  of the as-of view; read `wh.build_manifest` when you need it.
+
+### The rules
+
+"Game end" below is `fact_game.availability_game_end_utc`: kickoff + 4 h
+(`game_end_utc_est`), except for games whose kickoff time was guessed (all of 1999, the 102
+2000-2005 placeholders), which are assumed to kick off in the latest normal night slot for their
+weekday (config `availability.estimated_kickoff_for_availability_et`: 21:00 ET on Mondays, the
+Monday-night kickoff of 1999-2005, and 20:30 ET otherwise) + 4 h, and never earlier than the
+guess. "Kickoff" is game end minus 4 h (the real kickoff, or the late night-slot guess).
+
+| Table | `available_at` | Why this is safe |
+|---|---|---|
+| `fact_game` | game end + `game_result_lag_hours` (3 h) | The row holds the final score, closing lines and coaches: all public once the game is over. Real games ran past kickoff + 4 h (weather delays up to 77 min, overtime); on every 2020+ game with a reliable play clock the last play is before this time. Lines of played games are allowed (spec 6.4). |
+| `fact_schedule` | REG: `schedule_release_month_day` (May 20) of the season, 00:00 UTC. POST: when the previous round's last game is final (game end + 3 h; Wild Card: the last regular-season game); a playoff game with no previous week in the build uses its own kickoff. Listed schedule changes: not before their own kickoff (below) | Schedules come out in April or May; May 20 is later than every release. A playoff matchup is set when the previous round ends. Only pre-game columns are in this table. |
+| `fact_schedule.slot_available_at` (gates `gameday`, `weekday`, `gametime`, `kickoff_utc`, `kickoff_is_estimated`, `location`, `stadium`, `away_rest`, `home_rest`) | the latest of: the row's `available_at`; kickoff − `schedule_slot_lead_days` (12); for the last two regular-season weeks the previous week's as-of; for a listed change, its kickoff | Date, time and venue can still change after the release: games are flexed with 12 days' notice, and Week 17/18 slots are picked after the previous week. The as-of view shows these columns as NULL until then; who plays whom and the week number stay visible. |
+| `fact_play`, `fact_player_week`, `fact_team_week`, `fact_snaps` | the row's game (joined on `game_id`) end + `game_data_lag_hours` (6 h each) | nflverse publishes game data in a nightly run after the game. Each row uses its own game, never a per-week constant, so a game moved to Tuesday or Wednesday (the split weeks) is not visible at its week's Tuesday as-of and is at the next. |
+| `fact_injury_report` | 2021-2024 rows with `date_modified`: that stamp. 2010-2020 rows with a stamp: the stamp + `injury_legacy_stamp_offset_hours` (9 h). Otherwise (2009, the 62 null rows of 2010, 2025+): the team's kickoff that week. A team without a game that week: the week's `asof_weekly_utc`. Then never earlier than 1 s after the **previous** week's as-of | `date_modified` is the row's last change, observed. From 2021 the stamps are real UTC; the 2010-2020 ones are not (their time of day does not move with daylight saving time, see `docs/assumptions.md` section 4), so they count 9 h later. The final report is always out by kickoff. The floor enforces spec 6.1: week N+1 reports are not available at the Tuesday as-of after week N. |
+| `fact_depth_chart` | daily rows (2025+): `dt`. Legacy weekly rows (2001-2024): that week's `asof_weekly_utc` minus 6 days, the Wednesday 14:00 UTC before the week's games. REG rows whose week has no REG week (the post-finale chart) use the week with the same number (Wild Card); SBBYE rows use the Super Bowl week | Week N's chart is visible at the as-of after week N and week N+1's is not (as-ofs are at least 7 days apart). The orphan mappings are later than the charts' real dates. |
+| `coach_game` | kickoff | Who coaches a game is certain at kickoff. A future game's listed coach can reveal a firing, so it stays hidden until then. |
+| `coach_team_season` | when the stint's last game is final (game end + 3 h), or, if another coach coaches the team later that season, that coach's first kickoff | A stint's `last_week`/`n_games` are only known once it is over, and a finished stint row mid-season means "fired": it may only appear once the new coach is on the sideline. |
+| `dim_coach` | kickoff of the coach's first game in the warehouse | A coach exists, for point-in-time purposes, from his first game. |
+| `dim_player.public_from_utc` (row rule, hindsight table) | draft: May 15 of `draft_year`; undrafted: his first data row's `available_at`; else NULL (never) | See "Four kinds of tables". |
+
+**Schedule changes after the release.** nflverse keeps only the FINAL schedule, so without
+more a game moved later in the year shows its new week, date or stadium from May 20 on. A
+curated list in `config/settings.yaml` (`availability.schedule_exceptions`, 24 entries: Hurricane
+Irma's 2017 week-1 game played in week 11, the 2020 COVID moves, the 2014 and 2022 snowstorm
+games at Ford Field, the 2020 49ers games in Arizona, the snow-delayed 2023 Wild Card game at
+Buffalo ...) names each changed game; the build checks every id against the data. Such a row,
+and its slot, count as public only from the game's own kickoff. That is later than the real
+announcement for every change (a game is always announced before it is played), so no date has
+to be typed in, and nothing in nflverse could verify one. The cost is small: for a few weeks
+before each of these 24 games, the moved game is missing from "upcoming games". A change may
+carry an earlier `announced` date only together with a `source` link (the config refuses a date
+without one); it then counts from 12:00 UTC the day after. The cancelled 2022 week-17 Buffalo at
+Cincinnati game is absent from nflverse (both teams show 16 games); it is listed with
+`cancelled: true` and recorded in `build_manifest.notes.cancelled_games`, so a "games remaining"
+feature for those two teams in 2022 can add it back (`AvailabilityRules.cancelled_games()`). This is a known limit that is reduced, not
+removed: a change that is not on the list cannot be detected from nflverse, so features must
+not treat a future week's game count, bye or split flag as known in advance for those seasons.
+
+`build_manifest.notes` records per table how many rows each branch placed
+(`available_at_rule_counts`, every branch listed, zeros included; `public_from_utc_rule_counts`
+on `dim_player`: draft / first_fact_row / never) and `n_available_after_week_asof`: rows not yet
+public at their own week's Tuesday as-of. On the full 1999-2026 build that is 6 games (the five
+split weeks) and their plays/stats/snaps, 16 injury rows stamped after their week's as-of, 12
+`coach_game` rows (split-week games) and 43 coaching stints that ended with a change; 0 for
+`fact_schedule` and `fact_depth_chart`. `fact_schedule` also notes `n_schedule_exceptions`,
+`n_slot_last_two_reg_weeks`, `cancelled_games` and `schedule_exceptions_not_found` (a listed
+game the built seasons do not have: a config typo or an nflverse change).
+
+Knobs (`config/settings.yaml`, `availability:`, validated on load): `game_data_lag_hours` per
+dataset (0-48), `game_result_lag_hours` (0-48), `schedule_release_month_day` (`MM-DD`),
+`schedule_slot_lead_days` (0-60), `estimated_kickoff_for_availability_et` (weekday → `HH:MM`,
+plus `default`), `injury_legacy_stamp_offset_hours` (0-48), `draft_public_month_day` (`MM-DD`)
+and `schedule_exceptions`. The 6 h lag was chosen from the data, and the margins are thin:
+
+- the tightest non-split week is a late Monday-night week-1 game (22:25 ET kickoff, 2007): it
+  ends 7.6 h before its Tuesday as-of, so its rows arrive with **1.6 h** to spare; the guessed
+  1999-2005 Monday-night games (21:00 ET) have 2 h;
+- the regular-season finale ends 6.5-6.7 h before the end-of-season snapshot (Sunday-night
+  finales 2006-2025), a **0.5 h** margin after the lag; the guessed 1999-2005 Sunday night
+  slot also leaves 0.5 h, and the 1999-2002 **Monday-night** finales (21:00 ET) land exactly
+  at the 12:00 UTC snapshot (**0 h**, visible because the boundary is inclusive);
+- the final score (`fact_game`, game end + 3 h) keeps 3 h at the end-of-season snapshot.
+
+So the build checks it: if any game-data or `fact_game` row of a non-split week misses its
+Tuesday as-of, or any finale row misses the end-of-season snapshot, it stops with
+`AvailabilityError` (a larger lag in config would otherwise silently drop Monday-night games).
+
+### Reading the warehouse point-in-time (`twm.asof`)
+
+```python
+from twm.asof import AsOfView, weekly_as_of
+
+db = "data/warehouse.duckdb"
+as_of = weekly_as_of(db, 2025, 5)  # 2025-10-07 14:00 UTC, timezone-aware
+with AsOfView(db, as_of) as v:
+    rec = v.sql("""SELECT player_id, sum(receptions) AS rec
+                   FROM fact_player_week WHERE season = 2025 GROUP BY player_id""")
+```
+
+Inside an `AsOfView` every table has its normal name: event tables show only rows with
+`available_at <= as_of` and without their today's-snapshot columns (`SELECT position FROM
+fact_player_week` is an error); `fact_schedule` shows its slot columns as NULL before
+`slot_available_at`; `dim_team` everything; `dim_week` every week, with the schedule counts of
+weeks not played yet as NULL; `dim_player` only the players who exist by then and only the
+allowlisted columns (`SELECT latest_team FROM dim_player` is an error); `build_manifest` is not
+there. Plain SQL is therefore safe by default. The real warehouse is attached read-only as `wh`:
+`wh.fact_player_week` returns every row and column, future included. That is the deliberate,
+visible bypass (for inspection and for building labels), and exactly what the leakage harness
+catches when a feature uses it. Table names are matched in any letter case.
+
+For polars frames: `asof_filter(df, as_of)` keeps `available_at <= as_of` (features) and
+`outcomes_after(df, as_of, until=...)` keeps `as_of < available_at <= until` (labels, spec 6.2
+rule 3), so a row can never be both. Both accept a DataFrame or LazyFrame and refuse a missing,
+non-datetime or NULL `available_at`, and a frame that was joined before filtering (it has
+`available_at_right` too, whose future rows would slip through): **filter each table, then
+join**. `as_of` must be timezone-aware: a naive `datetime` raises `TypeError`, because a local
+time silently read as UTC (or the reverse) can leak a whole game.
+`end_of_regular_season_as_of(db, season)` gives the Hot-Seat snapshot. A warehouse built before
+these rules raises `WarehouseTooOldError` ("rebuild it with `twm build`").
+
+`uv run twm asof 2025 5` prints a week's as-of and, per event table, how many of the season's
+rows were visible at that moment.
+
+### The leakage harness (`twm.backtest.leakage`)
+
+`assert_future_invariant(builder, db_path, as_of, key=[...])` runs a feature builder (a function
+that takes an `AsOfView` and returns a polars DataFrame) on the real warehouse, then on two
+scratch copies in which everything not yet public at `as_of` is (a) deleted or (b) scrambled:
+event rows with `available_at > as_of` and `dim_player` rows of players who do not exist yet
+(deleted in (a), their non-key values scrambled in (b)); masked values (`fact_schedule` slots
+before `slot_available_at`, `dim_week` counts of weeks not played yet: NULL in (a), scrambled in
+(b)); today's-snapshot columns (`dim_player`'s hidden columns, `fact_player_week.position` ...:
+scrambled on every row in (b)). Scrambling is per type: integers `x * 3 + 7` (or bitwise NOT
+where that would not fit, so a value near the type's limit never crashes the harness), floats
+`x * 3 + 7`, booleans negated, text reversed, other timestamps +1 day; keys such as `game_id`,
+`player_id`, `season`, `week`, `team` untouched. A builder that never sees the future gives
+identical output; any difference raises `LeakageError` naming the variant, the columns and
+example rows. `key` must identify the output rows (checked).
+
+```python
+def season_receptions(v):  # passes: reads through the view
+    return v.sql(
+        "SELECT player_id, sum(receptions) AS rec FROM fact_player_week "
+        "WHERE season = 2020 GROUP BY 1"
+    )
+
+
+def leaky(v):  # fails: 'week <= 12' is not time
+    return v.sql(
+        "SELECT player_id, sum(receptions) AS rec FROM wh.fact_player_week "
+        "WHERE season = 2020 AND week <= 12 GROUP BY 1"
+    )
+
+
+assert_future_invariant(leaky, db, weekly_as_of(db, 2020, 12), key=["player_id"])
+# LeakageError: [deleted] the output has 1844 rows on the real warehouse but 1840 ...
+```
+
+The second one fails on real data because Baltimore at Pittsburgh (2020 week 12) was moved to
+Wednesday: it is week 12, but it had not been played at week 12's Tuesday as-of. The tests in
+`tests/test_leakage.py` are the spec's "a deliberately leaky feature fails the as-of test"
+(bypasses, a split week, labels, today's team and position, a future week's game count, a
+Week-18 kickoff slot, next year's draft class, integers near the type limit).
+
+Limits (read before trusting a green result):
+
+- the harness checks one as-of per call (test a split week and a season start too), and the
+  builder must be deterministic;
+- a NULL future value stays NULL when scrambled, and a change smaller than the float tolerance
+  is not seen;
+- **static tables (`dim_team`, `dim_week`'s calendar columns) and `dim_player`'s allowlisted
+  columns of players who already exist are copied unchanged: they are TRUSTED, not tested.**
+  A builder that uses `dim_team.team_division` (today's alignment) passes; keep future-looking
+  reads of those tables out of feature builders, or give the table a row or column rule first;
+- it cannot see leakage already **baked into a visible value**: nflverse model columns (spec
+  6.3), stat corrections, the FINAL schedule in `fact_schedule` (a change that is not in
+  `schedule_exceptions`), or a wrong `available_at` rule. It tests builders, not the warehouse.
+
+### Worked example: 2025 week 5, Tuesday as-of
+
+`weekly_as_of(db, 2025, 5)` = Tuesday 2025-10-07 14:00 UTC. Week 5 ended with Kansas City at
+Jacksonville on Monday 2025-10-06 20:15 ET (kickoff 2025-10-07 00:15 UTC).
+
+- Visible: all 78 games of weeks 1-5 in `fact_game` (the Monday game's final score at 07:15
+  UTC: end 04:15 + 3 h), their 13,488 plays and the week-5 player stats and snaps (Monday
+  night's at 10:15 UTC); the injury reports of weeks 1-5 (1,310 rows, each available at its
+  team's kickoff because 2025 has no `date_modified`); every daily depth-chart snapshot up to
+  the 07:15 UTC pull that morning; all 272 regular-season `fact_schedule` rows (who plays whom
+  in which week, public since 2025-05-20), with the date, time and venue of the 95 games of
+  weeks 1-6 and week 7's Thursday game (kickoff within 12 days); `dim_team`; `dim_week` with
+  game counts up to week 5; 17,423 players in `dim_player` (the 2025 draft class included).
+- Not visible: week 6 of anything. Philadelphia at the Giants on Thursday 2025-10-09 is in
+  `fact_schedule` (the fixture and its slot) but not in `fact_game` (no score yet); its injury
+  reports appear at kickoff; the date/time of weeks 7-18 (a Week-18 slot is picked after week
+  17); week 6's `dim_week.n_games`; the 13 playoff `fact_schedule` rows (matchups unknown);
+  every 2025 `coach_team_season` row (no stint is over); any player's position (today's
+  value); the closing line of any unplayed game.
+
+### Known, accepted imperfections
+
+- **Stat corrections.** nflverse reloads play-by-play and stats on Wednesday-Thursday with
+  corrections; the cache holds the corrected values, so a historical backtest sees a slightly
+  cleaner week than a Tuesday user did. A mild, unavoidable leak; live runs record the real
+  arrival times (`pipeline_runs`, step E4).
+- **The final schedule.** `fact_schedule` and `dim_week` are built from nflverse's FINAL
+  schedule. Slots are masked until 12 days before kickoff (and Week 17/18 until the previous
+  week), future weeks' `dim_week` counts until their own as-of, and 24 listed changes until
+  their own kickoff; changes that are not listed (for example a game postponed within its
+  week) still show their final week from the release on. Known, reduced, not removed.
+- **Today's snapshots.** Positions, sizes and headshots come from nflverse's current player
+  table; the as-of view hides them, but anything derived from them through `wh.` is hindsight.
+  `dim_team.team_division` is today's alignment and team codes are today's franchise codes.
+- **Model columns** (`epa`, `wp`, `cpoe` ...) come from models trained on later seasons
+  (spec 6.3); `available_at` cannot fix that.
 
 ## Determinism and the manifest
 
@@ -218,7 +480,12 @@ size differs by ~1 MB on full history), so never compare the files, compare the 
   therefore NULL) for every source-backed table except `fact_depth_chart`, whose two formats
   are unioned by hand; other notes: `n_kickoff_estimated` (`fact_game`), `merged_spellings`
   (`dim_coach`), `n_team_seasons_multi_coach` (`coach_team_season`), `n_unit_other`
-  (`fact_depth_chart`).
+  (`fact_depth_chart`), and the B2 availability notes: `available_at_rule_counts` (how many
+  rows each rule branch placed, zeros included), `n_available_after_week_asof` (rows not yet
+  public at their own week's Tuesday as-of), `n_raised_to_after_previous_week_asof`
+  (`fact_injury_report`), `n_schedule_exceptions`, `n_slot_last_two_reg_weeks`,
+  `cancelled_games` and `schedule_exceptions_not_found` (`fact_schedule`) and
+  `public_from_utc_rule_counts` (`dim_player`).
 
 The whole build runs in one transaction inside the scratch file `<warehouse>.building`; only a
 committed build is renamed over the real file (atomic on the same filesystem). A key violation or
@@ -233,7 +500,7 @@ write-ahead log, left by a notebook that opened the file read-write and died bef
 checkpointing) is discarded with a warning before the rename; DuckDB would otherwise replay it
 into the new file. `twm.warehouse.connect()` opens read-only by default for that reason.
 
-## Decisions made in B1 (confirm or revisit)
+## Decisions made in B1 and B2 (confirm or revisit)
 
 1. **Weekly as-of anchored to the first kickoff's date**, not to the last game's estimated end
    (the design brief's wording). Consequence: in the five split weeks (2010 W16, 2020 W5/W12/W13,
@@ -241,10 +508,33 @@ into the new file. `twm.warehouse.connect()` opens read-only by default for that
    alternative (first Tuesday 14:00 after the last game) would put the as-of after the next
    week's kickoff in those weeks.
 2. **`fact_depth_chart.week_at_dt` is a window label for grouping and inspection only**; B2 uses
-   `dt` as the daily charts' `available_at`. How the orphan legacy REG week-18/19 charts map to a
-   window is B2's call (see `fact_depth_chart` above).
+   `dt` as the daily charts' `available_at`, and maps the orphan legacy REG week-18/19 charts to
+   the Wild Card week (see `fact_depth_chart` above).
 3. **`dim_coach.coach_id` is a slug of the name** (`mike_mccarthy`): two different coaches with
    the same spelling would merge, and an upstream spelling fix changes an ID. Stable only while
    nflverse spelling is stable; H1 may replace it with a manual coach table. Likewise team codes
    follow play-by-play (LA/LAC/LV) with raw codes kept only where the source differed
    (`schema.TEAM_ALIASES`), a policy the B3 ID map and any external join must follow.
+4. **B2: `fact_game` is available as a whole at game end** and a separate `fact_schedule` holds
+   the pre-game columns (the alternative, one row with per-column times, would make every reader
+   choose columns by time). `roof` is left out of `fact_schedule` (open/closed is decided on game
+   day for retractable roofs).
+5. **B2: injury rows are never available before the previous week's as-of has passed**, even
+   when `date_modified` is earlier (125 rows of 2010-2024 on the full build), to honour spec
+   6.1's "week N+1 reports are not available at the Tuesday as-of".
+6. **B2: a coaching stint that ended with a change becomes available at the next coach's first
+   kickoff**, not at the stint's last game, so a stint row cannot announce a firing before it is
+   public.
+7. **B2: a daily depth-chart row without `dt` stops the build** (B1 kept it with a NULL `dt`):
+   a row that cannot be placed in time cannot be used by any point-in-time reader.
+8. **B2 review: point-in-time goes beyond rows.** `dim_player` got a row rule (draft or first
+   data row), `fact_schedule` a second time column for its volatile slot columns plus a
+   curated list of later schedule changes, `dim_week` masks a future week's schedule counts
+   until the week's own as-of (the review proposed "until the week's window starts"; the own
+   as-of is stricter, because at week 4's as-of week 5's window has just started and its
+   split flag would reveal a postponement announced days later), and today's-snapshot columns
+   (positions, sizes) are hidden. `window_end_utc` stays visible: it equals `asof_weekly_utc`.
+9. **B2 review: a 3 h result lag** on `fact_game` (and the playoff matchups and coaching
+   stints that follow from a result), the 21:00 ET Monday-night slot for guessed kickoffs, and
+   a 9 h offset for the 2010-2020 injury stamps. The 6 h game-data lag is unchanged; the build
+   now refuses a lag that would drop rows from an official snapshot.

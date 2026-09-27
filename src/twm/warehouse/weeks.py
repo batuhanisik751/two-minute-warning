@@ -65,8 +65,9 @@ WEEKDAYS = {
 # game's estimated end at 21:00 UTC even when it really was a late-afternoon or night game, and
 # 20:00 ET is an hour before the 21:00 ET Monday-night kickoffs of 1999-2005. No official as-of
 # (Tuesday 14:00 UTC, or Monday 12:00 UTC end-of-season) falls inside that gap, and the rows are
-# flagged (``kickoff_is_estimated``, ``dim_week.n_kickoff_estimated``) so B2 can give them a
-# conservative ``available_at``.
+# flagged (``kickoff_is_estimated``, ``dim_week.n_kickoff_estimated``), and the availability
+# rules (twm.warehouse.available) give them a conservative night-slot game end: the latest
+# normal slot for that weekday (21:00 ET Monday nights in 1999-2005, 20:30 ET otherwise).
 DEFAULT_KICKOFF_ET = {"Sunday": "13:00", "Saturday": "16:30"}
 DEFAULT_KICKOFF_ET_OTHER = "20:00"
 EARLIEST_REAL_KICKOFF_ET = time(9, 30)

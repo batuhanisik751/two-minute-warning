@@ -5,7 +5,7 @@ from __future__ import annotations
 import functools
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -179,11 +179,42 @@ class Settings(BaseModel):
         return ROOT / getattr(self.paths, key)
 
 
+# The stats config/scoring.yaml may score, per section (src/twm/scoring.py maps each to columns).
+SCORING_STATS: dict[str, tuple[str, ...]] = {
+    "passing": ("yards", "touchdowns", "interceptions", "two_point_conversions"),
+    "rushing": ("yards", "touchdowns", "two_point_conversions"),
+    "receiving": ("receptions", "yards", "touchdowns", "two_point_conversions"),
+    "misc": ("fumbles_lost", "special_teams_touchdowns", "fumble_recovery_touchdowns"),
+}
+
+
+class ScoringOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fumbles_lost_scope: Literal["all", "scrimmage"] = "all"
+
+
 class Scoring(BaseModel):
+    """config/scoring.yaml: points per unit of each stat. Unknown sections or stat names are
+    rejected, so a typo ("recieving") fails loudly instead of silently scoring zero."""
+
+    model_config = ConfigDict(extra="forbid")
+
     passing: dict[str, float]
     rushing: dict[str, float]
     receiving: dict[str, float]
     misc: dict[str, float]
+    options: ScoringOptions = ScoringOptions()
+
+    @model_validator(mode="after")
+    def _known_stats(self) -> Scoring:
+        for section, allowed in SCORING_STATS.items():
+            unknown = sorted(set(getattr(self, section)) - set(allowed))
+            if unknown:
+                raise ValueError(
+                    f"scoring.{section}: unknown stats {unknown}; allowed: {list(allowed)}"
+                )
+        return self
 
 
 class League(BaseModel):

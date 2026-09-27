@@ -253,14 +253,13 @@ nflverse counts. `special_teams_tds × 6` reconciles every row exactly (**0 rema
 compute from components (spec 7.1) and include a configurable `special_teams_td` line
 (default 6, matching ESPN standard scoring).
 
-Note for B4: `fumbles_lost_total` differs from that three-column sum on **31 of 6,321** rows in
-2025 (return-game fumbles by returners, e.g. DJ Moore week 1 = 1 vs 0; Riley Leonard week 18
-= 2 vs 1). nflverse's `fantasy_points_ppr` does **not** deduct those. B4 must choose which
-column the `misc.fumbles_lost` line in `config/scoring.yaml` reads — `fumbles_lost_total`
-(every lost fumble, probably what a league's "fumbles lost" setting means; verify against the
-ESPN league settings when connected) or the three-column sum (matches nflverse exactly) — and
-document the choice. The cross-check against `fantasy_points_ppr` must use the three-column
-sum either way.
+Resolved in B4 (`docs/scoring.md`): the engine computes points from components and
+`options.fumbles_lost_scope` chooses the fumble column: `all` (default, `fumbles_lost_total`, every
+lost fumble incl. returns) or `scrimmage` (the three-column sum, as nflverse). The `nflverse_ppr`
+preset reproduces `fantasy_points_ppr` exactly on all 150,691 QB/RB/WR/TE player-weeks 1999-2026;
+our default differs on 983 player-weeks (return fumbles) and 67 (fumble-recovery touchdowns,
+which nflverse does not score). Both choices are to be checked against the ESPN league's settings
+in step F2.
 
 ## 9. `ff_opportunity` details
 

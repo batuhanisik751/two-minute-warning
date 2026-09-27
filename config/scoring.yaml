@@ -1,17 +1,28 @@
-# Default full-PPR scoring. Overridden by the ESPN league settings when connected.
+# Fantasy scoring: points per unit of each stat. Default: full PPR (PROJECT_SPEC 7.1).
+# Points are always computed from the stat components (src/twm/scoring.py, docs/scoring.md);
+# nflverse's precomputed fantasy_points_ppr is only a cross-check. When My League (ESPN) is
+# connected, the league's own settings override this file.
 passing:
-  yards: 0.04
+  yards: 0.04                    # 1 point per 25 passing yards
   touchdowns: 4
   interceptions: -2
   two_point_conversions: 2
 rushing:
-  yards: 0.1
+  yards: 0.1                     # 1 point per 10 rushing yards
   touchdowns: 6
   two_point_conversions: 2
 receiving:
-  receptions: 1
+  receptions: 1                  # "PPR": 1 point per catch (0.5 = half PPR, 0 = standard)
   yards: 0.1
   touchdowns: 6
   two_point_conversions: 2
 misc:
   fumbles_lost: -2
+  special_teams_touchdowns: 6    # kick and punt return touchdowns scored by the player
+  fumble_recovery_touchdowns: 6  # the player recovers a fumble and scores
+options:
+  # Which lost fumbles cost points:
+  #   all       every lost fumble, including on kick and punt returns (the plain meaning of
+  #             "fumbles lost"; to be checked against the ESPN league's settings in step F2)
+  #   scrimmage only fumbles on sacks, runs and catches (what nflverse's fantasy_points_ppr counts)
+  fumbles_lost_scope: all

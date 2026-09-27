@@ -28,7 +28,11 @@ def doctor() -> None:
 
     s = settings()
     typer.echo(f"project: {s.project_name}  season: {s.current_season}")
-    typer.echo(f"scoring: PPR={scoring().receiving['receptions']}  teams={league().teams}")
+    sc = scoring()
+    typer.echo(
+        f"scoring: {sc.receiving.get('receptions', 0):g} per catch, fumbles lost: "
+        f"{sc.options.fumbles_lost_scope}  teams={league().teams}"
+    )
     db = s.path("warehouse")
     if db.exists():
         typer.echo(f"warehouse: {nv.project_relative(db)}")

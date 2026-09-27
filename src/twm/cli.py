@@ -50,11 +50,17 @@ def doctor() -> None:
 @app.command()
 def ingest(
     datasets: list[str] | None = typer.Argument(None, help="Dataset names (default: all)."),
-    start: int = typer.Option(None, help="First season (default: each dataset's first season)."),
-    end: int = typer.Option(None, help="Last season (default: current season)."),
+    start: int | None = typer.Option(
+        None, help="First season (default and minimum: each dataset's first season)."
+    ),
+    end: int | None = typer.Option(None, help="Last season (default: current season)."),
     force: bool = typer.Option(False, help="Re-download even if cached."),
 ) -> None:
-    """Download nflverse datasets into the local Parquet cache (data/raw)."""
+    """Download nflverse datasets into the local Parquet cache (data/raw).
+
+    Every dataset and season is attempted even if one fails. The run ends with a summary of
+    failures and exits with code 1 if anything failed, so a scheduled job notices.
+    """
     from twm.config import settings
     from twm.sources import nflverse as nv
 
@@ -62,21 +68,51 @@ def ingest(
     unknown = [n for n in names if n not in nv.DATASETS]
     if unknown:
         raise typer.BadParameter(f"unknown datasets: {unknown}; known: {list(nv.DATASETS)}")
-    last = end or settings().current_season
+    current = settings().current_season
+    last = end if end is not None else current
+    if start is not None and start > last:
+        raise typer.BadParameter(f"--start {start} is after --end {last}")
+
+    failures: list[tuple[str, str, str]] = []
+
+    def run(name: str, season: int | None) -> None:
+        label = str(season) if season is not None else "all"
+        try:
+            df = nv.fetch(name, season, force=force)
+        except Exception as e:  # report every failure at the end; the exit code says it failed
+            failures.append((name, label, f"{type(e).__name__}: {e}"))
+            typer.echo(f"{name:22s} {label:<6} FAILED (details at the end)")
+            return
+        typer.echo(f"{name:22s} {label:<6} {df.height:>9,} rows  {df.width:>4} cols")
+
     for name in names:
         ds = nv.DATASETS[name]
         if not ds.per_season:
-            df = nv.fetch(name, force=force)
-            typer.echo(f"{name:22s} all      {df.height:>9,} rows  {df.width:>4} cols")
+            run(name, None)
             continue
-        first = start or ds.first_season or settings().seasons["pbp_start"]
-        for season in range(first, last + 1):
-            try:
-                df = nv.fetch(name, season, force=force)
-            except Exception as e:  # noqa: BLE001 - report and keep going
-                typer.echo(f"{name:22s} {season}   FAILED: {type(e).__name__}: {str(e)[:80]}")
-                continue
-            typer.echo(f"{name:22s} {season}   {df.height:>9,} rows  {df.width:>4} cols")
+        first = ds.first_season or settings().seasons["pbp_start"]
+        if start is not None and start < first:
+            typer.echo(f"{name:22s} starts in {first}; skipping {start}-{first - 1}")
+        ds_first = max(first, start) if start is not None else first
+        ds_last = last
+        if name in nv.POST_SEASON_ONLY and ds_last >= current:
+            ds_last = current - 1
+            typer.echo(f"{name:22s} {current} is published only after the season; skipped")
+        for season in range(ds_first, ds_last + 1):
+            run(name, season)
+
+    if failures:
+        typer.echo(f"\n{len(failures)} failed:", err=True)
+        for name, label, msg in failures:
+            typer.echo(f"  {name} {label}: {msg}", err=True)
+        drift = [f for f in failures if f[2].startswith("SchemaDriftError")]
+        if drift:
+            typer.echo(
+                "Schema drift means upstream removed columns we rely on; read the message above "
+                "before refreshing snapshots.",
+                err=True,
+            )
+        raise typer.Exit(code=1)
 
 
 @app.command()

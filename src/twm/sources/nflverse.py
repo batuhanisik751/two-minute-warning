@@ -147,6 +147,9 @@ _ALL_DATASETS: list[Dataset] = [
 
 DATASETS: dict[str, Dataset] = _registry(_ALL_DATASETS)
 
+# Datasets nflverse publishes only after a season ends: the current season never exists.
+POST_SEASON_ONLY = frozenset({"participation"})
+
 # Depth charts changed format in 2025 (timestamped rows instead of week-assigned rows). The
 # pre-2025 schema has its own snapshot, refreshed from the last legacy season.
 LEGACY_SNAPSHOT = "depth_charts_legacy"

@@ -295,5 +295,40 @@ def ids_report(
     typer.echo(f"wrote {target}")
 
 
+@app.command()
+def glossary(
+    name: str | None = typer.Argument(None, help="One term, e.g. `twm glossary wopr`."),
+    write: bool = typer.Option(False, "--write", help="Regenerate docs/glossary.md."),
+) -> None:
+    """Explain a metric or feature in plain English (the feature/metric registry)."""
+    from twm import registry
+    from twm.config import ROOT
+
+    if write:
+        out = ROOT / "docs" / "glossary.md"
+        out.write_text(registry.glossary_markdown())
+        typer.echo(f"wrote {out} ({len(registry.REGISTRY)} entries)")
+        return
+    if name is None:
+        for e in sorted(registry.REGISTRY.values(), key=lambda e: (e.kind, e.name)):
+            flag = " (planned, " + e.step + ")" if e.status == "planned" else ""
+            typer.echo(f"{e.kind:10s}  {e.name:24s}  {e.title}{flag}")
+        return
+    try:
+        e = registry.get(name)
+    except KeyError as err:
+        typer.echo(str(err.args[0]), err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"{e.title} [{e.kind}, {e.unit}]")
+    typer.echo(f"  {e.explanation}")
+    typer.echo(f"  formula: {e.formula}")
+    if e.source:
+        typer.echo(f"  source:  {e.source}")
+    if e.verified:
+        typer.echo(f"  checked: {e.verified}")
+    if e.status == "planned":
+        typer.echo(f"  planned: built in step {e.step}")
+
+
 if __name__ == "__main__":
     app()

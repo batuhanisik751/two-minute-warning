@@ -1,5 +1,7 @@
 """`twm ingest` keeps going after a failure, reports every failure and exits non-zero."""
 
+import re
+
 import polars as pl
 import pytest
 from typer.testing import CliRunner
@@ -10,6 +12,14 @@ from twm.sources import nflverse as nv
 
 runner = CliRunner()
 CURRENT = settings().current_season
+
+
+def _plain(text: str) -> str:
+    """Typer prints usage errors in a Rich panel: colored when CI forces color, boxed, and
+    wrapped to the terminal width. Strip all of that so assertions see the message itself."""
+    text = re.sub(r"\x1b\[[0-9;]*m", "", text)
+    text = re.sub(r"[│╭╮╰╯─]", " ", text)
+    return " ".join(text.split())
 
 
 @pytest.fixture
@@ -73,7 +83,7 @@ def test_start_is_clamped_to_first_season_with_one_message(calls):
 def test_start_after_end_is_rejected(calls):
     result = runner.invoke(app, ["ingest", "schedules", "--start", "2025", "--end", "2020"])
     assert result.exit_code == 2
-    assert "is after --end" in result.output
+    assert "is after --end" in _plain(result.output)
 
 
 def test_post_season_only_dataset_skips_current_season(calls):

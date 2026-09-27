@@ -20,10 +20,12 @@ Four kinds of tables (see :data:`TABLE_AVAILABILITY`):
 - **static**: no ``available_at``; always visible (team list, the calendar of as-of times).
   ``dim_week``'s schedule-derived counts of a week that has not been played yet are masked
   (``masked_columns``): the calendar is known, a future postponement is not.
-- **hindsight**: a snapshot taken *today* (``dim_player``). Its rows appear only from the
-  player's draft (or first public data row) on (``public_from_utc``), and point-in-time readers
-  see only an allowlist of columns that do not change later.
-- **meta**: build bookkeeping (``build_manifest``); never exposed point-in-time.
+- **hindsight**: a snapshot taken *today* (``dim_player``, ``bridge_player_id``). Its rows
+  appear only from the player's draft (or first public data row) on (``public_from_utc``; a
+  bridge row copies its player's), and point-in-time readers see only an allowlist of columns
+  that do not change later.
+- **meta**: build bookkeeping (``build_manifest``, the id report tables ``report_id_*``);
+  never exposed point-in-time.
 
 Some columns hold a value that is already "baked in" when the row becomes visible (a position
 taken today, nflverse's final schedule); ``available_at`` cannot fix those, and the leakage
@@ -275,9 +277,12 @@ TODAYS_POSITION = (
     "(fact_depth_chart.position) instead"
 )
 
+# Ids are identifiers, not features: visible so a point-in-time reader can join other sources
+# (spec 6.2 rule 5, "no identifiers as model features", is enforced by the feature registry).
 DIM_PLAYER_VISIBLE = (
     "gsis_id", "display_name", "birth_date", "draft_year", "draft_round", "draft_pick",
-    "draft_team", "college_name", "espn_id", "pfr_id",
+    "draft_team", "college_name", "espn_id", "pfr_id", "sleeper_id", "fantasypros_id",
+    "yahoo_id", "sportradar_id", "mfl_id",
 )  # fmt: skip
 DIM_PLAYER_HIDDEN = {
     "last_season": "the last season he played: at an as-of in 2019 it tells you whether a "
@@ -291,6 +296,17 @@ DIM_PLAYER_HIDDEN = {
     "height": "today's listed height: can differ from the value listed at the as-of",
     "weight": "today's listed weight: players gain and lose weight over a career (and a "
     "change of weight often comes with a change of position)",
+}
+
+BRIDGE_VISIBLE = ("id_type", "source_id", "gsis_id")
+BRIDGE_BOOKKEEPING = (
+    "bookkeeping about today's sources (which of them list the player, e.g. a later season's "
+    "roster), not needed to join ids point-in-time; read wh.bridge_player_id to inspect it"
+)
+BRIDGE_HIDDEN = {
+    "method": BRIDGE_BOOKKEEPING,
+    "n_candidates": BRIDGE_BOOKKEEPING,
+    "is_conflict": BRIDGE_BOOKKEEPING,
 }
 
 TABLE_AVAILABILITY: dict[str, Availability] = {
@@ -454,6 +470,33 @@ TABLE_AVAILABILITY: dict[str, Availability] = {
                 "fact_injury_report and fact_depth_chart; NULL (never visible) when neither "
                 "exists",
             },
+        ),
+        Availability(
+            "bridge_player_id",
+            "hindsight",
+            "Built today from today's id tables. A link is visible point-in-time once its "
+            "player exists in dim_player (his public_from_utc, copied here), so a future "
+            "player's ids never appear early. Readers see id_type, source_id and gsis_id; the "
+            "bookkeeping columns (method, n_candidates, is_conflict) are hidden.",
+            visible_columns=BRIDGE_VISIBLE,
+            hidden_columns=BRIDGE_HIDDEN,
+            row_visible_column=PUBLIC_FROM,
+            extra_columns={
+                PUBLIC_FROM: "dim_player.public_from_utc of the linked player: the row is "
+                "visible point-in-time from then on (NULL: never)",
+            },
+        ),
+        Availability(
+            "report_id_coverage",
+            "meta",
+            "The unmatched-id report (match rates over the whole warehouse and cache, future "
+            "seasons included): bookkeeping, never a model input.",
+        ),
+        Availability(
+            "report_id_unmatched",
+            "meta",
+            "The unmatched-id report (ids without a gsis_id, suspect links, ambiguous ids, "
+            "conflicts, name links): bookkeeping, never a model input.",
         ),
     )
 }
@@ -816,16 +859,26 @@ def available_at_sql(table: str, rules: AvailabilityRules) -> AvailabilitySQL:
 
 
 def row_visibility_sql(table: str, rules: AvailabilityRules) -> AvailabilitySQL:
-    """The row rule of a hindsight table (``dim_player.public_from_utc``) as SQL.
+    """The row rule of a hindsight table as SQL.
 
-    Built after every event table, because an undrafted player exists from his first public
-    data row. A NULL result means "never visible" (errs late): an undrafted player with no row
-    in any built season.
+    ``dim_player.public_from_utc``: built after every event table, because an undrafted player
+    exists from his first public data row (snap counts through their B3 ``gsis_id``). A NULL
+    result means "never visible" (errs late): an undrafted player with no row in any built
+    season. ``bridge_player_id``: the linked player's ``public_from_utc``.
     """
     a = TABLE_AVAILABILITY[table]
-    if table != "dim_player" or a.row_visible_column is None:
+    if a.row_visible_column is None:
         raise ValueError(f"{table} has no row visibility rule")
-    first_row = "LEAST(_f.first_row, _fs.first_row)"  # LEAST skips NULLs
+    if table == "bridge_player_id":  # the linked player's own row rule, reused as is
+        return AvailabilitySQL(
+            expr="_p.public_from_utc",
+            joins="LEFT JOIN dim_player _p ON _p.gsis_id = s.gsis_id",
+            branch="CASE WHEN _p.public_from_utc IS NULL THEN 'never' ELSE 'player_public' END",
+            branches=("never", "player_public"),
+        )
+    if table != "dim_player":  # pragma: no cover - a new hindsight table needs its rule here
+        raise ValueError(f"{table} has no row visibility rule")
+    first_row = "_f.first_row"
     return AvailabilitySQL(
         expr=(
             "CASE WHEN s.draft_year IS NOT NULL THEN make_timestamp(CAST(s.draft_year AS BIGINT), "
@@ -836,14 +889,11 @@ def row_visibility_sql(table: str, rules: AvailabilityRules) -> AvailabilitySQL:
             LEFT JOIN (
                 SELECT gsis_id, min(available_at) AS first_row FROM (
                     SELECT player_id AS gsis_id, available_at FROM fact_player_week
+                    UNION ALL SELECT gsis_id, available_at FROM fact_snaps
                     UNION ALL SELECT gsis_id, available_at FROM fact_injury_report
                     UNION ALL SELECT gsis_id, available_at FROM fact_depth_chart
                 ) WHERE gsis_id IS NOT NULL GROUP BY gsis_id
-            ) _f ON _f.gsis_id = s.gsis_id
-            LEFT JOIN (
-                SELECT pfr_player_id, min(available_at) AS first_row FROM fact_snaps
-                WHERE pfr_player_id IS NOT NULL GROUP BY pfr_player_id
-            ) _fs ON _fs.pfr_player_id = s.pfr_id""",
+            ) _f ON _f.gsis_id = s.gsis_id""",
         branch=(
             "CASE WHEN s.draft_year IS NOT NULL THEN 'draft' "
             f"WHEN {first_row} IS NOT NULL THEN 'first_fact_row' ELSE 'never' END"

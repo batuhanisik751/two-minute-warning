@@ -93,7 +93,10 @@ def test_every_table_builds_from_fixtures(raw, db_path):
     assert m["fact_game"]["seasons"] == "[2025]" and m["fact_game"]["duckdb_version"]
     assert m["fact_game"]["polars_version"] == pl.__version__
     assert set(m["fact_game"]) == set(sc.BUILD_MANIFEST_COLUMNS)
-    assert all(len(r["content_hash"]) == 32 for r in manifest)
+    # every default fixture id matches, so the unmatched-id report is the one empty table
+    assert all(len(r["content_hash"]) == 32 for r in manifest if r["n_rows"])
+    assert [r["table_name"] for r in manifest if not r["n_rows"]] == ["report_id_unmatched"]
+    assert m["report_id_unmatched"]["content_hash"] == "empty"
     notes = json.loads(m["fact_game"]["notes"])
     assert notes["n_kickoff_estimated"] == 0 and "location" in notes["null_columns"]
     # one-file datasets do not depend on the season selection

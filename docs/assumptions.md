@@ -148,19 +148,64 @@ ill-defined for weeks that start on a Saturday or Wednesday). In
 every case a week-N+1 row is never available at the Tuesday as-of after week N. Live: nflverse
 refreshes injuries daily at 07:00 UTC, and the pipeline records the real arrival time.
 
-## 5. Snap counts use PFR IDs; the join works
+## 5. Player ids: sources, dtypes and match rates (verified 2026-09-27, B3)
 
-`pfr_player_id` is a string like `BankKe01`. Join to `gsis_id` via `ff_playerids.pfr_id`:
+The canonical key is `gsis_id`; `bridge_player_id` maps every other id to it
+(docs/warehouse.md, "Player IDs"). What the cache holds:
 
-| Season | QB/RB/WR/TE snap rows | matched via `ff_playerids` | matched via `rosters_weekly.pfr_id` |
-|---|---|---|---|
-| 2025 | 7,126 | 99.7% | 99.6% |
-| 2013 | 6,389 | 99.3% | 69.1% |
+- `players` (`load_players`): 24,833 rows, `gsis_id` unique and never null. `pfr_id` 22,668
+  non-null and unique; `espn_id` 16,568 non-null (**String**) and unique; also `pff_id`,
+  `nfl_id`, `esb_id`, `otc_id`, `smart_id` (all String; `esb_id` and `smart_id` each have one
+  duplicate: one person listed under two gsis ids). Every `gsis_id` seen in `player_stats`,
+  `injuries`, `ff_opportunity`, `ngs_*` and `depth_charts` is in `players` (except a `0`
+  placeholder and five other 1999-2000 ids in the stats, see the report).
+- `ff_playerids` (DynastyProcess): 12,508 rows; `gsis_id` 8,019 non-null (10 values repeated;
+  85 of them, 3 not even in GSIS format, are not in `players`); `pfr_id` 9,645 (16 repeated);
+  `espn_id` **Int64** 8,177 (13 repeated); `sleeper_id` Int64 6,405 (6 repeated);
+  `fantasypros_id` Int64 4,874 (2 repeated); `mfl_id` Int64 unique; `yahoo_id`,
+  `sportradar_id`, `nfl_id` String; `pff_id` Int64; plus `name`, `merge_name`, `position`,
+  `team`, `birthdate`, `draft_year`/`round`/`pick`. It is the only source of FantasyPros, MFL and
+  (before the weekly rosters carry them) Sleeper/Yahoo/Sportradar ids. `stats_global_id` uses 0
+  as a placeholder (6,574 rows) and is not used. `nfl_id` mixes the NFL's current numeric id
+  (the one `players.nfl_id` uses) with an older NFL.com numbering (2,431 of 6,480 shared
+  players differ).
+- Where `players` and `ff_playerids` both give an id for the same player they disagree 8 times
+  for PFR and 12 for ESPN (6 for PFF); the examples look like `ff_playerids` errors (one player
+  given another player's PFR id), so `players` wins.
+- `rosters_weekly` (2002-2026): ids are **String** (`pfr_id`, `espn_id`, `sleeper_id`,
+  `yahoo_id`, `sportradar_id`, `pff_id`, `esb_id`, `smart_id`, `gsis_it_id` = the NFL numeric
+  id, `rotowire_id`, `fantasy_data_id`); empty strings occur (`yahoo_id` 309 rows, `esb_id`
+  423, `gsis_id` 11) and are NULL after canonicalization. Across seasons a few ids name two
+  players (e.g. 2 PFR, 5 ESPN, 1 Sleeper id): those are ambiguous unless `players` settles them.
+  1,684 roster gsis ids (2014-2026) are not in `players`; 1,509 of them carry roster status
+  `CUT` at some point (camp and practice-squad players who never appear in nflverse's data).
+- `ff_rankings_all.id` is a String FantasyPros id; `ff_rankings_week.fantasypros_id` and
+  `ff_rankings_draft.id` are Int64. Snap counts use PFR slugs (`pfr_player_id`, String).
+  Depth charts 2025+ carry an ESPN id (String) and a gsis_id; 32,730 of the 1.13M daily rows
+  have an ESPN id but no gsis_id, and the bridge fills 1,125 of them (the rest are ESPN ids no
+  id table knows).
 
-Use `ff_playerids` first, `rosters_weekly` as fallback, and report the unmatched remainder
-(spec 7.5). `ff_playerids` ID dtypes: `gsis_id`/`pfr_id` strings; `espn_id`, `sleeper_id`,
-`fantasypros_id` Int64. The roster-side `espn_id` (`rosters_weekly`, `rosters`, `players`,
-`depth_charts`) is a **string**, so cast one side before the ESPN join.
+Final match rates (full 1999-2026 build, after the bridge and the name passes):
+
+| Dataset (QB/RB/WR/TE rows) | Match |
+|---|---|
+| Snap counts, rows | every season 2013-2026 between 99.75% (2024) and 100% |
+| Preseason `rp` candidate pool (QB 18, RB 36, WR 36, TE 18) | 108 of 108 in every season 2020-2026 |
+| Weekly `wp` rankings, rows (IDP pages left out) | 99.95% (2020), 99.91%, 99.82%, 99.82%, 99.50%, 99.02% (2025), 97.24% (2026 so far) |
+| Redraft `rp` rankings, distinct players (IDP pages left out) | 2020 12 of 836 unmatched, 2023 44/979, 2026 88/937 (fringe players and rookies) |
+| `ff_rankings_week` (current week) | 6 of 472 unmatched |
+
+Even `players` is not always right: a few PFR slugs it gives to one (often long-retired) player
+are used by the snap counts for someone else. The build's usage check compares each snap-count
+season with the linked player's career (rookie season or draft year - 1 to last season + 1):
+on the full build 1 PFR id is re-linked to the player the weekly rosters and `ff_playerids`
+agree on, 1 id's 6 snap rows are left without a gsis_id, and 10 ids are flagged for a position
+on the other side of the ball (report only). All 12 are `suspect` rows in the id report, for
+the owner to confirm with manual overrides (docs/warehouse.md, "Player IDs").
+
+Before B3 (A3), snap counts matched 99.7% (2025) and 99.3% (2013) through `ff_playerids`
+alone, and 69.1% in 2013 through `rosters_weekly.pfr_id` alone; `players.pfr_id` first closes
+almost all of it. Every build refreshes these numbers (`report_id_coverage`; `twm ids`).
 
 ## 6. FantasyPros rankings archive starts December 2019
 

@@ -39,12 +39,34 @@ def doctor() -> None:
         else:
             for name, n in counts:
                 typer.echo(f"  {name:22s} {n:>12,} rows")
+            line = _ids_line(db)
+            if line:
+                typer.echo(line)
     else:
         typer.echo(
             f"warehouse: not built ({nv.project_relative(db)}); run "
             f"`twm build {s.current_season - 1} {s.current_season}` (or --start 1999)"
         )
     typer.echo("ok")
+
+
+def _ids_line(db: Path) -> str | None:
+    """The one ID-coverage line of ``twm doctor`` (None if the report tables are absent)."""
+    import duckdb
+
+    from twm import ids
+    from twm.warehouse import build as wb
+
+    try:
+        con = wb.connect(db, read_only=True)
+    except duckdb.Error:
+        return None
+    try:
+        return ids.doctor_line(con)
+    except duckdb.Error:
+        return None
+    finally:
+        con.close()
 
 
 @app.command()
@@ -218,6 +240,55 @@ def asof(
     except (LookupError, WarehouseTooOldError, duckdb.Error) as e:
         typer.echo(f"cannot show the as-of: {e}", err=True)
         raise typer.Exit(code=1) from e
+
+
+@app.command("ids")
+def ids_report(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    out: Path = typer.Option(
+        Path("reports/ids/unmatched_ids.md"),
+        "--out",
+        help="Markdown file to write (relative paths are under the project root).",
+    ),
+) -> None:
+    """Write the unmatched-ID report (markdown) from the warehouse and print a summary.
+
+    Reads the tables every build refreshes (bridge_player_id, report_id_coverage,
+    report_id_unmatched; docs/warehouse.md "Player IDs"). The output is deterministic (sorted;
+    the only time in it is the build's), so it can be committed and diffed.
+    """
+    import duckdb
+
+    from twm import ids
+    from twm.config import ROOT, settings
+    from twm.warehouse import build as wb
+
+    path = db if db is not None else settings().path("warehouse")
+    if not Path(path).exists():
+        typer.echo(f"warehouse not found: {path}; run `twm build` first", err=True)
+        raise typer.Exit(code=1)
+    try:
+        con = wb.connect(path, read_only=True)
+    except duckdb.Error as e:
+        typer.echo(f"cannot open the warehouse: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    try:
+        if not ids.has_report(con):
+            typer.echo(
+                f"{path} has no ID report tables (built before B3); rebuild it with `twm build`",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        text = ids.render_markdown(con)
+        lines = ids.summary_lines(con)
+    finally:
+        con.close()
+    target = out if out.is_absolute() else ROOT / out
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+    for line in lines:
+        typer.echo(line)
+    typer.echo(f"wrote {target}")
 
 
 if __name__ == "__main__":

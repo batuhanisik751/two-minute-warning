@@ -1,4 +1,4 @@
-# The warehouse (Steps B1-B2)
+# The warehouse (Steps B1-B3)
 
 `twm build 2025 2026` (or `--start 1999`) turns the Parquet cache in `data/raw/` into one
 DuckDB file, `data/warehouse.duckdb` (gitignored). The build is written to
@@ -19,12 +19,13 @@ table_name = 'fact_game'` (or `duckdb_tables()` for the table docs).
 
 Code: `src/twm/warehouse/schema.py` (what each table is), `weeks.py` (the as-of rules, pure
 functions), `available.py` (when each row becomes public, B2), `build.py` (the builder),
-`src/twm/asof.py` (point-in-time reading) and `src/twm/backtest/leakage.py` (the leakage
-harness). Tests: `tests/test_weeks.py`, `tests/test_warehouse_build.py`, `tests/test_available.py`,
-`tests/test_asof.py`, `tests/test_leakage.py`, `tests/test_cli_build.py` (offline, tiny synthetic
-fixtures in `tests/conftest.py`), plus opt-in `realdata` tests in `tests/test_warehouse_build.py`
-and `tests/test_available.py` that read the real cache (`uv run pytest -m realdata`, never
-download; they build into a temporary file).
+`src/twm/ids.py` (the player id map and the unmatched-id report, B3), `src/twm/asof.py`
+(point-in-time reading) and `src/twm/backtest/leakage.py` (the leakage harness). Tests:
+`tests/test_weeks.py`, `tests/test_warehouse_build.py`, `tests/test_available.py`,
+`tests/test_asof.py`, `tests/test_leakage.py`, `tests/test_ids.py`, `tests/test_cli_build.py`
+(offline, tiny synthetic fixtures in `tests/conftest.py`), plus opt-in `realdata` tests in
+`tests/test_warehouse_build.py`, `tests/test_available.py` and `tests/test_ids.py` that read the
+real cache (`uv run pytest -m realdata`, never download; they build into a temporary file).
 
 ## Tables
 
@@ -41,11 +42,14 @@ before it, `dim_player` stores `public_from_utc` last): see "When is a row avail
 | `fact_play` | one play, 128 curated columns (identifiers, game state, play descriptors, main players, nflverse model columns, context). All 128 names exist in `data/schemas/pbp.json`; nothing was dropped | `game_id, play_id` | pbp |
 | `fact_player_week` | one player in one game week, every weekly stat column | `player_id, season, week, season_type` | player_stats |
 | `fact_team_week` | one team in one game week | `team, season, week, season_type` | team_stats |
-| `fact_snaps` | one player in one game with snap counts and percentages (PFR ids; mapped to `gsis_id` in B3) | `game_id, pfr_player_id` | snap_counts |
+| `fact_snaps` | one player in one game with snap counts and percentages. The source names players by Pro-Football-Reference id (`pfr_player_id`); `gsis_id` (right after it) is mapped through `bridge_player_id` (NULL for 234 of 327,698 rows on the full build: ids with no link, and 6 rows whose link the usage check found implausible; all listed in the id report). `(game_id, gsis_id)` is unique among rows with a gsis_id (counted on every build, `notes.n_duplicate_game_gsis`, 0), so features can join on it | `game_id, pfr_player_id` | snap_counts |
 | `fact_injury_report` | one player on one team's injury report for one week; `date_modified` is the report row's last-modified time where the source has it (2010-2024; NULL for 2025+ and effectively 2009, see assumptions section 4) | `season, week, team, gsis_id` | injuries |
 | `fact_depth_chart` | one depth-chart slot, from either upstream format (`source_format` = `legacy` weekly charts 2001-2024, or `daily` snapshots 2025+) | see below | depth_charts |
 | `dim_team` | one of the 36 nflverse team rows; `current_abbr` maps OAK→LV, SD→LAC, STL→LA, LAR→LA; `is_current` is false for those four | `team_abbr` | teams |
-| `dim_player` | one player (skeleton; B3 adds the cross-source id map) and `public_from_utc`, the moment he exists point-in-time (his draft, or his first public data row). `dim_team` and `dim_player` are snapshots of the one-file datasets (`all.parquet`): they do not depend on the seasons built (manifest `seasons` = `[]`) and change whenever `twm ingest` refreshes them | `gsis_id` | players |
+| `dim_player` | one player from nflverse's player table, with one id per other system (`pfr_id`, `espn_id`, `sleeper_id`, `fantasypros_id`, `yahoo_id`, `sportradar_id`, `mfl_id`, all from `bridge_player_id`, see "Player IDs") and `public_from_utc`, the moment he exists point-in-time (his draft, or his first public data row). `dim_team` and `dim_player` are snapshots of the one-file datasets (`all.parquet`) (manifest `seasons` = `[]`) and change whenever `twm ingest` refreshes them; since B3 the ids and `public_from_utc` also use the built seasons' weekly rosters and facts | `gsis_id` | players (+ bridge) |
+| `bridge_player_id` | one id of another system (`id_type`, `source_id`) and the `gsis_id` it belongs to, with the `method` that linked it, `n_candidates` and `is_conflict`; see "Player IDs" | `id_type, source_id` | players, rosters_weekly, ff_playerids, data/manual |
+| `report_id_coverage` | the unmatched-id report, part 1: rows and distinct ids per dataset, season, id type and scope (`all`, `fantasy` = QB/RB/WR/TE) and how many map to a `gsis_id` (bookkeeping, rebuilt on every build) | `dataset, season, id_type, scope` | the build + raw cache |
+| `report_id_unmatched` | the unmatched-id report, part 2: every unmatched id with a name, plus suspect links (usage contradicts the link), ambiguous ids, conflicts, name-pass links and players with several ids of one type (`kind`) | `kind, dataset, id_type, source_id` | the build + raw cache |
 | `dim_coach` | one head coach; `coach_id` is a slug (`mike_mccarthy`) and spellings that share a slug are merged into one row (`coach_name` = whitespace collapsed, alphabetically first spelling; merges listed in `build_manifest.notes.merged_spellings`). Interim coaches the schedule never names (2024+) are absent | `coach_id` | fact_game |
 | `coach_game` | one team in one game and the head coach the schedule lists for it (unplayed games included). The schedule columns record mid-season changes through 2023 but not in 2024-2025 (TEN/NYG 2025, NYJ/CHI/NO 2024 show the fired coach all season), so interim coaches are missing there | `game_id, team` | fact_game |
 | `coach_team_season` | one coach-team-season as listed in the schedule: first/last scheduled week and `n_games` = games scheduled (played or not, playoffs included; 17 already for every 2026 coach). Point-in-time since B2: a stint row appears only once the stint is over (season end, or the next coach's first kickoff), so at an in-season as-of the current coach has no row here; count `coach_game` rows through `AsOfView` for games coached to date. A team has more than one row only when nflverse recorded the change (2000-2023) | `coach_id, team, season` | coach_game |
@@ -114,7 +118,10 @@ Columns: `season`, `source_format`, `week` (legacy chart week; NULL for SBBYE ro
 rows), `week_at_dt` (daily only: the `dim_week` week whose window contains `dt`; NULL after the
 season's last as-of, i.e. offseason snapshots belong to no week; it is a window label for as-of
 filtering, not a chart selector, see the as-of rules), `game_type`, `season_type`,
-`dt` (daily snapshot time, UTC), `team`, `team_raw`, `gsis_id`, `espn_id`, `player_name`,
+`dt` (daily snapshot time, UTC), `team`, `team_raw`, `gsis_id`, `espn_id`, `gsis_id_from_espn`
+(B3: a daily row whose source has no `gsis_id` gets it from its `espn_id` through
+`bridge_player_id`; 1,125 rows on the full build, 31,605 daily rows still have an ESPN id but no
+`gsis_id`), `player_name`,
 `player_position` (legacy roster position), `unit` (offense / defense / special_teams / other),
 `unit_raw` (legacy formation or daily `pos_grp`), `position` (slot: legacy `depth_position` or
 daily `pos_abb`), `pos_slot` (daily), `depth_rank` (1 = starter).
@@ -237,22 +244,31 @@ one-line rule stored as the `available_at` column comment in the file):
   `team_division` is today's alignment (Seattle shows NFC West for 1999-2001), and every team
   column in the warehouse uses today's franchise code (a 2014 STL row reads LA), which reveals
   later relocations;
-- *hindsight* tables are snapshots taken today: `dim_player`. A player **exists point-in-time**
-  only from `public_from_utc`: May 15 (config `availability.draft_public_month_day`, later than
-  every draft's last day, before the June 1 board) of his `draft_year`, or, undrafted, the
-  earliest `available_at` of his rows in `fact_player_week`, `fact_snaps` (via `pfr_id`),
-  `fact_injury_report` and `fact_depth_chart`. An undrafted player with no such row never
-  appears (6,925 of 24,833 on the full build, mostly pre-1999 players). Without this row rule a
+- *hindsight* tables are snapshots taken today: `dim_player` and `bridge_player_id`. A player
+  **exists point-in-time** only from `public_from_utc`: May 15 (config
+  `availability.draft_public_month_day`, later than every draft's last day, before the June 1
+  board) of his `draft_year`, or, undrafted, the earliest `available_at` of his rows in
+  `fact_player_week`, `fact_snaps` (through its B3 `gsis_id`), `fact_injury_report` and
+  `fact_depth_chart`. An undrafted player with no such row never appears (6,924 of 24,833 on
+  the full build, mostly pre-1999 players; 6,925 before B3 mapped snap counts and ESPN-only
+  depth-chart rows to players). Snap rows whose link the usage check re-linked or left NULL
+  (see "Player IDs") never make the wrong player public. A `bridge_player_id` row copies its player's `public_from_utc`,
+  so a future player's ids are hidden exactly like the player himself; the view shows
+  `id_type`, `source_id` and `gsis_id` (`method`, `n_candidates`, `is_conflict` are hidden
+  bookkeeping). Without this row rule a
   2015 as-of would list every later draft class, and the top of next year's draft order is this
   season's final standings. The visible columns are those that do not change later:
   `gsis_id`, `display_name`, `birth_date`, `draft_year`, `draft_round`, `draft_pick`,
-  `draft_team` (today's franchise code: a 2016 San Diego pick reads LAC), `college_name`,
-  `espn_id`, `pfr_id`. Hidden: `last_season` (tells you in 2019 whether a player retires after
+  `draft_team` (today's franchise code: a 2016 San Diego pick reads LAC), `college_name`, and
+  the ids `espn_id`, `pfr_id`, `sleeper_id`, `fantasypros_id`, `yahoo_id`, `sportradar_id`,
+  `mfl_id` (identifiers, not features: spec 6.2 rule 5 is enforced by the feature registry).
+  Hidden: `last_season` (tells you in 2019 whether a player retires after
   2019), `status` (later injuries, retirements), `latest_team` (every later trade or signing),
   `rookie_season` (a player who has not debuted yet would already "exist"), `position` and
   `position_group` (today's, see above), `height` and `weight` (today's listing);
-- *meta*: `build_manifest` (row counts of the whole warehouse, future rows included): not part
-  of the as-of view; read `wh.build_manifest` when you need it.
+- *meta*: `build_manifest` (row counts of the whole warehouse, future rows included) and the
+  id report tables `report_id_coverage` and `report_id_unmatched`: not part of the as-of view;
+  read `wh.<table>` when you need them.
 
 ### The rules
 
@@ -275,6 +291,7 @@ guess. "Kickoff" is game end minus 4 h (the real kickoff, or the late night-slot
 | `coach_team_season` | when the stint's last game is final (game end + 3 h), or, if another coach coaches the team later that season, that coach's first kickoff | A stint's `last_week`/`n_games` are only known once it is over, and a finished stint row mid-season means "fired": it may only appear once the new coach is on the sideline. |
 | `dim_coach` | kickoff of the coach's first game in the warehouse | A coach exists, for point-in-time purposes, from his first game. |
 | `dim_player.public_from_utc` (row rule, hindsight table) | draft: May 15 of `draft_year`; undrafted: his first data row's `available_at`; else NULL (never) | See "Four kinds of tables". |
+| `bridge_player_id.public_from_utc` (row rule, hindsight table) | the linked player's `dim_player.public_from_utc` | An id is only as public as its player. |
 
 **Schedule changes after the release.** nflverse keeps only the FINAL schedule, so without
 more a game moved later in the year shows its new week, date or stadium from May 20 on. A
@@ -340,8 +357,8 @@ Inside an `AsOfView` every table has its normal name: event tables show only row
 fact_player_week` is an error); `fact_schedule` shows its slot columns as NULL before
 `slot_available_at`; `dim_team` everything; `dim_week` every week, with the schedule counts of
 weeks not played yet as NULL; `dim_player` only the players who exist by then and only the
-allowlisted columns (`SELECT latest_team FROM dim_player` is an error); `build_manifest` is not
-there. Plain SQL is therefore safe by default. The real warehouse is attached read-only as `wh`:
+allowlisted columns (`SELECT latest_team FROM dim_player` is an error); `bridge_player_id` only
+the ids of players who exist; `build_manifest` and the `report_id_*` tables are not there. Plain SQL is therefore safe by default. The real warehouse is attached read-only as `wh`:
 `wh.fact_player_week` returns every row and column, future included. That is the deliberate,
 visible bypass (for inspection and for building labels), and exactly what the leakage harness
 catches when a feature uses it. Table names are matched in any letter case.
@@ -451,6 +468,208 @@ Jacksonville on Monday 2025-10-06 20:15 ET (kickoff 2025-10-07 00:15 UTC).
 - **Model columns** (`epa`, `wp`, `cpoe` ...) come from models trained on later seasons
   (spec 6.3); `available_at` cannot fix that.
 
+## Player IDs (`bridge_player_id`, B3)
+
+**Why several id systems?** Every data provider numbers players its own way. nflverse's
+play-by-play, stats, injuries and depth charts use the NFL's GSIS id (`00-00xxxxx`);
+Pro-Football-Reference snap counts use a PFR slug (`pfr_player_id`, letters and digits); the
+2025+ ESPN depth charts an ESPN number; FantasyPros rankings a FantasyPros number; Sleeper,
+Yahoo, Sportradar and MyFantasyLeague (MFL) their own. The warehouse keeps **`gsis_id` as the
+one canonical key** (spec 7.5) and a *bridge*: `bridge_player_id` has one row per
+(`id_type`, `source_id`) naming the `gsis_id` it belongs to. To put a gsis_id on any source,
+join its id there:
+
+```sql
+SELECT s.*, b.gsis_id
+FROM some_source s
+LEFT JOIN bridge_player_id b ON b.id_type = 'fantasypros' AND b.source_id = s.fantasypros_id
+```
+
+If your id column is numeric, compare on its canonical text
+(`twm.ids.canonical_id_sql(column, its_type)`): a DOUBLE cast to VARCHAR keeps `.0` and
+matches nothing.
+
+`source_id` is the id as **canonical text** (`twm.ids.canonical_id`): integers never carry a
+decimal part (`4374496`, never `4374496.0`; some sources store ids as numbers, others as
+text), text is trimmed, an empty string is NULL. Id types (`twm.ids.ID_TYPES`): `pfr`, `espn`,
+`sleeper`, `fantasypros`, `yahoo`, `sportradar`, `pff`, `nfl`, `mfl`, plus the cheap extras
+`esb`, `smart`, `otc` (players), `rotowire`, `fantasy_data`, `cbs`, `stats`, `fleaflicker`,
+`cfbref`, `rotoworld`, `ktc`, `swish`. Left out: `ff_playerids.stats_global_id` (0 is a
+placeholder in 6,574 rows). `nfl` is the NFL's numeric id (players' `nfl_id` and the weekly
+rosters' `gsis_it_id` agree on it); `ff_playerids.nfl_id` mixes it with an older NFL.com
+numbering, so some players carry two `nfl` ids.
+
+**Where links come from, most trusted first** (`method`):
+
+1. `manual`: `data/manual/player_id_overrides.csv`, checked by a person (below);
+2. `players`: nflverse's player table, one row per gsis_id, every id in it unique;
+3. `rosters_weekly`: the weekly rosters of the built seasons (2002+);
+4. `ff_playerids`: DynastyProcess's cross-site table, the only source of Sleeper-for-old-seasons,
+   FantasyPros, MFL and several other ids. It comes last because where it and `players` both
+   give an id for the same player they disagree now and then (8 PFR and 12 ESPN ids; the
+   examples look like `ff_playerids` errors, e.g. one player given another player's PFR id);
+5. the two name passes (below), only for `ff_playerids` rows that have no gsis_id.
+
+**Disagreements and ambiguity.** For every (`id_type`, `source_id`) all sources propose a
+gsis_id. `n_candidates` counts the distinct proposals (also those naming a player missing from
+`dim_player`, listed as "(not in dim_player)"); when it is above 1 the sources disagree, the
+most trusted one wins and `is_conflict` is true (70 ids on the full build, 19 of them only
+because a candidate is missing from `dim_player`; every one listed in the report with all
+candidates). A conflict row's `detail` starts "precedence picked <method>": precedence is a
+rule, not a check, so the pick can still be wrong; when the usage check (next paragraph)
+contradicts it, the detail says so instead. When the **winning source itself** names two players for one
+id (a duplicate inside that source, or a weekly-roster id that belongs to one player in 2024 and
+another in 2025) the id is **ambiguous**: it is left out of the bridge and listed in the report
+(19 ids). A wrong link would silently merge two players, which is worse than a missing link that
+the report shows. A link to a gsis_id that is not in `dim_player` is dropped too (5,126
+candidate links from the weekly rosters and 779 from `ff_playerids`, counted in
+`build_manifest.notes.n_links_to_gsis_not_in_dim_player`): nflverse's player table lacks 1,684
+weekly-roster players (1,509 of them were cut at some point: camp and practice-squad players)
+and 85 `ff_playerids` gsis ids.
+
+**The usage check (`kind = 'suspect'`).** Precedence trusts `players` over everything, but
+even `players` can hand an id to the wrong person (a PFR slug given to a 1980 player that the
+2026 snap counts use for a 2026 rookie). So after the bridge is resolved, the build checks
+every PFR link that `fact_snaps` uses against the linked player's career window
+[`COALESCE(rookie_season, draft_year)` - 1, `last_season` + 1] (`twm.ids.stage_usage_checks`):
+
+- **Career rule (hard).** A season outside the window cannot be that player. If the id is
+  never used inside the window, the link is not `manual`, and every lower-ranked source that
+  names someone else names the *same* player, whose window holds every season of use, the
+  bridge is re-linked to him (`method` = `<source>_usage_override`, e.g.
+  `rosters_weekly_usage_override`, `is_conflict` true). Otherwise the link stays, and the snap
+  rows outside the window get `gsis_id` NULL. Either way a `suspect` row names the evidence
+  (`dataset = 'fact_snaps'`). Full build: 1 id re-linked (2 rows), 1 id left NULL for its 6
+  rows.
+- **Position rule (report only).** The snap counts list the id only on the other side of the
+  ball (offense / defense / special teams) than the player's `position_group`: reported as
+  `suspect`, link kept. Position changes (edge rushers listed DE or LB, safeties at LB) make a
+  finer rule noisy, and even this one catches real two-way players, so it never changes a
+  link. Full build: 10 ids.
+
+Rows left NULL, or moved to another player, are ignored by both players' `public_from_utc`
+(it reads `fact_snaps.gsis_id` after the check). Owner action: confirm each `suspect` row and
+add a `manual` override (below) once the player is verified from the data; a manual link is
+never overridden by the check.
+
+**The name passes.** 4,489 `ff_playerids` rows have no gsis_id, so their FantasyPros, Sleeper,
+MFL ... ids would otherwise map to nobody. Names are compared after `normalize_name`: lowercase,
+accents removed, punctuation dropped (apostrophes, periods and hyphens join the parts:
+"D'Andre Swift" -> `dandre swift`, "A.J. Brown" -> `aj brown`, "Amon-Ra St. Brown" ->
+`amonra st brown`), the suffixes jr/sr/ii/iii/iv/v dropped ("Odell Beckham Jr." -> `odell
+beckham`), spaces collapsed.
+
+- Pass A, `name_birthdate`: normalized name + exact birth date. The key must be unique among
+  the gsis-less `ff_playerids` rows **and** among the players: two players with the same name
+  and birthday are never guessed between.
+- Pass B, `name_position_draft` (only for rows pass A did not link): normalized name + position
+  group + draft year, unique on both sides, and the birth dates must not contradict (either one
+  missing, or equal).
+- Safety rules: a row whose own ids are linked by id (step 2-4) to a different player is not
+  linked at all (`contradicts_id_link`, 43 ids); an id that already has an id-based link keeps
+  it (`id_link_exists`, 1,687 ids, all agreeing); a player never gets a second id of a type he
+  already carries (`player_has_other_id_of_type`, 31); two name links for one id, or one player
+  named for two ids, cancel each other (reported as ambiguous). Pass B skips only the rows
+  pass A linked, not their players, so one player can be linked by both passes through two
+  rows (one with his birth date, one with his draft year); this last rule is what stops him
+  getting two ids of a type.
+- Result on the full build: the passes proposed 2,782 rows (A 2,523, B 259); after the safety
+  rules 2,771 rows (10,645 ids: A 10,022, B 623) were linked. Every link is listed in the report
+  (`kind = 'name_link'`, with the evidence) so the owner can spot-check them; a pass-A link
+  whose `ff_playerids` position group differs from the player's says "position group differs:
+  RB vs WR" in its evidence (64 rows; most are historical position changes, but check them
+  first).
+
+**`dim_player`'s ids.** `pfr_id`, `espn_id`, `sleeper_id`, `fantasypros_id`, `yahoo_id`,
+`sportradar_id` and `mfl_id` come from the bridge: one id per type per player, the most trusted
+method first, then the smallest id (deterministic). For `pfr_id`/`espn_id` that is nflverse's
+own value whenever it has one (the `players` link, unless the usage check re-linked it); the
+bridge filled 10 PFR (one of them the usage re-link) and 60 ESPN gaps from the weekly rosters,
+`ff_playerids` and the name passes (which method: join the
+id back to `bridge_player_id`). A player with several ids of one type (25 ids on the full build,
+e.g. two ESPN ids) keeps one; the others are listed as `kind = 'multiple_ids'`. Coverage on the
+full build: PFR 22,677, ESPN 16,628, MFL 10,695, Sportradar 7,188, Sleeper 6,151, Yahoo 5,339,
+FantasyPros 4,765 of 24,833 players.
+
+**The override file** `data/manual/player_id_overrides.csv` (committed; header only to start):
+
+```csv
+id_type,source_id,gsis_id,note,verified_by
+fantasypros,12345,00-0000000,"why you are sure (a link, what you checked)",your name
+```
+
+A row forces that link with the highest precedence (`method = 'manual'`), which also resolves
+an ambiguous id. The build validates the file and stops with `IdOverrideError` naming every bad
+line: unknown `id_type`, empty `source_id`/`gsis_id`, a gsis_id that is not in `dim_player`,
+or the same (`id_type`, `source_id`) twice (ids are compared as canonical text, so `12345` and
+`12345.0` are the same key). Use it only for links you verified; take candidates from the
+report (suspect links, ambiguous ids, conflicts, unmatched ids with a "known only as ..."
+hint). A suspect row's PFR slug may belong to another person in `players` too, so check the
+data (games, team, position) before adding it.
+
+**Where the bridge is used.** `fact_snaps.gsis_id` (PFR id, after the usage check),
+`fact_depth_chart` daily rows
+without an upstream gsis_id (ESPN id, flagged `gsis_id_from_espn`; the key stays unique, checked
+on every build) and `dim_player`'s ids. Point-in-time, a bridge row is visible only once its
+player exists (`public_from_utc`, copied from `dim_player`), in `AsOfView` and in the leakage
+harness alike (a future draft class's ids are deleted or scrambled like the players).
+
+### The unmatched-id report (`twm ids`)
+
+Every build refreshes two bookkeeping tables (kind *meta*): `report_id_coverage` (per dataset,
+season, id type and scope: rows, unmatched rows, distinct ids, unmatched ids, `match_rate` =
+share of rows that map, `id_match_rate` = share of distinct ids) and `report_id_unmatched`
+(every unmatched id with a name, position, first/last season and row count, plus the
+`suspect`, `ambiguous`, `conflict`, `name_link` and `multiple_ids` rows; an unmatched id the
+bridge knows something about says so in `detail`). Snap rows the usage check left without a
+gsis_id count as unmatched. Datasets: the warehouse's `fact_snaps` (PFR),
+`fact_depth_chart[daily_no_gsis]` (daily rows without an upstream gsis_id: how many the ESPN id
+rescues), `fact_player_week`, `fact_injury_report`, `fact_play` (passer/rusher/receiver; `gsis`
+ids: is the id in `dim_player`?), and straight from the raw cache (read from the Parquet files,
+never fetched; a dataset or season that is not cached is skipped and listed in
+`notes.coverage_datasets_skipped`): FantasyPros rankings (`ff_rankings_all[rp]` and `[wp]` per
+scrape year, `ff_rankings_week`, `ff_rankings_draft`; team defenses left out, and for
+`ff_rankings_all` the IDP pages (`db`, `dl`, `lb`, `idp`), which sometimes list an offensive
+player), `ff_opportunity`,
+`pfr_pass/rush/rec`, `ngs_*`, `draft_picks` (gsis and PFR ids) and `combine` (PFR ids). Scope
+`fantasy` = QB/RB/WR/TE rows of datasets that have a position.
+
+`ff_rankings_all[rp_preseason_pool]` is the Waiver Radar candidate pool: per season 2020-2026,
+the last August/September redraft cheat-sheet scrape before week 1's first game day, and per
+position the players ranked inside `teams x starters x candidate_pool_multiplier` by ECR (QB 18,
+RB 36, WR 36, TE 18 with `config/league.yaml`; ties included). Only a player's own positional
+cheat sheet counts (`qb-cheatsheets`, `ppr-rb-cheatsheets` ...: the page's position must equal
+the row's): FantasyPros sometimes lists a player on an IDP or another position's page, and his
+rank there is not his WR rank.
+
+`uv run twm ids` writes it as markdown to `reports/ids/unmatched_ids.md` (`--db`, `--out`; a
+relative `--out` is under the project root) and prints a summary (with the suspect count); the
+file is deterministic (sorted, the only time in it is the build's `built_at`), so two runs can be
+diffed. It is gitignored because it changes with every data refresh; regenerate it any time. It starts with a headline table (snaps and weekly rankings match rates,
+pool misses per season), then the suspect links, the pool misses, the top 10 unmatched
+QB/RB/WR/TE ids per dataset, ambiguous ids, conflicts, extra ids, the name-pass links of
+fantasy-site ids or QB/RB/WR/TE players (the SQL for all of them is in the file), and the full
+coverage table last. `twm doctor` prints one `ids:` line.
+
+Headline numbers on the full 1999-2026 build (2026-09-27 cache):
+
+| Check | Result |
+|---|---|
+| Snap counts QB/RB/WR/TE, rows with a gsis_id | 99.75% (2024, the lowest) to 100% (2013, 2017, 2018); every season 2013-2026 >= 99.5% |
+| Preseason `rp` candidate pool (108 players per season) without a gsis_id | 0 in every season 2020-2026 |
+| Weekly `wp` rankings QB/RB/WR/TE, rows with a gsis_id | 2019 100%, 2020 99.95%, 2021 99.91%, 2022 99.82%, 2023 99.82%, 2024 99.50%, 2025 99.02%, 2026 97.24% (46 of 1,665 rows so far) |
+| Redraft `rp` rankings QB/RB/WR/TE, distinct ids with a gsis_id | 2020 98.6% (12 of 836 missing), 2023 95.5% (44/979), 2026 90.6% (88/937) |
+| Usage check on snap-count PFR links | 12 suspect ids: 1 re-linked, 1 left NULL (6 rows), 10 position-only (kept) |
+| `ff_rankings_week` (current week) QB/RB/WR/TE | 466 of 472 ids |
+| gsis ids in stats / injuries / plays / ngs / ff_opportunity | all in `dim_player` except 61 `fact_player_week` and 6 `fact_play` rows of 1999-2000 (a `0` placeholder id and five other 1999-2000 ids) |
+
+The weekly-rankings target (99% of rows) is met through 2025 but not in 2026 (97.24%): the
+missing rows are fringe players, mostly 2026 rookies, whose FantasyPros id is in no id table at
+all, or whose `ff_playerids` row names a gsis_id that nflverse's player table does not have yet
+(the report's `detail` says "known only as a player missing from dim_player"). They can be
+linked through the override file once verified, and newer `players`/`ff_playerids` files close
+most of them by themselves.
+
 ## Determinism and the manifest
 
 Building twice from the same cache gives the same table content (per-table `content_hash` and
@@ -485,7 +704,15 @@ size differs by ~1 MB on full history), so never compare the files, compare the 
   public at their own week's Tuesday as-of), `n_raised_to_after_previous_week_asof`
   (`fact_injury_report`), `n_schedule_exceptions`, `n_slot_last_two_reg_weeks`,
   `cancelled_games` and `schedule_exceptions_not_found` (`fact_schedule`) and
-  `public_from_utc_rule_counts` (`dim_player`).
+  `public_from_utc_rule_counts` (`dim_player`, `bridge_player_id`). B3 adds, on
+  `bridge_player_id`: `n_links_by_method`, `n_links_by_id_type`, `n_conflicts`, `n_ambiguous`,
+  `n_links_to_gsis_not_in_dim_player`, `name_pass_rows_linked`, `name_pass_links_rejected`,
+  `n_manual_overrides`; on `dim_player`: `n_players_with_id`, `n_players_with_several_ids`,
+  `n_pfr_id_not_from_players`, `n_espn_id_not_from_players`; `n_rows_without_gsis_id`
+  (`fact_snaps`); `n_daily_gsis_filled_from_espn`, `n_daily_espn_without_gsis`
+  (`fact_depth_chart`); the headline match rates, `preseason_pool_unmatched`,
+  `preseason_pool_cutoffs` and `coverage_datasets_skipped` (`report_id_coverage`); and
+  `n_rows_by_kind` (`report_id_unmatched`).
 
 The whole build runs in one transaction inside the scratch file `<warehouse>.building`; only a
 committed build is renamed over the real file (atomic on the same filesystem). A key violation or
@@ -500,7 +727,7 @@ write-ahead log, left by a notebook that opened the file read-write and died bef
 checkpointing) is discarded with a warning before the rename; DuckDB would otherwise replay it
 into the new file. `twm.warehouse.connect()` opens read-only by default for that reason.
 
-## Decisions made in B1 and B2 (confirm or revisit)
+## Decisions made in B1-B3 (confirm or revisit)
 
 1. **Weekly as-of anchored to the first kickoff's date**, not to the last game's estimated end
    (the design brief's wording). Consequence: in the five split weeks (2010 W16, 2020 W5/W12/W13,
@@ -538,3 +765,18 @@ into the new file. `twm.warehouse.connect()` opens read-only by default for that
    stints that follow from a result), the 21:00 ET Monday-night slot for guessed kickoffs, and
    a 9 h offset for the 2010-2020 injury stamps. The 6 h game-data lag is unchanged; the build
    now refuses a lag that would drop rows from an official snapshot.
+10. **B3: `players` > weekly rosters > `ff_playerids` > name passes**, with a manual file on top;
+    an id the winning source maps to two players is left out rather than guessed, and links to
+    a gsis_id that nflverse's player table lacks are dropped (so `bridge_player_id.gsis_id` is
+    always a `dim_player` row). The weekly rosters are read for the built seasons only (like
+    every per-season input), so a 2025-2026 build has fewer roster links than a full one.
+11. **B3: the id report reads the raw cache directly** for datasets the warehouse does not hold
+    (rankings, NGS, PFR advanced stats, draft picks, combine): a skipped dataset is noted, never
+    downloaded. Rankings are grouped by the scrape's calendar year.
+12. **B3: `dim_player.public_from_utc` now reads snap counts through `fact_snaps.gsis_id`** (the
+    bridge) instead of `dim_player.pfr_id`, and daily depth-chart rows filled from ESPN ids count
+    as data rows: 1 more player exists point-in-time (6,924 never visible instead of 6,925).
+13. **B3: the usage check can overrule precedence for snap counts**: a PFR link whose player's
+    career does not fit the seasons the id is used in is re-linked (only when the other sources
+    agree on one player whose career fits) or left NULL for those rows, and reported as
+    `suspect`. A position on the other side of the ball is only reported.

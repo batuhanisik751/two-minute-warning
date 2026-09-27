@@ -19,6 +19,7 @@ class Paths(BaseModel):
     schemas: str
     warehouse: str
     league_db: str
+    manual: str = "data/manual"  # committed, hand-curated files (player_id_overrides.csv ...)
 
 
 # Datasets whose rows are stamped "game end + lag" (twm.warehouse.available).

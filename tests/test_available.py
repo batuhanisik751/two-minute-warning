@@ -29,7 +29,6 @@ from tests.conftest import (
     season_2025_games,
 )
 from twm.asof import AsOfView, weekly_as_of
-from twm.sources import nflverse as nv
 from twm.warehouse import available as av
 from twm.warehouse import build as wb
 from twm.warehouse import schema as sc
@@ -847,33 +846,21 @@ def test_dim_week_masks_future_weeks_schedule_counts(raw, db_path):
 # Real data (opt-in: `uv run pytest -m realdata`; never downloads, builds into tmp)
 # --------------------------------------------------------------------------------------
 
-REAL_SEASONS = list(range(2013, 2026))
-
-
-@pytest.fixture(scope="module")
-def real_db(tmp_path_factory):
-    if not all(nv.cache_path("schedules", s).exists() for s in REAL_SEASONS):
-        pytest.skip("real cache not present (run `twm ingest`)")
-    path = tmp_path_factory.mktemp("real") / "real.duckdb"
-    with pytest.MonkeyPatch.context() as mp:  # realdata tests read the cache, never download
-
-        def _no_download(ds):
-            pytest.fail(f"realdata test tried to download {ds.name}")
-
-        mp.setattr(nv, "_loader", _no_download)
-        manifest = wb.build_warehouse(REAL_SEASONS, db_path=path)
-    return path, {m["table_name"]: m for m in manifest}
+# The checks cover 2013-2025 (complete seasons with every dataset) of the shared full build
+# (tests/conftest.py real_full_db).
+REAL_FIRST, REAL_LAST = 2013, 2025
 
 
 @pytest.mark.realdata
-def test_real_every_week_is_complete_and_nothing_later_is_visible(real_db):
+def test_real_every_week_is_complete_and_nothing_later_is_visible(real_full_db):
     """For every non-split regular-season week 2013-2025, at its Tuesday as-of: all of that
     week's plays, player stats and snaps are visible, and nothing from a later week is."""
-    path, manifest = real_db
+    path, _ = real_full_db
     con = _open(path)
     weeks = (
         "SELECT season, week, asof_weekly_utc AS asof FROM dim_week "
-        "WHERE season_type = 'REG' AND NOT is_split_week"
+        f"WHERE season_type = 'REG' AND NOT is_split_week "
+        f"AND season BETWEEN {REAL_FIRST} AND {REAL_LAST}"
     )
     assert con.execute(f"SELECT count(*) FROM ({weeks})").fetchone()[0] > 200
     for t in ("fact_play", "fact_player_week", "fact_snaps", "fact_team_week", "fact_game"):
@@ -930,17 +917,20 @@ def test_real_every_week_is_complete_and_nothing_later_is_visible(real_db):
     assert con.execute("""SELECT count(*) FROM fact_injury_report
         WHERE season BETWEEN 2010 AND 2020 AND date_modified IS NOT NULL
           AND available_at < date_modified + INTERVAL 8 HOUR""").fetchone() == (0,)
+    # only split-week games (and their stats) are late for their own week
+    assert con.execute(f"""
+        SELECT count(*) FROM fact_game g JOIN dim_week w ON w.season = g.season
+        AND w.week = g.week WHERE g.season BETWEEN {REAL_FIRST} AND {REAL_LAST}
+        AND g.available_at > w.asof_weekly_utc""").fetchone() == (5,)
     # nobody drafted after the as-of season is visible in dim_player in-season
     con.close()
     with AsOfView(path, weekly_as_of(path, 2015, 5)) as v:
         assert v.sql("SELECT count(*) AS n FROM dim_player WHERE draft_year > 2015").item() == 0
-    # only split-week games (and their stats) are late for their own week
-    assert json.loads(manifest["fact_game"]["notes"])["n_available_after_week_asof"] == 5
 
 
 @pytest.mark.realdata
-def test_real_plays_frame_filter_matches_the_view(real_db):
-    path, _ = real_db
+def test_real_plays_frame_filter_matches_the_view(real_full_db):
+    path, _ = real_full_db
     from twm.asof import asof_filter
 
     asof = weekly_as_of(path, 2020, 12)

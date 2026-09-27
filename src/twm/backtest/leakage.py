@@ -9,9 +9,9 @@ at ``as_of``, then deleting or scrambling everything that was not public yet can
    builder touched plus every static/hindsight table, where everything not yet public at
    ``as_of`` is (a) DELETED or (b) PERTURBED:
 
-   - event rows with ``available_at > as_of``, and ``dim_player`` rows of players who do not
-     exist yet (``public_from_utc`` NULL or after the as-of): deleted in (a); in (b) their
-     non-key columns are scrambled;
+   - event rows with ``available_at > as_of``, and rows of the hindsight tables (``dim_player``,
+     and ``bridge_player_id``: a link is visible once its player is) whose ``public_from_utc``
+     is NULL or after the as-of: deleted in (a); in (b) their non-key columns are scrambled;
    - masked values (``fact_schedule``'s date/time/venue before ``slot_available_at``,
      ``dim_week``'s schedule counts of weeks not played yet): NULL in (a), scrambled in (b);
    - today's-snapshot columns (``dim_player.latest_team``, ``fact_player_week.position`` ...):

@@ -53,7 +53,8 @@ import duckdb
 import polars as pl
 
 from twm import __version__
-from twm.config import settings
+from twm import ids as pid
+from twm.config import league, settings
 from twm.sources import nflverse as nv
 from twm.warehouse import available as av
 from twm.warehouse import schema as sc
@@ -661,6 +662,7 @@ def _build_fact_depth_chart(
           CAST(club_code AS VARCHAR) AS team_raw,
           NULLIF(CAST(gsis_id AS VARCHAR), '') AS gsis_id,
           CAST(NULL AS VARCHAR) AS espn_id,
+          FALSE AS gsis_id_from_espn,
           COALESCE(full_name, first_name || ' ' || last_name) AS player_name,
           CAST(position AS VARCHAR) AS player_position,
           {sc.unit_sql("formation", sc.UNIT_LEGACY)} AS unit,
@@ -672,6 +674,8 @@ def _build_fact_depth_chart(
     if daily_types is not None:
         dt_expr = sc.cast_sql("dt", "TIMESTAMP", daily_types["dt"])
         dt_expr_d = sc.cast_sql("dt", "TIMESTAMP", daily_types["dt"], alias="d")
+        espn = pid.canonical_id_sql("d.espn_id", daily_types["espn_id"])
+        src_gsis = "NULLIF(trim(CAST(d.gsis_id AS VARCHAR)), '')"
         pairs = con.execute(
             f"SELECT DISTINCT file_season AS season, {dt_expr} AS dt FROM src_depth_daily"
         ).pl()
@@ -687,8 +691,9 @@ def _build_fact_depth_chart(
           {dt_expr_d} AS dt,
           {sc.normalize_team_sql("d.team")} AS team,
           CAST(d.team AS VARCHAR) AS team_raw,
-          NULLIF(CAST(d.gsis_id AS VARCHAR), '') AS gsis_id,
-          CAST(d.espn_id AS VARCHAR) AS espn_id,
+          COALESCE({src_gsis}, b.gsis_id) AS gsis_id,
+          {espn} AS espn_id,
+          ({src_gsis} IS NULL AND b.gsis_id IS NOT NULL) AS gsis_id_from_espn,
           CAST(d.player_name AS VARCHAR) AS player_name,
           CAST(NULL AS VARCHAR) AS player_position,
           {sc.unit_sql("d.pos_grp", sc.UNIT_DAILY)} AS unit,
@@ -698,7 +703,8 @@ def _build_fact_depth_chart(
           CAST(d.pos_rank AS INTEGER) AS depth_rank
         FROM src_depth_daily d
         LEFT JOIN df_week_at_dt w
-          ON w.season = d.file_season AND w.dt = {dt_expr_d}""")
+          ON w.season = d.file_season AND w.dt = {dt_expr_d}
+        LEFT JOIN _bridge b ON b.id_type = 'espn' AND b.source_id = {espn}""")
     if not parts:
         parts.append(_empty_select(table))
     sql = " UNION ALL BY NAME ".join(f"({p})" for p in parts)
@@ -711,7 +717,158 @@ def _build_fact_depth_chart(
     if n_other:
         stats.notes["n_unit_other"] = n_other
         log.warning("fact_depth_chart: %d rows with unknown unit (stored as 'other')", n_other)
+    if daily_types is not None:
+        filled, still = con.execute(
+            "SELECT count(*) FILTER (WHERE gsis_id_from_espn), "
+            "count(*) FILTER (WHERE gsis_id IS NULL AND espn_id IS NOT NULL) "
+            "FROM fact_depth_chart WHERE source_format = 'daily'"
+        ).fetchone()
+        stats.notes["n_daily_gsis_filled_from_espn"] = filled
+        stats.notes["n_daily_espn_without_gsis"] = still
     return out
+
+
+# --------------------------------------------------------------------------------------
+# Player ids (B3, twm.ids)
+# --------------------------------------------------------------------------------------
+
+
+def _stage_player_ids(con: duckdb.DuckDBPyConnection, src: SourceFiles, stats: TableStats) -> None:
+    """Stage ``_players`` and ``_bridge`` (twm.ids) before the tables that use them."""
+    ptypes = _source_view(con, "players", src.paths["players"])
+    pid.stage_players(con, "src_players", ptypes)
+    known = [r[0] for r in con.execute("SELECT gsis_id FROM _players").fetchall()]
+    overrides = pid.read_overrides(pid.overrides_path(), known)
+    ff = None
+    if src.paths["ff_playerids"]:
+        ff = ("src_ff_playerids", _source_view(con, "ff_playerids", src.paths["ff_playerids"]))
+    rw = None
+    if src.paths["rosters_weekly"]:
+        rw = (
+            "src_rosters_weekly",
+            _source_view(con, "rosters_weekly", src.paths["rosters_weekly"]),
+        )
+    stats.notes.update(pid.stage_bridge(con, pid.BridgeInputs(("src_players", ptypes), ff, rw,
+                                                              overrides)))  # fmt: skip
+
+
+def _build_fact_snaps(
+    con: duckdb.DuckDBPyConnection,
+    src: SourceFiles,
+    stats: TableStats,
+    arules: av.AvailabilityRules,
+) -> TableStats:
+    """Snap counts with ``gsis_id`` mapped from the PFR id through ``_bridge``.
+
+    First the usage check (twm.ids.stage_usage_checks): a link whose player's career does not
+    fit the seasons the PFR id is used in is re-linked or, for those rows, left NULL."""
+    table = sc.tables()["fact_snaps"]
+    if not src.paths["snap_counts"]:
+        return _materialize(con, table, _empty_select(table), stats, arules)
+    types, inner = _source_select(con, _without_computed(table), src, stats)
+    pfr = pid.canonical_id_sql("s.pfr_player_id", "VARCHAR")
+    usage = f"SELECT s.season, {pfr}, s.position FROM ({inner}) s"
+    stats.notes.update(pid.stage_usage_checks(con, "fact_snaps", "pfr", usage))
+    cols = ", ".join(
+        "CASE WHEN x.source_id IS NULL THEN b.gsis_id END AS gsis_id"
+        if c.computed
+        else f"s.{sc.q(c.name)}"
+        for c in table.columns
+    )
+    sql = (
+        f"SELECT {cols} FROM ({inner}) s "
+        f"LEFT JOIN _bridge b ON b.id_type = 'pfr' AND b.source_id = {pfr} "
+        "LEFT JOIN _usage_null x ON x.dataset = 'fact_snaps' AND x.id_type = 'pfr' "
+        f"AND x.source_id = {pfr} AND x.season = s.season"
+    )
+    out = _materialize(con, table, sql, stats, arules)
+    out.notes["n_rows_without_gsis_id"] = con.execute(
+        "SELECT count(*) FROM fact_snaps WHERE gsis_id IS NULL"
+    ).fetchone()[0]
+    # feature joins use (game_id, gsis_id): two PFR ids of one player in one game would double
+    # him, so the build counts such groups (0 expected) and warns
+    n_dup = con.execute(
+        "SELECT count(*) FROM (SELECT 1 FROM fact_snaps WHERE gsis_id IS NOT NULL "
+        "GROUP BY game_id, gsis_id HAVING count(*) > 1)"
+    ).fetchone()[0]
+    out.notes["n_duplicate_game_gsis"] = n_dup
+    if n_dup:
+        log.warning(
+            "fact_snaps: %d (game_id, gsis_id) pairs appear more than once (two PFR ids of "
+            "one player in one game); see report_id_unmatched kind 'multiple_ids'",
+            n_dup,
+        )
+    return out
+
+
+def _build_dim_player(
+    con: duckdb.DuckDBPyConnection,
+    src: SourceFiles,
+    stats: TableStats,
+    arules: av.AvailabilityRules,
+) -> TableStats:
+    """nflverse's players plus one id per system from ``_bridge`` (twm.ids)."""
+    table = sc.tables()["dim_player"]
+    _, inner = _source_select(con, _without_computed(table), src, stats)
+    cols = ", ".join(
+        f"i.{sc.q(c.name)}" if c.computed else f"p.{sc.q(c.name)}" for c in table.columns
+    )
+    sql = (
+        f"SELECT {cols} FROM ({inner}) p "
+        f"LEFT JOIN ({pid.dim_player_ids_sql()}) i ON i.gsis_id = p.gsis_id"
+    )
+    out = _materialize(con, table, sql, stats, arules)
+    # how many espn/pfr ids come from somewhere else than nflverse's players table
+    for t in ("pfr", "espn"):
+        out.notes[f"n_{t}_id_not_from_players"] = con.execute(
+            f"SELECT count(*) FROM dim_player d JOIN _bridge b ON b.id_type = '{t}' "
+            f"AND b.source_id = d.{t}_id WHERE b.method <> 'players'"
+        ).fetchone()[0]
+    out.notes["n_players_with_id"] = {
+        c: con.execute(f"SELECT count({sc.q(c)}) FROM dim_player").fetchone()[0]
+        for c in ("pfr_id", "espn_id", *sc.DIM_PLAYER_ID_COLUMNS)
+    }
+    out.notes["n_players_with_several_ids"] = pid.stage_multiple_ids(con)
+    return out
+
+
+def _build_id_reports(
+    con: duckdb.DuckDBPyConnection,
+    seasons: list[int],
+    stats: dict[str, TableStats],
+    arules: av.AvailabilityRules,
+) -> None:
+    """``bridge_player_id`` (after dim_player: its rows follow the player's row rule) and the
+    unmatched-id report tables."""
+    specs = sc.tables()
+    bridge = specs["bridge_player_id"]
+    cols = ", ".join(sc.q(c) for c in bridge.column_names)
+    stats["bridge_player_id"].notes.update(pid.bridge_notes(con))  # after the usage checks
+    _materialize(con, bridge, f"SELECT {cols} FROM _bridge", stats["bridge_player_id"], arules)
+    lg = league()
+    cutoffs = {
+        p: round(n * lg.candidate_pool_multiplier) for p, n in lg.starter_rank_threshold.items()
+    }
+    raw, notes = pid.raw_coverage(con, seasons, nv.cache_path)
+    sources = pid.warehouse_coverage() + raw
+    pool = pid.pool_coverage(con, cutoffs)
+    if pool is not None:
+        sources.append(pool)
+    cov = stats["report_id_coverage"]
+    cov.notes.update(notes)
+    cov.notes["preseason_pool_cutoffs"] = cutoffs
+    cov.notes.update(pid.stage_reports(con, sources))
+    for name, staged in (
+        ("report_id_coverage", "_report_coverage"),
+        ("report_id_unmatched", "_report_unmatched"),
+    ):
+        t = specs[name]
+        cols = ", ".join(f"CAST({sc.q(c.name)} AS {c.type}) AS {sc.q(c.name)}" for c in t.columns)
+        _materialize(con, t, f"SELECT {cols} FROM {staged}", stats[name])
+    kinds = con.execute(
+        "SELECT kind, count(*) FROM report_id_unmatched GROUP BY 1 ORDER BY 1"
+    ).fetchall()
+    stats["report_id_unmatched"].notes["n_rows_by_kind"] = {k: n for k, n in kinds}
 
 
 def _build_dim_team(
@@ -844,17 +1001,18 @@ def build_warehouse(
                 _assert_week_windows(con)  # before anything maps timestamps to weeks
                 _build_fact_schedule(con, stats["fact_schedule"], arules)
                 _build_coaches(con, stats, arules)
-                for name in (
-                    "fact_play",
-                    "fact_player_week",
-                    "fact_team_week",
-                    "fact_snaps",
-                    "fact_injury_report",
-                ):
+                for name in ("fact_play", "fact_player_week", "fact_team_week"):
                     _build_from_source(con, specs[name], src, stats[name], arules)
+                # B3: the id bridge first, then the tables that map ids through it
+                _stage_player_ids(con, src, stats["bridge_player_id"])
+                _build_fact_snaps(con, src, stats["fact_snaps"], arules)
+                _build_from_source(
+                    con, specs["fact_injury_report"], src, stats["fact_injury_report"], arules
+                )
                 _build_fact_depth_chart(con, src, stats["fact_depth_chart"], arules)
                 # after every event table: an undrafted player exists from his first row
-                _build_from_source(con, specs["dim_player"], src, stats["dim_player"], arules)
+                _build_dim_player(con, src, stats["dim_player"], arules)
+                _build_id_reports(con, seasons, stats, arules)
                 _assert_no_timestamptz(con)
                 _note_after_week_asof(con, stats)
                 _assert_official_snapshots_complete(con)

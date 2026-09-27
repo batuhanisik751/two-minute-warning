@@ -112,3 +112,4 @@ paths:
   schemas: data/schemas
   warehouse: data/warehouse.duckdb
   league_db: data/league.duckdb
+  manual: data/manual          # committed: player_id_overrides.csv (B3), coach_departures.csv (H2)

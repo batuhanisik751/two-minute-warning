@@ -234,9 +234,11 @@ class AsOfView:
     ``fact_player_week.position``); static tables (dim_team, dim_week) show every row, with
     ``dim_week``'s schedule-derived counts NULL for weeks not played yet; ``fact_schedule``'s
     date/time/venue columns are NULL until ``slot_available_at``; hindsight tables
-    (dim_player) show only players who exist by then (drafted, or with a public data row) and
-    only their allowlisted columns (querying ``latest_team`` or ``position`` is an error).
-    ``build_manifest`` is not a view. So ordinary SQL is point-in-time safe by default.
+    (dim_player, and bridge_player_id: a link is visible once its player is) show only players
+    who exist by then (drafted, or with a public data row) and only their allowlisted columns
+    (querying ``latest_team`` or ``position`` is an error). The meta tables (build_manifest,
+    report_id_coverage, report_id_unmatched) are not views. So ordinary SQL is point-in-time
+    safe by default.
 
     The warehouse itself is attached read-only as ``wh``: ``wh.fact_play`` returns every row,
     including the future. It exists for inspection and for label builders, and it is exactly

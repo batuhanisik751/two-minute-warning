@@ -439,11 +439,25 @@ def fact_team_week_spec() -> Table:
     )
 
 
+FACT_SNAPS_GSIS = Column(
+    "gsis_id",
+    "VARCHAR",
+    computed=True,
+    doc=(
+        "the player's gsis_id through bridge_player_id (id_type 'pfr'); NULL when the PFR id "
+        "maps to no player, or when the usage check found the link implausible for this season "
+        "(both listed in report_id_unmatched). Unique per game_id among non-NULL values "
+        "(build_manifest notes.n_duplicate_game_gsis), so joins on (game_id, gsis_id) are safe"
+    ),
+)
+
+
 def fact_snaps_spec() -> Table:
     cols = columns_from_snapshot(
         "snap_counts", transforms={"team": normalize_team_sql, "opponent": normalize_team_sql}
     )
-    cols += [_raw_team("team"), _raw_team("opponent")]
+    at = [c.name for c in cols].index("pfr_player_id") + 1
+    cols = [*cols[:at], FACT_SNAPS_GSIS, *cols[at:], _raw_team("team"), _raw_team("opponent")]
     return Table(
         name="fact_snaps",
         source="snap_counts",
@@ -451,7 +465,8 @@ def fact_snaps_spec() -> Table:
         columns=tuple(cols),
         doc=(
             "One row per player per game with offensive, defensive and special-teams snap counts "
-            "and percentages (Pro-Football-Reference IDs; the ID map to gsis_id is built in B3)."
+            "and percentages. The source identifies players by Pro-Football-Reference id "
+            "(pfr_player_id); gsis_id is mapped through bridge_player_id (B3)."
         ),
     )
 
@@ -512,8 +527,20 @@ DEPTH_CHART_COLUMNS = (
     Column("dt", "TIMESTAMP", doc="daily: snapshot time (UTC) per team; legacy: NULL"),
     Column("team", "VARCHAR", doc="current abbreviation"),
     Column("team_raw", "VARCHAR", doc="team as spelled in the source"),
-    Column("gsis_id", "VARCHAR", doc="player id (NULL for empty or unmatched daily slots)"),
-    Column("espn_id", "VARCHAR", doc="daily only"),
+    Column(
+        "gsis_id",
+        "VARCHAR",
+        doc=(
+            "player id (NULL for empty or unmatched daily slots); a daily row whose source has "
+            "no gsis_id gets it from its espn_id through bridge_player_id (gsis_id_from_espn)"
+        ),
+    ),
+    Column("espn_id", "VARCHAR", doc="daily only (canonical id text)"),
+    Column(
+        "gsis_id_from_espn",
+        "BOOLEAN",
+        doc="daily rows: gsis_id was empty upstream and was filled from espn_id (B3)",
+    ),
     Column("player_name", "VARCHAR"),
     Column("player_position", "VARCHAR", doc="legacy roster position (daily: NULL)"),
     Column("unit", "VARCHAR", doc="offense / defense / special_teams / other"),
@@ -606,18 +633,42 @@ DIM_PLAYER_COLUMNS = [
     "last_season", "draft_year", "draft_round", "draft_pick", "draft_team", "college_name",
     "espn_id", "pfr_id", "height", "weight", "status", "latest_team",
 ]  # fmt: skip
+# One id per system, from bridge_player_id (B3); espn_id/pfr_id above come from there too.
+DIM_PLAYER_ID_COLUMNS = {
+    "sleeper_id": "Sleeper",
+    "fantasypros_id": "FantasyPros",
+    "yahoo_id": "Yahoo",
+    "sportradar_id": "Sportradar",
+    "mfl_id": "MyFantasyLeague",
+}
+BRIDGE_ID_DOC = (
+    "{site} id from bridge_player_id (canonical text; when a player has several ids of this "
+    "type, the most trusted method wins, then the smallest id; the others are listed in "
+    "report_id_unmatched as 'multiple_ids')"
+)
 
 
 def dim_player_spec() -> Table:
     _check_names("players", DIM_PLAYER_COLUMNS)
     snap = snapshot_columns("players")
+    docs = {
+        "espn_id": BRIDGE_ID_DOC.format(site="ESPN") + "; nflverse's players table first",
+        "pfr_id": BRIDGE_ID_DOC.format(site="Pro-Football-Reference")
+        + "; nflverse's players table first",
+    }
     cols = [
         Column(
             n,
             "DATE" if n == "birth_date" else duckdb_type_of(snap[n]),
             transform=normalize_team_sql if n in ("draft_team", "latest_team") else None,
+            computed=n in docs,
+            doc=docs.get(n, ""),
         )
         for n in DIM_PLAYER_COLUMNS
+    ]
+    cols += [
+        Column(n, "VARCHAR", computed=True, doc=BRIDGE_ID_DOC.format(site=site))
+        for n, site in DIM_PLAYER_ID_COLUMNS.items()
     ]
     return Table(
         name="dim_player",
@@ -625,10 +676,125 @@ def dim_player_spec() -> Table:
         primary_key=("gsis_id",),
         columns=tuple(cols),
         doc=(
-            "One row per player (skeleton; B3 adds the cross-source ID map). gsis_id is the "
-            "canonical key; rows without one are dropped and counted."
+            "One row per player from nflverse's players table, with one id per other system "
+            "(PFR, ESPN, Sleeper, FantasyPros, Yahoo, Sportradar, MFL) from bridge_player_id. "
+            "gsis_id is the canonical key; rows without one are dropped and counted."
         ),
     )
+
+
+# ---- player ids and the unmatched-id report (B3, twm.ids) --------------------------------
+
+BRIDGE_PLAYER_ID = Table(
+    name="bridge_player_id",
+    primary_key=("id_type", "source_id"),
+    columns=(
+        Column(
+            "id_type",
+            "VARCHAR",
+            doc="the id system: pfr, espn, sleeper, fantasypros, yahoo, sportradar, pff, nfl, "
+            "mfl, esb, smart, otc, rotowire, fantasy_data, cbs, stats, fleaflicker, cfbref, "
+            "rotoworld, ktc, swish (twm.ids.ID_TYPES)",
+        ),
+        Column(
+            "source_id",
+            "VARCHAR",
+            doc="the id in that system as canonical text (integers without a decimal part, "
+            "trimmed)",
+        ),
+        Column("gsis_id", "VARCHAR", doc="the player it belongs to (always in dim_player)"),
+        Column(
+            "method",
+            "VARCHAR",
+            doc="where the link comes from, most trusted first: manual (data/manual/"
+            "player_id_overrides.csv), players, rosters_weekly, ff_playerids, name_birthdate, "
+            "name_position_draft (name passes, only for ff_playerids rows without a gsis_id); "
+            "<source>_usage_override (e.g. rosters_weekly_usage_override): the usage check "
+            "replaced a link whose player's career does not fit where the id is used",
+        ),
+        Column(
+            "n_candidates",
+            "INTEGER",
+            doc="distinct gsis_ids the id-based sources proposed for this id, players missing "
+            "from dim_player included (1 = all agree)",
+        ),
+        Column(
+            "is_conflict",
+            "BOOLEAN",
+            doc="sources disagreed (n_candidates > 1); the most trusted source won, unless "
+            "the usage check overrode it",
+        ),
+    ),
+    doc=(
+        "One row per (id_type, source_id): the gsis_id that id belongs to. Join any other "
+        "source's player id here to reach gsis_id. Ids that the winning source maps to two "
+        "players are ambiguous and left out (listed in report_id_unmatched). A row is visible "
+        "point-in-time once its player exists in dim_player (public_from_utc)."
+    ),
+)
+
+REPORT_ID_COVERAGE = Table(
+    name="report_id_coverage",
+    primary_key=("dataset", "season", "id_type", "scope"),
+    not_null_key=("dataset", "id_type", "scope"),
+    columns=(
+        Column(
+            "dataset",
+            "VARCHAR",
+            doc="warehouse table or raw cache dataset; [..] names a subset (ecr_type, format)",
+        ),
+        Column("season", "INTEGER", doc="season (rankings: the scrape's calendar year)"),
+        Column("id_type", "VARCHAR", doc="bridge id_type, or 'gsis' (is the id in dim_player?)"),
+        Column("scope", "VARCHAR", doc="'all' rows, or 'fantasy' (QB/RB/WR/TE rows)"),
+        Column("n_rows", "BIGINT", doc="rows with an id"),
+        Column("n_rows_unmatched", "BIGINT", doc="rows whose id maps to no gsis_id"),
+        Column("n_ids", "BIGINT", doc="distinct ids"),
+        Column("n_ids_unmatched", "BIGINT", doc="distinct ids that map to no gsis_id"),
+        Column("match_rate", "DOUBLE", doc="1 - n_rows_unmatched / n_rows"),
+        Column("id_match_rate", "DOUBLE", doc="1 - n_ids_unmatched / n_ids"),
+    ),
+    doc=(
+        "The unmatched-id report, part 1 (spec 7.5, rebuilt on every build): how many rows and "
+        "distinct ids of each dataset map to a gsis_id, per season, id type and scope. "
+        "Bookkeeping (kind meta): not part of the as-of view."
+    ),
+)
+
+REPORT_ID_UNMATCHED = Table(
+    name="report_id_unmatched",
+    primary_key=("kind", "dataset", "id_type", "source_id"),
+    columns=(
+        Column(
+            "kind",
+            "VARCHAR",
+            doc="unmatched (an id of that dataset maps to no gsis_id), suspect (the dataset's "
+            "use of the id contradicts its link: seasons outside the player's career, re-linked "
+            "or left NULL, or a position on the other side of the ball, kept), ambiguous (left "
+            "out of the bridge), conflict (sources disagreed, precedence won), name_link (made "
+            "by a name pass: spot-check), multiple_ids (a player with several ids of a "
+            "dim_player type)",
+        ),
+        Column("dataset", "VARCHAR", doc="as in report_id_coverage; bridge_player_id otherwise"),
+        Column("id_type", "VARCHAR"),
+        Column("source_id", "VARCHAR"),
+        Column(
+            "gsis_id",
+            "VARCHAR",
+            doc="the linked player (suspect, conflict, name_link, multiple_ids)",
+        ),
+        Column("name", "VARCHAR", doc="player name (the dataset's, or dim_player's)"),
+        Column("position", "VARCHAR", doc="the dataset's position (or today's for bridge rows)"),
+        Column("season_min", "INTEGER"),
+        Column("season_max", "INTEGER"),
+        Column("n_rows", "BIGINT", doc="unmatched: rows of the dataset with this id"),
+        Column("detail", "VARCHAR", doc="the candidates and methods, or the name-pass evidence"),
+    ),
+    doc=(
+        "The unmatched-id report, part 2: every unmatched id with a name, plus the bridge's "
+        "ambiguous ids, conflicts, name-pass links and players with several ids of one type. "
+        "Bookkeeping (kind meta). `twm ids` renders it as markdown."
+    ),
+)
 
 
 DIM_COACH = Table(
@@ -785,6 +951,9 @@ def tables() -> dict[str, Table]:
         fact_injury_report_spec(),
         fact_depth_chart_spec(),
         dim_player_spec(),
+        BRIDGE_PLAYER_ID,
+        REPORT_ID_COVERAGE,
+        REPORT_ID_UNMATCHED,
     ]
     return {t.name: t for t in specs}
 
@@ -800,4 +969,6 @@ SOURCE_DATASETS = (
     "depth_charts",
     "players",
     "teams",
+    "ff_playerids",
+    "rosters_weekly",
 )

@@ -32,6 +32,8 @@ uv run twm build 2025 2026    # DuckDB warehouse data/warehouse.duckdb from the 
                               # (see docs/warehouse.md); `twm doctor` then lists its tables
 uv run twm asof 2025 5        # what the warehouse looked like at week 5's Tuesday as-of
                               # (every row has an `available_at`; see docs/warehouse.md)
+uv run twm ids                # player-id coverage report -> reports/ids/unmatched_ids.md (gitignored)
+                              # (docs/warehouse.md "Player IDs"; fix links in data/manual/)
 uv run pytest                 # offline tests (the default); `uv run pytest -m network` runs the live drift check
 ```
 

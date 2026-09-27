@@ -10,6 +10,7 @@ from typing import Any
 import polars as pl
 import pytest
 
+from twm import ids
 from twm.sources import nflverse as nv
 
 TEAMS_36 = [
@@ -162,6 +163,40 @@ PLAYERS_DTYPES: dict[str, pl.DataType] = {
 }
 
 
+# ff_playerids (DynastyProcess) and weekly rosters: the id sources of the B3 bridge. Every id in
+# the fixtures is synthetic (9xxxxx, 8xxxxx ... numbers, "OneAl00"-style PFR slugs).
+FF_PLAYERIDS_DTYPES: dict[str, pl.DataType] = {
+    "mfl_id": pl.Int64(),
+    "sportradar_id": pl.String(),
+    "fantasypros_id": pl.Int64(),
+    "gsis_id": pl.String(),
+    "pff_id": pl.Int64(),
+    "sleeper_id": pl.Int64(),
+    "nfl_id": pl.String(),
+    "espn_id": pl.Int64(),
+    "yahoo_id": pl.String(),
+    "pfr_id": pl.String(),
+    "name": pl.String(),
+    "position": pl.String(),
+    "birthdate": pl.String(),
+    "draft_year": pl.Int64(),
+}
+
+ROSTERS_WEEKLY_DTYPES: dict[str, pl.DataType] = {
+    "season": pl.Int32(),
+    "week": pl.Int32(),
+    "team": pl.String(),
+    "position": pl.String(),
+    "full_name": pl.String(),
+    "gsis_id": pl.String(),
+    "espn_id": pl.String(),
+    "sportradar_id": pl.String(),
+    "yahoo_id": pl.String(),
+    "pfr_id": pl.String(),
+    "sleeper_id": pl.String(),
+}
+
+
 def frame(rows: list[Mapping[str, Any]], dtypes: Mapping[str, pl.DataType]) -> pl.DataFrame:
     """Build a typed frame from partial row dicts (missing keys -> NULL)."""
     cols = list(dtypes)
@@ -281,6 +316,52 @@ def default_players() -> pl.DataFrame:
     )
 
 
+def default_ff_playerids() -> pl.DataFrame:
+    """The two default players with synthetic cross-site ids (A. One has them all)."""
+    return frame(
+        [
+            {
+                "gsis_id": "00-0000001",
+                "name": "Alpha One",
+                "position": "QB",
+                "fantasypros_id": 900001,
+                "sleeper_id": 800001,
+                "mfl_id": 700001,
+                "yahoo_id": "600001",
+                "sportradar_id": "sr-0001",
+                "birthdate": "1990-01-01",
+            },
+            {
+                "gsis_id": "00-0000002",
+                "name": "Beta Two",
+                "position": "WR",
+                "fantasypros_id": 900002,
+                "mfl_id": 700002,
+            },
+        ],  # fmt: skip
+        FF_PLAYERIDS_DTYPES,
+    )
+
+
+def default_rosters(season: int) -> pl.DataFrame:
+    """A. One on a weekly roster with the PFR id the default snap counts use (OneAl00)."""
+    return frame(
+        [
+            {
+                "season": season,
+                "week": 1,
+                "team": "KC",
+                "position": "QB",
+                "full_name": "Alpha One",
+                "gsis_id": "00-0000001",
+                "pfr_id": "OneAl00",
+                "sleeper_id": "800001",
+            }
+        ],  # fmt: skip
+        ROSTERS_WEEKLY_DTYPES,
+    )
+
+
 class RawCache:
     """Writes synthetic dataset files where ``nflverse.cache_path`` expects them."""
 
@@ -304,6 +385,7 @@ class RawCache:
         snaps: list[dict[str, Any]] | None = None,
         injuries: pl.DataFrame | list[dict[str, Any]] | None = None,
         depth_charts: pl.DataFrame | None = None,
+        rosters: pl.DataFrame | list[dict[str, Any]] | None = None,
     ) -> None:
         """Write every per-season dataset a build needs, with sensible tiny defaults."""
         self.write("schedules", season, frame(games, SCHEDULE_DTYPES))
@@ -351,10 +433,17 @@ class RawCache:
         if depth_charts is None:
             depth_charts = daily_depth_chart(games) if season >= 2025 else legacy_depth_chart(games)
         self.write("depth_charts", season, depth_charts)
+        if season >= 2002:  # weekly rosters start in 2002
+            if rosters is None:
+                rosters = default_rosters(season)
+            if not isinstance(rosters, pl.DataFrame):
+                rosters = frame(rosters, ROSTERS_WEEKLY_DTYPES)
+            self.write("rosters_weekly", season, rosters)
 
     def write_globals(self) -> None:
         self.write("teams", None, default_teams())
         self.write("players", None, default_players())
+        self.write("ff_playerids", None, default_ff_playerids())
 
 
 def legacy_depth_chart(games: list[dict[str, Any]]) -> pl.DataFrame:
@@ -511,6 +600,8 @@ def raw(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RawCache:
 
     monkeypatch.setattr(nv, "_loader", _no_download)
     monkeypatch.setattr(nv, "_configure_nflreadpy", lambda: None)
+    # the committed overrides file is never read by offline tests: they write their own
+    monkeypatch.setattr(ids, "overrides_path", lambda: tmp_path / "manual" / ids.OVERRIDES_FILE)
     cache = RawCache(root)
     cache.write_globals()
     return cache
@@ -519,3 +610,36 @@ def raw(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RawCache:
 @pytest.fixture
 def db_path(tmp_path: Path) -> Path:
     return tmp_path / "wh.duckdb"
+
+
+# --------------------------------------------------------------------------------------
+# Real data (opt-in: `uv run pytest -m realdata`)
+# --------------------------------------------------------------------------------------
+
+REAL_FULL_SEASONS = list(range(1999, 2027))
+
+
+@pytest.fixture(scope="session")
+def real_full_db(tmp_path_factory: pytest.TempPathFactory) -> Any:
+    """One full 1999-2026 build from the real cache, shared by every realdata test module.
+
+    Reads the cache and never downloads (a download fails the test); the scratch file is
+    removed afterwards, so pytest's kept temp dirs do not pile up warehouse copies. Yields
+    (path, manifest by table name)."""
+    from twm.warehouse import build as wb
+
+    needed = [nv.cache_path("schedules", s) for s in REAL_FULL_SEASONS]
+    needed.append(nv.cache_path("ff_playerids", None))
+    if not all(p.exists() for p in needed):
+        pytest.skip("real cache not present (run `twm ingest`)")
+    path = tmp_path_factory.mktemp("real") / "full.duckdb"
+    with pytest.MonkeyPatch.context() as mp:
+
+        def _no_download(ds):
+            pytest.fail(f"realdata test tried to download {ds.name}")
+
+        mp.setattr(nv, "_loader", _no_download)
+        manifest = wb.build_warehouse(REAL_FULL_SEASONS, db_path=path)
+    yield path, {m["table_name"]: m for m in manifest}
+    for f in path.parent.glob(path.name + "*"):
+        f.unlink(missing_ok=True)

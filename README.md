@@ -35,6 +35,8 @@ uv run twm asof 2025 5        # what the warehouse looked like at week 5's Tuesd
 uv run twm ids                # player-id coverage report -> reports/ids/unmatched_ids.md (gitignored)
 uv run twm glossary wopr      # what a metric means, how it is computed (docs/glossary.md)
                               # (docs/warehouse.md "Player IDs"; fix links in data/manual/)
+uv run twm radar pool 2023 6  # Waiver Radar candidate pool at week 6's as-of (docs/waiver_radar.md)
+uv run twm radar pool-report  # pool sizes and validation -> reports/waiver_radar/pool_sizes.md
 uv run pytest                 # offline tests (the default); `uv run pytest -m network` runs the live drift check
 ```
 
@@ -46,7 +48,7 @@ Dataset names: `uv run twm ingest --help` or `DATASETS` in `src/twm/sources/nflv
 - `data/schemas/<dataset>.json` (committed) records each dataset's columns and dtypes. Every current-season or one-file load is compared with it: a missing column raises `SchemaDriftError`, a changed dtype or a new column is logged. Snapshots are written on the first current-season fetch of a dataset and refreshed **deliberately** with `uv run python scripts/refresh_snapshots.py` (review the diff, then commit), never by `twm ingest`.
 - What we verified about the data, and where it differs from the spec: `docs/assumptions.md`. Re-verify from the cache with `uv run python scripts/verify_sources.py` (no network unless you pass `--allow-download`).
 
-See `PROJECT_SPEC.md` for the full specification, `docs/warehouse.md` for the DuckDB warehouse, `docs/scoring.md` for how fantasy points are computed and `docs/progress.md` for the build log.
+See `PROJECT_SPEC.md` for the full specification, `docs/warehouse.md` for the DuckDB warehouse, `docs/scoring.md` for how fantasy points are computed, `docs/waiver_radar.md` for the Waiver Radar's candidate pool and `docs/progress.md` for the build log.
 
 ## Attribution
 

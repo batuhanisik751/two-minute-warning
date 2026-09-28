@@ -101,6 +101,14 @@ class AvailabilityConfig(BaseModel):
     injury_legacy_stamp_offset_hours: float
     draft_public_month_day: str
     schedule_exceptions: list[ScheduleException]
+    roster_postgame_share_threshold: float
+
+    @field_validator("roster_postgame_share_threshold")
+    @classmethod
+    def _share(cls, v: float) -> float:
+        if not 0 < v < 1:
+            raise ValueError(f"roster_postgame_share_threshold = {v}: must be between 0 and 1")
+        return v
 
     @field_validator("game_data_lag_hours")
     @classmethod
@@ -263,12 +271,82 @@ class Scoring(BaseModel):
         return self
 
 
+# Fantasy positions in scope for P1 (PROJECT_SPEC 7.1).
+FANTASY_POSITIONS = ("QB", "RB", "WR", "TE")
+
+
+class PoolConfig(BaseModel):
+    """``pool:`` in league.yaml: the Waiver Radar candidate pool (step C1). Strict, because a
+    typo would silently change which players a backtest calls "available"."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    roster_statuses: list[str]
+    prior_season_min_games: int
+    rookie_drafted_rounds: int
+    ownership_available_below: float
+    ownership_high: float
+    ownership_low: float
+
+    @field_validator("roster_statuses")
+    @classmethod
+    def _statuses(cls, v: list[str]) -> list[str]:
+        if not v or len(set(v)) != len(v) or any(not s or s != s.upper() for s in v):
+            raise ValueError(
+                f"pool.roster_statuses {v!r}: need a non-empty list of distinct upper-case "
+                "roster status codes (ACT, INA, DEV ...)"
+            )
+        return v
+
+    @field_validator("prior_season_min_games")
+    @classmethod
+    def _games(cls, v: int) -> int:
+        if not 1 <= v <= 17:
+            raise ValueError(f"pool.prior_season_min_games = {v}: must be between 1 and 17")
+        return v
+
+    @field_validator("rookie_drafted_rounds")
+    @classmethod
+    def _rounds(cls, v: int) -> int:
+        if not 0 <= v <= 7:
+            raise ValueError(f"pool.rookie_drafted_rounds = {v}: must be between 0 and 7")
+        return v
+
+    @model_validator(mode="after")
+    def _percentages(self) -> PoolConfig:
+        for name in ("ownership_available_below", "ownership_high", "ownership_low"):
+            if not 0 <= getattr(self, name) <= 100:
+                raise ValueError(f"pool.{name} must be a percentage between 0 and 100")
+        if self.ownership_low >= self.ownership_high:
+            raise ValueError("pool.ownership_low must be below pool.ownership_high")
+        return self
+
+
 class League(BaseModel):
     teams: int
     lineup: dict[str, int]
     starter_rank_threshold: dict[str, int]
     flex_worthy_rank: int
     candidate_pool_multiplier: float
+    pool: PoolConfig
+
+    @model_validator(mode="after")
+    def _positions(self) -> League:
+        missing = [p for p in FANTASY_POSITIONS if p not in self.starter_rank_threshold]
+        if missing:
+            raise ValueError(f"starter_rank_threshold lacks positions {missing}")
+        if self.candidate_pool_multiplier <= 0:
+            raise ValueError("candidate_pool_multiplier must be positive")
+        return self
+
+    def candidate_pool_cutoffs(self) -> dict[str, int]:
+        """Per position, how many players count as "surely rostered": the starter threshold
+        times ``candidate_pool_multiplier``, rounded (QB 12 x 1.5 = 18, RB 24 x 1.5 = 36 ...).
+        The one place this number is computed (the id report and the pool both use it)."""
+        return {
+            p: round(n * self.candidate_pool_multiplier)
+            for p, n in self.starter_rank_threshold.items()
+        }
 
 
 def _load(name: str) -> dict[str, Any]:

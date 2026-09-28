@@ -16,6 +16,24 @@ starter_rank_threshold:
   WR: 24
   TE: 12
 flex_worthy_rank: 36    # teams x (RB + FLEX) = 36: a RB/WR ranked top-36 is worth a FLEX start
-# "Likely available on waivers" = outside the top (starters x 1.5) by ADP (average draft
-# position, i.e. where real drafts took the player) and PPG (fantasy points per game).
+# "Likely available on waivers" = outside the top (starters x 1.5) by a preseason ranking and
+# by PPG (fantasy points per game): QB 18, RB 36, WR 36, TE 18 with the numbers above
+# (docs/waiver_radar.md).
 candidate_pool_multiplier: 1.5
+# The Waiver Radar candidate pool (step C1, src/twm/modules/waiver_radar/pool.py).
+pool:
+  # Weekly-roster statuses that count as "on a team and able to play soon": ACT active, INA
+  # inactive for that game, DEV practice squad. RES (injured reserve), CUT, RET ... are left out.
+  roster_statuses: [ACT, INA, DEV]
+  # 2013-2019 have no preseason rankings, so last season's PPG rank stands in for them; a
+  # player needs at least this many regular-season games last season to be ranked.
+  prior_season_min_games: 4
+  # ... and rookies drafted in rounds 1 to this number count as drafted (not in the pool).
+  rookie_drafted_rounds: 2
+  # Diagnostics only (the pool never uses ownership): a player owned in fewer than this
+  # percent of leagues counts as "really available" when the report checks the pool.
+  ownership_available_below: 50
+  # The report also counts pool players owned in at least ownership_high percent of leagues
+  # and players outside the pool owned in fewer than ownership_low percent.
+  ownership_high: 80
+  ownership_low: 20

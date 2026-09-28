@@ -57,6 +57,30 @@ Plays where the game is still in the balance and neither team is forced to pass 
 - **Formula:** win probability from 0.2 to 0.8 and more than 120 seconds left in the half
 - **Source:** fact_play.is_neutral (twm.situations)
 
+### Points per game this season
+
+How much a player has scored per game so far this season. A player near the top has been picked up by now, so he is not in the candidate pool.
+
+- **Name:** `ppg_to_date`; **unit:** points per game; **used by:** waiver_radar
+- **Formula:** fantasy points (config/scoring.yaml) summed over the season's regular-season games public at the as-of / the number of those games (weeks with a stat line); ppg_pos_rank ranks it within the roster position (ties share the better rank)
+- **Source:** fact_player_week (twm.scoring.score_sql) through twm.asof.AsOfView
+
+### Preseason position rank
+
+Where the player stood before the season: experts' consensus ranking (ECR) when it exists, otherwise last season's scoring. A player ranked high was drafted in almost every league.
+
+- **Name:** `preseason_pos_rank`; **unit:** rank (1 = best); **used by:** waiver_radar
+- **Formula:** 2020 on (method ecr): the player's rank among his position's players on FantasyPros' last August/September redraft cheat sheet of that position before the season's first game (fact_ranking.pos_rank, page_kind preseason); not on his roster position's sheet: his rank on his own FantasyPros position's sheet, judged against that position's cutoff. 2013-2019 (method prior_ppg): his rank by last season's regular-season PPG among players of his current roster position with at least 4 games; ties share the better rank
+- **Source:** fact_ranking.pos_rank; fact_player_week for last season's PPG
+
+### Rostership (percent of leagues)
+
+How many real leagues have the player on a roster. It checks the candidate pool (a player owned in fewer than 50% of leagues is really available); the pool itself never uses it, because it does not exist before 2020.
+
+- **Name:** `owned_avg`; **unit:** percent (0-100); **used by:** waiver_radar
+- **Formula:** FantasyPros' average share of leagues rostering the player across sites (fact_ranking.player_owned_avg) from the season's latest weekly ranking public at the as-of (the Friday before that week's games); owned_espn = ESPN's share (fact_ranking.player_owned_espn). 2020 partly, 2021 on
+- **Source:** fact_ranking.player_owned_avg, fact_ranking.player_owned_espn
+
 ### WPA (win probability added) \*
 
 How much one play or decision changed a team's chance of winning.
@@ -178,6 +202,14 @@ A player who scores far above his opportunity usually comes back down; one who s
 
 - **Name:** `regression_to_the_mean`; **unit:** -; **used by:** regression_watch
 - **Formula:** extreme results drift back toward the average when luck made them extreme
+
+### Waiver Radar candidate pool
+
+The players who are probably still on waivers in a typical 12-team league. There is no record of which players sat on fantasy rosters before 2020, so anyone ranked high before the season or scoring well since counts as taken; the rest are the players the Waiver Radar ranks.
+
+- **Name:** `candidate_pool`; **unit:** yes/no per player and as-of (in_pool); **used by:** waiver_radar
+- **Formula:** on an NFL roster at the as-of (his latest public weekly roster row of the season, on his team's latest public roster, with status ACT, INA, DEV, at QB/RB/WR/TE) and outside the top N at his position by BOTH preseason_pos_rank and ppg_to_date; N = weekly starter threshold x candidate_pool_multiplier (1.5): QB 18, RB 36, WR 36, TE 18; in seasons without a preseason cheat sheet, rookies drafted in rounds 1-2 count as drafted
+- **Source:** twm.modules.waiver_radar.pool.candidate_pool (fact_roster_week, fact_ranking, fact_player_week)
 
 ### Weekly starter threshold
 

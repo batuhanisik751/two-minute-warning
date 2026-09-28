@@ -61,6 +61,14 @@ availability:
   # A drafted player "exists" point-in-time from this day of his draft year (00:00 UTC); later
   # than the last day of every NFL draft (2014 ended on May 10) and before the June 1 board.
   draft_public_month_day: "05-15"
+  # Weekly rosters (fact_roster_week) come in two kinds of snapshot, told apart per season from
+  # the data at build time: among players who played in week N, the share whose week-N roster
+  # status is not ACT. Above this share the season's rosters were taken AFTER the games and
+  # contain later moves (2002-2015: 6.6%-9.8% measured on the 2026-09-27 cache), so a week-N
+  # roster counts as public only at week N+1's as-of; at or below it (2016-2026: 0%-0.18%) it
+  # is a game-day snapshot, public at week N's own as-of (build_manifest notes on
+  # fact_roster_week: regime_by_season).
+  roster_postgame_share_threshold: 0.01
   # Schedule changes made after the release that nflverse's FINAL schedule bakes in (a game
   # moved to another week, day or stadium, or cancelled). Game ids are checked against the
   # data by the build. No announcement dates: they cannot be verified from nflverse, so each

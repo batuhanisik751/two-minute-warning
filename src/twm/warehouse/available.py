@@ -69,6 +69,17 @@ AFTER_PREVIOUS_ASOF = timedelta(seconds=1)
 # time (UTC). Undated changes (the default) count from the game's own kickoff.
 EXCEPTION_PUBLIC_TIME = time(12, 0)
 
+# A weekly roster whose season is a post-game snapshot and whose week is the season's last:
+# there is no next week's as-of, so it counts as public this long after its own as-of.
+ROSTER_LAST_WEEK_LAG = timedelta(days=7)
+# The build stores the per-season snapshot regime of the weekly rosters here (temp table,
+# see roster_regime_sql) before fact_roster_week's available_at is computed.
+ROSTER_REGIME_RELATION = "_roster_regime"
+ROSTER_REGIMES = ("game_day", "post_game")
+# A FantasyPros ranking scrape counts as public at 00:00 UTC the day after its scrape_date
+# (the time of day of the scrape is unknown, so the end of that day errs late).
+RANKING_LAG = timedelta(days=1)
+
 GAME_DATA_TABLES = {
     "fact_play": "pbp",
     "fact_player_week": "player_stats",
@@ -152,6 +163,9 @@ class AvailabilityRules:
     draft_public_month: int = 5
     draft_public_day: int = 15
     schedule_exceptions: tuple[ScheduleChange, ...] = ()
+    # A season's weekly rosters are "post-game" snapshots when more than this share of the
+    # players who played in week N have a week-N status other than ACT (fact_roster_week).
+    roster_postgame_share_threshold: float = 0.01
 
     @classmethod
     def from_config(cls, cfg: Any) -> AvailabilityRules:
@@ -182,6 +196,7 @@ class AvailabilityRules:
             injury_legacy_offset=timedelta(hours=float(get("injury_legacy_stamp_offset_hours"))),
             draft_public_month=draft_m,
             draft_public_day=draft_d,
+            roster_postgame_share_threshold=float(get("roster_postgame_share_threshold")),
             schedule_exceptions=tuple(
                 ScheduleChange.announced_on(
                     item(x, "game_id"),
@@ -422,6 +437,32 @@ TABLE_AVAILABILITY: dict[str, Availability] = {
             "event",
             "A head coach exists for point-in-time purposes from the kickoff of his first "
             "game in the warehouse.",
+        ),
+        Availability(
+            "fact_roster_week",
+            "event",
+            "A weekly roster row (team, position, status) of week N is public at week N's "
+            "Tuesday as-of when the season's rosters are game-day snapshots, and only at week "
+            "N+1's as-of (the season's last week: its own as-of + 7 days) when they are "
+            "post-game snapshots. The build decides per season from the data: among players "
+            "who played in week N, the share whose week-N status is not ACT; above "
+            "availability.roster_postgame_share_threshold (1%) the roster was taken after the "
+            "games and can contain moves made after the Tuesday as-of (2002-2015), at or "
+            "below it the roster is the game-day list (2016 on). rookie_year is left out of "
+            "the as-of view (a few rows carry a later season).",
+            hindsight_columns={
+                "rookie_year": "the player's first season as nflverse records it today: a few "
+                "rows (17 in 2002-2026) carry a rookie year later than the roster's own "
+                "season, i.e. the season the player later first played; use entry_year",
+            },
+            week_key=_SW,
+        ),
+        Availability(
+            "fact_ranking",
+            "event",
+            "A FantasyPros ranking row is public from 00:00 UTC the day after its scrape_date "
+            "(the time of day of the scrape is unknown, so the end of that day errs late). "
+            "The values (ranks, ownership) are the archive's snapshot of that day.",
         ),
         Availability(
             "dim_team",
@@ -855,7 +896,78 @@ def available_at_sql(table: str, rules: AvailabilityRules) -> AvailabilitySQL:
             ),
         )
 
+    if table == "fact_roster_week":
+        return AvailabilitySQL(
+            expr=f"""CASE
+                WHEN _r.regime = 'game_day' THEN _w.asof_weekly_utc
+                WHEN _nw.asof_weekly_utc IS NOT NULL THEN _nw.asof_weekly_utc
+                ELSE _w.asof_weekly_utc + {_interval(ROSTER_LAST_WEEK_LAG)}
+            END""",
+            joins=f"""
+            LEFT JOIN {ROSTER_REGIME_RELATION} _r ON _r.season = s.season
+            LEFT JOIN dim_week _w ON _w.season = s.season AND _w.week = s.week
+            LEFT JOIN dim_week _nw ON _nw.season = s.season AND _nw.week = _w.next_week""",
+            branch="""CASE
+                WHEN _w.asof_weekly_utc IS NULL THEN 'unplaced_week_not_in_dim_week'
+                WHEN _r.regime = 'game_day' THEN 'game_day_same_week_asof'
+                WHEN _nw.asof_weekly_utc IS NOT NULL THEN 'post_game_next_week_asof'
+                ELSE 'post_game_last_week_asof_plus_7_days'
+            END""",
+            branches=(
+                "game_day_same_week_asof",
+                "post_game_next_week_asof",
+                "post_game_last_week_asof_plus_7_days",
+                "unplaced_week_not_in_dim_week",
+            ),
+        )
+
+    if table == "fact_ranking":
+        return AvailabilitySQL(
+            expr=f"(CAST(s.scrape_date AS TIMESTAMP) + {_interval(RANKING_LAG)})"
+        )
+
     raise ValueError(f"no available_at rule for event table {table!r}")  # pragma: no cover
+
+
+def roster_regime_sql(roster: str, rules: AvailabilityRules) -> str:
+    """Per season: is the weekly roster a game-day or a post-game snapshot? (fact_roster_week)
+
+    ``roster`` is a relation with ``season, week, gsis_id, status`` (the weekly roster rows,
+    duplicates included). A player "played" in week N when he has a snap-count row
+    (``fact_snaps``, 2013+) or a stat row (``fact_player_week``) that week. A game-day roster
+    lists everyone who played as ACT; a roster taken after the games also shows moves made
+    since (a player who played on Sunday and went on injured reserve on Monday shows RES).
+    So the share of players who played but are not ACT (no ACT row that week) tells the two
+    apart: above ``roster_postgame_share_threshold`` the season is ``post_game``. A season
+    without any evidence (nobody who played is on its rosters) is ``post_game`` too (errs
+    late). Must run after fact_snaps and fact_player_week are built.
+    """
+    threshold = repr(float(rules.roster_postgame_share_threshold))
+    return f"""
+        WITH played AS (
+            SELECT DISTINCT season, week, gsis_id FROM fact_snaps WHERE gsis_id IS NOT NULL
+            UNION
+            SELECT DISTINCT season, week, player_id FROM fact_player_week
+            WHERE player_id IS NOT NULL
+        ),
+        listed AS (
+            SELECT season, week, gsis_id, bool_or(status = 'ACT') AS is_act
+            FROM {roster} WHERE gsis_id IS NOT NULL GROUP BY season, week, gsis_id
+        ),
+        measured AS (
+            SELECT l.season, count(*) AS n_played_on_roster,
+                   count(*) FILTER (WHERE NOT COALESCE(l.is_act, FALSE)) AS n_played_not_act
+            FROM listed l JOIN played p USING (season, week, gsis_id)
+            GROUP BY l.season
+        ),
+        seasons AS (SELECT DISTINCT season FROM {roster})
+        SELECT s.season, COALESCE(m.n_played_on_roster, 0) AS n_played_on_roster,
+               COALESCE(m.n_played_not_act, 0) AS n_played_not_act,
+               m.n_played_not_act / m.n_played_on_roster AS share_not_act,
+               CASE WHEN m.n_played_on_roster > 0
+                     AND m.n_played_not_act / m.n_played_on_roster <= {threshold}
+                    THEN 'game_day' ELSE 'post_game' END AS regime
+        FROM seasons s LEFT JOIN measured m USING (season)"""
 
 
 def row_visibility_sql(table: str, rules: AvailabilityRules) -> AvailabilitySQL:

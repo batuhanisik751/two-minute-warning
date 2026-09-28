@@ -29,6 +29,12 @@ from twm.sources import nflverse as nv
 
 # Historical abbreviation -> abbreviation used today (dim_team.current_abbr).
 TEAM_ALIASES: dict[str, str] = {"OAK": "LV", "SD": "LAC", "STL": "LA", "LAR": "LA"}
+# The weekly rosters of 2002-2015 spell five teams with the NFL's own codes. Each mapping was
+# checked on the data (C1): the same players in the same weeks carry the right-hand code in
+# player_stats for thousands of player-weeks (tests/test_waiver_radar_pool.py, realdata).
+ROSTER_TEAM_ALIASES: dict[str, str] = {
+    "ARZ": "ARI", "BLT": "BAL", "CLV": "CLE", "HST": "HOU", "SL": "LA",
+}  # fmt: skip
 
 POLARS_TO_DUCKDB: dict[str, str] = {
     "Int8": "INTEGER",
@@ -72,11 +78,17 @@ def sql_str(text: str) -> str:
     return "'" + text.replace("'", "''") + "'"
 
 
-def normalize_team_sql(expr: str) -> str:
-    """Empty string -> NULL, then historical abbreviations -> current ones."""
+def normalize_team_sql(expr: str, extra: Mapping[str, str] | None = None) -> str:
+    """Empty string -> NULL, then historical abbreviations -> current ones (``extra``: more
+    source-specific spellings, e.g. :data:`ROSTER_TEAM_ALIASES`)."""
     inner = f"NULLIF({expr}, '')"
-    whens = " ".join(f"WHEN '{old}' THEN '{new}'" for old, new in TEAM_ALIASES.items())
+    aliases = {**TEAM_ALIASES, **(extra or {})}
+    whens = " ".join(f"WHEN '{old}' THEN '{new}'" for old, new in aliases.items())
     return f"(CASE {inner} {whens} ELSE {inner} END)"
+
+
+def normalize_roster_team_sql(expr: str) -> str:
+    return normalize_team_sql(expr, ROSTER_TEAM_ALIASES)
 
 
 def season_type_sql(game_type_expr: str) -> str:
@@ -637,6 +649,176 @@ def fact_depth_chart_spec() -> Table:
     )
 
 
+# ---- weekly rosters (C1) ------------------------------------------------------------------
+
+# Status order used to keep one row when a player appears twice in a week (a trade shows the
+# old team's TRD/TRC/TRT row next to the new team's ACT row): the more "on a team" status
+# wins; 'others' (TRC, TRD, TRT, NWT, RSN, EXE ...) sit between SUS and CUT; ties: team.
+ROSTER_STATUS_PRIORITY = ("ACT", "INA", "DEV", "RES", "PUP", "SUS", None, "CUT", "RET")
+
+
+def roster_status_rank_sql(expr: str) -> str:
+    """0 for the most preferred status, then 1, 2 ...; statuses not listed get the rank of
+    the ``None`` slot of :data:`ROSTER_STATUS_PRIORITY` (NULL status too)."""
+    other = ROSTER_STATUS_PRIORITY.index(None)
+    whens = " ".join(
+        f"WHEN '{st}' THEN {i}" for i, st in enumerate(ROSTER_STATUS_PRIORITY) if st is not None
+    )
+    return f"(CASE {expr} {whens} ELSE {other} END)"
+
+
+def _nonempty(expr: str) -> str:
+    return f"NULLIF(trim({expr}), '')"
+
+
+def fact_roster_week_spec() -> Table:
+    snap = snapshot_columns("rosters_weekly")
+    docs = {
+        "season": "NFL season",
+        "week": "roster week (1-22; regular season and playoffs, like dim_week.week)",
+        "game_type": "REG/WC/DIV/CON/SB",
+        "team": "current abbreviation (the 2002-2015 NFL codes ARZ/BLT/CLV/HST/SL and OAK/SD/"
+        "STL/LAR mapped to today's)",
+        "gsis_id": "player id (rows without one are dropped and counted)",
+        "position": "the roster position of that week: point-in-time (players do change "
+        "position; dim_player.position is today's)",
+        "depth_chart_position": "roster depth-chart position (NULL before 2016)",
+        "status": "roster status that week: ACT active, INA inactive for the game, DEV "
+        "practice squad, RES reserve lists (injured reserve ...), PUP, SUS, CUT, RET; plus "
+        "transaction codes TRC/TRD/TRT in 2002-2015 duplicates",
+        "status_description_abbr": "the source's short status description code",
+        "full_name": "player name as listed on the roster",
+        "years_exp": "seasons of NFL experience (= season - entry_year)",
+        "entry_year": "the season the player entered the league",
+        "rookie_year": "nflverse's rookie year (hidden point-in-time: a few rows carry a "
+        "later season)",
+        "draft_club": "drafting team as spelled in the source (NULL if undrafted)",
+        "draft_number": "overall pick number (NULL if undrafted)",
+    }
+    _check_names("rosters_weekly", [n for n in docs if n != "season_type"])
+    # explicit types: upstream drifts (draft_number is text in some seasons)
+    types = dict.fromkeys(
+        ("season", "week", "years_exp", "entry_year", "rookie_year", "draft_number"), "INTEGER"
+    )
+    cols = []
+    for name in ("season", "week", "game_type"):
+        cols.append(Column(name, types.get(name, duckdb_type_of(snap[name])), doc=docs[name]))
+    cols += [
+        Column(
+            "season_type", "VARCHAR", source="game_type", transform=season_type_sql,
+            doc="REG or POST (from game_type)",
+        ),
+        Column("team", "VARCHAR", transform=normalize_roster_team_sql, doc=docs["team"]),
+        _raw_team("team"),
+        Column("gsis_id", "VARCHAR", transform=_nonempty, doc=docs["gsis_id"]),
+    ]  # fmt: skip
+    for name in (
+        "position", "depth_chart_position", "status", "status_description_abbr", "full_name",
+        "years_exp", "entry_year", "rookie_year", "draft_club", "draft_number",
+    ):  # fmt: skip
+        cols.append(Column(name, types.get(name, duckdb_type_of(snap[name])), doc=docs[name]))
+    return Table(
+        name="fact_roster_week",
+        source="rosters_weekly",
+        primary_key=("season", "week", "gsis_id"),
+        columns=tuple(cols),
+        dedupe_order=(roster_status_rank_sql("status"), "team"),
+        doc=(
+            "One row per player per roster week (2002+): his team, position and status that "
+            "week, the point-in-time source of positions (dim_player's is today's). Rows "
+            "without a gsis_id are dropped; a player listed twice in a week (a trade) keeps "
+            "one row by status (ACT > INA > DEV > RES > PUP > SUS > others > CUT > RET, then "
+            "team). When a week's roster is public depends on the season (available_at: "
+            "game-day snapshots from 2016, post-game snapshots before)."
+        ),
+    )
+
+
+# ---- FantasyPros rankings (C1) ------------------------------------------------------------
+
+
+def fact_ranking_spec() -> Table:
+    _check_names(
+        "ff_rankings_all",
+        ["scrape_date", "ecr_type", "fp_page", "page_type", "id", "player", "pos", "team", "ecr",
+         "sd", "best", "worst", "player_owned_espn", "player_owned_yahoo", "player_owned_avg"],
+    )  # fmt: skip
+    cols = (
+        Column("scrape_date", "DATE", doc="the day FantasyPros' page was saved"),
+        Column(
+            "season",
+            "INTEGER",
+            doc="NFL season of the scrape: its year from March on, the year before in "
+            "January-February (a January weekly ranking belongs to the season that is ending)",
+        ),
+        Column("ecr_type", "VARCHAR", doc="rp (redraft positional) or wp (weekly positional)"),
+        Column(
+            "page_kind",
+            "VARCHAR",
+            doc="preseason (a position's redraft cheat sheet), ros (rest of season) or "
+            "weekly (that week's positional ranking); IDP, kicker, defense and dynasty-labelled "
+            "pages are not kept",
+        ),
+        Column(
+            "page_pos",
+            "VARCHAR",
+            doc="the position of the page (QB/RB/WR/TE). A few players are listed on another "
+            "position's page too (a RB on the WR sheet): pos is the player's own position",
+        ),
+        Column("fp_page", "VARCHAR", doc="the page as the archive names it"),
+        Column("page_type", "VARCHAR", doc="the archive's page label (redraft-wr, weekly-qb ...)"),
+        Column("fantasypros_id", "VARCHAR", doc="FantasyPros player id (canonical text)"),
+        Column(
+            "gsis_id",
+            "VARCHAR",
+            computed=True,
+            doc="the player's gsis_id through bridge_player_id (id_type 'fantasypros'); NULL "
+            "when the FantasyPros id maps to no player (listed in the id report)",
+        ),
+        Column("player", "VARCHAR", doc="player name as FantasyPros writes it"),
+        Column("pos", "VARCHAR", doc="FantasyPros' position for the player (QB/RB/WR/TE)"),
+        Column("team", "VARCHAR", doc="team as FantasyPros spells it (not normalized)"),
+        Column("ecr", "DOUBLE", doc="expert consensus rank on that page (lower is better)"),
+        Column("sd", "DOUBLE", doc="standard deviation of the experts' ranks"),
+        Column("best", "DOUBLE", doc="best rank any expert gave"),
+        Column("worst", "DOUBLE", doc="worst rank any expert gave"),
+        Column(
+            "pos_rank",
+            "INTEGER",
+            computed=True,
+            doc="the player's rank on the page among the page position's players, by ecr: "
+            "1 + the number of page_pos players with a strictly lower ecr (ties share the "
+            "best rank, like SQL rank()); a player of another position listed on the page gets "
+            "the rank he would have among them. NULL when ecr is NULL",
+        ),
+        Column(
+            "player_owned_espn",
+            "DOUBLE",
+            doc="percent of ESPN leagues rostering the player on the scrape day (0-100; "
+            "populated 2020 partly, 2021-2023, 2024 partly)",
+        ),
+        Column("player_owned_yahoo", "DOUBLE", doc="percent of Yahoo leagues (0-100)"),
+        Column(
+            "player_owned_avg",
+            "DOUBLE",
+            doc="FantasyPros' average rostership across sites (0-100; 2020 partly, 2021+)",
+        ),
+    )
+    return Table(
+        name="fact_ranking",
+        source="ff_rankings_all",
+        primary_key=("scrape_date", "ecr_type", "page_kind", "page_pos", "fantasypros_id"),
+        columns=cols,
+        doc=(
+            "One row per player per FantasyPros positional ranking page per scrape day "
+            "(redraft cheat sheets, rest-of-season and weekly pages; QB/RB/WR/TE only), from "
+            "the ff_rankings_all archive (December 2019 on), with expert consensus ranks and "
+            "the rostership percentages of that day. Exact duplicates on a page are removed "
+            "(the lowest ecr is kept). The seasons of the build only."
+        ),
+    )
+
+
 # ---- dimensions --------------------------------------------------------------------------
 
 
@@ -981,6 +1163,8 @@ def tables() -> dict[str, Table]:
         fact_snaps_spec(),
         fact_injury_report_spec(),
         fact_depth_chart_spec(),
+        fact_roster_week_spec(),
+        fact_ranking_spec(),
         dim_player_spec(),
         BRIDGE_PLAYER_ID,
         REPORT_ID_COVERAGE,
@@ -1002,4 +1186,5 @@ SOURCE_DATASETS = (
     "teams",
     "ff_playerids",
     "rosters_weekly",
+    "ff_rankings_all",
 )

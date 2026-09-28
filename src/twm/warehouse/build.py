@@ -54,7 +54,7 @@ import polars as pl
 
 from twm import __version__
 from twm import ids as pid
-from twm.config import league, settings
+from twm.config import FANTASY_POSITIONS, league, settings
 from twm.sources import nflverse as nv
 from twm.warehouse import available as av
 from twm.warehouse import schema as sc
@@ -731,6 +731,177 @@ def _build_fact_depth_chart(
 
 
 # --------------------------------------------------------------------------------------
+# Weekly rosters and FantasyPros rankings (C1: the Waiver Radar candidate pool)
+# --------------------------------------------------------------------------------------
+
+
+def _build_fact_roster_week(
+    con: duckdb.DuckDBPyConnection,
+    src: SourceFiles,
+    stats: TableStats,
+    arules: av.AvailabilityRules,
+) -> TableStats:
+    """Weekly rosters; ``available_at`` depends on each season's snapshot regime, measured
+    here from the data (:func:`twm.warehouse.available.roster_regime_sql`). Needs fact_snaps
+    and fact_player_week (who played) and dim_week."""
+    table = sc.tables()["fact_roster_week"]
+    regime = av.ROSTER_REGIME_RELATION
+    if not src.paths["rosters_weekly"]:  # every requested season predates 2002
+        con.execute(
+            f"CREATE OR REPLACE TEMP TABLE {regime} AS SELECT CAST(NULL AS INTEGER) AS season, "
+            "CAST(NULL AS VARCHAR) AS regime WHERE FALSE"
+        )
+        return _materialize(con, table, _empty_select(table), stats, arules)
+    types, sql = _source_select(con, table, src, stats)
+    status = "CAST(status AS VARCHAR)" if "status" in types else "CAST(NULL AS VARCHAR)"
+    staged = (
+        f"(SELECT {sc.cast_sql('season', 'INTEGER', types['season'])} AS season, "
+        f"{sc.cast_sql('week', 'INTEGER', types['week'])} AS week, "
+        f"NULLIF(trim(CAST(gsis_id AS VARCHAR)), '') AS gsis_id, {status} AS status "
+        "FROM src_rosters_weekly)"
+    )
+    con.execute(f"CREATE OR REPLACE TEMP TABLE {regime} AS {av.roster_regime_sql(staged, arules)}")
+    out = _materialize(con, table, sql, stats, arules)
+    rows = con.execute(
+        f"SELECT season, regime, share_not_act, n_played_on_roster, n_played_not_act "
+        f"FROM {regime} ORDER BY season"
+    ).fetchall()
+    out.notes["regime_threshold"] = arules.roster_postgame_share_threshold
+    out.notes["regime_by_season"] = {
+        str(season): {
+            "regime": reg,
+            "share_not_act": None if share is None else round(share, 6),
+            "n_played_on_roster": n,
+            "n_played_not_act": n_not,
+        }
+        for season, reg, share, n, n_not in rows
+    }
+    known = "SELECT current_abbr FROM dim_team"
+    out.notes["n_rows_unknown_team"] = con.execute(
+        f"SELECT count(*) FROM fact_roster_week WHERE team IS NOT NULL AND team NOT IN ({known})"
+    ).fetchone()[0]
+    if out.notes["n_rows_unknown_team"]:
+        log.warning(
+            "fact_roster_week: %d rows with a team code that is not in dim_team",
+            out.notes["n_rows_unknown_team"],
+        )
+    return out
+
+
+def _build_fact_ranking(
+    con: duckdb.DuckDBPyConnection,
+    src: SourceFiles,
+    seasons: list[int],
+    stats: TableStats,
+    arules: av.AvailabilityRules,
+) -> TableStats:
+    """FantasyPros positional rankings (redraft cheat sheets, rest of season, weekly) of the
+    built seasons, QB/RB/WR/TE only, with gsis_id through ``_bridge`` and pos_rank.
+
+    The page classification is :func:`twm.ids.ranking_page_kind_sql` (shared with the id
+    report). Exact duplicates on a page (the archive repeats some rows) keep the lowest ecr,
+    then the page name, then every other column; pos_rank is computed after that."""
+    table = sc.tables()["fact_ranking"]
+    types = _source_view(con, "ff_rankings_all", src.paths["ff_rankings_all"])
+    date = "CAST(NULLIF(trim(CAST(scrape_date AS VARCHAR)), '') AS DATE)"
+    positions = ", ".join(f"'{p}'" for p in FANTASY_POSITIONS)
+    in_seasons = ", ".join(str(int(x)) for x in seasons) or "NULL"
+    kind = pid.ranking_page_kind_sql("ecr_type", "fp_page", "page_type")
+
+    def col(name: str, target: str) -> str:  # a column the file lacks is NULL (like Column.sql)
+        return (
+            sc.cast_sql(name, target, types[name]) if name in types else (f"CAST(NULL AS {target})")
+        )
+
+    num = {c: col(c, "DOUBLE") for c in
+           ("ecr", "sd", "best", "worst", "player_owned_espn", "player_owned_yahoo",
+            "player_owned_avg")}  # fmt: skip
+    con.execute(f"""
+        CREATE OR REPLACE TEMP TABLE _rank_src AS
+        SELECT {date} AS scrape_date,
+               CAST(CASE WHEN month({date}) >= 3 THEN year({date})
+                         ELSE year({date}) - 1 END AS INTEGER) AS season,
+               CAST(ecr_type AS VARCHAR) AS ecr_type,
+               {kind} AS page_kind,
+               {pid.ranking_page_pos_sql("fp_page")} AS page_pos,
+               CAST(fp_page AS VARCHAR) AS fp_page,
+               CAST(page_type AS VARCHAR) AS page_type,
+               {pid.canonical_id_sql("id", types["id"])} AS fantasypros_id,
+               {col("player", "VARCHAR")} AS player, CAST(pos AS VARCHAR) AS pos,
+               {col("team", "VARCHAR")} AS team,
+               {", ".join(f"{e} AS {sc.q(c)}" for c, e in num.items())}
+        FROM src_ff_rankings_all
+        WHERE ecr_type IN ('rp', 'wp')""")
+    reasons = dict(
+        con.execute(f"""
+        SELECT CASE WHEN season NOT IN ({in_seasons}) OR season IS NULL THEN 'season_not_built'
+                    WHEN page_kind IS NULL THEN 'not_a_qb_rb_wr_te_page'
+                    WHEN pos IS NULL OR pos NOT IN ({positions}) THEN 'not_qb_rb_wr_te_player'
+                    WHEN fantasypros_id IS NULL THEN 'no_id'
+                    ELSE 'kept' END AS reason, count(*)
+        FROM _rank_src GROUP BY 1 ORDER BY 1""").fetchall()
+    )
+    kept = (
+        f"season IN ({in_seasons}) AND page_kind IS NOT NULL AND pos IN ({positions}) "
+        "AND fantasypros_id IS NOT NULL"
+    )
+    page = "scrape_date, ecr_type, page_kind, page_pos"
+    others = ", ".join(f"{sc.q(c)} NULLS LAST" for c in
+                       ("player", "pos", "team", *num, "season", "page_type"))  # fmt: skip
+    own = "CASE WHEN pos = page_pos THEN 1 ELSE 0 END"
+    cols = ", ".join(
+        {
+            "gsis_id": "b.gsis_id AS gsis_id",
+            "pos_rank": "CAST(CASE WHEN r.ecr IS NOT NULL THEN r._own_le - r._own_eq + 1 END "
+            "AS INTEGER) AS pos_rank",
+        }.get(c.name, f"r.{sc.q(c.name)}")
+        for c in table.columns
+    )
+    sql = f"""
+        SELECT {cols} FROM (
+            SELECT d.*,
+                   sum({own}) OVER (PARTITION BY {page} ORDER BY ecr
+                       RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _own_le,
+                   sum({own}) OVER (PARTITION BY {page}, ecr) AS _own_eq
+            FROM (
+                SELECT * FROM _rank_src WHERE {kept}
+                QUALIFY row_number() OVER (
+                    PARTITION BY {page}, fantasypros_id
+                    ORDER BY ecr NULLS LAST, fp_page NULLS LAST, {others}) = 1
+            ) d
+        ) r
+        LEFT JOIN _bridge b ON b.id_type = 'fantasypros' AND b.source_id = r.fantasypros_id"""
+    n_dupes = (
+        reasons.get("kept", 0)
+        - con.execute(
+            f"SELECT count(*) FROM (SELECT DISTINCT {page}, fantasypros_id FROM _rank_src "
+            f"WHERE {kept})"
+        ).fetchone()[0]
+    )
+    out = _materialize(con, table, sql, stats, arules)
+    con.execute("DROP TABLE IF EXISTS _rank_src")
+    out.n_source_rows = sum(reasons.values())
+    out.n_dropped_duplicates = n_dupes
+    out.n_dropped_null_key = out.n_source_rows - reasons.get("kept", 0)
+    out.seasons = sorted(seasons)
+    out.notes["rows_by_reason"] = reasons  # rp/wp rows of the archive: kept or why not
+    out.notes["n_rows_other_ecr_types"] = con.execute(
+        "SELECT count(*) FROM src_ff_rankings_all WHERE ecr_type NOT IN ('rp', 'wp') "
+        "OR ecr_type IS NULL"
+    ).fetchone()[0]
+    out.notes["n_rows_by_page_kind"] = dict(
+        con.execute("SELECT page_kind, count(*) FROM fact_ranking GROUP BY 1 ORDER BY 1").fetchall()
+    )
+    out.notes["n_rows_without_gsis_id"] = con.execute(
+        "SELECT count(*) FROM fact_ranking WHERE gsis_id IS NULL"
+    ).fetchone()[0]
+    out.notes["n_rows_listed_on_another_positions_page"] = con.execute(
+        "SELECT count(*) FROM fact_ranking WHERE pos <> page_pos"
+    ).fetchone()[0]
+    return out
+
+
+# --------------------------------------------------------------------------------------
 # Player ids (B3, twm.ids)
 # --------------------------------------------------------------------------------------
 
@@ -847,10 +1018,7 @@ def _build_id_reports(
     cols = ", ".join(sc.q(c) for c in bridge.column_names)
     stats["bridge_player_id"].notes.update(pid.bridge_notes(con))  # after the usage checks
     _materialize(con, bridge, f"SELECT {cols} FROM _bridge", stats["bridge_player_id"], arules)
-    lg = league()
-    cutoffs = {
-        p: round(n * lg.candidate_pool_multiplier) for p, n in lg.starter_rank_threshold.items()
-    }
+    cutoffs = league().candidate_pool_cutoffs()
     raw, notes = pid.raw_coverage(con, seasons, nv.cache_path)
     sources = pid.warehouse_coverage() + raw
     pool = pid.pool_coverage(con, cutoffs)
@@ -1012,6 +1180,10 @@ def build_warehouse(
                     con, specs["fact_injury_report"], src, stats["fact_injury_report"], arules
                 )
                 _build_fact_depth_chart(con, src, stats["fact_depth_chart"], arules)
+                # C1: rosters need fact_snaps / fact_player_week (their snapshot regime) and
+                # rankings the id bridge
+                _build_fact_roster_week(con, src, stats["fact_roster_week"], arules)
+                _build_fact_ranking(con, src, seasons, stats["fact_ranking"], arules)
                 # after every event table: an undrafted player exists from his first row
                 _build_dim_player(con, src, stats["dim_player"], arules)
                 _build_id_reports(con, seasons, stats, arules)

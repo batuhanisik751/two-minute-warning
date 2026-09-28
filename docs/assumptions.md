@@ -229,6 +229,24 @@ same 1.5×starters cutoff). Decision to be presented at Step C1. The ID join for
 `id` in `ff_rankings_all` is a FantasyPros ID stored as a string; 3,352 of 4,019 `rp` IDs match
 `ff_playerids.fantasypros_id` (the rest are mostly IDP/K/DST or long-retired players).
 
+**Rostership exists for 2020 on (found in C1; this corrects spec 8.1's "historical rostership
+data does not exist").** The archive carries `player_owned_avg` (FantasyPros' average share of
+leagues rostering the player, 0-100), `player_owned_espn` and `player_owned_yahoo`. On the
+weekly (`wp`) positional pages `player_owned_avg` is filled for 5,062 of 8,124 QB/RB/WR/TE rows
+in 2020 and every row 2021-2026; `player_owned_espn` for the same 2020 rows and every row
+2021-2023, none 2024-2026 (the preseason cheat sheets still have ESPN figures for part of
+2024). It covers only the players FantasyPros ranks each week, and nothing before 2020, so the
+candidate pool keeps the rank-based stand-in and uses rostership as its check
+(`docs/waiver_radar.md`: about 96% of pool players with a figure are owned in under 50% of
+leagues). The page layout: `rp` positional cheat sheets exist in a long form
+(`/nfl/rankings/ppr-wr-cheatsheets.php`, 2021 on) and a short form (`ppr-wr-cheatsheets`,
+2019-12 to 2020-09; two 2020 scrapes label them `dynasty-offense`); `ros-...` pages are
+rest-of-season; `wp` pages (`/nfl/rankings/ppr-wr.php`, short `ppr-wr`) are scraped on
+Fridays (84 dates), sometimes Thursdays (17). The archive repeats some rows (1,114
+(scrape_date, ecr_type, fp_page, id) groups among `rp`/`wp`), and a few players are listed on
+another position's page (152 rows, e.g. a RB on the WR sheet). All handled in `fact_ranking`
+(docs/warehouse.md).
+
 ## 7. `spread_line` sign: positive = home team favored
 
 Using schedules for played games (`result` = `home_score − away_score`, verified exact; `total`
@@ -399,7 +417,9 @@ moment the whole row was public, and every estimate errs late.
 | `coach_game` | kickoff | A future game's listed coach can reveal a firing. |
 | `coach_team_season` | when the stint's last game is final (game end + 3 h), or the next coach's first kickoff when the team changed coach (43 stints) | A finished stint mid-season means a firing. |
 | `dim_coach` | first kickoff | |
-| ff_opportunity, rankings, rosters, draft, combine, participation (not in the warehouse yet) | A3 proposals, to implement when those tables are added: ff_opportunity `dim_week.last_game_end_utc_est` + lag; rosters_weekly like legacy depth charts; rankings `scrape_date` 12:00 UTC; draft/combine the draft day / March; participation Feb 15 of the next year (never in-season) | |
+| `fact_roster_week` (C1) | game-day seasons (2016 on): week N's `asof_weekly_utc`; post-game seasons (2002-2015): week N+1's as-of (the last week: its own as-of + 7 days). The regime is measured per season by the build (`availability.roster_postgame_share_threshold`, 1%) | Among players who played in week N (snap or stat row), the share whose week-N roster status is not ACT: 6.6%-9.8% every season 2002-2015, 0%-0.18% every season 2016-2026 (see §15). A post-game roster can contain moves made after the Tuesday as-of, so it waits a week (the A3 proposal, "like legacy depth charts", would have leaked those moves) |
+| `fact_ranking` (C1) | the day after `scrape_date`, 00:00 UTC | The scrape's time of day is unknown (A3 proposed 12:00 UTC the same day; the end of the day errs later). The Tuesday as-of therefore sees the previous Friday's weekly ranking |
+| ff_opportunity, draft, combine, participation (not in the warehouse yet) | A3 proposals, to implement when those tables are added: ff_opportunity `dim_week.last_game_end_utc_est` + lag; draft/combine the draft day / March; participation Feb 15 of the next year (never in-season) | |
 
 Verified on a full 1999-2026 build (2026-09-27, rebuilt after the B2 review): no event row has
 a NULL `available_at`; for
@@ -444,6 +464,11 @@ dataset in the run log (`pipeline_runs`, step E4) so the estimates can be checke
 9. The ingestion layer stays dtype-agnostic; B1 owns type normalisation (§10 drift table).
 10. nflreadpy's own cache is **off** (spec 4.1 said to enable it); the Parquet cache supersedes
     it (§10).
+11. (C1) Historical fantasy **rostership exists from 2020** in `ff_rankings_all` (§6), against
+    spec 8.1; the candidate pool still uses the rank-based proxy (no figure before 2020 or for
+    the deep bench) and reports its agreement with rostership.
+12. (C1) Weekly rosters are **post-game** snapshots in 2002-2015 and **game-day** snapshots
+    from 2016 (§15); positions for point-in-time use come from them, not from `players`.
 
 ## 14. Glossary (one line each)
 
@@ -477,5 +502,41 @@ dataset in the run log (`pipeline_runs`, step E4) so the estimates can be checke
   expected combined score, the moneyline the odds on who wins outright.
 - **REG / POST** — regular season / playoffs (the `season_type` / `game_type` columns).
 - **IR** — injured reserve (`RES` in roster `status`).
+- **Roster status** — `ACT` active, `INA` inactive for that game (healthy scratch or minor
+  injury), `DEV` practice squad (can be promoted any week), `RES` a reserve list (injured
+  reserve ...), `PUP`, `SUS`, `CUT`, `RET`; the Waiver Radar treats ACT, INA and DEV as "on a
+  roster".
+- **Rostership** — the share of fantasy leagues in which a player sits on a team
+  (`player_owned_avg`, 0-100); low rostership = available on waivers.
+- **Candidate pool** — the players probably still on waivers in a 12-team league at an as-of
+  (`docs/waiver_radar.md`).
 - **As-of / time-machine rule** — every prediction is stamped with the moment it was made and
   uses only data available then; a past week's prediction is never recomputed with later data.
+
+## 15. Weekly rosters: game-day and post-game snapshots (C1)
+
+Verified on the full 1999-2026 cache (2026-09-27) while building `fact_roster_week`:
+
+- **Snapshot timing.** Among players who played in week N (a snap-count or player-stats row that
+  week), the share whose week-N roster status is not ACT is 6.6%-9.8% in every season
+  2002-2015 and 0%-0.18% in every season 2016-2026. A player who played and shows RES that
+  same week went on injured reserve after the game: the 2002-2015 rosters were taken after the
+  games (and may include moves up to the next week), the 2016+ rosters on game day. The build
+  measures this per season (`build_manifest.notes.regime_by_season`) and delays post-game
+  rosters by a week (§12).
+- **Duplicates.** 16,302 (season, week, gsis_id) groups have more than one row (33,771 rows),
+  all in 2002-2015 except 13 in 2019: trades show the old team's TRC/TRD/TRT row next to the
+  new team's; 151 rows have no gsis_id.
+- **Team codes.** 2002-2015 use ARZ, BLT, CLV, HST and SL for Arizona, Baltimore, Cleveland,
+  Houston and St. Louis (checked: the same players carry ARI, BAL, CLE, HOU and LA in
+  player_stats for thousands of player-weeks each), plus OAK and SD.
+- **Coverage by era.** Practice-squad players (DEV) are listed from 2017 (about 300 a week
+  2017-2019, 440+ from 2020, a handful before); INA (inactive for the game) from 2019; the
+  2016 week-1 roster is the summer camp roster (2,471 ACT rows; 1,781 in week 2).
+  Teams on their bye week are missing from a game-day week's roster. A released player usually
+  gets a CUT row, but some simply vanish from the next roster.
+- **Positions change.** In `fact_roster_week`, 70 players hold more than one fantasy position
+  (QB/RB/WR/TE) across 2013-2025, and 49 player-seasons show two within one season: the
+  roster position of the week is the point-in-time position.
+- **`rookie_year` is partly hindsight.** 17 rows carry a rookie year later than the roster's
+  season; `entry_year` never does. The as-of view hides `rookie_year`.

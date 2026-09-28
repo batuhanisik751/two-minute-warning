@@ -1,4 +1,4 @@
-# The warehouse (Steps B1-B3)
+# The warehouse (Steps B1-B3, C1)
 
 `twm build 2025 2026` (or `--start 1999`) turns the Parquet cache in `data/raw/` into one
 DuckDB file, `data/warehouse.duckdb` (gitignored). The build is written to
@@ -45,6 +45,8 @@ before it, `dim_player` stores `public_from_utc` last): see "When is a row avail
 | `fact_snaps` | one player in one game with snap counts and percentages. The source names players by Pro-Football-Reference id (`pfr_player_id`); `gsis_id` (right after it) is mapped through `bridge_player_id` (NULL for 234 of 327,698 rows on the full build: ids with no link, and 6 rows whose link the usage check found implausible; all listed in the id report). `(game_id, gsis_id)` is unique among rows with a gsis_id (counted on every build, `notes.n_duplicate_game_gsis`, 0), so features can join on it | `game_id, pfr_player_id` | snap_counts |
 | `fact_injury_report` | one player on one team's injury report for one week; `date_modified` is the report row's last-modified time where the source has it (2010-2024; NULL for 2025+ and effectively 2009, see assumptions section 4) | `season, week, team, gsis_id` | injuries |
 | `fact_depth_chart` | one depth-chart slot, from either upstream format (`source_format` = `legacy` weekly charts 2001-2024, or `daily` snapshots 2025+) | see below | depth_charts |
+| `fact_roster_week` | one player on one weekly roster (2002+, C1): team, **point-in-time position**, status (ACT, INA, DEV practice squad, RES, CUT ...), `entry_year`, draft pick. The source of positions and of "who is on a roster"; its `available_at` depends on the season's snapshot kind (below). `rookie_year` is hidden point-in-time | `season, week, gsis_id` | rosters_weekly |
+| `fact_ranking` | one player on one FantasyPros QB/RB/WR/TE ranking page on one scrape day (C1): `page_kind` = `preseason` (redraft cheat sheet), `ros` (rest of season) or `weekly`; `page_pos` the page's position; ECR, `pos_rank` (rank among the page position's players), rostership `player_owned_avg` / `player_owned_espn` / `player_owned_yahoo`; `gsis_id` through `bridge_player_id` (NULL when unmatched). Built seasons only (`season`: the scrape's year from March, the year before in January-February) | `scrape_date, ecr_type, page_kind, page_pos, fantasypros_id` | ff_rankings_all |
 | `dim_team` | one of the 36 nflverse team rows; `current_abbr` maps OAK→LV, SD→LAC, STL→LA, LAR→LA; `is_current` is false for those four | `team_abbr` | teams |
 | `dim_player` | one player from nflverse's player table, with one id per other system (`pfr_id`, `espn_id`, `sleeper_id`, `fantasypros_id`, `yahoo_id`, `sportradar_id`, `mfl_id`, all from `bridge_player_id`, see "Player IDs") and `public_from_utc`, the moment he exists point-in-time (his draft, or his first public data row). `dim_team` and `dim_player` are snapshots of the one-file datasets (`all.parquet`) (manifest `seasons` = `[]`) and change whenever `twm ingest` refreshes them; since B3 the ids and `public_from_utc` also use the built seasons' weekly rosters and facts | `gsis_id` | players (+ bridge) |
 | `bridge_player_id` | one id of another system (`id_type`, `source_id`) and the `gsis_id` it belongs to, with the `method` that linked it, `n_candidates` and `is_conflict`; see "Player IDs" | `id_type, source_id` | players, rosters_weekly, ff_playerids, data/manual |
@@ -106,6 +108,18 @@ Counts are for the full 1999-2026 history (a 2025+2026 build shows a fraction of
 - `fact_depth_chart`: exact duplicate rows in the legacy files (3,856 rows 2001-2024, 1,628 of
   them in 2001). Two legacy rows equal on the key but different elsewhere are *not* removed: they
   stop the build with `PrimaryKeyError` (none exist in the cache today).
+- `fact_roster_week` (C1): rows without a `gsis_id` (151, empty strings included) and, when a
+  player is listed twice in one week (16,302 player-weeks, almost all 2002-2015: a trade shows
+  the old team's TRC/TRD/TRT row next to the new team's), all but one row: status priority ACT >
+  INA > DEV > RES > PUP > SUS > others > CUT > RET, then team (17,469 rows dropped).
+  `n_dropped_null_key`, `n_dropped_duplicates`. The 2002-2015 files spell five teams with the
+  NFL's own codes (ARZ, BLT, CLV, HST, SL): mapped to ARI, BAL, CLE, HOU, LA
+  (`schema.ROSTER_TEAM_ALIASES`, checked against player_stats; `team_raw` keeps the original).
+- `fact_ranking` (C1): of the archive's `rp`/`wp` rows, the IDP, kicker, defense and
+  dynasty-labelled pages, players who are not QB/RB/WR/TE, and seasons that are not built
+  (`notes.rows_by_reason`); other ranking types (overall, dynasty, best ball: 1.43 M rows,
+  `notes.n_rows_other_ecr_types`) are not read. The archive repeats some rows on the same page:
+  one per (page, player) is kept, the lowest ECR first (636 on the full build).
 
 Upstream gaps that are not build bugs: three played games have no play-by-play rows
 (`1999_01_BAL_STL`, `2000_03_SD_KC`, `2000_06_BUF_MIA`); the 2013 injury file has no Super Bowl
@@ -233,8 +247,10 @@ one-line rule stored as the `available_at` column comment in the file):
   (`hindsight_columns`): `fact_player_week.position`, `position_group` and `headshot_url`, and
   `fact_depth_chart.player_position`. A player who changed position shows the later one for
   every past season (Cordarrelle Patterson WR → RB in 2021, Taysom Hill QB → TE), so the as-of
-  view leaves those columns out. A point-in-time position must be derived later (B3/C1) from
-  the as-of-visible depth-chart slot (`fact_depth_chart.position`) or from weekly rosters;
+  view leaves those columns out. The point-in-time position is `fact_roster_week.position`
+  (C1), or the as-of-visible depth-chart slot (`fact_depth_chart.position`).
+  `fact_roster_week.rookie_year` is hidden too (a few rows carry a later season; use
+  `entry_year`);
 - *static* tables are always visible: `dim_team` and `dim_week` (the calendar of as-of times).
   `dim_week`'s columns computed from a week's final game list (`n_games`,
   `n_kickoff_estimated`, first/last gameday and kickoff, `last_game_end_utc_est`,
@@ -287,6 +303,8 @@ guess. "Kickoff" is game end minus 4 h (the real kickoff, or the late night-slot
 | `fact_play`, `fact_player_week`, `fact_team_week`, `fact_snaps` | the row's game (joined on `game_id`) end + `game_data_lag_hours` (6 h each) | nflverse publishes game data in a nightly run after the game. Each row uses its own game, never a per-week constant, so a game moved to Tuesday or Wednesday (the split weeks) is not visible at its week's Tuesday as-of and is at the next. |
 | `fact_injury_report` | 2021-2024 rows with `date_modified`: that stamp. 2010-2020 rows with a stamp: the stamp + `injury_legacy_stamp_offset_hours` (9 h). Otherwise (2009, the 62 null rows of 2010, 2025+): the team's kickoff that week. A team without a game that week: the week's `asof_weekly_utc`. Then never earlier than 1 s after the **previous** week's as-of | `date_modified` is the row's last change, observed. From 2021 the stamps are real UTC; the 2010-2020 ones are not (their time of day does not move with daylight saving time, see `docs/assumptions.md` section 4), so they count 9 h later. The final report is always out by kickoff. The floor enforces spec 6.1: week N+1 reports are not available at the Tuesday as-of after week N. |
 | `fact_depth_chart` | daily rows (2025+): `dt`. Legacy weekly rows (2001-2024): that week's `asof_weekly_utc` minus 6 days, the Wednesday 14:00 UTC before the week's games. REG rows whose week has no REG week (the post-finale chart) use the week with the same number (Wild Card); SBBYE rows use the Super Bowl week | Week N's chart is visible at the as-of after week N and week N+1's is not (as-ofs are at least 7 days apart). The orphan mappings are later than the charts' real dates. |
+| `fact_roster_week` | per season, from the data: **game-day** snapshots (2016 on): week N's roster at week N's `asof_weekly_utc`; **post-game** snapshots (2002-2015): at week N+1's as-of, the season's last week at its own as-of + 7 days. The build measures, among players who played in week N (a snap or stat row), the share whose week-N status is not ACT; above `availability.roster_postgame_share_threshold` (1%) the season is post-game (`notes.regime_by_season`) | A post-game roster shows moves made after the games (a player who played Sunday shows RES): 6.6%-9.8% of players who played are not ACT in 2002-2015, 0%-0.18% in 2016-2026. Such a roster can contain moves made after the Tuesday as-of, so it waits a week. Consequence: in 2002-2015 no roster is public at the week-1 as-of |
+| `fact_ranking` | the day after `scrape_date`, 00:00 UTC | The scrape's time of day is unknown; the end of that day errs late. Weekly (`wp`) pages are scraped on Fridays (sometimes Thursdays), so the latest weekly page at a Tuesday as-of is the Friday before that week's games |
 | `coach_game` | kickoff | Who coaches a game is certain at kickoff. A future game's listed coach can reveal a firing, so it stays hidden until then. |
 | `coach_team_season` | when the stint's last game is final (game end + 3 h), or, if another coach coaches the team later that season, that coach's first kickoff | A stint's `last_week`/`n_games` are only known once it is over, and a finished stint row mid-season means "fired": it may only appear once the new coach is on the sideline. |
 | `dim_coach` | kickoff of the coach's first game in the warehouse | A coach exists, for point-in-time purposes, from his first game. |
@@ -610,7 +628,8 @@ data (games, team, position) before adding it.
 **Where the bridge is used.** `fact_snaps.gsis_id` (PFR id, after the usage check),
 `fact_depth_chart` daily rows
 without an upstream gsis_id (ESPN id, flagged `gsis_id_from_espn`; the key stays unique, checked
-on every build) and `dim_player`'s ids. Point-in-time, a bridge row is visible only once its
+on every build), `fact_ranking.gsis_id` (FantasyPros id, C1) and `dim_player`'s ids.
+Point-in-time, a bridge row is visible only once its
 player exists (`public_from_utc`, copied from `dim_player`), in `AsOfView` and in the leakage
 harness alike (a future draft class's ids are deleted or scrambled like the players).
 
@@ -640,7 +659,10 @@ position the players ranked inside `teams x starters x candidate_pool_multiplier
 RB 36, WR 36, TE 18 with `config/league.yaml`; ties included). Only a player's own positional
 cheat sheet counts (`qb-cheatsheets`, `ppr-rb-cheatsheets` ...: the page's position must equal
 the row's): FantasyPros sometimes lists a player on an IDP or another position's page, and his
-rank there is not his WR rank.
+rank there is not his WR rank. Since C1 this is the same page classification and scrape
+selection that `fact_ranking` and the candidate pool use (`twm.ids.ranking_page_kind_sql`,
+`preseason_scrape_sql`), so the two can never disagree (a realdata test checks it); the full
+pool is in `docs/waiver_radar.md`.
 
 `uv run twm ids` writes it as markdown to `reports/ids/unmatched_ids.md` (`--db`, `--out`; a
 relative `--out` is under the project root) and prints a summary (with the suspect count); the
@@ -748,7 +770,11 @@ size differs by ~1 MB on full history), so never compare the files, compare the 
   (`fact_snaps`); `n_daily_gsis_filled_from_espn`, `n_daily_espn_without_gsis`
   (`fact_depth_chart`); the headline match rates, `preseason_pool_unmatched`,
   `preseason_pool_cutoffs` and `coverage_datasets_skipped` (`report_id_coverage`); and
-  `n_rows_by_kind` (`report_id_unmatched`).
+  `n_rows_by_kind` (`report_id_unmatched`). C1 adds, on `fact_roster_week`: `regime_by_season`
+  (per season: `game_day` or `post_game`, the measured share of players who played but are not
+  ACT, and its counts), `regime_threshold`, `n_rows_unknown_team`; on `fact_ranking`:
+  `rows_by_reason` (the archive's `rp`/`wp` rows kept or why not), `n_rows_other_ecr_types`,
+  `n_rows_by_page_kind`, `n_rows_without_gsis_id`, `n_rows_listed_on_another_positions_page`.
 
 The whole build runs in one transaction inside the scratch file `<warehouse>.building`; only a
 committed build is renamed over the real file (atomic on the same filesystem). A key violation or

@@ -196,6 +196,29 @@ ROSTERS_WEEKLY_DTYPES: dict[str, pl.DataType] = {
     "yahoo_id": pl.String(),
     "pfr_id": pl.String(),
     "sleeper_id": pl.String(),
+    # C1 (fact_roster_week): NULL unless a test sets them
+    "game_type": pl.String(),
+    "status": pl.String(),
+    "entry_year": pl.Int32(),
+    "rookie_year": pl.Int32(),
+    "draft_number": pl.String(),  # a string in some real seasons: exercises the cast
+}
+
+# FantasyPros rankings (ff_rankings_all, one file): the C1 fact_ranking source. Synthetic ids
+# (9xxxxx) and names.
+RANKINGS_ALL_DTYPES: dict[str, pl.DataType] = {
+    "fp_page": pl.String(),
+    "page_type": pl.String(),
+    "player": pl.String(),
+    "id": pl.String(),
+    "pos": pl.String(),
+    "team": pl.String(),
+    "ecr": pl.Float64(),
+    "sd": pl.Float64(),
+    "player_owned_avg": pl.Float64(),
+    "player_owned_espn": pl.Float64(),
+    "ecr_type": pl.String(),
+    "scrape_date": pl.String(),
 }
 
 
@@ -347,13 +370,35 @@ def default_ff_playerids() -> pl.DataFrame:
     )
 
 
-def default_rosters(season: int) -> pl.DataFrame:
-    """A. One on a weekly roster with the PFR id the default snap counts use (OneAl00)."""
+def default_rankings() -> pl.DataFrame:
+    """One synthetic preseason QB cheat-sheet row for Alpha One (FantasyPros id 900001)."""
+    return frame(
+        [
+            {
+                "fp_page": "/nfl/rankings/qb-cheatsheets.php",
+                "page_type": "redraft-qb",
+                "player": "Alpha One",
+                "id": "900001",
+                "pos": "QB",
+                "team": "KC",
+                "ecr": 1.0,
+                "ecr_type": "rp",
+                "scrape_date": "2025-08-28",
+            },
+        ],  # fmt: skip
+        RANKINGS_ALL_DTYPES,
+    )
+
+
+def default_rosters(season: int, week: int = 1) -> pl.DataFrame:
+    """A. One on a weekly roster with the PFR id the default snap counts use (OneAl00), in
+    ``week`` (a roster week must be a week of the schedule: fact_roster_week places it in time
+    by that week's as-of)."""
     return frame(
         [
             {
                 "season": season,
-                "week": 1,
+                "week": week,
                 "team": "KC",
                 "position": "QB",
                 "full_name": "Alpha One",
@@ -439,7 +484,7 @@ class RawCache:
         self.write("depth_charts", season, depth_charts)
         if season >= 2002:  # weekly rosters start in 2002
             if rosters is None:
-                rosters = default_rosters(season)
+                rosters = default_rosters(season, min(g["week"] for g in games))
             if not isinstance(rosters, pl.DataFrame):
                 rosters = frame(rosters, ROSTERS_WEEKLY_DTYPES)
             self.write("rosters_weekly", season, rosters)
@@ -448,6 +493,7 @@ class RawCache:
         self.write("teams", None, default_teams())
         self.write("players", None, default_players())
         self.write("ff_playerids", None, default_ff_playerids())
+        self.write("ff_rankings_all", None, default_rankings())
 
 
 def legacy_depth_chart(games: list[dict[str, Any]]) -> pl.DataFrame:
@@ -634,6 +680,7 @@ def real_full_db(tmp_path_factory: pytest.TempPathFactory) -> Any:
 
     needed = [nv.cache_path("schedules", s) for s in REAL_FULL_SEASONS]
     needed.append(nv.cache_path("ff_playerids", None))
+    needed.append(nv.cache_path("ff_rankings_all", None))
     if not all(p.exists() for p in needed):
         pytest.skip("real cache not present (run `twm ingest`)")
     path = tmp_path_factory.mktemp("real") / "full.duckdb"

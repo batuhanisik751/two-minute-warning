@@ -964,6 +964,59 @@ POOL_LABEL = "ff_rankings_all[rp_preseason_pool]"
 # 'ppr-wr-cheatsheets' ... (group 1 must equal the row's lower-case position).
 POOL_PAGE_RE = "(qb|rb|wr|te)-cheatsheets"
 
+# ---- FantasyPros page classification, shared by fact_ranking (warehouse, C1) and the id
+# report's preseason pool: one definition of "a position's preseason cheat sheet", "rest of
+# season" and "weekly" page, and of which preseason scrape a season uses.
+# Pages come in a long form ('/nfl/rankings/ppr-wr-cheatsheets.php', 2021+) and a short form
+# ('ppr-wr-cheatsheets', 2019-12 to 2020-10). IDP (db/dl/lb/idp), kicker and defense pages are
+# never QB/RB/WR/TE pages; the 2020 short-form pages labelled 'dynasty-...' are left out too.
+PRESEASON_PAGE_RE = "(^|/)(ppr-)?(qb|rb|wr|te)-cheatsheets([.]php)?$"
+ROS_PAGE_RE = "(^|/)ros-(ppr-)?(qb|rb|wr|te)([.]php)?$"
+WEEKLY_PAGE_RE = "(^|/)(ppr-)?(qb|rb|wr|te)([.]php)?$"
+# group 1: the page's position, for any of the three kinds of page
+PAGE_POS_RE = "(qb|rb|wr|te)(-cheatsheets)?([.]php)?$"
+PAGE_KINDS = ("preseason", "ros", "weekly")
+# Preseason cheat sheets count only when scraped in these months (the draft season) and before
+# the season's first game day (week 1's dim_week.first_gameday); the last such scrape wins.
+PRESEASON_MONTHS = (8, 9)
+
+
+def ranking_page_kind_sql(ecr_type: str, fp_page: str, page_type: str) -> str:
+    """SQL: 'preseason' | 'ros' | 'weekly' for a QB/RB/WR/TE positional page, else NULL.
+
+    ``preseason``: a redraft positional (``rp``) cheat sheet; ``ros``: an ``rp`` rest-of-season
+    page; ``weekly``: a weekly positional (``wp``) page. Arguments are SQL expressions."""
+    page = f"COALESCE({fp_page}, '')"
+    return (
+        f"(CASE WHEN COALESCE({page_type}, '') LIKE 'dynasty%' THEN NULL "
+        f"WHEN {ecr_type} = 'rp' AND regexp_matches({page}, '{PRESEASON_PAGE_RE}') "
+        "THEN 'preseason' "
+        f"WHEN {ecr_type} = 'rp' AND regexp_matches({page}, '{ROS_PAGE_RE}') THEN 'ros' "
+        f"WHEN {ecr_type} = 'wp' AND regexp_matches({page}, '{WEEKLY_PAGE_RE}') THEN 'weekly' "
+        "END)"
+    )
+
+
+def ranking_page_pos_sql(fp_page: str) -> str:
+    """SQL: the page's position in upper case (QB/RB/WR/TE); only meaningful for pages that
+    :func:`ranking_page_kind_sql` classifies."""
+    return f"NULLIF(upper(regexp_extract(COALESCE({fp_page}, ''), '{PAGE_POS_RE}', 1)), '')"
+
+
+def preseason_scrape_sql(pages: str, weeks: str = "dim_week") -> str:
+    """SQL: per season, the scrape that is the preseason ranking: the last ``scrape_date`` of
+    ``pages`` (preseason cheat-sheet rows with ``season`` and ``scrape_date``) in August or
+    September and strictly before week 1's first game day (``weeks``: dim_week or its
+    point-in-time view). Columns: season, scrape_date."""
+    months = ", ".join(str(m) for m in PRESEASON_MONTHS)
+    return f"""
+        SELECT p.season, max(p.scrape_date) AS scrape_date
+        FROM {pages} p JOIN {weeks} w ON w.season = p.season AND w.week = 1
+         AND w.season_type = 'REG'
+        WHERE month(CAST(p.scrape_date AS DATE)) IN ({months})
+          AND CAST(p.scrape_date AS DATE) < w.first_gameday
+        GROUP BY p.season"""
+
 
 def _check_raw_coverage() -> None:
     for r in RAW_COVERAGE:
@@ -1086,6 +1139,7 @@ def pool_coverage(
         return None
     cut = " ".join(f"WHEN '{p}' THEN {int(n)}" for p, n in cutoffs.items())
     pos = ", ".join(f"'{p}'" for p in cutoffs)
+    kind = ranking_page_kind_sql("ecr_type", "fp_page", "page_type")
     return CoverageRows(
         POOL_LABEL,
         "fantasypros",
@@ -1093,18 +1147,10 @@ def pool_coverage(
         WITH pages AS (
             SELECT {_SCRAPE_YEAR} AS season, scrape_date, pos, id, player, ecr, fp_page
             FROM raw_ff_rankings_all
-            WHERE ecr_type = 'rp' AND fp_page LIKE '%cheatsheets%' AND fp_page NOT LIKE '%ros%'
-              AND page_type NOT LIKE 'dynasty%' AND pos IN ({pos}) AND ecr IS NOT NULL
-              AND regexp_extract(fp_page, '{POOL_PAGE_RE}', 1) = lower(pos)
-              AND month(CAST(scrape_date AS DATE)) IN (8, 9)
+            WHERE {kind} = 'preseason' AND {ranking_page_pos_sql("fp_page")} = pos
+              AND pos IN ({pos}) AND ecr IS NOT NULL
         ),
-        last_scrape AS (
-            SELECT p.season, max(p.scrape_date) AS scrape_date
-            FROM pages p JOIN dim_week w ON w.season = p.season AND w.week = 1
-             AND w.season_type = 'REG'
-            WHERE CAST(p.scrape_date AS DATE) < w.first_gameday
-            GROUP BY p.season
-        ),
+        last_scrape AS ({preseason_scrape_sql("pages")}),
         ranked AS (
             SELECT p.season, {canonical_id_sql("p.id", "VARCHAR")} AS source_id,
                    min(p.player) AS name, p.pos AS position, min(p.ecr) AS ecr

@@ -295,6 +295,108 @@ def ids_report(
     typer.echo(f"wrote {target}")
 
 
+radar_app = typer.Typer(help="Waiver Radar: the candidate pool (players probably on waivers).")
+app.add_typer(radar_app, name="radar")
+
+
+def _warehouse_or_exit(db: Path | None) -> Path:
+    from twm.config import settings
+
+    path = Path(db) if db is not None else settings().path("warehouse")
+    if not path.exists():
+        typer.echo(f"warehouse not found: {path}; run `twm build` first", err=True)
+        raise typer.Exit(code=1)
+    return path
+
+
+@radar_app.command("pool")
+def radar_pool(
+    season: int = typer.Argument(..., help="Season, e.g. 2023."),
+    week: int = typer.Argument(..., help="Regular-season week; the pool at its Tuesday as-of."),
+    pos: str | None = typer.Option(None, "--pos", help="Only this position (QB, RB, WR, TE)."),
+    method: str = typer.Option(
+        "auto", "--method", help="auto, ecr (preseason cheat sheet) or prior_ppg (fallback)."
+    ),
+    show_all: bool = typer.Option(
+        False, "--all", help="Also list rostered players kept out of the pool, with the reason."
+    ),
+    limit: int = typer.Option(30, "--limit", help="Rows to print (0 = all)."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+) -> None:
+    """Print the candidate pool at a week's Tuesday as-of, best points per game first."""
+    import duckdb
+    import polars as pl
+
+    from twm.asof import AsOfView, WarehouseTooOldError, weekly_as_of
+    from twm.modules.waiver_radar.pool import candidate_pool
+
+    path = _warehouse_or_exit(db)
+    if method not in ("auto", "ecr", "prior_ppg"):
+        raise typer.BadParameter("--method must be auto, ecr or prior_ppg")
+    try:
+        when = weekly_as_of(path, season, week)
+        with AsOfView(path, when) as view:
+            df = candidate_pool(view, season, week, method=method)  # type: ignore[arg-type]
+    except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot compute the pool: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    if pos is not None:
+        df = df.filter(pl.col("position") == pos.upper())
+    universe = df.height
+    if not show_all:
+        df = df.filter(pl.col("in_pool"))
+    df = df.sort(["ppg_to_date", "gsis_id"], descending=[True, False], nulls_last=True)
+    used = df.get_column("method").unique().to_list() if df.height else [method]
+    typer.echo(
+        f"{season} week {week}, as-of {when:%Y-%m-%d %H:%M} UTC, method {', '.join(used)}: "
+        f"{int(df.get_column('in_pool').sum()) if df.height else 0} in the pool of "
+        f"{universe} rostered players" + (f" at {pos.upper()}" if pos else "")
+    )
+    cols = ["name", "team", "position", "status", "games_to_date", "ppg_to_date",
+            "ppg_pos_rank", "preseason_source", "preseason_pos_rank", "in_pool", "excluded_by",
+            "owned_avg"]  # fmt: skip
+    shown = df.select(cols) if limit == 0 else df.select(cols).head(limit)
+    with pl.Config(tbl_rows=-1, tbl_cols=-1, tbl_width_chars=200, float_precision=1,
+                   tbl_hide_dataframe_shape=True, tbl_hide_column_data_types=True):  # fmt: skip
+        typer.echo(str(shown))
+
+
+@radar_app.command("pool-report")
+def radar_pool_report(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    out: Path = typer.Option(
+        Path("reports/waiver_radar/pool_sizes.md"),
+        "--out",
+        help="Markdown file to write (relative paths are under the project root); a CSV with "
+        "the same name is written next to it.",
+    ),
+    start: int = typer.Option(2013, "--start", help="First season (snap counts start 2013)."),
+    end: int | None = typer.Option(None, "--end", help="Last season (default: current)."),
+) -> None:
+    """Write the pool-size report and its validation (markdown + CSV) and print a summary."""
+    import duckdb
+
+    from twm.asof import WarehouseTooOldError
+    from twm.config import ROOT, settings
+    from twm.modules.waiver_radar.report import build_report, write_report
+
+    path = _warehouse_or_exit(db)
+    last = end if end is not None else settings().current_season
+    if start > last:
+        raise typer.BadParameter(f"--start {start} is after --end {last}")
+    try:
+        report = build_report(path, list(range(start, last + 1)))
+    except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot build the report: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    target = out if out.is_absolute() else ROOT / out
+    csv_path = write_report(report, target)
+    for line in report.summary:
+        typer.echo(line)
+    typer.echo(f"wrote {target}")
+    typer.echo(f"wrote {csv_path}")
+
+
 @app.command()
 def glossary(
     name: str | None = typer.Argument(None, help="One term, e.g. `twm glossary wopr`."),

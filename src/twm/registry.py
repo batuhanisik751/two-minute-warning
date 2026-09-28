@@ -22,6 +22,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+from twm.config import league
 from twm.situations import SituationRules
 
 Kind = Literal["metric", "feature", "label", "concept", "identifier"]
@@ -100,8 +101,23 @@ class Entry:
         return f"{self.title} ({self.unit}): {self.explanation}"
 
 
+def _pool_texts() -> dict[str, str]:
+    """Config-derived pieces of the candidate-pool entries (never hard-coded numbers)."""
+    lg = league()
+    cut = lg.candidate_pool_cutoffs()
+    return {
+        "cutoffs": ", ".join(f"{p} {n}" for p, n in cut.items()),
+        "multiplier": f"{lg.candidate_pool_multiplier:g}",
+        "statuses": ", ".join(lg.pool.roster_statuses),
+        "min_games": str(lg.pool.prior_season_min_games),
+        "rounds": str(lg.pool.rookie_drafted_rounds),
+        "below": f"{lg.pool.ownership_available_below:g}",
+    }
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
+    pool = _pool_texts()
     return [
         # ---- fantasy basics ------------------------------------------------------------
         Entry(
@@ -142,6 +158,78 @@ def _entries() -> list[Entry]:
             explanation="A player 'finished as a starter' in a week when he scored well enough "
             "that a typical 12-team league would have started him.",
             step="C2",
+        ),
+        # ---- Waiver Radar candidate pool (C1) -------------------------------------------
+        Entry(
+            name="candidate_pool",
+            title="Waiver Radar candidate pool",
+            kind="concept",
+            modules=("waiver_radar",),
+            unit="yes/no per player and as-of (in_pool)",
+            formula="on an NFL roster at the as-of (his latest public weekly roster row of the "
+            "season, on his team's latest public roster, with status "
+            f"{pool['statuses']}, at QB/RB/WR/TE) and outside the top N at his position by BOTH "
+            "preseason_pos_rank and ppg_to_date; N = weekly starter threshold x "
+            f"candidate_pool_multiplier ({pool['multiplier']}): {pool['cutoffs']}; in seasons "
+            f"without a preseason cheat sheet, rookies drafted in rounds 1-{pool['rounds']} count "
+            "as drafted",
+            explanation="The players who are probably still on waivers in a typical 12-team "
+            "league. There is no record of which players sat on fantasy rosters before 2020, so "
+            "anyone ranked high before the season or scoring well since counts as taken; the "
+            "rest are the players the Waiver Radar ranks.",
+            source="twm.modules.waiver_radar.pool.candidate_pool (fact_roster_week, "
+            "fact_ranking, fact_player_week)",
+            step="C1",
+        ),
+        Entry(
+            name="preseason_pos_rank",
+            title="Preseason position rank",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="rank (1 = best)",
+            formula="2020 on (method ecr): the player's rank among his position's players on "
+            "FantasyPros' last August/September redraft cheat sheet of that position before "
+            "the season's first game (fact_ranking.pos_rank, page_kind preseason); not on his "
+            "roster position's sheet: his rank on his own FantasyPros position's sheet, judged "
+            "against that position's cutoff. 2013-2019 (method prior_ppg): his rank by last "
+            "season's regular-season PPG among players of his current roster position with at "
+            f"least {pool['min_games']} games; ties share the better rank",
+            explanation="Where the player stood before the season: experts' consensus ranking "
+            "(ECR) when it exists, otherwise last season's scoring. A player ranked high was "
+            "drafted in almost every league.",
+            source="fact_ranking.pos_rank; fact_player_week for last season's PPG",
+            step="C1",
+        ),
+        Entry(
+            name="ppg_to_date",
+            title="Points per game this season",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="points per game",
+            formula="fantasy points (config/scoring.yaml) summed over the season's "
+            "regular-season games public at the as-of / the number of those games (weeks with "
+            "a stat line); ppg_pos_rank ranks it within the roster position (ties share the "
+            "better rank)",
+            explanation="How much a player has scored per game so far this season. A player "
+            "near the top has been picked up by now, so he is not in the candidate pool.",
+            source="fact_player_week (twm.scoring.score_sql) through twm.asof.AsOfView",
+            step="C1",
+        ),
+        Entry(
+            name="owned_avg",
+            title="Rostership (percent of leagues)",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="percent (0-100)",
+            formula="FantasyPros' average share of leagues rostering the player across sites "
+            "(fact_ranking.player_owned_avg) from the season's latest weekly ranking public at "
+            "the as-of (the Friday before that week's games); owned_espn = ESPN's share "
+            "(fact_ranking.player_owned_espn). 2020 partly, 2021 on",
+            explanation="How many real leagues have the player on a roster. It checks the "
+            f"candidate pool (a player owned in fewer than {pool['below']}% of leagues is really "
+            "available); the pool itself never uses it, because it does not exist before 2020.",
+            source="fact_ranking.player_owned_avg, fact_ranking.player_owned_espn",
+            step="C1",
         ),
         # ---- opportunity (what a player is given) ---------------------------------------
         Entry(

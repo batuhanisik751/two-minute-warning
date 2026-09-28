@@ -27,6 +27,9 @@ build/
 web/node_modules/
 web/.next/
 web/.vercel/
+web/*.tsbuildinfo
+web/next-env.d.ts
+web/.drizzle-check-*/
 
 # os / editors
 .DS_Store

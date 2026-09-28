@@ -1317,6 +1317,150 @@ def _display_path(path: Path, root: Path) -> str:
             return str(path)
 
 
+# --------------------------------------------------------------------------------------
+# Publishing (step E2): the public database
+# --------------------------------------------------------------------------------------
+
+
+@app.command()
+def publish(
+    target: str = typer.Option(
+        ...,
+        "--target",
+        help="local = the Docker database (TWM_LOCAL_DATABASE_URL, default docker-compose.yml); "
+        "remote = the public Neon database (DATABASE_URL, the writer role).",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Do everything, then roll back: shows what would change."
+    ),
+    allow_incomplete: bool = typer.Option(
+        False,
+        "--allow-incomplete",
+        help="Also publish live lists that were scored with incomplete data (skipped by "
+        "default, with exit code 4).",
+    ),
+    replace_live: list[str] | None = typer.Option(
+        None,
+        "--replace-live",
+        help="SEASON-Wnn, e.g. 2026-W04: replace that week's published live lists with the "
+        "local ones (live lists are otherwise frozen). Prints what it replaces. Repeatable.",
+    ),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    store: Path | None = typer.Option(
+        None, "--store", help="Predictions store (default: settings paths.predictions)."
+    ),
+    dataset: Path = typer.Option(
+        Path("data/waiver_radar/dataset.parquet"), "--dataset", help="The Waiver Radar dataset."
+    ),
+    evaluation_csv: Path = typer.Option(
+        Path("reports/waiver_radar/evaluation.csv"),
+        "--evaluation",
+        help="The committed evaluation CSV (published as the track record).",
+    ),
+    now: str | None = typer.Option(None, "--now", hidden=True, help="Pretend clock (tests)."),
+) -> None:
+    """Publish the Waiver Radar lists, outcomes, track record, player pages and glossary to
+    Postgres, in one transaction (docs/deploy.md). Live lists already published are never
+    changed (frozen); everything else is replaced. Exit codes: 0 done, 1 refused or failed
+    (nothing changed), 4 done but some live lists were skipped as incomplete (retry later)."""
+    import uuid
+
+    from twm.config import settings
+    from twm.publish import collect as col
+    from twm.publish import target as tg
+    from twm.publish import write as wr
+
+    try:
+        tgt = tg.resolve(target)
+        weeks = [wr.parse_week(w) for w in (replace_live or [])]
+    except (tg.TargetError, ValueError) as e:
+        typer.echo(f"not published: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"target: {tgt.describe()}")
+    clock = _clock(now)
+    run_id, started = uuid.uuid4().hex, _clock(None)
+    s = settings()
+    inputs = col.Inputs(
+        warehouse=_project_path(db) if db is not None else s.path("warehouse"),
+        store=_project_path(store) if store is not None else s.path("predictions"),
+        dataset=_project_path(dataset),
+        evaluation_csv=_project_path(evaluation_csv),
+        season=s.current_season,
+        now=clock,
+    )
+
+    def fail(message: str, step: str) -> None:
+        text = tg.redact(message, tgt.url)
+        typer.echo(f"not published: {text}", err=True)
+        if not dry_run:
+            ok = wr.record_failure_at(
+                tgt, run_id=run_id, started=started, error=text, notes={"step": step}
+            )
+            typer.echo(
+                "the failed run was recorded in pipeline_runs"
+                if ok
+                else "(the failure could not be recorded in pipeline_runs)",
+                err=True,
+            )
+        raise typer.Exit(code=1)
+
+    try:
+        data = col.collect(inputs)
+    except (col.PublishInputError, FileNotFoundError, ValueError) as e:
+        fail(str(e), "collect")
+    problems = col.validate(data)
+    if problems:
+        fail("validation failed: " + "; ".join(problems), "validate")
+    try:
+        result = wr.publish(
+            tgt, data, dry_run=dry_run, allow_incomplete=allow_incomplete, replace_live=weeks,
+            run_id=run_id, started=started,
+        )  # fmt: skip
+    except wr.PublishError as e:
+        typer.echo(f"not published (rolled back): {e}", err=True)
+        if not dry_run:
+            typer.echo(
+                "the failed run was recorded in pipeline_runs"
+                if e.recorded
+                else "(the failure could not be recorded in pipeline_runs)",
+                err=True,
+            )
+        raise typer.Exit(code=1) from None
+    for line in wr.summary_lines(result, tgt)[1:]:
+        typer.echo(line)
+    if result.skipped:
+        raise typer.Exit(code=wr.EXIT_SKIPPED_INCOMPLETE)
+
+
+@app.command("migrate-local")
+def migrate_local() -> None:
+    """Apply web/drizzle's migrations to the LOCAL database (TWM_LOCAL_DATABASE_URL, default
+    the docker-compose.yml container). Refuses any other host: the public database is
+    migrated with `npm --prefix web run db:migrate` and the owner's connection
+    (docs/deploy.md)."""
+    import psycopg
+
+    from twm.publish import migrate as mg
+    from twm.publish import target as tg
+
+    try:
+        tgt = tg.resolve("local")
+    except tg.TargetError as e:
+        typer.echo(f"not migrated: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"target: {tgt.describe()}")
+    try:
+        with psycopg.connect(tgt.url, autocommit=True, connect_timeout=10) as conn:
+            applied = mg.apply_migrations(conn)
+    except psycopg.Error as e:
+        typer.echo(f"not migrated: {tg.redact(str(e), tgt.url)}", err=True)
+        raise typer.Exit(code=1) from None
+    if applied:
+        typer.echo("applied: " + ", ".join(applied))
+    else:
+        typer.echo("up to date: no migration to apply")
+
+
 @app.command()
 def glossary(
     name: str | None = typer.Argument(None, help="One term, e.g. `twm glossary wopr`."),

@@ -18,4 +18,52 @@ jobs:
       - run: uv sync --all-extras --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run pytest -m "not network and not realdata"
+      - run: uv run pytest -m "not network and not realdata and not postgres"
+
+  # `twm publish` and the Drizzle migrations against a real Postgres (tests marked postgres).
+  # The service matches docker-compose.yml (user/password twm: CI-only, not secrets), so the
+  # tests' default TWM_LOCAL_DATABASE_URL reaches it; TWM_REQUIRE_POSTGRES turns "server not
+  # reachable" into a failure instead of a skip.
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: twm
+          POSTGRES_PASSWORD: twm
+          POSTGRES_DB: twm
+        ports: ["5434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U twm -d twm"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      TWM_REQUIRE_POSTGRES: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --all-extras --locked
+      - run: uv run pytest -m postgres -rs
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      # the committed migrations must match db/schema.ts (never connects to a database)
+      - run: npm run db:check

@@ -40,8 +40,8 @@ Status = Literal["PASS", "WARN", "FAIL"]
 STATUSES: tuple[Status, ...] = ("PASS", "WARN", "FAIL")
 
 # .env keys the app knows (.env.example); values are never printed.
-ENV_KEYS = ("DATABASE_URL", "ENABLE_MY_LEAGUE", "ESPN_LEAGUE_ID", "ESPN_YEAR", "ESPN_S2",
-            "ESPN_SWID")  # fmt: skip
+ENV_KEYS = ("DATABASE_URL", "TWM_LOCAL_DATABASE_URL", "ENABLE_MY_LEAGUE", "ESPN_LEAGUE_ID",
+            "ESPN_YEAR", "ESPN_S2", "ESPN_SWID")  # fmt: skip
 ESPN_REQUIRED = ("ESPN_LEAGUE_ID", "ESPN_YEAR")
 ESPN_PRIVATE = ("ESPN_S2", "ESPN_SWID")  # cookies of a private league (the owner's is private)
 TRUE_WORDS = frozenset({"1", "true", "yes", "on"})

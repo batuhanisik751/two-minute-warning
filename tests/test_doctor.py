@@ -93,7 +93,7 @@ def test_env_reports_key_names_never_values(tmp_path):
     text = _text(c)
     assert c.status == "PASS" and SECRET not in text and "abc" not in text
     assert "set: DATABASE_URL, ENABLE_MY_LEAGUE, ESPN_YEAR" in text
-    assert "empty or absent: ESPN_LEAGUE_ID, ESPN_S2, ESPN_SWID" in text
+    assert "empty or absent: TWM_LOCAL_DATABASE_URL, ESPN_LEAGUE_ID, ESPN_S2, ESPN_SWID" in text
     assert "other keys: MY_OWN_KEY" in text and "My League: off" in text
 
 

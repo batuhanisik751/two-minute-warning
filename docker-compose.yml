@@ -1,0 +1,31 @@
+# Local Postgres for developing and testing `twm publish` (docs/deploy.md, "Local database").
+#
+#   docker compose up -d twm-postgres        # start (data survives restarts in a named volume)
+#   docker compose down                      # stop; add -v to delete the local data as well
+#
+# LOCAL DEVELOPMENT ONLY. The user name and password below are not secrets: the port is bound
+# to 127.0.0.1, so nothing outside this computer can reach it. The public site's database is a
+# separate Neon project whose credentials live only in .env, GitHub secrets and Vercel.
+# Port 5434 on purpose: other projects on this Mac use 5432 and 5433.
+name: two-minute-warning
+
+services:
+  twm-postgres:
+    image: postgres:16
+    container_name: twm-postgres
+    environment:
+      POSTGRES_USER: twm
+      POSTGRES_PASSWORD: twm
+      POSTGRES_DB: twm
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - twm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U twm -d twm"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  twm_pgdata:

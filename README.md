@@ -63,9 +63,16 @@ uv run twm score --as-of 2026-09-30T18:00Z   # a moment (with a time zone): the 
 uv run twm snapshot schedules     # rewrite one schema snapshot from the cache (--download to
                                   # re-fetch after a reviewed upstream change; never by default)
 uv run jupyter lab notebooks/01_waiver_radar.ipynb   # the Waiver Radar explained step by step
+
+# Publishing to Postgres (docs/deploy.md): a local Docker database first, the public one later
+docker compose up -d twm-postgres # local Postgres on 127.0.0.1:5434 (local development only)
+uv run twm migrate-local          # create the tables (web/drizzle/*.sql) in the local database
+uv run twm publish --target local # lists, outcomes, track record, player pages, glossary
+uv run twm publish --target remote --dry-run   # the public database (DATABASE_URL in .env)
 uv run pytest                 # offline tests (the default), golden tests included;
                               # `uv run pytest -m network` runs the live drift check,
-                              # `uv run pytest -m realdata` the tests on the real cache
+                              # `uv run pytest -m realdata` the tests on the real cache,
+                              # `uv run pytest -m postgres` the tests on the local Postgres
 ```
 
 ## Your league
@@ -88,7 +95,7 @@ Dataset names: `uv run twm ingest --help` or `DATASETS` in `src/twm/sources/nflv
 - `data/schemas/<dataset>.json` (committed) records each dataset's columns and dtypes. Every current-season or one-file load is compared with it: a missing column raises `SchemaDriftError`, a changed dtype or a new column is logged. Snapshots are written on the first current-season fetch of a dataset and refreshed **deliberately** with `uv run python scripts/refresh_snapshots.py` (review the diff, then commit), never by `twm ingest`.
 - What we verified about the data, and where it differs from the spec: `docs/assumptions.md`. Re-verify from the cache with `uv run python scripts/verify_sources.py` (no network unless you pass `--allow-download`).
 
-See `PROJECT_SPEC.md` for the full specification, `docs/warehouse.md` for the DuckDB warehouse, `docs/scoring.md` for how fantasy points are computed, `docs/waiver_radar.md` for the Waiver Radar's candidate pool, labels, features, models, evaluation and weekly list, `notebooks/01_waiver_radar.ipynb` for a guided tour of it and `docs/progress.md` for the build log.
+See `PROJECT_SPEC.md` for the full specification, `docs/warehouse.md` for the DuckDB warehouse, `docs/scoring.md` for how fantasy points are computed, `docs/waiver_radar.md` for the Waiver Radar's candidate pool, labels, features, models, evaluation and weekly list, `docs/deploy.md` for the public database (local Docker Postgres, Neon, roles, publishing), `notebooks/01_waiver_radar.ipynb` for a guided tour of it and `docs/progress.md` for the build log.
 
 ## Attribution
 

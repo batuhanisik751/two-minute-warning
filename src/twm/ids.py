@@ -1129,10 +1129,10 @@ def pool_coverage(
 ) -> CoverageRows | None:
     """The Waiver Radar candidate pool in the preseason redraft positional (``rp``) rankings:
     per season, the last August/September cheat-sheet scrape before week 1's first game day,
-    and per position the players ranked inside ``cutoffs`` (QB 18, RB 36, WR 36, TE 18 by
-    ECR, ties included). Only a player's own positional page counts (a WR's rank on the WR
-    cheat sheet, never his rank on an IDP or another position's page). Seasons that are not
-    built are skipped."""
+    and per position the players ranked inside ``cutoffs`` (``League.candidate_pool_cutoffs``:
+    QB 18, RB 36, WR 36, TE 18 in the default league; by ECR, ties included). Only a player's
+    own positional page counts (a WR's rank on the WR cheat sheet, never his rank on an IDP or
+    another position's page). Seasons that are not built are skipped."""
     if "raw_ff_rankings_all" not in {
         r[0] for r in con.execute("SELECT view_name FROM duckdb_views()").fetchall()
     }:

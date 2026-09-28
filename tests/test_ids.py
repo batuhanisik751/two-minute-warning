@@ -1078,7 +1078,7 @@ def test_doctor_prints_one_id_coverage_line(world, db_path, monkeypatch):
     monkeypatch.setattr(s.paths, "warehouse", str(db_path))
     result = CliRunner().invoke(app, ["doctor"])
     assert result.exit_code == 0, result.output
-    lines = [x for x in result.output.splitlines() if x.startswith("ids: ")]
+    lines = [x.strip() for x in result.output.splitlines() if x.strip().startswith("ids: ")]
     assert len(lines) == 1 and "ambiguous" in lines[0] and "conflicts" in lines[0]
 
 
@@ -1167,9 +1167,7 @@ def test_real_pool_rows_come_from_their_own_positional_page(real_full_db):
 
     path, _ = real_full_db
     lg = league()
-    cutoffs = {
-        p: round(n * lg.candidate_pool_multiplier) for p, n in lg.starter_rank_threshold.items()
-    }
+    cutoffs = lg.candidate_pool_cutoffs()
     con = duckdb.connect()
     con.execute(f"ATTACH {sc.sql_str(str(path))} AS wh (READ_ONLY)")
     con.execute("CREATE VIEW dim_week AS SELECT * FROM wh.dim_week")

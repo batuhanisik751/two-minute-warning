@@ -636,9 +636,11 @@ def test_thresholds_derive_from_league_config():
     assert PoolConfig.model_fields.keys() >= {"roster_statuses", "ownership_available_below"}
     default = wp.PoolRules.from_config(lg)
     assert default.cutoffs == {"QB": 18, "RB": 36, "WR": 36, "TE": 18}
+    assert default.cutoffs == lg.candidate_pool_cutoffs()
     assert default.cutoffs == {
-        p: round(n * lg.candidate_pool_multiplier) for p, n in lg.starter_rank_threshold.items()
+        p: round(n * lg.candidate_pool_multiplier) for p, n in lg.starter_thresholds().items()
     }
+    assert (default.teams, default.multiplier) == (lg.teams, lg.candidate_pool_multiplier)
     assert default.roster_statuses == ("ACT", "INA", "DEV")
     bigger = League(**{**lg.model_dump(), "candidate_pool_multiplier": 2.0})
     assert wp.PoolRules.from_config(bigger).cutoffs == {"QB": 24, "RB": 48, "WR": 48, "TE": 24}

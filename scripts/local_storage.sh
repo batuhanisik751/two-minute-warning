@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Keep the virtualenv, the raw data cache and the warehouse OUTSIDE a cloud-synced folder,
-# with symlinks left in the project so every path in the code stays the same.
+# Keep the virtualenv, the raw data cache, the Waiver Radar dataset, the predictions store,
+# the warehouse and the trained models OUTSIDE a cloud-synced folder, with symlinks left in
+# the project so every path in the code stays the same.
 #
 # Why: this checkout lives in ~/Desktop, which iCloud Drive syncs. iCloud marks every
 # dot-folder (.venv) "hidden", and Python 3.13 skips hidden .pth files, so `import twm`
@@ -51,6 +52,7 @@ fi
 
 relocate data/raw dir
 relocate data/waiver_radar dir   # the Waiver Radar dataset (C3)
+relocate models dir              # trained production models (C6: models/waiver_radar/*.joblib)
 # The predictions store (C4) is opened in place by DuckDB, so a symlinked file works.
 if [ -e "$ROOT/data/predictions.duckdb" ] || [ -L "$ROOT/data/predictions.duckdb" ]; then
   relocate data/predictions.duckdb file

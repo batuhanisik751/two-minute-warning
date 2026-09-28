@@ -669,7 +669,7 @@ def breakout_events(ranked: pl.DataFrame, universe: pl.DataFrame) -> pl.DataFram
     ev = ev.join(pool_first, on=["season", ID], how="left").join(
         at.rename({"week": "breakout_week"}), on=["season", "breakout_week", ID], how="left"
     )
-    thresholds = {p: int(n) for p, n in league().starter_rank_threshold.items()}
+    thresholds = league().starter_thresholds()
     later = (
         universe.join(ev.select("season", ID, "breakout_week"), on=["season", ID])
         .filter(pl.col("week") >= pl.col("breakout_week"))

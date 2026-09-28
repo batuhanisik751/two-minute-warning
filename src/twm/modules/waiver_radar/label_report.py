@@ -28,7 +28,7 @@ from pathlib import Path
 
 import polars as pl
 
-from twm.config import FANTASY_POSITIONS, settings
+from twm.config import FANTASY_POSITIONS, or_join, settings
 from twm.modules.waiver_radar.labels import (
     POSITION_SOURCES,
     LabelRules,
@@ -254,17 +254,31 @@ def build_label_report(
             p = sub.filter(pl.col("position") == pos)
             r += [p.height, _pct(int((p.get_column("n_flex_finishes") >= 1).sum()), p.height)]
         frows.append(r)
-    lines += [
-        "## FLEX-worthy finishes in the pool (informative, not a label)",
-        "",
-        f"Share of pool rows with at least one week ranked in the top {rules.flex_rank} at his "
-        "position (a RB or WR a 12-team league would start in its FLEX slot).",
-        "",
-    ]
-    head = ["seasons"]
-    for pos in rules.flex_positions:
-        head += [f"{pos} n", f"{pos} FLEX-worthy"]
-    lines += _table(head, frows)
+    lines += ["## FLEX-worthy finishes in the pool (informative, not a label)", ""]
+    if rules.flex_positions:
+        ranks = {p: int(rules.flex_ranks[p]) for p in rules.flex_positions}
+        where = (
+            f"in the top {next(iter(ranks.values()))} at his position"
+            if len(set(ranks.values())) == 1
+            else "at or above his position's FLEX-worthy rank ("
+            + ", ".join(f"{p} top {n}" for p, n in ranks.items())
+            + ")"
+        )
+        lines += [
+            f"Share of pool rows with at least one week ranked {where} (a "
+            f"{or_join(rules.flex_positions)} a {rules.league_size} league would start in its "
+            "FLEX slot).",
+            "",
+        ]
+        head = ["seasons"]
+        for pos in rules.flex_positions:
+            head += [f"{pos} n", f"{pos} FLEX-worthy"]
+        lines += _table(head, frows)
+    else:
+        lines.append(
+            "None: the league's lineup has no multi-position (FLEX) slot for a position in "
+            "flex_worthy_positions (config/league.yaml)."
+        )
     lines.append("")
 
     # ---- 4. windows ---------------------------------------------------------------------------

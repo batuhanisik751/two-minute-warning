@@ -60,7 +60,7 @@ Whether the experts' ranking existed at that moment; the expert baseline is only
 The running back or receiver scored well enough to fill a FLEX slot that week. Informative only; it is not a label.
 
 - **Name:** `is_flex_finish`; **unit:** boolean; **used by:** waiver_radar
-- **Formula:** a RB or WR with weekly_pos_rank <= flex_worthy_rank (36); always false for QB and TE
+- **Formula:** a RB or WR with weekly_pos_rank <= his position's FLEX-worthy rank (RB/WR top 36); always false for QB and TE
 - **Source:** twm.modules.waiver_radar.labels.weekly_finishes
 
 ### Fantasy points
@@ -801,7 +801,7 @@ The players who are probably still on waivers in a typical 12-team league. There
 A player 'finished as a starter' in a week when he scored well enough that a typical 12-team league would have started him.
 
 - **Name:** `starter_threshold`; **unit:** rank; **used by:** waiver_radar, shared
-- **Formula:** teams x starters at the position (config/league.yaml starter_rank_threshold): QB top 12, RB top 24, WR top 24, TE top 12 by fantasy points that week; FLEX-worthy (flex_worthy_rank): RB/WR top 36
+- **Formula:** teams x dedicated starters at the position (derived from config/league.yaml teams and lineup): QB top 12, RB top 24, WR top 24, TE top 12 by fantasy points that week; FLEX-worthy (teams x (dedicated starters + multi-position slots the position can fill), for the positions in flex_worthy_positions): RB/WR top 36
 - **Source:** config/league.yaml; twm.modules.waiver_radar.labels.LabelRules
 
 ## Identifiers (never model features)

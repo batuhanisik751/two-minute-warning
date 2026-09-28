@@ -19,58 +19,23 @@ def version() -> None:
 
 @app.command()
 def doctor() -> None:
-    """Show the config in use and the warehouse tables with their row counts."""
-    import duckdb
+    """Check that this checkout is ready: config, env, data, models (exit 1 on a FAIL).
 
-    from twm.config import league, scoring, settings
-    from twm.sources import nflverse as nv
-    from twm.warehouse import build as wb
+    Checks: config files load and validate (with the derived league shape), .env (key names
+    only, never values), the virtualenv's hidden-file problem, the data symlinks, nflreadpy vs
+    the schema snapshots, the raw cache's seasons and freshness, the warehouse (built after the
+    cache changed?), player-id coverage and the production model. One line per check: PASS,
+    WARN (works, but something is missing or stale; the line says what to run) or FAIL
+    (broken)."""
+    from twm import doctor as dr
 
-    s = settings()
-    typer.echo(f"project: {s.project_name}  season: {s.current_season}")
-    sc = scoring()
-    typer.echo(
-        f"scoring: {sc.receiving.get('receptions', 0):g} per catch, fumbles lost: "
-        f"{sc.options.fumbles_lost_scope}  teams={league().teams}"
-    )
-    db = s.path("warehouse")
-    if db.exists():
-        typer.echo(f"warehouse: {nv.project_relative(db)}")
-        try:
-            counts = wb.table_counts(db)
-        except duckdb.Error:
-            typer.echo("  locked by another process (close notebooks / open read-only)")
-        else:
-            for name, n in counts:
-                typer.echo(f"  {name:22s} {n:>12,} rows")
-            line = _ids_line(db)
-            if line:
-                typer.echo(line)
-    else:
-        typer.echo(
-            f"warehouse: not built ({nv.project_relative(db)}); run "
-            f"`twm build {s.current_season - 1} {s.current_season}` (or --start 1999)"
-        )
-    typer.echo("ok")
-
-
-def _ids_line(db: Path) -> str | None:
-    """The one ID-coverage line of ``twm doctor`` (None if the report tables are absent)."""
-    import duckdb
-
-    from twm import ids
-    from twm.warehouse import build as wb
-
-    try:
-        con = wb.connect(db, read_only=True)
-    except duckdb.Error:
-        return None
-    try:
-        return ids.doctor_line(con)
-    except duckdb.Error:
-        return None
-    finally:
-        con.close()
+    checks = dr.run_checks()
+    for c in checks:
+        for line in c.lines():
+            typer.echo(line)
+    typer.echo(dr.summary(checks))
+    if any(c.status == "FAIL" for c in checks):
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -139,6 +104,56 @@ def ingest(
                 err=True,
             )
         raise typer.Exit(code=1)
+
+
+@app.command()
+def snapshot(
+    dataset: str = typer.Argument(
+        ..., help="Dataset name (see `twm ingest --help`), or depth_charts_legacy."
+    ),
+    season: int | None = typer.Option(
+        None,
+        "--season",
+        help="Season to describe (per-season datasets; default: the current season, or the "
+        "latest cached one with a warning).",
+    ),
+    download: bool = typer.Option(
+        False,
+        "--download",
+        help="Re-download that season from nflverse first (network), with the drift check off.",
+    ),
+) -> None:
+    """Rewrite one schema snapshot (data/schemas/<dataset>.json) deliberately.
+
+    By default it reads the local Parquet cache and never downloads. --download re-fetches the
+    season from nflverse with the drift check switched off: the deliberate way to accept an
+    upstream schema change after `twm ingest` stopped with a SchemaDriftError. Review
+    `git diff data/schemas` before committing. `uv run python scripts/refresh_snapshots.py`
+    rewrites all of them at once."""
+    from twm.sources import nflverse as nv
+
+    known = [*nv.DATASETS, nv.LEGACY_SNAPSHOT]
+    if dataset not in known:
+        raise typer.BadParameter(f"unknown dataset {dataset!r}; known: {known}")
+    try:
+        target = nv.snapshot_target(dataset, season)
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
+    if target.warning:
+        typer.echo(f"WARNING {target.warning}", err=True)
+    try:
+        path = nv.refresh_snapshot(
+            target.dataset, target.season, snapshot_name=target.snapshot_name, download=download
+        )
+    except FileNotFoundError as e:
+        typer.echo(f"not written: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    snap = nv.load_snapshot(target.snapshot_name) or {}
+    typer.echo(
+        f"{target.snapshot_name}: season {target.season or 'all'}, "
+        f"{snap.get('n_rows_sample', 0):,} rows, {len(snap.get('columns', {}))} columns "
+        f"({'downloaded' if download else 'from the cache'}) -> {nv.project_relative(path)}"
+    )
 
 
 @app.command()
@@ -1116,6 +1131,178 @@ def radar_week(
     if kinds == "backtest":
         typer.echo("(backtest = reconstructed after the fact; live = made in real time)")
     typer.echo(wk.week_text(rows, info, limit=limit))
+
+
+# --------------------------------------------------------------------------------------
+# The spec's generic entry points (PROJECT_SPEC 9): `twm train|backtest <module>`, `twm score`
+# --------------------------------------------------------------------------------------
+
+# Modules with a train/backtest/score implementation (the `twm radar ...` commands stay).
+MODULES = {"waiver_radar": "Waiver Radar (`twm radar ...`)"}
+# Modules of the spec that are not built yet, with the phase that builds them (spec 11).
+PLANNED_MODULES = {"regression_watch": "phase D", "decisions": "phase G", "hot_seat": "phase H",
+                   "board": "phase I"}  # fmt: skip
+
+
+def _module_or_exit(name: str) -> str:
+    key = name.strip().lower().replace("-", "_")
+    if key in MODULES:
+        return key
+    built = ", ".join(MODULES)
+    if key in PLANNED_MODULES:
+        raise typer.BadParameter(
+            f"{key} is not built yet ({PLANNED_MODULES[key]}); available: {built}"
+        )
+    raise typer.BadParameter(f"unknown module {name!r}; available: {built}")
+
+
+@app.command("train")
+def train(
+    module: str = typer.Argument(..., help="Module to train: waiver_radar."),
+    season: int | None = typer.Option(
+        None, "--season", help="Season the model will score (default: settings current_season)."
+    ),
+    retrain: bool = typer.Option(
+        False, "--retrain", help="Train a new model even if the stored one matches the data."
+    ),
+    dataset: Path = typer.Option(
+        Path("data/waiver_radar/dataset.parquet"),
+        "--dataset",
+        help="The training dataset from `twm radar dataset`.",
+    ),
+    store: Path | None = typer.Option(
+        None, "--store", help="Predictions store (default: settings paths.predictions)."
+    ),
+    models_dir: Path | None = typer.Option(
+        None, "--models-dir", help="Where models are saved (default: models/waiver_radar)."
+    ),
+) -> None:
+    """Build or refresh a module's production model for the current season.
+
+    waiver_radar: the walk-forward fold for the season (logistic regression for y_hit, trained
+    on every season before it, tuned and calibrated on the last of them). A stored model is
+    reused when it was trained on exactly today's dataset; otherwise a new one is trained,
+    saved under models/waiver_radar/ and recorded in the predictions store (docs/waiver_radar.md
+    'The production model'). Run it after `twm radar dataset` rebuilt the dataset."""
+    import polars as pl
+
+    from twm import predictions as pr
+    from twm.backtest.walkforward import WalkForwardError
+    from twm.config import settings
+    from twm.modules.waiver_radar import production as prod
+
+    _module_or_exit(module)
+    chosen = season if season is not None else settings().current_season
+    source = _project_path(dataset)
+    if not source.exists():
+        typer.echo(f"dataset not found: {source}; run `twm radar dataset` first", err=True)
+        raise typer.Exit(code=1)
+    store_path = _project_path(store if store is not None else pr.default_path())
+    root = _project_path(models_dir) if models_dir is not None else None
+    try:
+        ens = prod.ensure_production(
+            pl.read_parquet(source), chosen, store=store_path, root=root, retrain=retrain
+        )
+    except (prod.ProductionModelError, WalkForwardError, ValueError) as e:
+        typer.echo(f"cannot train: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    from twm.config import ROOT
+
+    m = ens.model
+    typer.echo(
+        f"waiver_radar {chosen}: {m.model_version} "
+        + ("reused (already trained on today's dataset)" if ens.reused else "trained now")
+    )
+    typer.echo(f"  {m.describe()}")
+    typer.echo(f"  file: {_display_path(ens.path, ROOT)}; store: {_display_path(store_path, ROOT)}")
+
+
+@app.command("backtest")
+def backtest(
+    module: str = typer.Argument(..., help="Module to backtest: waiver_radar."),
+    dataset: Path = typer.Option(
+        Path("data/waiver_radar/dataset.parquet"), "--dataset", help="The dataset."
+    ),
+    start: int | None = typer.Option(None, "--start", help="First test season (default 2014)."),
+    end: int | None = typer.Option(None, "--end", help="Last test season (default 2025)."),
+    models: list[str] | None = typer.Option(
+        None, "--models", "--model", help="Models to run (repeatable; default: all)."
+    ),
+    labels: list[str] | None = typer.Option(
+        None, "--label", help="Label(s) (repeatable; default y_hit): y_hit, y_sustained."
+    ),
+    store: Path | None = typer.Option(None, "--store", help="Predictions store to write."),
+    out: Path = typer.Option(
+        Path("reports/waiver_radar/backtest.md"), "--out", help="Markdown report to write."
+    ),
+) -> None:
+    """Walk-forward backtest of a module (waiver_radar: the same as `twm radar backtest`)."""
+    _module_or_exit(module)
+    radar_backtest(
+        dataset=dataset, start=start, end=end, models=models, labels=labels, store=store, out=out
+    )
+
+
+@app.command("score")
+def score(
+    as_of: str | None = typer.Option(
+        None,
+        "--as-of",
+        help="Which week: a season-week (2026-W3 or '2026 3') or an ISO timestamp with a zone "
+        "(2026-09-30T18:00Z), which maps to the week whose list was current then. Default: the "
+        "latest week whose Tuesday as-of has passed.",
+    ),
+    modules: list[str] | None = typer.Option(
+        None, "--module", help="Module(s) to score (repeatable; default: all built)."
+    ),
+    allow_incomplete: bool = typer.Option(
+        False, "--allow-incomplete", help="Score even if some of the week's data is missing."
+    ),
+    limit: int = typer.Option(10, "--limit", help="Players per position to print."),
+    retrain: bool = typer.Option(False, "--retrain", help="Train a new production model."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    store: Path | None = typer.Option(None, "--store", help="Predictions store."),
+    dataset: Path = typer.Option(
+        Path("data/waiver_radar/dataset.parquet"), "--dataset", help="The training dataset."
+    ),
+) -> None:
+    """Score every module's list at an official as-of (waiver_radar: `twm radar score`).
+
+    A list is always made from the data as it stood at a week's official as-of (the Tuesday
+    14:00 UTC after the week's games), never at an arbitrary moment: `--as-of 2026-W3` is week
+    3's as-of; a timestamp picks the week whose list was current then, i.e. the latest
+    regular-season as-of at or before it (Wednesday 2026-09-30 is week 3's list; a timestamp
+    in the offseason is the last week of the season before). A timestamp needs a time zone.
+    Exit codes as `twm radar score` (3: the week's data has not arrived)."""
+    from twm.asof import AsOfParseError, parse_as_of, week_at
+
+    chosen = [_module_or_exit(m) for m in (modules or list(MODULES))]
+    season: int | None = None
+    week: int | None = None
+    if as_of is not None:
+        try:
+            target = parse_as_of(as_of)
+        except AsOfParseError as e:
+            raise typer.BadParameter(str(e)) from e
+        if isinstance(target, tuple):
+            season, week = target
+        else:
+            path = _warehouse_or_exit(db)
+            try:
+                season, week, official = week_at(path, target)
+            except LookupError as e:
+                typer.echo(f"cannot score: {e}", err=True)
+                raise typer.Exit(code=1) from e
+            typer.echo(
+                f"--as-of {target:%Y-%m-%d %H:%M} UTC is in the window of {season} week {week} "
+                f"(its list is made at the official as-of {official:%a %Y-%m-%d %H:%M} UTC)"
+            )
+    for _module in dict.fromkeys(chosen):  # only waiver_radar exists
+        radar_score(
+            season=season, week=week, allow_incomplete=allow_incomplete, limit=limit,
+            retrain=retrain, db=db, store=store, dataset=dataset, models_dir=None,
+            evaluation_csv=Path("reports/waiver_radar/evaluation.csv"), out=None, now=None,
+        )  # fmt: skip
 
 
 def _display_path(path: Path, root: Path) -> str:

@@ -8,7 +8,7 @@ Built on the open-source [nflverse](https://nflverse.nflverse.com/) data ecosyst
 
 ## Requirements
 
-Python **3.13** and [uv](https://docs.astral.sh/uv/). If your checkout lives in a cloud-synced folder (on macOS, `~/Desktop` and `~/Documents` sync to iCloud Drive), run `scripts/local_storage.sh` once: it keeps the virtualenv, the raw data cache and the warehouse outside the synced folder and leaves symlinks in the project, so nothing else changes.
+Python **3.13** and [uv](https://docs.astral.sh/uv/). If your checkout lives in a cloud-synced folder (on macOS, `~/Desktop` and `~/Documents` sync to iCloud Drive), run `scripts/local_storage.sh` once: it keeps the virtualenv, the raw data cache, the warehouse, the Waiver Radar dataset, the predictions store and the trained models outside the synced folder and leaves symlinks in the project, so nothing else changes (re-run it after pulling this change: it now also moves `models/`).
 
 ## First run
 
@@ -17,7 +17,8 @@ uv sync --all-extras          # creates .venv (Python 3.13) with all dependencie
 cp .env.example .env          # fill in locally; never commit
 uv run pre-commit install     # ruff + file-hygiene hooks on every commit
 uv run twm --help
-uv run twm doctor             # config, data and environment checks
+uv run twm doctor             # config, .env, data and model checks: PASS / WARN / FAIL per line,
+                              # with what to run; exit code 1 on any FAIL
 
 # Quick start: two small datasets, a few MB, under a minute
 uv run twm ingest schedules player_stats --start 2024
@@ -51,8 +52,32 @@ uv run twm radar score        # this week's Waiver Radar list (after Monday nigh
                               # reasons -> reports/waiver_radar/weekly/<season>-W<week>.md + the store
 uv run twm radar score --season 2026 --week 2   # a past week (stored as a reconstructed list)
 uv run twm radar week 2026 2 --pos RB           # any stored week (backtest or live) with outcomes
+
+# The spec's generic commands (one per module; only waiver_radar exists so far)
+uv run twm train waiver_radar     # build or refresh this season's production model
+uv run twm backtest waiver_radar --label y_hit --label y_sustained   # = twm radar backtest
+uv run twm score                  # every module's list for the latest Tuesday as-of
+uv run twm score --as-of 2026-W3  # a season-week ("2026 3" works too)
+uv run twm score --as-of 2026-09-30T18:00Z   # a moment (with a time zone): the week whose
+                                  # list was current then (here week 3, made Tue 14:00 UTC)
+uv run twm snapshot schedules     # rewrite one schema snapshot from the cache (--download to
+                                  # re-fetch after a reviewed upstream change; never by default)
 uv run jupyter lab notebooks/01_waiver_radar.ipynb   # the Waiver Radar explained step by step
-uv run pytest                 # offline tests (the default); `uv run pytest -m network` runs the live drift check
+uv run pytest                 # offline tests (the default), golden tests included;
+                              # `uv run pytest -m network` runs the live drift check,
+                              # `uv run pytest -m realdata` the tests on the real cache
+```
+
+## Your league
+
+`config/league.yaml` describes the league the app is tuned for (the owner's: 12 teams, full PPR, 1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX, K, D/ST, 7 bench). Only the number of teams and the lineup are set there; every threshold is derived from them: the weekly starter threshold (teams x starters at the position), the FLEX-worthy rank and the Waiver Radar's candidate-pool cutoffs (`docs/waiver_radar.md`, "League shape"; `uv run twm doctor` prints them). For a what-if run with another league, copy `config/` to a folder, edit `league.yaml` there and prefix any command with `TWM_CONFIG_DIR=<folder>`.
+
+## Golden tests
+
+`tests/golden/` holds a small frozen synthetic world (made-up players and games, never real data: `inputs/`, generated once by `tests/golden/make_inputs.py`) and the known outputs of every Waiver Radar step on it (`expected/`: pool, labels, features, a tiny walk-forward backtest, the weekly list with reasons). `uv run pytest` rebuilds the world with the real pipeline and fails with a readable diff when an output changes. When a change is meant to change them, regenerate them deliberately and review the diff before committing:
+
+```bash
+uv run python tests/golden/update.py
 ```
 
 Dataset names: `uv run twm ingest --help` or `DATASETS` in `src/twm/sources/nflverse.py`.

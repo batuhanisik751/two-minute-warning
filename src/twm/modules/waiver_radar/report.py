@@ -145,6 +145,8 @@ def build_report(
     )
     used = h.filter(pl.col("used"))
     cut = rules.cutoffs
+    teams = rules.teams if rules.teams is not None else lg.teams
+    multiplier = rules.multiplier if rules.multiplier is not None else lg.candidate_pool_multiplier
     lines = [
         "# Waiver Radar candidate pool: sizes and validation",
         "",
@@ -152,11 +154,11 @@ def build_report(
         "(UTC). Deterministic: rerun on the same warehouse to get the same file. Rules and "
         "definitions: `docs/waiver_radar.md`.",
         "",
-        "A player is **in the pool** (probably on waivers in a 12-team league) when he is on an "
-        "NFL roster (status " + ", ".join(rules.roster_statuses) + ") and outside the top N at "
-        "his position by BOTH the preseason list and points per game so far. N = "
+        f"A player is **in the pool** (probably on waivers in a {teams}-team league) when he is "
+        "on an NFL roster (status " + ", ".join(rules.roster_statuses) + ") and outside the top "
+        "N at his position by BOTH the preseason list and points per game so far. N = "
         + ", ".join(f"{p} {cut[p]}" for p in FANTASY_POSITIONS)
-        + f" (config/league.yaml: starter threshold x {lg.candidate_pool_multiplier:g}). "
+        + f" (config/league.yaml: starter threshold x {multiplier:g}). "
         "Preseason list: FantasyPros' preseason cheat sheet (method `ecr`) where one exists, "
         "else last season's PPG rank (min "
         f"{rules.prior_season_min_games} games) with rookies drafted in rounds 1-"

@@ -100,10 +100,11 @@ def test_doctor_lists_warehouse_tables(raw, db_path, monkeypatch):
     _point_warehouse_at(monkeypatch, db_path)
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0, result.output
-    lines = [ln.split() for ln in result.output.splitlines() if ln.startswith("  ")]
+    lines = [ln.split() for ln in result.output.splitlines() if ln.rstrip().endswith(" rows")]
     counts = {name: int(n.replace(",", "")) for name, n, _rows in lines}
     assert counts["fact_game"] == 14 and counts["dim_week"] == 8
-    assert "not built" not in result.output and result.output.rstrip().endswith("ok")
+    assert "not built" not in result.output and "Warehouse:" in result.output
+    assert result.output.rstrip().splitlines()[-1].startswith("ok: ")
 
 
 def test_doctor_survives_a_read_write_handle_on_the_warehouse(raw, db_path, monkeypatch):
@@ -117,7 +118,7 @@ def test_doctor_survives_a_read_write_handle_on_the_warehouse(raw, db_path, monk
         rw.close()
     assert result.exit_code == 0, result.output
     assert "locked by another process" in result.output
-    assert result.output.rstrip().endswith("ok")
+    assert result.output.rstrip().splitlines()[-1].startswith("ok: ")
 
 
 def test_doctor_reports_not_built(db_path, monkeypatch):
@@ -125,7 +126,7 @@ def test_doctor_reports_not_built(db_path, monkeypatch):
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0, result.output
     assert "not built" in result.output and "run `twm build 2025 2026`" in result.output
-    assert result.output.rstrip().endswith("ok")
+    assert result.output.rstrip().splitlines()[-1].startswith("ok: ")
 
 
 def test_asof_cli_explains_a_warehouse_built_before_b2(tmp_path):

@@ -11,7 +11,8 @@ This module is the one place that rule is implemented:
   ``fact_play`` etc. only ever sees rows available by then. ``wh.fact_play`` (the attached
   warehouse) is the deliberate, visible way around it;
 - :func:`weekly_as_of` / :func:`end_of_regular_season_as_of` read the official as-of times from
-  ``dim_week`` so every module uses the same moments.
+  ``dim_week`` so every module uses the same moments; :func:`parse_as_of` and :func:`week_at`
+  turn a ``twm score --as-of`` text (a season-week or a zoned timestamp) into one of them.
 
 ``as_of`` must be timezone-AWARE (``datetime(2025, 10, 7, 14, tzinfo=UTC)`` or the value from
 :func:`weekly_as_of`). A naive datetime is refused: ``datetime.now()`` or a notebook's local time
@@ -195,6 +196,78 @@ def weekly_as_of(
         kind = f" {season_type}" if season_type else ""
         raise LookupError(f"no{kind} week {week} of {season} in dim_week (built?)")
     return row[0].replace(tzinfo=UTC)
+
+
+# ``twm score --as-of``: "2026-W3" (also 2026W3, 2026-w03) or "2026 3" (season and week).
+_SEASON_WEEK = (re.compile(r"^\s*(\d{4})\s*-?\s*[Ww](\d{1,2})\s*$"),
+                re.compile(r"^\s*(\d{4})\s+(\d{1,2})\s*$"))  # fmt: skip
+
+
+class AsOfParseError(ValueError):
+    """An ``--as-of`` text that is neither a season-week nor a zoned ISO timestamp."""
+
+
+def parse_as_of(text: str) -> tuple[int, int] | datetime:
+    """``twm score --as-of`` text -> (season, week) or an aware UTC datetime.
+
+    Accepted: a season-week ("2026-W3", "2026W3", "2026 3") or an ISO 8601 timestamp WITH a
+    zone ("2026-09-29T14:00Z", "2026-09-29T10:00-04:00"). A timestamp without a zone (or a bare
+    date) is refused: we cannot know which zone it meant, and a few hours of error move it into
+    another week's window (see :func:`week_at`)."""
+    for pattern in _SEASON_WEEK:
+        m = pattern.match(text)
+        if m:
+            season, week = int(m.group(1)), int(m.group(2))
+            if week < 1:
+                raise AsOfParseError(f"--as-of {text!r}: weeks start at 1")
+            return season, week
+    try:
+        t = datetime.fromisoformat(text.strip())
+    except ValueError:
+        raise AsOfParseError(
+            f"--as-of {text!r} is not a season-week (2026-W3 or '2026 3') or an ISO timestamp "
+            "with a zone (2026-09-29T14:00Z)"
+        ) from None
+    if t.tzinfo is None or t.tzinfo.utcoffset(t) is None:
+        raise AsOfParseError(
+            f"--as-of {text!r} has no time zone; add one (2026-09-29T14:00Z for UTC, or "
+            "-04:00 for US Eastern daylight time): a naive time is ambiguous"
+        )
+    return t.astimezone(UTC)
+
+
+def week_at(
+    db: Path | str | duckdb.DuckDBPyConnection, when: datetime
+) -> tuple[int, int, datetime]:
+    """The regular-season week whose list is current at ``when``: (season, week, its official
+    Tuesday as-of), from ``dim_week``.
+
+    Week N's list is made at its official as-of (the Tuesday 14:00 UTC after week N) and is
+    the current one until the next regular-season week's as-of, so its window is [as-of of
+    week N, as-of of the next week). ``when`` maps to the week whose window contains it: the
+    latest regular-season as-of at or before ``when`` (a Saturday maps to the week before it;
+    the offseason maps to the last week of the season before). LookupError if ``when`` is
+    before the first as-of in the warehouse."""
+    t = to_utc(when)
+    con, close = _with_connection(db)
+    try:
+        row = con.execute(
+            "SELECT season, week, asof_weekly_utc FROM dim_week WHERE season_type = 'REG' "
+            "AND asof_weekly_utc <= ? ORDER BY asof_weekly_utc DESC, season DESC LIMIT 1",
+            [t],
+        ).fetchone()
+        first = con.execute(
+            "SELECT min(asof_weekly_utc) FROM dim_week WHERE season_type = 'REG'"
+        ).fetchone()
+    finally:
+        if close:
+            con.close()
+    if row is None:
+        start = f" (the first is {first[0]:%Y-%m-%d %H:%M} UTC)" if first and first[0] else ""
+        raise LookupError(
+            f"{t:%Y-%m-%d %H:%M} UTC is before every regular-season as-of in the warehouse" + start
+        )
+    return int(row[0]), int(row[1]), row[2].replace(tzinfo=UTC)
 
 
 def end_of_regular_season_as_of(

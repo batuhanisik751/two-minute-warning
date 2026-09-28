@@ -16,8 +16,9 @@ The pieces (docs/waiver_radar.md "Labels" explains each one for a beginner):
   (``fact_roster_week``; missing that week: his latest earlier roster week of the season; else
   the ``fact_snaps`` position of that game); never today's position. Only QB, RB, WR and TE are
   ranked. A **starter finish** is a rank at or above the position's weekly starter threshold
-  (config/league.yaml ``starter_rank_threshold``); a **FLEX-worthy** finish (informative only) a
-  RB or WR rank at or above ``flex_worthy_rank``.
+  (teams x dedicated starters, derived from config/league.yaml: ``League.starter_thresholds``);
+  a **FLEX-worthy** finish (informative only) a rank at or above the position's FLEX-worthy rank
+  (``League.flex_worthy_ranks``: RB and WR in the default league, none for TE).
 - **Window.** The next ``window_games`` (3) regular-season weeks after N in which the player's
   as-of team (the pool's ``team``) has a game: a bye week of that team is skipped, which extends
   the window by a week. Capped at the season's last regular-season week (from ``dim_week``), so
@@ -60,7 +61,6 @@ if TYPE_CHECKING:
 # from training". Not league settings, so they live here, not in config/league.yaml.
 WINDOW_GAMES = 3
 MIN_TRAIN_GAMES = 2
-FLEX_POSITIONS = ("RB", "WR")  # config/league.yaml: flex_worthy_rank is a RB/WR rank
 
 # Fantasy points are rounded before ranking: a float sum's last bits depend on which stats a
 # player had, and equal scores must tie (points are multiples of 0.01 with the default config).
@@ -93,23 +93,40 @@ REQUIRED_POOL_COLUMNS = ("season", "week", "as_of", "gsis_id", "team")
 
 @dataclass(frozen=True)
 class LabelRules:
-    """The label's knobs as plain values (thresholds from config/league.yaml)."""
+    """The label's knobs as plain values (thresholds derived from config/league.yaml).
+
+    ``flex_ranks``: position -> FLEX-worthy rank, only for the positions that have one (default
+    RB 36, WR 36); a position without one never has a FLEX-worthy finish. ``teams`` (the league
+    size) is used only in generated text ("a 12-team league")."""
 
     starter_thresholds: Mapping[str, int]
-    flex_rank: int
-    flex_positions: tuple[str, ...] = FLEX_POSITIONS
+    flex_ranks: Mapping[str, int] = field(default_factory=dict)
     window_games: int = WINDOW_GAMES
     min_train_games: int = MIN_TRAIN_GAMES
     scoring: ScoringRules = field(default_factory=ScoringRules.from_config)
+    teams: int | None = None
 
     def __post_init__(self) -> None:
         missing = [p for p in FANTASY_POSITIONS if p not in self.starter_thresholds]
         if missing:
             raise ValueError(f"starter_thresholds lack positions {missing}")
-        if any(int(n) < 1 for n in self.starter_thresholds.values()) or self.flex_rank < 1:
-            raise ValueError("starter thresholds and flex_rank must be at least 1")
+        unknown = [p for p in self.flex_ranks if p not in FANTASY_POSITIONS]
+        if unknown:
+            raise ValueError(f"flex_ranks has positions outside {FANTASY_POSITIONS}: {unknown}")
+        if any(int(n) < 1 for n in (*self.starter_thresholds.values(), *self.flex_ranks.values())):
+            raise ValueError("starter thresholds and FLEX-worthy ranks must be at least 1")
         if self.window_games < 1 or not 0 <= self.min_train_games <= self.window_games:
             raise ValueError("need window_games >= 1 and 0 <= min_train_games <= window_games")
+
+    @property
+    def flex_positions(self) -> tuple[str, ...]:
+        """The positions with a FLEX-worthy rank, in position order."""
+        return tuple(p for p in FANTASY_POSITIONS if p in self.flex_ranks)
+
+    @property
+    def league_size(self) -> str:
+        """ "12-team": the league size for generated text (config when ``teams`` is unset)."""
+        return f"{self.teams if self.teams is not None else league().teams}-team"
 
     @classmethod
     def from_config(
@@ -117,9 +134,10 @@ class LabelRules:
     ) -> LabelRules:
         lg = lg or league()
         return cls(
-            starter_thresholds={p: int(n) for p, n in lg.starter_rank_threshold.items()},
-            flex_rank=int(lg.flex_worthy_rank),
+            starter_thresholds=lg.starter_thresholds(),
+            flex_ranks=lg.flex_worthy_ranks(),
             scoring=scoring or ScoringRules.from_config(),
+            teams=lg.teams,
         )
 
 
@@ -232,7 +250,8 @@ def weekly_finishes(
     that week's players of the same position (rank 'min': ties share the better rank; NULL for
     positions other than QB/RB/WR/TE), ``n_ranked`` (players ranked there that week),
     ``is_starter_finish`` (``pos_rank`` <= the position's starter threshold),
-    ``is_flex_finish`` (RB/WR with ``pos_rank`` <= flex_worthy_rank; False for QB/TE),
+    ``is_flex_finish`` (``pos_rank`` <= the position's FLEX-worthy rank; False for a position
+    without one: QB and TE in the default league),
     ``is_week_final`` (every game of the week has a score and stat lines: see
     :func:`week_status`) and the row's ``available_at``. Reads the whole warehouse, future
     included: this is outcome data for labels, never a feature.
@@ -249,6 +268,11 @@ def weekly_finishes(
     part = ["season", "week", "position"]
     ranked = pl.col("position").is_in(list(FANTASY_POSITIONS))
     threshold = pl.col("position").replace_strict(dict(rules.starter_thresholds), default=None)
+    flex_rank = (
+        pl.col("position").replace_strict(dict(rules.flex_ranks), default=None)
+        if rules.flex_ranks
+        else pl.lit(None, dtype=pl.Int64)
+    )
     df = (
         df.with_columns(
             pl.when(ranked)
@@ -259,12 +283,7 @@ def weekly_finishes(
         )
         .with_columns(
             (pl.col("pos_rank") <= threshold).fill_null(False).alias("is_starter_finish"),
-            (
-                pl.col("position").is_in(list(rules.flex_positions))
-                & (pl.col("pos_rank") <= rules.flex_rank)
-            )
-            .fill_null(False)
-            .alias("is_flex_finish"),
+            (pl.col("pos_rank") <= flex_rank).fill_null(False).alias("is_flex_finish"),
         )
         .join(weeks.select("season", "week", "is_week_final"), on=["season", "week"], how="left")
         .with_columns(pl.col("is_week_final").fill_null(False))

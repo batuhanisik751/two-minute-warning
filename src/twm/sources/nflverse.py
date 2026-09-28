@@ -32,7 +32,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import polars as pl
 import pyarrow as pa
@@ -424,6 +424,52 @@ def cached_seasons(name: str) -> list[int]:
             continue
         out.append(season)
     return sorted(out)
+
+
+class SnapshotTarget(NamedTuple):
+    """What ``refresh_snapshot`` should read for one snapshot name."""
+
+    dataset: str
+    season: int | None
+    snapshot_name: str
+    warning: str | None = None  # set when the season is not the one the snapshot should describe
+
+
+def snapshot_target(name: str, season: int | None = None) -> SnapshotTarget:
+    """The dataset and season a snapshot is taken from (``scripts/refresh_snapshots.py`` and
+    ``twm snapshot``): ``season`` when given; else the current season, or (with a warning) the
+    latest cached season when the current one is not cached. One-file datasets have no season;
+    ``depth_charts_legacy`` comes from depth_charts <DEPTH_CHARTS_LEGACY_LAST_SEASON> (or an
+    earlier ``season``)."""
+    if name == LEGACY_SNAPSHOT:
+        chosen = DEPTH_CHARTS_LEGACY_LAST_SEASON if season is None else int(season)
+        if chosen > DEPTH_CHARTS_LEGACY_LAST_SEASON:
+            raise ValueError(
+                f"{name} describes the pre-2025 format: pick a season up to "
+                f"{DEPTH_CHARTS_LEGACY_LAST_SEASON}"
+            )
+        return SnapshotTarget("depth_charts", chosen, name)
+    ds = _dataset(name)
+    if not ds.per_season:
+        if season is not None:
+            raise ValueError(f"{name} is one file with no seasons: leave out the season")
+        return SnapshotTarget(name, None, name)
+    if season is not None:
+        if ds.first_season is not None and season < ds.first_season:
+            raise ValueError(f"{name} starts in {ds.first_season}, not {season}")
+        return SnapshotTarget(name, int(season), name)
+    current = settings().current_season
+    cached = cached_seasons(name)
+    if current in cached or not cached:
+        return SnapshotTarget(name, current, name)
+    return SnapshotTarget(
+        name,
+        cached[-1],
+        name,
+        f"{name}: season {current} is not cached, snapshotting {cached[-1]} instead; "
+        f"fine for a dataset published after the season (participation), otherwise "
+        f"run `uv run twm ingest {name} --start {current}` first",
+    )
 
 
 def refresh_snapshot(

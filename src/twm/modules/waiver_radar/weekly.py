@@ -597,7 +597,7 @@ def build_report(run: WeeklyRun, *, generated: str, command: str) -> str:
     """The weekly list as markdown (deterministic apart from ``generated``)."""
     m, conf, s = run.model, run.conf, run.scored
     lg = league()
-    thresholds = ", ".join(f"top {n} {p}s" for p, n in lg.starter_rank_threshold.items())
+    thresholds = ", ".join(f"top {n} {p}s" for p, n in lg.starter_thresholds().items())
     thresholds = " or ".join(thresholds.rsplit(", ", 1))
     top10, top10_hits, top10_rows = cf.top_k_rate(conf, 10)
     cut = lg.candidate_pool_cutoffs()

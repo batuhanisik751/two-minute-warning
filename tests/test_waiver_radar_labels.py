@@ -36,7 +36,8 @@ from twm.modules.waiver_radar.pool import pool_history
 from twm.sources import nflverse as nv
 from twm.warehouse import build as wb
 
-RULES = lb.LabelRules(starter_thresholds={"QB": 1, "RB": 2, "WR": 2, "TE": 1}, flex_rank=3)
+RULES = lb.LabelRules(starter_thresholds={"QB": 1, "RB": 2, "WR": 2, "TE": 1},
+                      flex_ranks={"RB": 3, "WR": 3})  # fmt: skip
 
 
 def gid(n: int) -> str:
@@ -557,12 +558,14 @@ def test_a_window_that_counts_week_n_is_caught(world, tmp_path, monkeypatch):
 def test_thresholds_derive_from_league_config(world):
     lg = league()
     default = lb.LabelRules.from_config(lg)
-    assert dict(default.starter_thresholds) == lg.starter_rank_threshold
-    assert default.flex_rank == lg.flex_worthy_rank
+    assert dict(default.starter_thresholds) == lg.starter_thresholds()
+    assert dict(default.starter_thresholds) == {"QB": 12, "RB": 24, "WR": 24, "TE": 12}
+    assert dict(default.flex_ranks) == lg.flex_worthy_ranks() == {"RB": 36, "WR": 36}
+    assert default.flex_positions == ("RB", "WR") and default.teams == lg.teams
     assert (default.window_games, default.min_train_games) == (3, 2)
     shape = {"QB": 1, "RB": 2, "WR": 1, "TE": 1}
     stricter = League(**{**lg.model_dump(), "starter_rank_threshold": shape,
-                         "flex_worthy_rank": 1})  # fmt: skip
+                         "flex_worthy_rank": {"RB": 2, "WR": 1}})  # fmt: skip
     rules = lb.LabelRules.from_config(stricter)
     entry = [(1, 7, "LAC")]
     assert labels(world, 2025, entry)[1, 7]["y_sustained"] is True  # WR ranks 2, 1, 3
@@ -571,9 +574,14 @@ def test_thresholds_derive_from_league_config(world):
         1, False, 1,
     )  # fmt: skip
     with pytest.raises(ValueError, match="lack positions"):
-        lb.LabelRules(starter_thresholds={"QB": 12}, flex_rank=36)
+        lb.LabelRules(starter_thresholds={"QB": 12}, flex_ranks={"RB": 36})
     with pytest.raises(ValueError, match="window_games"):
-        lb.LabelRules(starter_thresholds=shape, flex_rank=3, min_train_games=4)
+        lb.LabelRules(starter_thresholds=shape, flex_ranks={"RB": 3}, min_train_games=4)
+    with pytest.raises(ValueError, match="outside"):
+        lb.LabelRules(starter_thresholds=shape, flex_ranks={"K": 3})
+    # a position without a FLEX-worthy rank never has a FLEX-worthy finish; none at all works
+    no_flex = lb.LabelRules(starter_thresholds=shape, flex_ranks={})
+    assert labels(world, 2025, entry, rules=no_flex)[1, 7]["n_flex_finishes"] == 0
 
 
 def test_label_rows_validation_and_empty_input(world):
@@ -710,7 +718,7 @@ def test_real_hits_have_a_real_starter_finish(real_labels):
     """Recompute every hit's starter finish from the warehouse with plain SQL: a stat line in
     a window week, public after the as-of, ranked within the week's roster position."""
     path, lab = real_labels
-    thr = league().starter_rank_threshold
+    thr = league().starter_thresholds()
     hits = (
         lab.filter(pl.col("y_hit").fill_null(False) & (pl.col("season") >= 2013))
         .with_row_index("hit_id")

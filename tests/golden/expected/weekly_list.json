@@ -1,0 +1,446 @@
+{
+ "model_version": "logit-71f95d16f5239fdd",
+ "backtest_version_of_the_same_fold": true,
+ "kind": "backtest",
+ "freshness_problems": [],
+ "list": [
+  {
+   "position": "QB",
+   "rank": 1,
+   "gsis_id": "00-0099123",
+   "name": "Drew Brisco123",
+   "team": "SF",
+   "score": 0.1739,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was No. 2 at QB on his team's depth chart a week earlier",
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "QB",
+   "rank": 2,
+   "gsis_id": "00-0099102",
+   "name": "Casey Orwell102",
+   "team": "BUF",
+   "score": 0.1739,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "QB",
+   "rank": 3,
+   "gsis_id": "00-0099042",
+   "name": "Casey Orwell042",
+   "team": "DAL",
+   "score": 0.0769,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was No. 2 at QB on his team's depth chart a week earlier",
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "QB",
+   "rank": 4,
+   "gsis_id": "00-0099002",
+   "name": "Casey Orwell002",
+   "team": "KC",
+   "score": 0.0625,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "QB",
+   "rank": 5,
+   "gsis_id": "00-0099023",
+   "name": "Drew Brisco023",
+   "team": "PHI",
+   "score": 0.0625,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "QB",
+   "rank": 6,
+   "gsis_id": "00-0099184",
+   "name": "Emery Ivers184",
+   "team": "SEA",
+   "score": 0.0,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was No. 2 at QB on his team's depth chart a week earlier"
+   ]
+  },
+  {
+   "position": "RB",
+   "rank": 1,
+   "gsis_id": "00-0099145",
+   "name": "Finley Pruitt145",
+   "team": "DET",
+   "score": 0.0,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "RB",
+   "rank": 2,
+   "gsis_id": "00-0099176",
+   "name": "Quinn Merced176",
+   "team": "DET",
+   "score": 0.0,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "RB",
+   "rank": 3,
+   "gsis_id": "00-0099191",
+   "name": "Lane Rourke191",
+   "team": "DET",
+   "score": 0.0,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "RB",
+   "rank": 4,
+   "gsis_id": "00-0099068",
+   "name": "Indy Quarry068",
+   "team": "SEA",
+   "score": 0.0,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "RB",
+   "rank": 5,
+   "gsis_id": "00-0099069",
+   "name": "Jules Dunmore069",
+   "team": "SEA",
+   "score": 0.0,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "RB",
+   "rank": 6,
+   "gsis_id": "00-0099049",
+   "name": "Jules Dunmore049",
+   "team": "DAL",
+   "score": 0.0,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "RB",
+   "rank": 7,
+   "gsis_id": "00-0099182",
+   "name": "Casey Orwell182",
+   "team": "DAL",
+   "score": 0.0,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "RB",
+   "rank": 8,
+   "gsis_id": "00-0099179",
+   "name": "Tatum Norcott179",
+   "team": "PHI",
+   "score": 0.0,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "RB",
+   "rank": 9,
+   "gsis_id": "00-0099188",
+   "name": "Indy Quarry188",
+   "team": "BUF",
+   "score": 0.0,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": []
+  },
+  {
+   "position": "RB",
+   "rank": 10,
+   "gsis_id": "00-0099178",
+   "name": "Sage Garrow178",
+   "team": "KC",
+   "score": 0.0,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": []
+  },
+  {
+   "position": "WR",
+   "rank": 1,
+   "gsis_id": "00-0099052",
+   "name": "Marlo Eskew052",
+   "team": "DAL",
+   "score": 0.75,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Has played 25% of his team's snaps this season",
+    "Drew 3% of his team's targets last game"
+   ]
+  },
+  {
+   "position": "WR",
+   "rank": 2,
+   "gsis_id": "00-0099091",
+   "name": "Lane Rourke091",
+   "team": "MIA",
+   "score": 0.3,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Has played 5% of his team's snaps this season",
+    "Was drafted: teams give drafted players more chances",
+    "Harper Jessup087 was ruled out of the last game: 4% of the team's carries are up for grabs"
+   ]
+  },
+  {
+   "position": "WR",
+   "rank": 3,
+   "gsis_id": "00-0099016",
+   "name": "Quinn Merced016",
+   "team": "KC",
+   "score": 0.1739,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Has played 4% of his team's snaps this season",
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "WR",
+   "rank": 4,
+   "gsis_id": "00-0099114",
+   "name": "Oakley Sully114",
+   "team": "BUF",
+   "score": 0.1739,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "WR",
+   "rank": 5,
+   "gsis_id": "00-0099156",
+   "name": "Quinn Merced156",
+   "team": "DET",
+   "score": 0.1739,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "WR",
+   "rank": 6,
+   "gsis_id": "00-0099090",
+   "name": "Kai Kittle090",
+   "team": "MIA",
+   "score": 0.1739,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances",
+    "Harper Jessup087 was ruled out of the last game: 4% of the team's carries are up for grabs"
+   ]
+  },
+  {
+   "position": "WR",
+   "rank": 7,
+   "gsis_id": "00-0099095",
+   "name": "Parker Fallon095",
+   "team": "MIA",
+   "score": 0.1739,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances",
+    "Harper Jessup087 was ruled out of the last game: 4% of the team's carries are up for grabs"
+   ]
+  },
+  {
+   "position": "WR",
+   "rank": 8,
+   "gsis_id": "00-0099136",
+   "name": "Quinn Merced136",
+   "team": "SF",
+   "score": 0.1739,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "WR",
+   "rank": 9,
+   "gsis_id": "00-0099189",
+   "name": "Jules Dunmore189",
+   "team": "SF",
+   "score": 0.1739,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "WR",
+   "rank": 10,
+   "gsis_id": "00-0099166",
+   "name": "Gray Corvell166",
+   "team": "DAL",
+   "score": 0.1207,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Has played 2% of his team's snaps this season",
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "TE",
+   "rank": 1,
+   "gsis_id": "00-0099039",
+   "name": "Tatum Norcott039",
+   "team": "PHI",
+   "score": 0.3,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Has played 12% of his team's snaps this season"
+   ]
+  },
+  {
+   "position": "TE",
+   "rank": 2,
+   "gsis_id": "00-0099118",
+   "name": "Sage Garrow118",
+   "team": "BUF",
+   "score": 0.1739,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": [
+    "Was drafted: teams give drafted players more chances"
+   ]
+  },
+  {
+   "position": "TE",
+   "rank": 3,
+   "gsis_id": "00-0099174",
+   "name": "Oakley Sully174",
+   "team": "SF",
+   "score": 0.0569,
+   "chance": 0.1135,
+   "band_lo": 0.0806,
+   "band_hi": 0.1576,
+   "tier": "watch",
+   "reasons": []
+  }
+ ]
+}

@@ -83,7 +83,11 @@ class AsOfRules:
     end_of_season_time: time = time(12, 0)
 
     @classmethod
-    def from_config(cls, as_of: Mapping[str, Any]) -> AsOfRules:
+    def from_config(cls, as_of: Mapping[str, Any] | Any) -> AsOfRules:
+        """From ``settings().as_of`` (a typed :class:`twm.config.AsOfConfig`, validated when
+        the config loads) or the same block as a plain mapping."""
+        if hasattr(as_of, "model_dump"):
+            as_of = as_of.model_dump()
         weekly = as_of["weekly"]
         eos = as_of["hot_seat_end_of_season"]
         if not isinstance(eos, Mapping) or eos.get("anchor") != "last_reg_week":

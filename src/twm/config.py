@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
+import math
+import os
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, PrivateAttr, field_validator, model_validator
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "config"
@@ -220,11 +226,94 @@ class NeutralConfig(BaseModel):
         return self
 
 
+WEEKDAY_KEYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+class WeeklyAsOf(BaseModel):
+    """``as_of.weekly``: the official weekly as-of, the first <weekday> <time> UTC after the
+    Eastern date of the week's first kickoff (PROJECT_SPEC 6.1: Tuesday 14:00 UTC)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    weekday: str
+    time: str
+
+    @field_validator("weekday")
+    @classmethod
+    def _weekday(cls, v: str) -> str:
+        if v.strip().lower() not in WEEKDAY_KEYS:
+            raise ValueError(f"as_of.weekly.weekday {v!r} is not a weekday name (e.g. tuesday)")
+        return v.strip().lower()
+
+    @field_validator("time")
+    @classmethod
+    def _time(cls, v: str) -> str:
+        return _check_hhmm("as_of.weekly.time", v)
+
+
+class EndOfSeasonAsOf(BaseModel):
+    """``as_of.hot_seat_end_of_season``: <days_after> days after the last game day of the last
+    regular-season week, at <time> UTC (the Hot-Seat snapshot)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    anchor: Literal["last_reg_week"]
+    days_after: int = 1
+    time: str = "12:00"
+
+    @field_validator("days_after")
+    @classmethod
+    def _days(cls, v: int) -> int:
+        if not 0 <= v <= 14:
+            raise ValueError(f"as_of.hot_seat_end_of_season.days_after = {v}: must be 0-14")
+        return v
+
+    @field_validator("time")
+    @classmethod
+    def _time(cls, v: str) -> str:
+        return _check_hhmm("as_of.hot_seat_end_of_season.time", v)
+
+
+class BoardAsOf(BaseModel):
+    """``as_of.board``: the Cliff & Breakout Board's two snapshots (P3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    post_draft: str
+    preseason: Literal["tuesday_before_week_1"]
+
+    @field_validator("post_draft")
+    @classmethod
+    def _month_day(cls, v: str) -> str:
+        return _check_month_day("as_of.board.post_draft", v)
+
+
+class AsOfConfig(BaseModel):
+    """``as_of:`` in settings.yaml (PROJECT_SPEC 6.1), validated when the config loads: a typo
+    would move every official as-of, so unknown keys are refused."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    weekly: WeeklyAsOf
+    hot_seat_end_of_season: EndOfSeasonAsOf
+    board: BoardAsOf
+
+    @field_validator("hot_seat_end_of_season", mode="before")
+    @classmethod
+    def _mapping(cls, v: Any) -> Any:
+        if not isinstance(v, Mapping):
+            raise ValueError(
+                "as_of.hot_seat_end_of_season must be a mapping with anchor: last_reg_week "
+                f"(and days_after, time), not {v!r}"
+            )
+        return v
+
+
 class Settings(BaseModel):
     project_name: str
     current_season: int
     seasons: dict[str, Any]
-    as_of: dict[str, Any]
+    as_of: AsOfConfig
     horizons: dict[str, int]
     garbage_time: GarbageTimeConfig
     neutral: NeutralConfig
@@ -324,35 +413,324 @@ class PoolConfig(BaseModel):
         return self
 
 
+# ---- League shape (PROJECT_SPEC 7.2) --------------------------------------------------------
+# Lineup slots that never score: the bench and injured reserve.
+BENCH_SLOTS = ("bench", "BE", "IR")
+# Positions the app does not rank (kickers, team defenses, individual defensive players, punters,
+# head coaches): a lineup may have slots for them (ESPN leagues usually have K and D/ST); they are
+# accepted and ignored, like any multi-position slot that holds none of FANTASY_POSITIONS.
+OTHER_POSITIONS = ("K", "DST", "D/ST", "DEF", "P", "HC", "DL", "DE", "DT", "LB", "DB", "CB", "S",
+                   "DP")  # fmt: skip
+MAX_TEAMS = 32
+# Plain words for the positions in scope (generated text: "a running back or receiver").
+POSITION_WORDS = {"QB": "quarterback", "RB": "running back", "WR": "receiver", "TE": "tight end"}
+
+
+def round_half_up(x: float) -> int:
+    """Round to the nearest whole number, halves up (16.5 -> 17), computed on the decimal
+    value so a multiplier such as 1.1 cannot land a hair below a half. Python's round() would
+    round halves to the even number (16.5 -> 16)."""
+    return int(Decimal(repr(x)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def or_join(items: Sequence[str], word: str = "or") -> str:
+    """ "RB", "RB or WR", "QB, RB or WR"."""
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    return f"{', '.join(items[:-1])} {word} {items[-1]}"
+
+
+def rank_groups(ranks: Mapping[str, int], *, sep: str = "/") -> str:
+    """Positions that share a rank, grouped, in position order: {RB: 36, WR: 36} -> "RB/WR top
+    36"; {QB: 24, RB: 48, WR: 48} -> "QB top 24, RB/WR top 48"."""
+    groups: dict[int, list[str]] = {}
+    for pos, n in ranks.items():
+        groups.setdefault(int(n), []).append(pos)
+    return ", ".join(f"{sep.join(ps)} top {n}" for n, ps in groups.items())
+
+
+@dataclass(frozen=True)
+class LeagueShape:
+    """Every league-shaped number, derived from config/league.yaml (``League.shape``).
+
+    - ``dedicated``: starting slots per team that only this position can fill (a QB slot; a
+      multi-position slot whose only in-scope position it is counts too).
+    - ``flex_slots``: starting slots per team this position can fill together with other
+      positions (FLEX, SUPERFLEX ...).
+    - ``starter_thresholds`` (PROJECT_SPEC 7.2): teams x dedicated starters: a weekly finish at
+      or above it is a **starter finish** (the Waiver Radar's labels).
+    - ``flex_worthy_ranks``: for each position in ``flex_worthy_positions`` that a
+      multi-position slot can hold: its starter threshold + teams x those slots (with no
+      override: teams x (dedicated + flex slots)): the most players of that position a league
+      could start. Informative only (``is_flex_finish``), never a label.
+    - ``pool_cutoffs``: starter threshold x ``candidate_pool_multiplier``, rounded half up: the
+      Waiver Radar treats players ranked inside it as rostered.
+    - ``overridden``: which numbers came from explicit overrides in league.yaml.
+    """
+
+    teams: int
+    dedicated: dict[str, int]
+    flex_slots: dict[str, int]
+    starter_thresholds: dict[str, int]
+    flex_worthy_ranks: dict[str, int]
+    pool_cutoffs: dict[str, int]
+    multiplier: float
+    starting_slots: int
+    bench_slots: int
+    ignored_slots: dict[str, int]
+    overridden: tuple[str, ...] = ()
+
+    @property
+    def size_text(self) -> str:
+        """ "12-team" (generated text: "a typical 12-team league")."""
+        return f"{self.teams}-team"
+
+    def describe(self) -> list[str]:
+        """Plain-English lines: the derived numbers and where they come from."""
+        lines = [
+            f"{self.teams} teams; per team {self.starting_slots} starting slots (QB/RB/WR/TE "
+            "dedicated: "
+            + ", ".join(f"{p} {n}" for p, n in self.dedicated.items())
+            + "; multi-position slots each position can fill: "
+            + (", ".join(f"{p} {n}" for p, n in self.flex_slots.items() if n) or "none")
+            + (
+                "; ignored (not ranked): "
+                + ", ".join(f"{s} {n}" for s, n in self.ignored_slots.items())
+                if self.ignored_slots
+                else ""
+            )
+            + f"), bench {self.bench_slots}",
+            "starter threshold (teams x dedicated starters): "
+            + ", ".join(f"{p} top {n}" for p, n in self.starter_thresholds.items()),
+            "FLEX-worthy rank: " + (rank_groups(self.flex_worthy_ranks) or "none"),
+            f"candidate-pool cutoff (threshold x {self.multiplier:g}): "
+            + ", ".join(f"{p} {n}" for p, n in self.pool_cutoffs.items()),
+        ]
+        if self.overridden:
+            lines.append("explicit overrides in league.yaml: " + ", ".join(self.overridden))
+        return lines
+
+
 class League(BaseModel):
+    """config/league.yaml: the fantasy league the app is tuned for.
+
+    Only ``teams``, ``lineup`` (slot -> count per team, bench included), ``slot_eligibility``
+    (which positions each multi-position slot can hold) and ``candidate_pool_multiplier`` are
+    needed: every threshold is derived from them (:class:`LeagueShape`, ``League.shape``).
+    ``starter_rank_threshold`` and ``flex_worthy_rank`` are optional overrides, normally left
+    out. Strict (unknown keys and slot names are refused), because a typo would silently change
+    which players count as starters or as available.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     teams: int
     lineup: dict[str, int]
-    starter_rank_threshold: dict[str, int]
-    flex_worthy_rank: int
+    slot_eligibility: dict[str, list[str]] = {}
+    # positions that get a FLEX-worthy rank when a multi-position slot can hold them (TE is left
+    # out by default: PROJECT_SPEC 7.2 defines FLEX-worthy for RB/WR; a superflex QB is in)
+    flex_worthy_positions: list[str] = ["QB", "RB", "WR"]
     candidate_pool_multiplier: float
+    starter_rank_threshold: dict[str, int] | None = None  # optional override, per position
+    flex_worthy_rank: int | dict[str, int] | None = None  # optional override (all or per position)
     pool: PoolConfig
+    _shape: LeagueShape | None = PrivateAttr(default=None)
+
+    @field_validator("teams")
+    @classmethod
+    def _teams(cls, v: int) -> int:
+        if not 2 <= v <= MAX_TEAMS:
+            raise ValueError(f"teams = {v}: a league needs between 2 and {MAX_TEAMS} teams")
+        return v
+
+    @field_validator("candidate_pool_multiplier")
+    @classmethod
+    def _multiplier(cls, v: float) -> float:
+        if not math.isfinite(v) or v <= 0:
+            raise ValueError("candidate_pool_multiplier must be positive")
+        if v < 1:
+            raise ValueError(
+                f"candidate_pool_multiplier = {v:g}: must be at least 1, or the pool cutoff "
+                "would be smaller than the number of starters and startable players would count "
+                "as available"
+            )
+        return v
 
     @model_validator(mode="after")
-    def _positions(self) -> League:
-        missing = [p for p in FANTASY_POSITIONS if p not in self.starter_rank_threshold]
-        if missing:
-            raise ValueError(f"starter_rank_threshold lacks positions {missing}")
-        if self.candidate_pool_multiplier <= 0:
-            raise ValueError("candidate_pool_multiplier must be positive")
+    def _derive(self) -> League:
+        self._shape = _derive_shape(self)
         return self
+
+    @property
+    def shape(self) -> LeagueShape:
+        assert self._shape is not None  # set by the validator
+        return self._shape
+
+    def starter_thresholds(self) -> dict[str, int]:
+        """Per position (QB, RB, WR, TE), the weekly starter threshold (teams x dedicated
+        starters, or the override): 12 teams x 1 QB = QB top 12."""
+        return dict(self.shape.starter_thresholds)
+
+    def flex_worthy_ranks(self) -> dict[str, int]:
+        """Per FLEX-worthy position (default RB and WR), the FLEX-worthy rank: RB 12 x (2 + 1)
+        = 36 in the default league. Empty when the lineup has no multi-position slot."""
+        return dict(self.shape.flex_worthy_ranks)
 
     def candidate_pool_cutoffs(self) -> dict[str, int]:
         """Per position, how many players count as "surely rostered": the starter threshold
-        times ``candidate_pool_multiplier``, rounded (QB 12 x 1.5 = 18, RB 24 x 1.5 = 36 ...).
-        The one place this number is computed (the id report and the pool both use it)."""
-        return {
-            p: round(n * self.candidate_pool_multiplier)
-            for p, n in self.starter_rank_threshold.items()
-        }
+        times ``candidate_pool_multiplier``, rounded half up (QB 12 x 1.5 = 18, RB 24 x 1.5 =
+        36 ...). The one place this number is computed (the id report and the pool both use
+        it)."""
+        return dict(self.shape.pool_cutoffs)
+
+
+def _derive_shape(lg: League) -> LeagueShape:
+    """Validate the lineup and derive every league-shaped number (see LeagueShape)."""
+    in_scope = set(FANTASY_POSITIONS)
+    known_positions = in_scope | set(OTHER_POSITIONS)
+    problems: list[str] = []
+    for slot, positions in lg.slot_eligibility.items():
+        if slot in known_positions or slot in BENCH_SLOTS:
+            problems.append(
+                f"slot_eligibility.{slot}: {slot} is a position or the bench, not a "
+                "multi-position slot"
+            )
+        unknown = [p for p in positions if p not in known_positions]
+        if not positions or unknown:
+            problems.append(
+                f"slot_eligibility.{slot} = {positions}: needs a non-empty list of positions "
+                f"({', '.join(FANTASY_POSITIONS)} or ignored ones such as K, DST)"
+                + (f"; unknown {unknown}" if unknown else "")
+            )
+        if len(set(positions)) != len(positions):
+            problems.append(f"slot_eligibility.{slot} lists a position twice: {positions}")
+    bad_flex = [p for p in lg.flex_worthy_positions if p not in in_scope]
+    if bad_flex or len(set(lg.flex_worthy_positions)) != len(lg.flex_worthy_positions):
+        problems.append(
+            f"flex_worthy_positions {lg.flex_worthy_positions}: distinct positions from "
+            f"{list(FANTASY_POSITIONS)}"
+        )
+    dedicated = dict.fromkeys(FANTASY_POSITIONS, 0)
+    flex_slots = dict.fromkeys(FANTASY_POSITIONS, 0)
+    ignored: dict[str, int] = {}
+    starting = bench = 0
+    for slot, count in lg.lineup.items():
+        if not isinstance(count, int) or count < 0:
+            problems.append(f"lineup.{slot} = {count}: a slot count must be a whole number >= 0")
+            continue
+        if slot in BENCH_SLOTS:
+            bench += count
+            continue
+        if slot in in_scope:
+            dedicated[slot] += count
+        elif slot in OTHER_POSITIONS:
+            if count:
+                ignored[slot] = ignored.get(slot, 0) + count
+        elif slot in lg.slot_eligibility:
+            holds = [p for p in FANTASY_POSITIONS if p in lg.slot_eligibility[slot]]
+            if len(holds) == 1:
+                dedicated[holds[0]] += count  # a slot only one ranked position can fill
+            elif holds:
+                for p in holds:
+                    flex_slots[p] += count
+            elif count:
+                ignored[slot] = ignored.get(slot, 0) + count
+        else:
+            problems.append(
+                f"lineup.{slot}: unknown slot. Use a position ({', '.join(FANTASY_POSITIONS)}, "
+                f"or {', '.join(OTHER_POSITIONS[:2])} ... which are ignored), a bench slot "
+                f"({', '.join(BENCH_SLOTS)}), or a multi-position slot listed under "
+                "slot_eligibility (e.g. FLEX: [RB, WR, TE])"
+            )
+            continue
+        starting += count
+    if problems:
+        raise ValueError("league.yaml: " + "; ".join(problems))
+
+    overridden: list[str] = []
+    override = dict(lg.starter_rank_threshold or {})
+    unknown = sorted(set(override) - in_scope)
+    if unknown:
+        raise ValueError(
+            f"starter_rank_threshold: unknown positions {unknown} (use {list(FANTASY_POSITIONS)})"
+        )
+    thresholds: dict[str, int] = {}
+    for p in FANTASY_POSITIONS:
+        if p in override:
+            thresholds[p] = int(override[p])
+            overridden.append(f"starter_rank_threshold.{p}")
+        else:
+            thresholds[p] = lg.teams * dedicated[p]
+    for p, n in thresholds.items():
+        if n < 1:
+            raise ValueError(
+                f"{p} has no starting slot of its own (lineup.{p} = {dedicated[p]}), so there is "
+                f"no weekly starter threshold for {p}s (teams x {p} starters = 0). Add a {p} "
+                f"slot to the lineup or set starter_rank_threshold.{p}"
+                if p not in override
+                else f"starter_rank_threshold.{p} = {n}: must be at least 1"
+            )
+
+    flex_ranks = {
+        p: thresholds[p] + lg.teams * flex_slots[p]
+        for p in FANTASY_POSITIONS
+        if flex_slots[p] > 0 and p in lg.flex_worthy_positions
+    }
+    fo = lg.flex_worthy_rank
+    if fo is not None:
+        if not flex_ranks:
+            raise ValueError(
+                "flex_worthy_rank is set but no FLEX-worthy position exists: the lineup has no "
+                "multi-position slot holding a position in flex_worthy_positions"
+            )
+        chosen = dict.fromkeys(flex_ranks, fo) if isinstance(fo, int) else dict(fo)
+        extra = sorted(set(chosen) - set(flex_ranks))
+        if extra:
+            raise ValueError(
+                f"flex_worthy_rank: {extra} have no FLEX-worthy rank to override (a position "
+                "needs a multi-position slot that can hold it and a place in "
+                f"flex_worthy_positions); FLEX-worthy positions: {list(flex_ranks)}"
+            )
+        for p, n in chosen.items():
+            flex_ranks[p] = int(n)
+            overridden.append(f"flex_worthy_rank.{p}")
+    for p, n in flex_ranks.items():
+        if n < thresholds[p]:
+            raise ValueError(
+                f"FLEX-worthy rank of {p} ({n}) is below its starter threshold ({thresholds[p]})"
+            )
+    cutoffs = {p: round_half_up(n * lg.candidate_pool_multiplier) for p, n in thresholds.items()}
+    return LeagueShape(
+        teams=lg.teams,
+        dedicated=dedicated,
+        flex_slots=flex_slots,
+        starter_thresholds=thresholds,
+        flex_worthy_ranks=flex_ranks,
+        pool_cutoffs=cutoffs,
+        multiplier=lg.candidate_pool_multiplier,
+        starting_slots=starting,
+        bench_slots=bench,
+        ignored_slots=ignored,
+        overridden=tuple(overridden),
+    )
+
+
+# Environment variable naming another folder with settings.yaml, scoring.yaml and league.yaml
+# (e.g. a 10-team league for a what-if run: `TWM_CONFIG_DIR=/path/to/cfg uv run twm ...`).
+# Paths inside settings.yaml stay relative to the project root.
+CONFIG_DIR_ENV = "TWM_CONFIG_DIR"
+CONFIG_FILES = ("settings.yaml", "scoring.yaml", "league.yaml")
+
+
+def config_dir() -> Path:
+    """The folder the YAML files are read from: $TWM_CONFIG_DIR, else ``config/``."""
+    env = os.environ.get(CONFIG_DIR_ENV)
+    return Path(env) if env else CONFIG_DIR
 
 
 def _load(name: str) -> dict[str, Any]:
-    with (CONFIG_DIR / name).open() as f:
+    with (config_dir() / name).open() as f:
         return yaml.safe_load(f)
 
 
@@ -369,3 +747,19 @@ def scoring() -> Scoring:
 @functools.cache
 def league() -> League:
     return League(**_load("league.yaml"))
+
+
+def reload() -> None:
+    """Forget the loaded config (after $TWM_CONFIG_DIR or a YAML file changed) and rebuild the
+    registry texts that quote it. The next settings()/scoring()/league() call reads the files
+    again."""
+    import sys
+
+    for fn in (settings, scoring, league):
+        fn.cache_clear()
+    registry = sys.modules.get("twm.registry")
+    if registry is not None:
+        # an invalid or missing league.yaml: the next league() call raises the clear message;
+        # the registry keeps its previous texts until the config loads
+        with contextlib.suppress(ValueError, OSError):
+            registry.refresh()

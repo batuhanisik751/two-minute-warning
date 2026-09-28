@@ -1,7 +1,8 @@
 # Waiver Radar: the candidate pool (C1), its labels (C2), its features (C3), its models (C4), their evaluation (C5) and the weekly list (C6)
 
 The Waiver Radar ranks players who are **probably still on waivers** (not on any team in a
-typical 12-team fantasy league) by how likely they are to become weekly starters soon. Before it
+typical fantasy league of the shape in `config/league.yaml`: 12 teams, full PPR, the owner's
+league) by how likely they are to become weekly starters soon. Before it
 can rank anyone it needs that list of available players, the *candidate pool*, for every
 Tuesday of every season we backtest (2013 on). This page explains how the pool is built, why
 it is built that way, and how well it matches reality where reality was recorded. The second
@@ -30,11 +31,63 @@ walk-forward harness), `src/twm/backtest/metrics.py` (metrics, the season-block 
 `tests/test_waiver_radar_features.py`, `tests/test_waiver_radar_expert_ranks.py`,
 `tests/test_waiver_radar_models.py`, `tests/test_walkforward.py`, `tests/test_backtest_metrics.py`,
 `tests/test_predictions_store.py`, `tests/test_waiver_radar_evaluation.py`,
-`tests/test_waiver_radar_weekly.py`. Reports:
+`tests/test_waiver_radar_weekly.py`, and the golden tests in `tests/golden/` (a frozen
+synthetic world run through every step, with its known outputs; README "Golden tests"). Reports:
 `reports/waiver_radar/pool_sizes.md`, `reports/waiver_radar/labels.md`,
 `reports/waiver_radar/features.md`, `reports/waiver_radar/backtest.md`,
 `reports/waiver_radar/evaluation.md` (each with a `.csv`; the evaluation's charts are in
 `reports/waiver_radar/figures/`), and the weekly lists in `reports/waiver_radar/weekly/`.
+
+## League shape: every number comes from `config/league.yaml`
+
+The Radar needs three league-shaped numbers per position, and none of them is typed in by
+hand: `src/twm/config.py` (`League.shape`) derives them from the number of teams and the
+lineup, so a 10-team or a 14-team league, a 3-WR lineup or a superflex league only needs
+`teams` and `lineup` changed. `uv run twm doctor` prints what it derived.
+
+- **Starter threshold** (PROJECT_SPEC 7.2) = teams x the starting slots only that position
+  can fill. A weekly finish at or above it is a *starter finish* (the labels). Default: 12 x 1
+  QB = **QB 12**, 12 x 2 = **RB 24**, **WR 24**, 12 x 1 = **TE 12**.
+- **FLEX-worthy rank** = teams x (those dedicated slots + the multi-position slots the
+  position can fill; which positions a slot holds is `slot_eligibility`, e.g.
+  `FLEX: [RB, WR, TE]`): the most players of that position a league could start. Default
+  **RB 36, WR 36** (12 x (2 + 1)). Informative only (`is_flex_finish`), never a label.
+  Only the positions in `flex_worthy_positions` get one: **TE is left out** by default (the
+  spec defines FLEX-worthy for RB/WR, and a FLEX slot rarely goes to a tight end; listing TE
+  would rank TEs against 12 x (1 + 1) = 24). A **superflex QB is in**: with `SUPERFLEX: 1`
+  and `SUPERFLEX: [QB, RB, WR, TE]`, QB is FLEX-worthy to 12 x (1 + 1) = 24, and RB/WR count
+  both slots (12 x (2 + 1 + 1) = 48, an upper bound: most superflex slots hold a QB). The
+  QB starter threshold stays 12 in a superflex league: the labels count a QB as a starter
+  only inside the dedicated QB slots (override it if you want 24).
+- **Candidate-pool cutoff** = starter threshold x `candidate_pool_multiplier` (1.5), rounded
+  half up: **QB 18, RB 36, WR 36, TE 18**. Players ranked inside it (preseason or points
+  per game) count as rostered.
+
+Kicker and team-defense slots (`K`, `DST`) and the bench are accepted and ignored: the app
+ranks QB, RB, WR and TE only. A lineup that leaves a position without any slot of its own
+(no TE slot, say) is refused with a message, because that position would have no starter
+threshold; so are unknown slot names, negative counts, a multiplier below 1 and fewer than 2
+teams. `starter_rank_threshold` and `flex_worthy_rank` still exist as **optional overrides**
+(normally left out; an override no longer follows `teams`).
+
+| league | starter threshold (QB, RB, WR, TE) | FLEX-worthy | pool cutoff (QB, RB, WR, TE) |
+|---|---|---|---|
+| 12 teams, 1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX (default) | 12, 24, 24, 12 | RB/WR 36 | 18, 36, 36, 18 |
+| 10 teams, same lineup | 10, 20, 20, 10 | RB/WR 30 | 15, 30, 30, 15 |
+| 14 teams, same lineup | 14, 28, 28, 14 | RB/WR 42 | 21, 42, 42, 21 |
+| 12 teams, 3 WR | 12, 24, 36, 12 | RB 36, WR 48 | 18, 36, 54, 18 |
+| 12 teams, superflex | 12, 24, 24, 12 | QB 24, RB/WR 48 | 18, 36, 36, 18 |
+| 12 teams, 2 TE | 12, 24, 24, 24 | RB/WR 36 | 18, 36, 36, 36 |
+
+**Stated assumption: the bench.** The pool stand-in uses starters x multiplier and does not
+model the bench size (7 in the default league). The multiplier 1.5 was validated for 12 teams
+only (the pool matched real FantasyPros rostership with 95.6% precision in 2020-2025,
+[below](#how-good-is-the-stand-in-report-2026-09-27-cache)); a league with a much deeper or
+shallower bench may need another multiplier (`candidate_pool_multiplier`), and a different
+league size has not been validated against rostership.
+
+To try another league without editing the shipped files, copy `config/` to a folder, change
+`league.yaml` there and run any command with `TWM_CONFIG_DIR=<folder> uv run twm ...`.
 
 ## Why a stand-in, and which one
 
@@ -48,9 +101,11 @@ he is **outside the top N at his position by BOTH** a preseason ranking **and** 
 points per game (PPG) so far this season. A player ranked that high before the season was
 drafted in almost every league; a player scoring that well has been picked up by now.
 
-N is the weekly starter threshold (config/league.yaml `starter_rank_threshold`: 12 teams x
-starters) times `candidate_pool_multiplier` (1.5): **QB 18, RB 36, WR 36, TE 18**. Change the
-multiplier or the league shape and N follows (`League.candidate_pool_cutoffs()`).
+N is the weekly starter threshold (teams x starters, derived from config/league.yaml; see
+[League shape](#league-shape-every-number-comes-from-configleagueyaml)) times
+`candidate_pool_multiplier` (1.5): **QB 18, RB 36, WR 36, TE 18** in the default 12-team
+league. Change the multiplier or the league shape and N follows
+(`League.candidate_pool_cutoffs()`).
 
 The preseason ranking:
 
@@ -261,9 +316,11 @@ with `depth_chart_position` FB), so they are ranked with the running backs. Kick
 with a stat line are not ranked either.
 
 A **starter finish** is a rank at or above the weekly starter threshold of the position
-(config/league.yaml `starter_rank_threshold` = 12 teams x starters: QB 12, RB 24, WR 24, TE 12;
-PROJECT_SPEC 7.2). A **FLEX-worthy finish** (informative, not a label) is a RB or WR ranked in
-the top `flex_worthy_rank` (36). Change the league shape in config/league.yaml and both follow.
+(teams x starters, derived from config/league.yaml: QB 12, RB 24, WR 24, TE 12 in the default
+12-team league; PROJECT_SPEC 7.2). A **FLEX-worthy finish** (informative, not a label) is a
+rank at or above the position's FLEX-worthy rank (RB and WR top 36 by default; none for QB and
+TE). Change the league shape in config/league.yaml and both follow
+([League shape](#league-shape-every-number-comes-from-configleagueyaml)).
 
 ## Step 2: the window
 
@@ -625,7 +682,11 @@ experts' ranks of C4, then the C2 labels), one row per (season, week, player), s
 built in about 35 s; two builds give byte-identical files. The four expert columns
 (`ecr_available`, `ecr_pos_rank`, `ecr_page_kind`, `ecr_scrape_date`, see
 [the experts' baseline](#the-baselines-what-the-models-must-beat)) are registered as metrics,
-so no model can use them; every other column is unchanged by C4.
+so no model can use them; every other column is unchanged by C4. The file was rebuilt on
+2026-09-28 after C6 so `teammates_out` carries C6's keys (`status`, `report_status`, `ahead`);
+`teammates_out` is an info column, not a feature and not in any hash, and every other column
+of the rebuilt file is identical to the previous one (checked column by column), so the stored
+backtest, the model versions and the reports did not change.
 
 `uv run twm radar features-report` reads it and writes `reports/waiver_radar/features.md` (and a
 CSV): for the rows a model will learn from (in the pool, final label, train-eligible,
@@ -1253,7 +1314,21 @@ uv run twm radar score --season 2026 --week 2   # a given week (reconstructed if
 uv run twm radar score --week 3 --allow-incomplete   # score anyway, marked incomplete
 uv run twm radar week 2026 2 --pos RB           # a stored week with outcomes
 uv run twm radar week 2019 9                    # a walk-forward backtest week
+uv run twm train waiver_radar                   # build or refresh the production model only
+uv run twm score --as-of 2026-W3                # the spec's generic form of `radar score`
+uv run twm score --as-of 2026-09-30T18:00Z      # a moment: the week whose list was current
 ```
+
+`twm score --as-of` takes a season-week (`2026-W3`, `2026W3` or `"2026 3"`) or an ISO timestamp
+**with a time zone** (`Z`, `+00:00`, `-04:00` ...; a time without one is refused, because a few
+hours of doubt can move it into another week). A list is always made at an official as-of,
+never at an arbitrary moment: week N's list is made at the Tuesday 14:00 UTC after week N and
+stays the current one until the next regular-season week's as-of, so a timestamp maps to the
+week whose window [its as-of, the next as-of) contains it. A Saturday is the week before it;
+Tuesday 13:59 UTC is still last week's list; a moment in the offseason is the last week of the
+season before; a moment before the first as-of in the warehouse is refused. `twm train
+waiver_radar` builds (or reuses, when it was trained on exactly today's dataset) the production
+fold of the current season without scoring anything: run it after `twm radar dataset`.
 
 Options of `score`: `--limit` (players printed per position; the report has 25), `--retrain`,
 `--db`, `--store`, `--dataset`, `--models-dir`, `--evaluation`, `--out`. Exit codes: 0 scored,

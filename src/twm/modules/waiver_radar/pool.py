@@ -5,8 +5,9 @@ rostership starts then, and covers only the players it ranks), so the backtests 
 stand-in. The owner's rule (2026-09-27, PROJECT_SPEC 8.1): a player is in the pool when
 he is **outside the top N at his position by BOTH** a preseason ranking **and** his fantasy
 points per game (PPG) so far this season, where N = the weekly starter threshold x
-``candidate_pool_multiplier`` (config/league.yaml: QB 18, RB 36, WR 36, TE 18). A player that
-high on either list was drafted or has been picked up by now in a typical 12-team league.
+``candidate_pool_multiplier`` (derived from config/league.yaml: ``League.candidate_pool_cutoffs``;
+QB 18, RB 36, WR 36, TE 18 in the default 12-team league). A player that high on either list
+was drafted or has been picked up by now in a typical league of that size.
 
 - **Preseason ranking.** Seasons with a FantasyPros preseason cheat sheet (2020 on, found in
   the data): his rank on the last August/September cheat sheet before the season's first game
@@ -66,13 +67,17 @@ POOL_COLUMNS = (
 
 @dataclass(frozen=True)
 class PoolRules:
-    """The pool's knobs as plain values (from config/league.yaml and config/scoring.yaml)."""
+    """The pool's knobs as plain values (from config/league.yaml and config/scoring.yaml).
+    ``teams`` and ``multiplier`` (the league size and ``candidate_pool_multiplier``) are used
+    only in generated text."""
 
     cutoffs: Mapping[str, int]
     roster_statuses: tuple[str, ...] = ("ACT", "INA", "DEV")
     prior_season_min_games: int = 4
     rookie_drafted_rounds: int = 2
     scoring: ScoringRules = field(default_factory=ScoringRules.from_config)
+    teams: int | None = None
+    multiplier: float | None = None
 
     def __post_init__(self) -> None:
         missing = [p for p in FANTASY_POSITIONS if p not in self.cutoffs]
@@ -90,6 +95,8 @@ class PoolRules:
             prior_season_min_games=lg.pool.prior_season_min_games,
             rookie_drafted_rounds=lg.pool.rookie_drafted_rounds,
             scoring=scoring or ScoringRules.from_config(),
+            teams=lg.teams,
+            multiplier=lg.candidate_pool_multiplier,
         )
 
 

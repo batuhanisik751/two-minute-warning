@@ -1,25 +1,45 @@
-# Default league shape (12-team ESPN standard). Verified against ESPN when connected.
+# The fantasy league the app is tuned for: the owner's ESPN league (12 teams, full PPR; the
+# lineup below was confirmed by the owner on 2026-09-28; verified against ESPN when connected).
+# Only `teams` and `lineup` (with `slot_eligibility`) describe the league: every threshold is
+# DERIVED from them in src/twm/config.py (League.shape), so changing the number of teams or the
+# lineup changes every number below by itself. `uv run twm doctor` prints the derived numbers.
 teams: 12
+# Lineup slots per team. A slot named after a position holds only that position; a slot listed
+# under slot_eligibility can hold any of its positions; bench (and IR) slots never score.
+# K and DST (D/ST) slots are accepted and ignored: the app ranks QB, RB, WR and TE only.
 lineup:
   QB: 1
   RB: 2
   WR: 2
   TE: 1
-  FLEX: 1       # RB/WR/TE
+  FLEX: 1
+  K: 1
+  DST: 1
   bench: 7
-# Weekly "starter" threshold = teams x starters at that position (QB 12, RB 24, WR 24, TE 12).
-# The FLEX slot is NOT folded into RB/WR here; it is expressed separately as flex_worthy_rank
-# (tests/test_config.py asserts both relationships).
-starter_rank_threshold:
-  QB: 12
-  RB: 24
-  WR: 24
-  TE: 12
-flex_worthy_rank: 36    # teams x (RB + FLEX) = 36: a RB/WR ranked top-36 is worth a FLEX start
-# "Likely available on waivers" = outside the top (starters x 1.5) by a preseason ranking and
-# by PPG (fantasy points per game): QB 18, RB 36, WR 36, TE 18 with the numbers above
-# (docs/waiver_radar.md).
+# Which positions each multi-position slot can hold. A superflex league adds `SUPERFLEX: 1` to
+# the lineup and `SUPERFLEX: [QB, RB, WR, TE]` here.
+slot_eligibility:
+  FLEX: [RB, WR, TE]
+# Derived (PROJECT_SPEC 7.2), with the lineup above:
+# - weekly "starter" threshold = teams x dedicated starters at the position:
+#   QB 12, RB 24, WR 24, TE 12 (a finish at or above it is a "starter finish": the labels);
+# - FLEX-worthy rank = teams x (dedicated starters + multi-position slots the position can fill)
+#   for the positions in flex_worthy_positions that such a slot can hold: RB 36, WR 36
+#   (informative only). TE is left out on purpose: spec 7.2 defines FLEX-worthy for RB/WR, and
+#   a FLEX slot rarely goes to a tight end (adding TE here would rank TEs against 12 x (1 + 1)
+#   = 24). A superflex QB is in: 12 x (1 + 1) = 24 in a 12-team superflex league.
+flex_worthy_positions: [QB, RB, WR]
+# "Likely available on waivers" = outside the top (starter threshold x candidate_pool_multiplier,
+# rounded half up) by a preseason ranking and by PPG (fantasy points per game): QB 18, RB 36,
+# WR 36, TE 18 here (docs/waiver_radar.md). Stated assumption: the pool proxy does not model the
+# bench size; 1.5 was validated for 12 teams only (95.6% of pool players were really available,
+# FantasyPros rostership 2020-2025, reports/waiver_radar/pool_sizes.md). Revisit it for a league
+# with a much deeper or shallower bench.
 candidate_pool_multiplier: 1.5
+# Optional overrides, normally left out (the numbers above are derived). Setting one freezes it:
+# it no longer follows `teams` or the lineup.
+# starter_rank_threshold: {QB: 12, RB: 24, WR: 24, TE: 12}
+# flex_worthy_rank: 36          # or per position: {RB: 36, WR: 36}
 # The Waiver Radar candidate pool (step C1, src/twm/modules/waiver_radar/pool.py).
 pool:
   # Weekly-roster statuses that count as "on a team and able to play soon": ACT active, INA

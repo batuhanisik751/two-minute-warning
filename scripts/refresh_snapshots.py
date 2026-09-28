@@ -19,46 +19,15 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import NamedTuple
 
-from twm.config import settings
 from twm.sources import nflverse as nv
 
-
-class Target(NamedTuple):
-    dataset: str
-    season: int | None
-    snapshot_name: str
-    warning: str | None = None  # set when the season is not the one the snapshot should describe
+Target = nv.SnapshotTarget
 
 
 def targets(names: list[str]) -> list[Target]:
     """What to snapshot for every requested name, and a warning when it is a fallback."""
-    current = settings().current_season
-    out: list[Target] = []
-    for name in names:
-        if name == nv.LEGACY_SNAPSHOT:
-            out.append(Target("depth_charts", nv.DEPTH_CHARTS_LEGACY_LAST_SEASON, name))
-            continue
-        ds = nv.DATASETS[name]
-        if not ds.per_season:
-            out.append(Target(name, None, name))
-            continue
-        cached = nv.cached_seasons(name)
-        if current in cached or not cached:
-            out.append(Target(name, current, name))
-            continue
-        out.append(
-            Target(
-                name,
-                cached[-1],
-                name,
-                f"{name}: season {current} is not cached, snapshotting {cached[-1]} instead; "
-                f"fine for a dataset published after the season (participation), otherwise "
-                f"run `uv run twm ingest {name} --start {current}` first",
-            )
-        )
-    return out
+    return [nv.snapshot_target(name) for name in names]
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -22,7 +22,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from twm.config import league
+from twm.config import FANTASY_POSITIONS, POSITION_WORDS, league, or_join, rank_groups
 from twm.situations import SituationRules
 
 Kind = Literal["metric", "feature", "label", "concept", "identifier"]
@@ -117,6 +117,7 @@ def _pool_texts() -> dict[str, str]:
     lg = league()
     cut = lg.candidate_pool_cutoffs()
     return {
+        "teams": str(lg.teams),
         "cutoffs": ", ".join(f"{p} {n}" for p, n in cut.items()),
         "multiplier": f"{lg.candidate_pool_multiplier:g}",
         "statuses": ", ".join(lg.pool.roster_statuses),
@@ -131,9 +132,17 @@ def _label_texts() -> dict[str, str]:
     from twm.modules.waiver_radar.labels import MIN_TRAIN_GAMES, WINDOW_GAMES
 
     lg = league()
+    flex = lg.flex_worthy_ranks()
+    others = [p for p in FANTASY_POSITIONS if p not in flex]
     return {
-        "thresholds": ", ".join(f"{p} top {n}" for p, n in lg.starter_rank_threshold.items()),
-        "flex": str(lg.flex_worthy_rank),
+        "teams": str(lg.teams),
+        "thresholds": ", ".join(f"{p} top {n}" for p, n in lg.starter_thresholds().items()),
+        # "RB/WR top 36" (grouped by rank); "none" when the lineup has no FLEX-type slot
+        "flex": rank_groups(flex) or "none (no multi-position slot)",
+        "flex_positions": "/".join(flex) or "none",
+        "flex_players": or_join([f"a {p}" if i == 0 else p for i, p in enumerate(flex)]),
+        "flex_words": or_join([POSITION_WORDS[p] for p in flex]),
+        "flex_never": or_join(others, "and"),
         "window": str(WINDOW_GAMES),
         "min_games": str(MIN_TRAIN_GAMES),
     }
@@ -536,11 +545,12 @@ def _entries() -> list[Entry]:
             kind="concept",
             modules=("waiver_radar", "shared"),
             unit="rank",
-            formula="teams x starters at the position (config/league.yaml "
-            f"starter_rank_threshold): {lab['thresholds']} by fantasy points that week; "
-            f"FLEX-worthy (flex_worthy_rank): RB/WR top {lab['flex']}",
+            formula="teams x dedicated starters at the position (derived from config/league.yaml "
+            f"teams and lineup): {lab['thresholds']} by fantasy points that week; FLEX-worthy "
+            "(teams x (dedicated starters + multi-position slots the position can fill), for "
+            f"the positions in flex_worthy_positions): {lab['flex']}",
             explanation="A player 'finished as a starter' in a week when he scored well enough "
-            "that a typical 12-team league would have started him.",
+            f"that a typical {lab['teams']}-team league would have started him.",
             source="config/league.yaml; twm.modules.waiver_radar.labels.LabelRules",
             step="C2",
         ),
@@ -558,10 +568,10 @@ def _entries() -> list[Entry]:
             f"candidate_pool_multiplier ({pool['multiplier']}): {pool['cutoffs']}; in seasons "
             f"without a preseason cheat sheet, rookies drafted in rounds 1-{pool['rounds']} count "
             "as drafted",
-            explanation="The players who are probably still on waivers in a typical 12-team "
-            "league. There is no record of which players sat on fantasy rosters before 2020, so "
-            "anyone ranked high before the season or scoring well since counts as taken; the "
-            "rest are the players the Waiver Radar ranks.",
+            explanation="The players who are probably still on waivers in a typical "
+            f"{pool['teams']}-team league. There is no record of which players sat on fantasy "
+            "rosters before 2020, so anyone ranked high before the season or scoring well "
+            "since counts as taken; the rest are the players the Waiver Radar ranks.",
             source="twm.modules.waiver_radar.pool.candidate_pool (fact_roster_week, "
             "fact_ranking, fact_player_week)",
             step="C1",
@@ -913,7 +923,8 @@ def _entries() -> list[Entry]:
             modules=("waiver_radar",),
             unit="boolean",
             formula=f"weekly_pos_rank <= the position's starter threshold ({lab['thresholds']})",
-            explanation="The player scored like a weekly starter in a 12-team league that week.",
+            explanation="The player scored like a weekly starter in a "
+            f"{lab['teams']}-team league that week.",
             source="twm.modules.waiver_radar.labels.weekly_finishes",
             step="C2",
         ),
@@ -923,10 +934,11 @@ def _entries() -> list[Entry]:
             kind="metric",
             modules=("waiver_radar",),
             unit="boolean",
-            formula=f"a RB or WR with weekly_pos_rank <= flex_worthy_rank ({lab['flex']}); "
-            "always false for QB and TE",
-            explanation="The running back or receiver scored well enough to fill a FLEX slot "
-            "that week. Informative only; it is not a label.",
+            formula=f"{lab['flex_players'] or 'a player'} with weekly_pos_rank <= his "
+            f"position's FLEX-worthy rank ({lab['flex']}); always false for "
+            f"{lab['flex_never'] or 'no position'}",
+            explanation=f"The {lab['flex_words'] or 'player'} scored well enough to fill a FLEX "
+            "slot that week. Informative only; it is not a label.",
             source="twm.modules.waiver_radar.labels.weekly_finishes",
             step="C2",
         ),
@@ -1033,7 +1045,7 @@ def _entries() -> list[Entry]:
                     "n_flex_finishes",
                     "FLEX-worthy finishes in the window",
                     "weeks",
-                    "window weeks with is_flex_finish (RB/WR only)",
+                    f"window weeks with is_flex_finish ({lab['flex_positions']} only)",
                     "Informative: how often he was worth a FLEX start.",
                     "",
                 ),
@@ -1126,6 +1138,14 @@ def _build(entries: Iterable[Entry]) -> dict[str, Entry]:
 
 
 REGISTRY: dict[str, Entry] = _build(_entries())
+
+
+def refresh() -> None:
+    """Rebuild every entry from the current config (twm.config.reload() calls this): the texts
+    quote the league shape. In place, so ``REGISTRY`` references stay valid."""
+    fresh = _build(_entries())
+    REGISTRY.clear()
+    REGISTRY.update(fresh)
 
 
 def get(name: str) -> Entry:

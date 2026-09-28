@@ -133,7 +133,16 @@ def test_reason_templates_render():
     assert points == "A scored 18.3 fantasy points"
     for e in rg.REGISTRY.values():
         if e.reason_template:
-            e.reason(player="P", value=0.5, prev=0.25, delta=0.25, weeks=3, teammate="T", team="X")
+            e.reason(player="P", value=0.5, prev=0.25, delta=0.25, weeks=3, teammate="T", team="X",
+                     why="is out", pos="WR")  # fmt: skip
+    # C6: a yes/no feature can phrase "no"; its fields are checked like the template's
+    assert rg.get("bye_in_next3").reason_if_false == "No bye week in the next 3 weeks"
+    with pytest.raises(ValueError, match="unknown fields"):
+        rg.Entry(name="x", title="T", kind="feature", modules=("shared",), unit="u", formula="f",
+                 explanation="e", reason_template="a", reason_if_false="{who}")  # fmt: skip
+    with pytest.raises(ValueError, match="needs a reason_template"):
+        rg.Entry(name="x", title="T", kind="feature", modules=("shared",), unit="u", formula="f",
+                 explanation="e", reason_if_false="no")  # fmt: skip
     with pytest.raises(ValueError, match="no reason template"):
         rg.get("wp").reason(value=0.5)
 

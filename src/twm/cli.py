@@ -297,7 +297,8 @@ def ids_report(
 
 radar_app = typer.Typer(
     help="Waiver Radar: the candidate pool (players probably on waivers), its labels, its "
-    "features and the training dataset."
+    "features, the training dataset, the backtest and its evaluation, and the weekly list "
+    "(`twm radar score`, `twm radar week`)."
 )
 app.add_typer(radar_app, name="radar")
 
@@ -871,6 +872,250 @@ def radar_evaluate(
     if fig_names:
         typer.echo(f"wrote {len(fig_names)} figures in {_display_path(fig_dir, ROOT)}")
     typer.echo(f"{time.perf_counter() - t0:.0f} s")
+
+
+def _clock(now: str | None):
+    """The time a command runs at, aware UTC: ``--now`` (ISO, UTC unless it says otherwise;
+    for tests and reproductions) or the real clock."""
+    from datetime import UTC, datetime
+
+    if now is None:
+        return datetime.now(UTC)
+    try:
+        t = datetime.fromisoformat(now)
+    except ValueError as e:
+        raise typer.BadParameter(f"--now {now!r} is not an ISO date-time") from e
+    return t.replace(tzinfo=UTC) if t.tzinfo is None else t.astimezone(UTC)
+
+
+def _project_path(path: Path) -> Path:
+    from twm.config import ROOT
+
+    return path if path.is_absolute() else ROOT / path
+
+
+@radar_app.command("score")
+def radar_score(
+    season: int | None = typer.Option(
+        None, "--season", help="Season (default: settings current_season)."
+    ),
+    week: int | None = typer.Option(
+        None,
+        "--week",
+        help="Regular-season week N: the list at its Tuesday as-of (default: the latest week "
+        "whose as-of has passed).",
+    ),
+    allow_incomplete: bool = typer.Option(
+        False,
+        "--allow-incomplete",
+        help="Score even if some of the week's data has not arrived; the list is marked "
+        "incomplete in the store and the report.",
+    ),
+    limit: int = typer.Option(10, "--limit", help="Players per position to print (report: 25)."),
+    retrain: bool = typer.Option(
+        False, "--retrain", help="Train a new production model even if the stored one matches."
+    ),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    store: Path | None = typer.Option(
+        None, "--store", help="Predictions store (default: settings paths.predictions)."
+    ),
+    dataset: Path = typer.Option(
+        Path("data/waiver_radar/dataset.parquet"),
+        "--dataset",
+        help="The training dataset from `twm radar dataset` (the production model learns from "
+        "its seasons before --season).",
+    ),
+    models_dir: Path | None = typer.Option(
+        None, "--models-dir", help="Where models are saved (default: models/waiver_radar)."
+    ),
+    evaluation_csv: Path = typer.Option(
+        Path("reports/waiver_radar/evaluation.csv"),
+        "--evaluation",
+        help="The C5 evaluation CSV (position notes such as the QB one are computed from it).",
+    ),
+    out: Path | None = typer.Option(
+        None,
+        "--out",
+        help="Report to write (default: reports/waiver_radar/weekly/<season>-W<week>.md).",
+    ),
+    now: str | None = typer.Option(
+        None,
+        "--now",
+        hidden=True,
+        help="Pretend it is this UTC time (ISO), to reproduce a run; the list is then never "
+        "stored as 'live'.",
+    ),
+) -> None:
+    """Score a week's Waiver Radar list with the production model: checks that the week's data
+    has arrived (exit code 3 if not), stores every prediction with its band, priority and
+    reasons, writes the weekly report and prints the top of each position
+    (docs/waiver_radar.md 'Weekly list')."""
+    import time
+
+    import polars as pl
+
+    from twm import predictions as pr
+    from twm.asof import WarehouseTooOldError, weekly_as_of
+    from twm.backtest.walkforward import WalkForwardError
+    from twm.config import ROOT, settings
+    from twm.modules.waiver_radar import confidence as cf
+    from twm.modules.waiver_radar import production as prod
+    from twm.modules.waiver_radar import weekly as wk
+    from twm.modules.waiver_radar.evaluation import EvaluationError
+
+    t0 = time.perf_counter()
+    path = _warehouse_or_exit(db)
+    clock = _clock(now)
+    chosen_season = season if season is not None else settings().current_season
+    try:
+        chosen_week = week if week is not None else wk.default_week(path, chosen_season, clock)
+        as_of = weekly_as_of(path, chosen_season, chosen_week)
+    except LookupError as e:
+        typer.echo(f"cannot score: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    fresh = wk.check_freshness(
+        wk.freshness_inputs(path, chosen_season, chosen_week), chosen_season, chosen_week,
+        as_of, clock,
+    )  # fmt: skip
+    if not fresh.ok and not allow_incomplete:
+        typer.echo(fresh.message(), err=True)
+        done = wk.last_complete_week(path, chosen_season, clock, before=chosen_week)
+        if done is not None:
+            typer.echo(
+                f"The latest complete week is {done}: `uv run twm radar score --season "
+                f"{chosen_season} --week {done}`.",
+                err=True,
+            )
+        raise typer.Exit(code=wk.EXIT_NOT_READY)
+    source = _project_path(dataset)
+    if not source.exists():
+        typer.echo(f"dataset not found: {source}; run `twm radar dataset` first", err=True)
+        raise typer.Exit(code=1)
+    store_path = _project_path(store if store is not None else pr.default_path())
+    models_root = _project_path(models_dir) if models_dir is not None else None
+    try:
+        ens = prod.ensure_production(
+            pl.read_parquet(source), chosen_season, store=store_path, root=models_root,
+            retrain=retrain,
+        )  # fmt: skip
+        conf = cf.from_store(
+            store_path, model=ens.model.model, label=ens.model.label,
+            seasons=cf.seasons_before(chosen_season),
+        )  # fmt: skip
+        notes = cf.position_notes(
+            _project_path(evaluation_csv), label=ens.model.label, model=ens.model.model,
+            before=chosen_season,
+        )  # fmt: skip
+        run = wk.run_week(
+            path, chosen_season, chosen_week, model=ens.model, conf=conf, now=clock,
+            allow_incomplete=allow_incomplete, notes=notes, model_reused=ens.reused,
+            real_clock=now is None,
+        )  # fmt: skip
+    except wk.NotReadyError as e:  # pragma: no cover - checked above; data changed meanwhile
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=wk.EXIT_NOT_READY) from e
+    except (
+        prod.ProductionModelError, EvaluationError, WalkForwardError, WarehouseTooOldError,
+        LookupError, ValueError,
+    ) as e:  # fmt: skip
+        typer.echo(f"cannot score: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    try:
+        counts = wk.store_week(run, store_path, created_at=clock.replace(tzinfo=None))
+    except pr.LiveWeekError as e:
+        typer.echo(f"not stored: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    args = [f"uv run twm radar score --season {chosen_season} --week {chosen_week}"]
+    if allow_incomplete:
+        args.append("--allow-incomplete")
+    text = wk.build_report(
+        run, generated=f"Generated at {clock:%Y-%m-%d %H:%M} UTC.", command=" ".join(args)
+    )
+    target = _project_path(out) if out is not None else wk.report_path(chosen_season, chosen_week)
+    wk.write_report(text, target)
+    m = ens.model
+    typer.echo(
+        f"{chosen_season} week {chosen_week}, as-of {as_of:%a %Y-%m-%d %H:%M} UTC: stored as "
+        f"'{run.kind}'" + (" (INCOMPLETE DATA)" if run.incomplete else "")
+    )
+    typer.echo(
+        f"model {m.model_version} ({'reused' if ens.reused else 'trained now'}; trained on "
+        f"{m.training_seasons[0]}-{m.training_seasons[-1]}, calibrated on {m.fold.val_season})"
+    )
+    if run.incomplete:
+        typer.echo("WARNING: scored with incomplete data:")
+        for p in run.freshness.problems:
+            typer.echo(f"  - {p}")
+    cut = conf.cutoffs
+    lo_s, hi_s = conf.seasons
+    typer.echo(
+        f"priority from the {lo_s}-{hi_s} backtest: must-add = similar players hit 50%+ (model "
+        f"probability {cut['must-add'] or 0:.1%} and up), speculative = 25-50% "
+        f"({cut['speculative'] or 0:.1%} and up), watch = the rest of the top 25"
+    )
+    for r in conf.tiers.iter_rows(named=True):
+        typer.echo(
+            f"  {r['tier']:<11} hit {100 * (r['rate'] or 0):.1f}% in the backtest "
+            f"({r['hits']:,} of {r['rows']:,} top-25 players)"
+        )
+    for note in run.notes.values():
+        typer.echo(note)
+    typer.echo(wk.compact_table(run.scored, limit))
+    typer.echo(
+        f"stored {counts['predictions']:,} predictions and {counts['outcomes']:,} outcomes in "
+        f"{_display_path(store_path, ROOT)}"
+    )
+    typer.echo(f"wrote {_display_path(target, ROOT)}")
+    typer.echo(f"{time.perf_counter() - t0:.0f} s")
+
+
+@radar_app.command("week")
+def radar_week(
+    season: int = typer.Argument(..., help="Season, e.g. 2023."),
+    week: int = typer.Argument(..., help="Regular-season week N (the list of its Tuesday as-of)."),
+    pos: str | None = typer.Option(None, "--pos", help="Only this position (QB, RB, WR, TE)."),
+    limit: int = typer.Option(25, "--limit", help="Players per position to print."),
+    store: Path | None = typer.Option(
+        None, "--store", help="Predictions store (default: settings paths.predictions). Read only."
+    ),
+    db: Path | None = typer.Option(
+        None, "--db", help="Warehouse for names, teams and outcomes (default from config)."
+    ),
+) -> None:
+    """Show a stored Waiver Radar week (backtest or live) with outcomes where known: the time
+    machine's first form."""
+    import polars as pl
+
+    from twm import predictions as pr
+    from twm.config import settings
+    from twm.modules.waiver_radar import weekly as wk
+
+    store_path = _project_path(store if store is not None else pr.default_path())
+    try:
+        rows, info = wk.stored_week(store_path, season, week)
+    except FileNotFoundError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=1) from e
+    if rows.height == 0:
+        typer.echo(
+            f"nothing stored for {season} week {week}: run `twm radar backtest` (2014-2025) or "
+            f"`twm radar score --season {season} --week {week}`"
+        )
+        raise typer.Exit(code=1)
+    wh = Path(db) if db is not None else settings().path("warehouse")
+    rows = wk.attach_names_and_outcomes(rows, wh if wh.exists() else None)
+    if pos is not None:
+        rows = rows.filter(pl.col("position") == pos.upper())
+    kinds = "/".join(info["kind"])
+    typer.echo(
+        f"{season} week {week}, as-of {info['as_of']:%a %Y-%m-%d %H:%M} UTC: {kinds} list of "
+        f"{info['model_version']}"
+        + (" (INCOMPLETE DATA)" if info["incomplete"] else "")
+        + (f"; {info['versions']} versions scored this week" if info["versions"] > 1 else "")
+    )
+    if kinds == "backtest":
+        typer.echo("(backtest = reconstructed after the fact; live = made in real time)")
+    typer.echo(wk.week_text(rows, info, limit=limit))
 
 
 def _display_path(path: Path, root: Path) -> str:

@@ -21,6 +21,7 @@ class Paths(BaseModel):
     league_db: str
     manual: str = "data/manual"  # committed, hand-curated files (player_id_overrides.csv ...)
     predictions: str = "data/predictions.duckdb"  # the predictions store (twm.predictions)
+    models: str = "models"  # trained production models (twm.modules.waiver_radar.production)
 
 
 # Datasets whose rows are stamped "game end + lag" (twm.warehouse.available).

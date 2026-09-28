@@ -718,7 +718,11 @@ def _teammate_features(
         .group_by("_row", "mate_id")
         .agg(pl.col("snap_share").fill_null(0.0).mean().alias("_my_snap"))
     )
-    pairs = pairs.join(mine, on=["_row", "mate_id"], how="left")
+    pairs = pairs.join(mine, on=["_row", "mate_id"], how="left").with_columns(
+        # a same-position teammate who played more snaps than he did (over the teammate's
+        # window): "played ahead of him" (top_teammate_out; named by the C6 reasons)
+        pl.when(same).then(pl.col("snap_share_avg3") > pl.col("_my_snap")).alias("_ahead")
+    )
     agg = pairs.group_by("_row").agg(
         pl.col("target_share_avg3").sum().alias("vacated_target_share"),
         pl.col("carry_share_avg3").sum().alias("vacated_carry_share"),
@@ -739,6 +743,9 @@ def _teammate_features(
                 "mate_pos",
                 "rule",
                 "rules",
+                "team_status",
+                "report_status",
+                "_ahead",
                 "last_week",
                 "target_share_avg3",
                 "carry_share_avg3",
@@ -764,6 +771,9 @@ def _teammates_json(mates: list[dict[str, Any]] | pl.Series) -> str:
             "position": m["mate_pos"],
             "rule": m["rule"],
             "rules": m["rules"],
+            "status": m.get("team_status"),
+            "report_status": m.get("report_status"),
+            "ahead": m.get("_ahead"),
             "last_week": m["last_week"],
             "target_share_avg3": round(float(m["target_share_avg3"]), 4),
             "carry_share_avg3": round(float(m["carry_share_avg3"]), 4),

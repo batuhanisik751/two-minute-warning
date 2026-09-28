@@ -1,4 +1,4 @@
-# Waiver Radar: the candidate pool (C1), its labels (C2), its features (C3), its models (C4) and their evaluation (C5)
+# Waiver Radar: the candidate pool (C1), its labels (C2), its features (C3), its models (C4), their evaluation (C5) and the weekly list (C6)
 
 The Waiver Radar ranks players who are **probably still on waivers** (not on any team in a
 typical 12-team fantasy league) by how likely they are to become weekly starters soon. Before it
@@ -10,27 +10,31 @@ the models learn from: did a pool player really become a starter in the next wee
 part ([Features](#features-what-the-radar-knows-at-the-as-of-step-c3)) explains what the models
 learn FROM: each player's situation as it looked on that Tuesday. Then
 ([Models and backtest](#models-and-backtest-step-c4)) explains how the models are trained and
-graded, and the last part ([Evaluation](#evaluation-how-good-and-how-sure-step-c5)) how good
-they are, how sure we can be, and where they fail. A guided tour for a first-season fantasy
-player: `notebooks/01_waiver_radar.ipynb`.
+graded, then ([Evaluation](#evaluation-how-good-and-how-sure-step-c5)) how good they are, how
+sure we can be, and where they fail. The last part ([Weekly list](#the-weekly-list-step-c6))
+is the product: every Tuesday, the list you use on your waiver wire, how to read it and when
+to run it. A guided tour for a first-season fantasy player: `notebooks/01_waiver_radar.ipynb`.
 
 Code: `src/twm/modules/waiver_radar/pool.py` (the pool), `report.py` (the pool report),
 `labels.py` (the labels), `label_report.py` (the label report), `features.py` (the features),
 `dataset.py` (pool + features + labels), `feature_report.py` (the feature report),
 `expert_ranks.py` (the experts' ranks for the expert baseline), `models.py` (baselines and
 models), `backtest.py` (the backtest and its report), `evaluation.py` (the evaluation and its
-report), `figures.py` (the evaluation's charts); `src/twm/backtest/walkforward.py` (the
+report), `figures.py` (the evaluation's charts), `production.py` (the model that scores the
+live season), `confidence.py` (the band and the priority), `reasons.py` (the reasons),
+`weekly.py` (the weekly list); `src/twm/backtest/walkforward.py` (the
 walk-forward harness), `src/twm/backtest/metrics.py` (metrics, the season-block bootstrap,
 "caught before it happened"), `src/twm/predictions.py` (the predictions store). Tables:
 `fact_roster_week`, `fact_ranking` and `fact_opportunity_week` (docs/warehouse.md). Tests:
 `tests/test_waiver_radar_pool.py`, `tests/test_waiver_radar_labels.py`,
 `tests/test_waiver_radar_features.py`, `tests/test_waiver_radar_expert_ranks.py`,
 `tests/test_waiver_radar_models.py`, `tests/test_walkforward.py`, `tests/test_backtest_metrics.py`,
-`tests/test_predictions_store.py`, `tests/test_waiver_radar_evaluation.py`. Reports:
+`tests/test_predictions_store.py`, `tests/test_waiver_radar_evaluation.py`,
+`tests/test_waiver_radar_weekly.py`. Reports:
 `reports/waiver_radar/pool_sizes.md`, `reports/waiver_radar/labels.md`,
 `reports/waiver_radar/features.md`, `reports/waiver_radar/backtest.md`,
 `reports/waiver_radar/evaluation.md` (each with a `.csv`; the evaluation's charts are in
-`reports/waiver_radar/figures/`).
+`reports/waiver_radar/figures/`), and the weekly lists in `reports/waiver_radar/weekly/`.
 
 ## Why a stand-in, and which one
 
@@ -531,7 +535,9 @@ From those teammates:
   he did over the same games (the teammate's window): someone who played ahead of him is out.
 - `joined_team_recently`: his latest roster team differs from his first one this season.
 - `teammates_out` (not a feature): the list, as JSON text, with each teammate's name, rules,
-  last week played and shares, for the plain-English reasons of step C6.
+  roster status and injury-report status (C6), whether he played more snaps than the player
+  (`ahead`, same position only; C6), last week played and shares, for the plain-English
+  reasons of step C6 ("... after X went on a reserve list").
 
 Three real examples from the dataset (2026-09-28 cache; `twm radar features SEASON WEEK --team
 X --all` shows them): at the 2014 week-11 as-of Denver's Ronnie Hillman was out (Out on the
@@ -1040,8 +1046,10 @@ give byte-identical PNGs.
   out while already rostered in every league is still counted if the proxy had him in the pool.
 - **Calibration above 60%** (`y_hit`) and above 30% (`y_sustained`) rests on few predictions and
   runs high.
-- **The current version rule** (last written wins) is simple; C6 will need to decide which
-  version a live list uses.
+- **The current version rule** (last written wins) is simple. C6 uses the same rule for the
+  live season's model (see [the production model](#the-production-model)); the evaluation
+  reads only the evaluation seasons (2014-2025), so the live season's lists never enter it
+  before their outcomes are known.
 
 ## Commands
 
@@ -1056,3 +1064,214 @@ uv run jupyter nbconvert --to notebook --execute --inplace \
 
 Options: `--label` (repeatable; default both), `--store`, `--dataset`, `--out`, `--figures`
 (default `figures/` next to the report). The command only reads the store and the dataset.
+
+# The weekly list (step C6)
+
+Everything above leads here: every Tuesday during the season the Radar scores the pool with the
+model, and you get one list per position with, for every player, **how likely he is to become a
+starter soon, how sure that number is, what to do about him and why**. Code:
+`src/twm/modules/waiver_radar/production.py` (the model), `confidence.py` (the band and the
+priority), `reasons.py` (the reasons), `weekly.py` (the check, the scoring, the store, the
+report). The lists: `reports/waiver_radar/weekly/<season>-W<week>.md` (committed). Tests:
+`tests/test_waiver_radar_weekly.py`.
+
+## When to run it
+
+After Monday night's game **and** after Tuesday's data updates, i.e. after the as-of (Tuesday
+14:00 UTC), and before your league's waivers clear (most ESPN leagues process them on Wednesday;
+check yours):
+
+```bash
+uv run twm ingest && uv run twm build          # fresh data first
+uv run twm radar score                         # this season's latest week whose as-of has passed
+```
+
+A run between the as-of and the first kickoff of the next week, on the real clock, is stored as
+**live** (made in real time); any other run is **backtest** (reconstructed: what the Radar would
+have said then). A run with a set clock (the hidden `--now` option, for tests and reproductions)
+is never live, and a reconstructed run never overwrites a stored live week.
+
+## Is the data there? (the freshness check)
+
+`available_at` says when nflverse normally publishes a row; it does not prove our cache has it.
+So before scoring week N the command checks, in the cache:
+
+- every game of week N that should be over by the as-of has a **final score** (a game moved
+  past the as-of, like the five split weeks, is a note, not a problem);
+- every played game has **player stats**, **snap counts** and **ffopportunity** rows (expected
+  fantasy points), matched by game;
+- every team that played has a **week-N injury report** and a **week-N roster**;
+- the **Tuesday as-of has come** (a run before it is early: Monday night's game and its snap
+  counts may still be missing).
+
+If anything is missing it refuses (exit code 3), lists what is missing in plain words and names
+the latest complete week. `--allow-incomplete` scores anyway: every stored row gets
+`incomplete = TRUE` and the report opens with a warning. (A played team-week without any
+injury-report rows happened 0 to 3 times a season in 2013-2025, 8 times in all; when you are sure
+the report is simply empty, use `--allow-incomplete`.)
+
+On 2026-09-28 (Monday, 14:37 UTC) week 3 was refused: the as-of (Tuesday 2026-09-29 14:00 UTC)
+had not come, and 15 of its 16 games had no final score in the cache yet (only Thursday's game
+had been ingested).
+
+## The production model
+
+The model that scores season S is exactly the walk-forward fold the backtest would use for test
+season S (PROJECT_SPEC 6.2 rule 2): the logistic regression (the C4 winner) for `y_hit`,
+trained on every labelled season before S, settings tuned on S-1, calibrated on S-1's scores,
+refit on all seasons before S, never refit during the season. For 2026: trained on 2013-2025
+(96,220 player-weeks, 10,371 hits), L1 penalty with C = 0.01, version
+`logit-5828a082c9e09093`. Its version is the backtest's fingerprint (model, label, features,
+settings, training seasons, training-data hash), so the same data always gives the same version;
+a realdata test trains the 2025 fold the same way and gets the stored backtest's 2025 version and
+its stored scores, bit for bit.
+
+The fitted model is saved to `models/waiver_radar/<version>.joblib` (gitignored; reloading it
+gives bit-identical scores, tested) and recorded in the store's `model_versions`. **Which version
+is current**: the latest-written version of (`logit`, `y_hit`, test season S)
+(`twm.predictions.current_versions`). `twm radar score` reuses it when its training seasons and
+training-data hash equal what the dataset gives today and its file exists; otherwise it trains a
+new fold (about 15 seconds), which becomes current. `--retrain` forces a new fold. Rebuild the
+dataset (`uv run twm radar dataset`) only when the history changed; the weekly features are
+computed fresh from the warehouse through the as-of view, not read from the dataset.
+
+## How to read the list
+
+Each position's top 25 (the whole pool is stored) shows:
+
+- **Chance**, e.g. `56% (similar players hit 53-59%)`: in the 2014-2025 backtest (91,638
+  predictions, each made by a model that had never seen that season), how often players the
+  Radar rated like him became a starter (a week in the top 12 QBs, 24 RBs, 24 WRs or 12 TEs) in
+  their team's next 3 games, with a 90% range. "Like him" = the backtest predictions sorted by
+  probability and cut into groups of at least 500 (a probability shared by several predictions is
+  never split), merged where needed so the rate never goes down as the probability goes up
+  (38 groups). A group of 500 gives a 90% range of at most about +/-3.7 points.
+  - Why not C5's 10 equal-count bins: the top one spans every probability from 34% to 100%
+    (9,163 predictions, 47.3% hit), so every top player would show 47% and nobody could reach the
+    50% of a must-add.
+  - Why the chance, not the model's own probability: C5 found the probabilities too high above
+    about 60% (the 70-80% ones hit 66.7%). The chance is the honest number; the model's
+    calibrated probability is shown next to it (`model`) and stored as `score`.
+- **Priority** (top 25 only), set from the backtest: **must-add** when similar players hit at
+  least 50% of the time, **speculative** from 25% to 50%, **watch** below. Because the groups
+  only go up, these are cutoffs on the model probability. In 2014-2025, on the top 25 of all 732
+  weekly lists:
+
+| priority | model probability | top-25 players | hits | hit rate | per list |
+|---|---|---|---|---|---|
+| must-add | 53.0% and up | 2,517 | 1,495 | 59.4% | 3.4 |
+| speculative | 24.8% to 53.0% | 10,466 | 3,915 | 37.4% | 14.3 |
+| watch | below 24.8% | 5,317 | 723 | 13.6% | 7.3 |
+
+The same probability means a little less early in a season: in week 1-2 lists must-adds hit
+48.3% (89) and 49.7% (151), in week 8 68.1% (191). Each report prints its own week's rates under
+the table.
+
+The band, the priority and the position notes of a list of season S come only from backtest
+seasons before S (for 2026: all of 2014-2025; a reconstructed 2020 list: 2014-2019), so no
+number on a list rests on outcomes after its as-of.
+
+- **Why**: up to 3 reasons (next section).
+- **The QB note**: at quarterback the backtest showed no gain over last week's points (C5:
+  43.4% vs 43.1% of the top 10 hit, difference +0.3 points, 95% interval -0.6 to +1.3). The QB
+  list says so; the note is computed from `reports/waiver_radar/evaluation.csv` for every
+  position whose interval reaches zero, never typed.
+
+About 48% of the Radar's top-10 picks became starters in 2014-2025 (3,501 of 7,320): a chance
+is not a promise.
+
+## The reasons
+
+For the logistic regression a player's log-odds is `baseline + sum of contributions`, where a
+feature's **contribution** = its weight x (his transformed value - the training average), summed
+over its columns (the value, its "was missing" indicator; position's four yes/no columns). The
+contributions add up exactly to the model's log-odds minus the baseline (tested). The reasons
+are the largest positive contributions, phrased with the feature's sentence from the registry
+(`reason_template`, `docs/glossary.md` "Waiver Radar reason") and the player's own values at the
+as-of, with four rules so that each line is true and useful:
+
+1. at most one reason per topic (snaps, targets, carries, expected points, scoring, preseason,
+   depth chart, teammates, team offense, schedule, player): "played 83% of the snaps" and
+   "averaged 80% of the snaps" are one reason, not two;
+2. never `position`, `team_games_remaining` or `n_opp_games_seen`: they move a whole week's list
+   alike and cannot explain why one player ranks above another;
+3. the value itself must push the chance up, both from the training average and from the
+   average player of his list that week: a positive contribution that only comes from "the
+   value is known" (a birth date on file) would print a wrong reason ("is 30 years old: younger
+   players ..."), and a value no better than his list's average does not explain his rank;
+4. a sentence that would not be true as printed is skipped: a missing value, a "rise" that is
+   not a rise, a "soft schedule" below the league average, "more than his chances were worth"
+   when it was less.
+
+Unavailable teammates are named with the reason they are out (from `teammates_out`): "X is on a
+reserve list (such as injured reserve)", "was released", "was ruled out of the last game",
+"missed the last game" ... A feature without a sentence would fall back to "<title>: <value>";
+today every feature that can be a reason has one. Each stored reason is
+`{feature, theme, contribution, text}` (`reasons_json`).
+
+What the 2026 model uses: the L1 penalty kept 39 of its 63 columns. The largest weights are on
+snap share in the last game, whether his age and his points per game are known at all, the
+preseason rank, points per game and its rank, position, games remaining, target share, games
+played and carry share. The teammate features got weights near zero (the snap and share
+features already show a new role), so teammate reasons are rare this season.
+
+Checked against the raw data for 2026 week 2 (nflverse files in `data/raw`): Woody Marks "Got 44%
+of his team's carries last game" = 8 of Houston's 18 carries in 2026_02_CIN_HOU; Josh Downs
+"Played 83% of his team's snaps last game" = 54 snaps, 0.83 in the snap counts of
+2026_02_IND_KC, and "Drew 22% of his team's targets over the last 2 games" = mean of 13.8% (4 of
+29) and 30.0% (9 of 30); Malik Willis "Averages 14.6 fantasy points per game" = 16.70 (220 passing
+yards, 1 interception, 39 rushing yards, 1 rushing touchdown) and 12.48 (197 passing yards, 1
+touchdown, 6 rushing yards), and "Was ranked No. 21 among QBs before the season" = 20
+quarterbacks with a lower ECR on FantasyPros' 2026-09-04 QB cheat sheet.
+
+## Point in time
+
+`weekly.score_week` reads only an as-of view of the warehouse (pool, features, the team's
+games) plus two fixed things made beforehand: the model (trained on earlier seasons) and the
+backtest bins. The probability, the rank, the chance, the priority and the reasons all come from
+the same point-in-time row, and the leakage harness passes on the whole function, reasons
+included (synthetic weeks 2 and 3; opt-in realdata: 2025 week 10 with daily depth charts).
+
+## The store and the time machine
+
+Each run writes every pool row of the week to `data/predictions.duckdb` under the production
+model's version: probability (`score`), raw score, rank, `band` (JSON: chance, 90% range, the
+group's size, hits and probability range), `tier`, `reasons_json`, `kind`, `incomplete`,
+`created_at`; and the week's outcomes as far as known (pending until the window's games are
+played). Re-running a week replaces only that week's rows of that version.
+
+`uv run twm radar week SEASON WEEK [--pos RB]` shows any stored week, a walk-forward backtest
+week (2014-2025: probability and outcome; those rows have no band or reasons) or a weekly list,
+with names and teams from the pool at its as-of and outcomes where known (the store's final
+outcome, else the labels as they stand now in the warehouse).
+
+## Commands
+
+```bash
+uv run twm radar score                          # current season, latest week whose as-of passed
+uv run twm radar score --season 2026 --week 2   # a given week (reconstructed if in the past)
+uv run twm radar score --week 3 --allow-incomplete   # score anyway, marked incomplete
+uv run twm radar week 2026 2 --pos RB           # a stored week with outcomes
+uv run twm radar week 2019 9                    # a walk-forward backtest week
+```
+
+Options of `score`: `--limit` (players printed per position; the report has 25), `--retrain`,
+`--db`, `--store`, `--dataset`, `--models-dir`, `--evaluation`, `--out`. Exit codes: 0 scored,
+3 data not ready, 1 anything else (including a refused overwrite of a live week).
+
+## Known limits
+
+- **The chance is pooled** over positions and weeks. It runs a little high early in a season
+  (weeks 1-2, above) and for QBs and WRs at the top (C5 by position); each report shows its
+  week's tier rates.
+- **Reasons explain the logistic regression only.** LightGBM (tied in C4) would need another
+  method (per-tree contributions). The contributions are measured from the training average, so
+  a reason can be true and still be a modest one (a preseason No. 64 QB is better than the average
+  pool player).
+- **Outcomes of a live list stay pending** in the store until they are refreshed (the scoring
+  run writes what is known then; `twm radar week` fills in newer outcomes from the warehouse
+  when it shows a week). A job that updates stored outcomes belongs to the scheduled workflow
+  (E4).
+- **The freshness check trusts the cache's row counts.** It cannot see a partial file (a game
+  with only some players' snap counts) or a stat correction published later.
+- **Model columns** (EPA, ffopportunity expectations: spec 6.3) feed the features as in C4.

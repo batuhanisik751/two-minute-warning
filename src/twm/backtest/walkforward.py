@@ -111,6 +111,15 @@ def season_span(seasons: Sequence[int]) -> str:
     return ", ".join(str(x) for x in s)
 
 
+def _fold(have: Sequence[int], test_season: int) -> Fold:
+    train = tuple(x for x in have if x < test_season)
+    if not train:
+        raise WalkForwardError(f"test season {test_season} has no earlier season to train on")
+    if len(train) == 1:
+        return Fold(test_season, train, None, ())
+    return Fold(test_season, train, train[-1], train[:-1])
+
+
 def plan_folds(data_seasons: Iterable[int], test_seasons: Iterable[int]) -> list[Fold]:
     """One :class:`Fold` per test season (sorted): train = data seasons before it, validation
     = the last of those (none when there is only one). WalkForwardError when a test season has
@@ -120,14 +129,15 @@ def plan_folds(data_seasons: Iterable[int], test_seasons: Iterable[int]) -> list
     for s in sorted({int(x) for x in test_seasons}):
         if s not in have:
             raise WalkForwardError(f"test season {s} has no rows")
-        train = tuple(x for x in have if x < s)
-        if not train:
-            raise WalkForwardError(f"test season {s} has no earlier season to train on")
-        if len(train) == 1:
-            folds.append(Fold(s, train, None, ()))
-        else:
-            folds.append(Fold(s, train, train[-1], train[:-1]))
+        folds.append(_fold(have, s))
     return folds
+
+
+def production_fold(data_seasons: Iterable[int], season: int) -> Fold:
+    """The fold that scores ``season`` live (spec 6.2 rule 2): the same rules as
+    :func:`plan_folds`, but ``season`` needs no labelled rows (its labels are not known yet).
+    Seasons at or after ``season`` in ``data_seasons`` are ignored, never trained on."""
+    return _fold(sorted({int(s) for s in data_seasons}), int(season))
 
 
 def assert_before(frame: pl.DataFrame, test_season: int, *, what: str) -> None:

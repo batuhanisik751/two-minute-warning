@@ -71,6 +71,7 @@ The score a player earns for your fantasy team in one game, computed from his ya
 - **Formula:** sum over stats of (stat value x points per unit in config/scoring.yaml); full PPR by default
 - **Source:** twm.scoring.score / score_sql on fact_player_week
 - **Verified:** the nflverse_ppr preset reproduces nflverse's fantasy_points_ppr exactly on all 150,691 QB/RB/WR/TE player-weeks 1999-2026 (tests/test_scoring.py)
+- **Waiver Radar reason:** "{player} scored {value:.1f} fantasy points"
 
 ### Garbage time \*
 
@@ -146,6 +147,7 @@ Someone who played ahead of him is out: the classic waiver opportunity.
 - **Name:** `top_teammate_out`; **unit:** boolean; **used by:** waiver_radar
 - **Formula:** an unavailable same-position teammate averaged a higher snap share than he did over the same games (the teammate's last 3 team games up to his last appearance)
 - **Source:** twm.modules.waiver_radar.features; fact_snaps, as vacated_target_share
+- **Waiver Radar reason:** "{teammate}, who played more snaps than him, {why}"
 
 ### Age
 
@@ -154,6 +156,7 @@ Younger players are likelier to grow into a bigger role.
 - **Name:** `age_at_asof`; **unit:** years; **used by:** waiver_radar
 - **Formula:** (as-of date - dim_player.birth_date) / 365.25; NULL without a public birth date
 - **Source:** twm.modules.waiver_radar.features; dim_player.birth_date
+- **Waiver Radar reason:** "Is {value:.0f} years old: younger players more often grow into a bigger role"
 
 ### Air-yards share
 
@@ -171,6 +174,7 @@ How much of the team's downfield passing is aimed at him.
 - **Name:** `air_yards_share_avg3`; **unit:** share (0-1); **used by:** waiver_radar
 - **Formula:** mean nflverse air_yards_share over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game); can be slightly negative (passes behind the line)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.air_yards_share
+- **Waiver Radar reason:** "Got {value:.0%} of his team's air yards (throws down the field) over the last {weeks} games"
 
 ### Bye in the next 3 weeks
 
@@ -179,6 +183,7 @@ A bye costs a week of production.
 - **Name:** `bye_in_next3`; **unit:** boolean; **used by:** waiver_radar
 - **Formula:** his team has no scheduled game in at least one of the calendar weeks N+1 to N+3 (capped at the last regular-season week)
 - **Source:** twm.modules.waiver_radar.features; fact_schedule, dim_week
+- **Waiver Radar reason:** "Has a bye week in the next 3 weeks" (when no: "No bye week in the next 3 weeks")
 
 ### Carry share
 
@@ -196,6 +201,7 @@ How much of the running game goes to him lately.
 - **Name:** `carry_share_avg3`; **unit:** share (0-1); **used by:** waiver_radar
 - **Formula:** mean carry_share over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.carries, fact_team_week.carries
+- **Waiver Radar reason:** "Got {value:.0%} of his team's carries over the last {weeks} games"
 
 ### Carry share, last game
 
@@ -204,6 +210,7 @@ The share of his team's runs he got last game.
 - **Name:** `carry_share_last`; **unit:** share (0-1); **used by:** waiver_radar
 - **Formula:** carry_share in the team's last game (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.carries, fact_team_week.carries
+- **Waiver Radar reason:** "Got {value:.0%} of his team's carries last game"
 
 ### Depth-chart move
 
@@ -212,6 +219,7 @@ How many spots he moved up the depth chart in a week.
 - **Name:** `depth_rank_change`; **unit:** ranks (positive = promoted); **used by:** waiver_radar
 - **Formula:** depth_rank_prev - depth_rank_now (NULL unless both exist)
 - **Source:** twm.modules.waiver_radar.features; fact_depth_chart
+- **Waiver Radar reason:** "Moved up the depth chart from No. {prev:.0f} to No. {value:.0f} at {pos}"
 
 ### Depth-chart rank a week earlier
 
@@ -220,6 +228,7 @@ Where he was listed a week ago.
 - **Name:** `depth_rank_prev`; **unit:** rank (1 = starter); **used by:** waiver_radar
 - **Formula:** depth_rank_now computed from the chart in force 7 days before the as-of
 - **Source:** twm.modules.waiver_radar.features; fact_depth_chart
+- **Waiver Radar reason:** "Was No. {value:.0f} at {pos} on his team's depth chart a week earlier"
 
 ### Depth-chart rank now
 
@@ -228,6 +237,7 @@ Where the team lists him at his position: 1 is the starter.
 - **Name:** `depth_rank_now`; **unit:** rank (1 = starter); **used by:** waiver_radar
 - **Formula:** on his team's depth chart in force at the as-of (daily charts 2025+: the team's latest snapshot with dt <= as-of; weekly charts: the latest visible week's chart), 1 + the number of players of his position group with a better (lower) depth rank in any offensive slot of the group; ties share the better rank. Slots map to groups by twm.modules.waiver_radar.features.slot_group (QB; RB, HB, FB, J; WR, LWR, RWR, SWR, WR1/WR2, WRE, WE; TE, LTE, RTE, H-B, F and combined slots with TE). NULL when he is not in a slot of his group
 - **Source:** twm.modules.waiver_radar.features; fact_depth_chart.position, depth_rank
+- **Waiver Radar reason:** "Is No. {value:.0f} at {pos} on his team's depth chart"
 
 ### Draft round
 
@@ -236,6 +246,7 @@ Teams give early picks more chances.
 - **Name:** `draft_round`; **unit:** round (1-7); **used by:** waiver_radar
 - **Formula:** dim_player.draft_round; NULL when undrafted (see is_undrafted)
 - **Source:** twm.modules.waiver_radar.features; dim_player.draft_round
+- **Waiver Radar reason:** "Was drafted in round {value:.0f}: teams give higher draft picks more chances"
 
 ### FPOE (fantasy points over expected) \*
 
@@ -252,6 +263,7 @@ Scoring above or below his chances lately; mostly luck, so it is weighted low.
 - **Name:** `fpoe_avg3`; **unit:** points per game; **used by:** waiver_radar
 - **Formula:** mean over the team's last 3 games of (fantasy_points - xfp) (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week, fact_opportunity_week
+- **Waiver Radar reason:** "Scored {value:.1f} points per game more than his chances were worth over the last {weeks} games"
 
 ### Fantasy points, last 3 games
 
@@ -260,6 +272,7 @@ His recent scoring per game.
 - **Name:** `fantasy_points_avg3`; **unit:** points per game; **used by:** waiver_radar
 - **Formula:** mean fantasy points over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week (twm.scoring.score_sql)
+- **Waiver Radar reason:** "Averaged {value:.1f} fantasy points over the last {weeks} games"
 
 ### Fantasy points, last game
 
@@ -268,6 +281,7 @@ What he scored last game.
 - **Name:** `fantasy_points_last`; **unit:** points; **used by:** waiver_radar
 - **Formula:** fantasy points (config/scoring.yaml) in the team's last game (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week (twm.scoring.score_sql)
+- **Waiver Radar reason:** "Scored {value:.1f} fantasy points last game"
 
 ### Games played this season
 
@@ -276,6 +290,7 @@ How many games he has a stat line in so far.
 - **Name:** `games_played_to_date`; **unit:** games; **used by:** waiver_radar
 - **Formula:** regular-season games with a stat line visible at the as-of (the pool's games_to_date)
 - **Source:** twm.modules.waiver_radar.features; twm.modules.waiver_radar.pool
+- **Waiver Radar reason:** "Has played in {value:.0f} games this season"
 
 ### Games remaining
 
@@ -284,6 +299,7 @@ How much season is left to use him.
 - **Name:** `team_games_remaining`; **unit:** games; **used by:** waiver_radar
 - **Formula:** his team's regular-season fixtures after week N (fact_schedule, plus listed cancelled games)
 - **Source:** twm.modules.waiver_radar.features; fact_schedule
+- **Waiver Radar reason:** "His team has {value:.0f} games left this season"
 
 ### Goal-line opportunities per game
 
@@ -292,6 +308,7 @@ Chances inside the 10-yard line: the most valuable touches in fantasy.
 - **Name:** `gl_opps_avg3`; **unit:** looks per game; **used by:** waiver_radar
 - **Formula:** mean over the team's last 3 games of his targets plus carries (as above) with yardline_100 <= 10 (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_play
+- **Waiver Radar reason:** "Had {value:.1f} chances per game inside the opponent's 10-yard line over the last {weeks} games"
 
 ### New team this season
 
@@ -300,6 +317,7 @@ He changed teams during the season (trade or signing).
 - **Name:** `joined_team_recently`; **unit:** boolean; **used by:** waiver_radar
 - **Formula:** his latest visible roster team differs from his earliest roster team this season
 - **Source:** twm.modules.waiver_radar.features; fact_roster_week
+- **Waiver Radar reason:** "Joined {team} during the season"
 
 ### Next opponents' points allowed
 
@@ -308,6 +326,7 @@ Whether his next matchups are soft (above 1) or tough (below 1) for his position
 - **Name:** `opp_fp_allowed_next3`; **unit:** ratio (1 = average); **used by:** waiver_radar
 - **Formula:** mean over his team's next 3 scheduled opponents (fact_schedule weeks after N, byes skipped; the listed cancelled games count until played) of: fantasy points the opponent's defense allowed per game to his position group this season (visible games; the scorer's snap-count position of that game, else his latest roster position) / the league average per team-game for the group; an opponent without a visible game counts 1.0; NULL when his team has no game left. No betting lines (spec 6.4)
 - **Source:** twm.modules.waiver_radar.features; fact_schedule, fact_player_week, fact_snaps
+- **Waiver Radar reason:** "Soft schedule: his next opponents have allowed {value:.2f} times the average fantasy points to {pos}s"
 
 ### On the depth chart
 
@@ -316,6 +335,7 @@ Whether the team lists him at all.
 - **Name:** `depth_listed`; **unit:** boolean; **used by:** waiver_radar
 - **Formula:** his gsis_id is on his team's chart in force at the as-of in any slot (offense, defense or special teams); NULL when the team has no visible chart
 - **Source:** twm.modules.waiver_radar.features; fact_depth_chart
+- **Waiver Radar reason:** "Is listed on his team's depth chart"
 
 ### Opponent games observed
 
@@ -332,6 +352,7 @@ Where his points per game rank at his position so far.
 - **Name:** `ppg_pos_rank`; **unit:** rank (1 = best); **used by:** waiver_radar
 - **Formula:** rank of ppg_to_date within his roster position among roster players with a game (ties share the better rank; the candidate pool's ppg_pos_rank)
 - **Source:** twm.modules.waiver_radar.features; twm.modules.waiver_radar.pool
+- **Waiver Radar reason:** "Ranks No. {value:.0f} among {pos}s in points per game this season"
 
 ### Points per game this season
 
@@ -340,6 +361,7 @@ How much a player has scored per game so far this season. A player near the top 
 - **Name:** `ppg_to_date`; **unit:** points per game; **used by:** waiver_radar
 - **Formula:** fantasy points (config/scoring.yaml) summed over the season's regular-season games public at the as-of / the number of those games (weeks with a stat line); ppg_pos_rank ranks it within the roster position (ties share the better rank)
 - **Source:** fact_player_week (twm.scoring.score_sql) through twm.asof.AsOfView
+- **Waiver Radar reason:** "Averages {value:.1f} fantasy points per game this season"
 
 ### Position
 
@@ -356,6 +378,7 @@ Where the player stood before the season: experts' consensus ranking (ECR) when 
 - **Name:** `preseason_pos_rank`; **unit:** rank (1 = best); **used by:** waiver_radar
 - **Formula:** 2020 on (method ecr): the player's rank among his position's players on FantasyPros' last August/September redraft cheat sheet of that position before the season's first game (fact_ranking.pos_rank, page_kind preseason); not on his roster position's sheet: his rank on his own FantasyPros position's sheet, judged against that position's cutoff. 2013-2019 (method prior_ppg): his rank by last season's regular-season PPG among players of his current roster position with at least 4 games; ties share the better rank
 - **Source:** fact_ranking.pos_rank; fact_player_week for last season's PPG
+- **Waiver Radar reason:** "Was ranked No. {value:.0f} among {pos}s before the season"
 
 ### Ranked before the season
 
@@ -364,6 +387,7 @@ Whether any preseason list ranked him at all.
 - **Name:** `preseason_ranked`; **unit:** boolean; **used by:** waiver_radar
 - **Formula:** preseason_pos_rank is not NULL (FantasyPros ECR 2020 on; last season's PPG rank or a round 1-2 rookie before)
 - **Source:** twm.modules.waiver_radar.features; twm.modules.waiver_radar.pool
+- **Waiver Radar reason:** "Was on a preseason ranking list"
 
 ### Red-zone carries per game
 
@@ -372,6 +396,7 @@ Carries inside the opponent's 20-yard line.
 - **Name:** `rz_carries_avg3`; **unit:** carries per game; **used by:** waiver_radar
 - **Formula:** mean over the team's last 3 games of his runs (play_type run, not two-point tries; kneels excluded) with yardline_100 <= 20 (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_play.rusher_player_id, yardline_100
+- **Waiver Radar reason:** "Got {value:.1f} carries per game inside the opponent's 20-yard line over the last {weeks} games"
 
 ### Red-zone targets per game
 
@@ -380,6 +405,7 @@ Targets inside the opponent's 20-yard line, where touchdowns come from.
 - **Name:** `rz_targets_avg3`; **unit:** targets per game; **used by:** waiver_radar
 - **Formula:** mean over the team's last 3 games of his targets on pass plays (not two-point tries) with yardline_100 <= 20 (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_play.receiver_player_id, yardline_100
+- **Waiver Radar reason:** "Drew {value:.1f} targets per game inside the opponent's 20-yard line over the last {weeks} games"
 
 ### Rookie
 
@@ -388,6 +414,7 @@ First-year players often earn more snaps as the season goes on.
 - **Name:** `is_rookie`; **unit:** boolean; **used by:** waiver_radar
 - **Formula:** his latest visible roster row's entry_year equals the season
 - **Source:** twm.modules.waiver_radar.features; fact_roster_week.entry_year
+- **Waiver Radar reason:** "Is a rookie: first-year players often earn more snaps as the season goes on"
 
 ### Routes proxy
 
@@ -396,6 +423,7 @@ About how many pass plays he was on the field for: a stand-in for routes run, wh
 - **Name:** `routes_proxy_avg3`; **unit:** dropbacks per game; **used by:** waiver_radar
 - **Formula:** mean over the team's last 3 games of (team dropbacks in the game x his snap share in it); dropbacks = plays with qb_dropback = 1 that are not two-point tries (passes, sacks, scrambles) (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_play.qb_dropback, fact_snaps.offense_pct
+- **Waiver Radar reason:** "Was on the field for about {value:.0f} pass plays per game over the last {weeks} games"
 
 ### Snap share
 
@@ -404,6 +432,7 @@ How often a player was on the field when his team had the ball. Coaches reveal t
 - **Name:** `offense_snap_share`; **unit:** share (0-1); **used by:** waiver_radar, regression_watch
 - **Formula:** fact_snaps.offense_pct: the player's offensive snaps divided by his team's offensive snaps in that game (Pro Football Reference, rounded to 0.01)
 - **Source:** fact_snaps.offense_pct (joined by fact_snaps.gsis_id)
+- **Waiver Radar reason:** "{player}'s snap share went from {prev:.0%} to {value:.0%}"
 
 ### Snap share change
 
@@ -412,6 +441,7 @@ Did his playing time just go up or down? A big rise means the coaches trust him 
 - **Name:** `snap_share_delta`; **unit:** share points; **used by:** waiver_radar
 - **Formula:** snap_share_last minus the mean snap share of the up to 3 team games before the last (NULL when the last game is the team's first)
 - **Source:** twm.modules.waiver_radar.features; fact_snaps.offense_pct
+- **Waiver Radar reason:** "Snap share rose from {prev:.0%} to {value:.0%} in his last game"
 
 ### Snap share, last 3 games
 
@@ -420,6 +450,7 @@ His usual playing time lately, less noisy than one game.
 - **Name:** `snap_share_avg3`; **unit:** share (0-1); **used by:** waiver_radar
 - **Formula:** mean offense_snap_share over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_snaps.offense_pct
+- **Waiver Radar reason:** "Played {value:.0%} of his team's snaps over the last {weeks} games"
 
 ### Snap share, last game
 
@@ -428,6 +459,7 @@ How much he played in the most recent game. A jump is often the first sign of a 
 - **Name:** `snap_share_last`; **unit:** share (0-1); **used by:** waiver_radar
 - **Formula:** offense_snap_share in the team's last game (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_snaps.offense_pct
+- **Waiver Radar reason:** "Played {value:.0%} of his team's snaps last game"
 
 ### Snap share, season
 
@@ -436,6 +468,7 @@ His playing time over the whole season so far.
 - **Name:** `snap_share_season`; **unit:** share (0-1); **used by:** waiver_radar
 - **Formula:** mean offense_snap_share over all team games of the season (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_snaps.offense_pct
+- **Waiver Radar reason:** "Has played {value:.0%} of his team's snaps this season"
 
 ### Target share
 
@@ -445,6 +478,7 @@ The share of his team's passes thrown to a player. Targets are the raw material 
 - **Formula:** player targets / team targets in that game (nflverse player_stats)
 - **Source:** fact_player_week.target_share
 - **Verified:** equals targets / (sum of targets of the player's team that week) on 358,395 of 358,434 player-weeks 2006-2026
+- **Waiver Radar reason:** "{player} drew {value:.0%} of his team's targets"
 
 ### Target share, last 3 games
 
@@ -453,6 +487,7 @@ How much of the passing game goes to him lately.
 - **Name:** `target_share_avg3`; **unit:** share (0-1); **used by:** waiver_radar
 - **Formula:** mean nflverse target_share over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.target_share
+- **Waiver Radar reason:** "Drew {value:.0%} of his team's targets over the last {weeks} games"
 
 ### Target share, last game
 
@@ -461,6 +496,7 @@ The share of his team's passes thrown his way last game.
 - **Name:** `target_share_last`; **unit:** share (0-1); **used by:** waiver_radar
 - **Formula:** nflverse target_share in the team's last game, 0 without a stat line (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.target_share
+- **Waiver Radar reason:** "Drew {value:.0%} of his team's targets last game"
 
 ### Team EPA per play \*
 
@@ -469,6 +505,7 @@ How efficient his offense is: good offenses create more points to go around.
 - **Name:** `team_epa_per_play`; **unit:** points per play; **used by:** waiver_radar
 - **Formula:** mean epa over his team's run and pass plays (no two-point tries) in the season's visible games
 - **Source:** twm.modules.waiver_radar.features; fact_play.epa
+- **Waiver Radar reason:** "His offense ({team}) has been efficient this season: {value:+.2f} expected points added per play"
 
 ### Team EPA per play (neutral) \*
 
@@ -477,6 +514,7 @@ Offensive efficiency when the game is close, the fairest view of a team.
 - **Name:** `team_epa_per_play_neutral`; **unit:** points per play; **used by:** waiver_radar
 - **Formula:** as team_epa_per_play, neutral situations only (fact_play.is_neutral)
 - **Source:** twm.modules.waiver_radar.features; fact_play.epa, is_neutral
+- **Waiver Radar reason:** "His offense ({team}) has been efficient when the game is close: {value:+.2f} expected points added per play"
 
 ### Team neutral pass rate
 
@@ -485,6 +523,7 @@ How pass-heavy his team is when the score does not force it.
 - **Name:** `team_pass_rate_neutral`; **unit:** share (0-1); **used by:** waiver_radar
 - **Formula:** share of his team's neutral-situation run and pass plays with pass = 1 (passes, sacks, scrambles)
 - **Source:** twm.modules.waiver_radar.features; fact_play.pass, is_neutral
+- **Waiver Radar reason:** "His team ({team}) passes on {value:.0%} of its plays when the game is close"
 
 ### Team plays per game
 
@@ -493,6 +532,7 @@ Pace: more plays mean more chances for everybody.
 - **Name:** `team_plays_per_game`; **unit:** plays per game; **used by:** waiver_radar
 - **Formula:** his team's run and pass plays (no two-point tries) / its visible games
 - **Source:** twm.modules.waiver_radar.features; fact_play
+- **Waiver Radar reason:** "His team ({team}) runs {value:.0f} plays per game: more plays, more chances"
 
 ### Teammates out at his position
 
@@ -501,6 +541,7 @@ How many players at his position are out.
 - **Name:** `teammate_same_pos_unavailable`; **unit:** players; **used by:** waiver_radar
 - **Formula:** number of unavailable teammates of his position group
 - **Source:** twm.modules.waiver_radar.features; as vacated_target_share
+- **Waiver Radar reason:** "{value:.0f} {pos} teammate(s) are out: {teammate}"
 
 ### Undrafted
 
@@ -509,6 +550,7 @@ He was not drafted.
 - **Name:** `is_undrafted`; **unit:** boolean; **used by:** waiver_radar
 - **Formula:** no draft round in dim_player at the as-of
 - **Source:** twm.modules.waiver_radar.features; dim_player.draft_round
+- **Waiver Radar reason:** "Went undrafted" (when no: "Was drafted: teams give drafted players more chances")
 
 ### Vacated carry share
 
@@ -517,6 +559,7 @@ Carries freed up by teammates who are out.
 - **Name:** `vacated_carry_share`; **unit:** share (sum); **used by:** waiver_radar
 - **Formula:** as vacated_target_share, with carry_share
 - **Source:** twm.modules.waiver_radar.features; fact_player_week, fact_team_week, fact_roster_week
+- **Waiver Radar reason:** "{teammate} {why}: {value:.0%} of the team's carries are up for grabs"
 
 ### Vacated carry share at his position
 
@@ -525,6 +568,7 @@ Carries freed up by players at his own position.
 - **Name:** `same_pos_vacated_carry_share`; **unit:** share (sum); **used by:** waiver_radar
 - **Formula:** vacated_carry_share over unavailable teammates of his own position group only
 - **Source:** twm.modules.waiver_radar.features; as vacated_carry_share
+- **Waiver Radar reason:** "{teammate} ({pos}) {why}: {value:.0%} of the team's carries are up for grabs at his position"
 
 ### Vacated target share
 
@@ -533,6 +577,7 @@ Targets that teammates who are now out used to get: somebody has to catch them.
 - **Name:** `vacated_target_share`; **unit:** share (sum); **used by:** waiver_radar
 - **Formula:** sum over his unavailable teammates (see teammate_unavailable) of their target_share averaged over the team's last 3 games up to their last appearance (before they became unavailable; games they missed count as 0)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week, fact_roster_week, fact_injury_report, fact_snaps
+- **Waiver Radar reason:** "{teammate} {why}: {value:.0%} of the team's targets are up for grabs"
 
 ### Vacated target share at his position
 
@@ -541,6 +586,7 @@ Targets freed up by players at his own position: the most direct path to more wo
 - **Name:** `same_pos_vacated_target_share`; **unit:** share (sum); **used by:** waiver_radar
 - **Formula:** vacated_target_share over unavailable teammates of his own position group only
 - **Source:** twm.modules.waiver_radar.features; as vacated_target_share
+- **Waiver Radar reason:** "{teammate} ({pos}) {why}: {value:.0%} of the team's targets are up for grabs at his position"
 
 ### WOPR (weighted opportunity rating)
 
@@ -558,6 +604,7 @@ One number for a receiver's recent opportunity.
 - **Name:** `wopr_avg3`; **unit:** index (about 0-1); **used by:** waiver_radar
 - **Formula:** mean nflverse wopr (1.5 x target share + 0.7 x air-yards share) over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.wopr
+- **Waiver Radar reason:** "Receiving workload (WOPR: targets and air yards combined) of {value:.2f} over the last {weeks} games"
 
 ### Years of experience
 
@@ -566,6 +613,7 @@ Seasons in the league before this one.
 - **Name:** `years_exp`; **unit:** seasons; **used by:** waiver_radar
 - **Formula:** his latest visible roster row's years_exp
 - **Source:** twm.modules.waiver_radar.features; fact_roster_week.years_exp
+- **Waiver Radar reason:** "Has {value:.0f} seasons of NFL experience"
 
 ### xFP (expected fantasy points) \*
 
@@ -583,6 +631,7 @@ What his recent chances were worth per game, whatever he did with them.
 - **Name:** `xfp_avg3`; **unit:** points per game; **used by:** waiver_radar
 - **Formula:** mean xfp over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_opportunity_week
+- **Waiver Radar reason:** "His targets and carries were worth {value:.1f} fantasy points per game over the last {weeks} games"
 
 ### xFP, last game \*
 
@@ -591,6 +640,7 @@ Expected fantasy points from his chances last game.
 - **Name:** `xfp_last`; **unit:** points; **used by:** waiver_radar
 - **Formula:** xfp in the team's last game, 0 without a row (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_opportunity_week
+- **Waiver Radar reason:** "His targets and carries last game were worth {value:.1f} fantasy points for an average player"
 
 ## Labels (what models predict)
 

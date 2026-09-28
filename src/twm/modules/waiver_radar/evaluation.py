@@ -10,9 +10,11 @@ experts' page existed (``ecr_available``), and the labels and weekly ranks of ev
 player (for "breakouts caught"). The dataset's labels are checked against the store's outcomes
 row by row; a mismatch stops the evaluation (the store is stale: re-run the backtest).
 
-**Which predictions.** For every (model, label, test season) the model version written last
+**Which predictions.** For every (model, label, test season) of the evaluation seasons
+(settings ``seasons.waiver_radar_eval``) the model version written last
 (:func:`twm.predictions.current_versions`): a backtest re-run after a change adds new versions
-and leaves the old ones in the store.
+and leaves the old ones in the store. The live season's production fold (C6) is left out until
+its outcomes are known.
 
 **What is measured** (PROJECT_SPEC 8.1), per label, per method, pooled and per position, with the
 number of lists (weeks x positions) and hits next to every rate:
@@ -70,7 +72,12 @@ from twm.backtest.metrics import (
 )
 from twm.backtest.walkforward import RAW_SCORE, SCORE
 from twm.config import FANTASY_POSITIONS, league
-from twm.modules.waiver_radar.backtest import SUBSETS, rostered_threshold, season_ranges
+from twm.modules.waiver_radar.backtest import (
+    SUBSETS,
+    eval_seasons,
+    rostered_threshold,
+    season_ranges,
+)
 from twm.modules.waiver_radar.models import (
     BASELINES,
     GROUP,
@@ -126,14 +133,23 @@ class EvaluationError(ValueError):
 # --------------------------------------------------------------------------------------
 
 
-def load_predictions(store: Path | str, label: str) -> pl.DataFrame:
+def load_predictions(
+    store: Path | str, label: str, *, seasons: tuple[int, int] | None = None
+) -> pl.DataFrame:
     """The current backtest predictions of every method for ``label``, with the outcome
-    (``y``): model, season, week, gsis_id, position, score, raw_score, rank, model_version."""
+    (``y``): model, season, week, gsis_id, position, score, raw_score, rank, model_version.
+
+    Only the model versions whose test season is in ``seasons`` (first, last; default the
+    evaluation seasons, settings ``seasons.waiver_radar_eval``): the production fold of the
+    live season (C6) scores weeks whose outcomes are not known yet and is graded later."""
     if label not in LABELS:
         raise ValueError(f"unknown label {label!r}; labels: {LABELS}")
     if not Path(store).exists():
         raise EvaluationError(f"predictions store not found: {store}; run `twm radar backtest`")
-    versions = pr.current_versions(store, MODULE, label)
+    first, last = seasons if seasons is not None else eval_seasons()
+    versions = pr.current_versions(store, MODULE, label).filter(
+        pl.col("test_season").is_between(first, last)
+    )
     if versions.height == 0:
         raise EvaluationError(
             f"no {label} predictions in the store; run `twm radar backtest --label {label}`"

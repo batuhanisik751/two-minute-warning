@@ -128,3 +128,4 @@ paths:
   league_db: data/league.duckdb
   manual: data/manual          # committed: player_id_overrides.csv (B3), coach_departures.csv (H2)
   predictions: data/predictions.duckdb   # predictions, outcomes, model versions (C4, gitignored)
+  models: models                         # production models, <module>/<version>.joblib (C6, gitignored)

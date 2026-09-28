@@ -7,9 +7,12 @@ Tables:
 - ``predictions``: one row per (model version, entity, season, week): the as-of, the horizon,
   the score (a calibrated probability for a model; the ranking value for a baseline), the
   uncalibrated ``raw_score``, the ``rank`` within ``rank_group`` (the Waiver Radar ranks per
-  position), ``band`` and ``reasons_json`` (filled from step C6; NULL / '[]' until then),
-  ``kind`` ('backtest' = reconstructed walk-forward, 'live' = made in real time) and
-  ``created_at``.
+  position), ``band`` and ``reasons_json`` (filled by the weekly lists of step C6: the band as
+  JSON text, the reasons as a JSON list; NULL / '[]' for walk-forward backtest rows), ``kind``
+  ('backtest' = reconstructed, 'live' = made in real time), ``created_at``, and (added in C6,
+  appended so older stores migrate in place) ``tier`` (the suggested priority of a weekly list:
+  'must-add', 'speculative', 'watch' or NULL) and ``incomplete`` (TRUE when the week was scored
+  although some of its data had not arrived: ``twm radar score --allow-incomplete``).
 - ``outcomes``: what happened, per (module, entity, season, week): the labels and whether they
   are final.
 - ``model_versions``: what produced a prediction: model, label, feature list, hyperparameters,
@@ -23,10 +26,13 @@ version, whichever weeks it scores, and it can be recomputed from its ``model_ve
 The content of the rows a version scored is kept in its notes (``test_rows_hash``), so a
 changed input is visible too. ``created_at`` is excluded from every hash.
 
-Writes are idempotent (:func:`write_predictions`): rows of the model versions being written
-are replaced, outcomes of the same (module, entity, season, week) are replaced, nothing else
-is touched, so each table's key (``PRIMARY_KEYS``) stays unique. Timestamps are naive UTC, like
-the warehouse.
+Writes are idempotent (:func:`write_predictions`). A backtest (``replace='versions'``)
+replaces every row of the model versions it writes; a weekly list (``replace='weeks'``)
+replaces only the rows of the (model version, season, week) it writes, keeps an existing
+``model_versions`` row as it is, and never overwrites a stored 'live' week with a
+reconstructed ('backtest') one. Outcomes of the same (module, entity, season, week) are
+replaced; nothing else is touched, so each table's key (``PRIMARY_KEYS``) stays unique.
+Timestamps are naive UTC, like the warehouse.
 """
 
 from __future__ import annotations
@@ -65,7 +71,17 @@ PREDICTION_COLUMNS: dict[str, str] = {
     "reasons_json": "VARCHAR NOT NULL",
     "kind": "VARCHAR NOT NULL",
     "created_at": "TIMESTAMP NOT NULL",
+    # added in C6 (weekly lists); ALTERed into older stores by connect()
+    "tier": "VARCHAR",
+    "incomplete": "BOOLEAN",
 }
+# Columns a writer may leave out (filled with these defaults): the C6 additions.
+PREDICTION_DEFAULTS: dict[str, tuple[Any, pl.DataType]] = {
+    "tier": (None, pl.String()),
+    "incomplete": (False, pl.Boolean()),
+}
+TIERS = ("must-add", "speculative", "watch")
+REPLACE_MODES = ("versions", "weeks")
 OUTCOME_COLUMNS: dict[str, str] = {
     "module": "VARCHAR NOT NULL",
     "entity_id": "VARCHAR NOT NULL",
@@ -204,11 +220,22 @@ def connect(path: Path | str, *, read_only: bool = False) -> duckdb.DuckDBPyConn
         # write_predictions keeps the keys unique instead (and the tests check it).
         body = ", ".join(f"{c} {t}" for c, t in cols.items())
         con.execute(f"CREATE TABLE IF NOT EXISTS {name} ({body})")
+    # a store written before C6 lacks the appended prediction columns: add them in place
+    for col in PREDICTION_DEFAULTS:
+        con.execute(
+            f"ALTER TABLE predictions ADD COLUMN IF NOT EXISTS {col} {PREDICTION_COLUMNS[col]}"
+        )
     return con
 
 
 def _check(df: pl.DataFrame, table: str) -> pl.DataFrame:
     cols = list(TABLES[table])
+    if table == "predictions":
+        df = df.with_columns(
+            pl.lit(value, dtype=dtype).alias(c)
+            for c, (value, dtype) in PREDICTION_DEFAULTS.items()
+            if c not in df.columns
+        )
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise ValueError(f"{table} rows lack columns {missing}")
@@ -220,6 +247,9 @@ def _check(df: pl.DataFrame, table: str) -> pl.DataFrame:
         bad = set(out.get_column("kind").unique().to_list()) - set(KINDS)
         if bad:
             raise ValueError(f"kind must be one of {KINDS}, got {sorted(bad)}")
+        bad = set(out.get_column("tier").drop_nulls().unique().to_list()) - set(TIERS)
+        if bad:
+            raise ValueError(f"tier must be one of {TIERS} or NULL, got {sorted(bad)}")
     return out
 
 
@@ -234,16 +264,30 @@ def _naive(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+class LiveWeekError(ValueError):
+    """A reconstructed ('backtest') list would overwrite a stored 'live' list of the same week."""
+
+
 def write_predictions(
     path: Path | str,
     *,
     predictions: pl.DataFrame,
     versions: pl.DataFrame,
     outcomes: pl.DataFrame | None = None,
+    replace: str = "versions",
 ) -> dict[str, int]:
-    """Replace the rows of ``versions``' model versions (predictions and version rows) and the
-    outcomes of the same (module, entity, season, week), in one transaction. Returns the row
-    counts written per table."""
+    """Write predictions, their model versions and (optionally) outcomes in one transaction.
+    Returns the row counts written per table.
+
+    ``replace='versions'`` (a backtest): every stored prediction and version row of
+    ``versions``' model versions is replaced. ``replace='weeks'`` (a weekly list): only the
+    stored predictions of the same (model version, season, week) are replaced, a version row
+    already in the store is kept as it is (its ``created_at`` says when the model was made),
+    and a week whose stored rows are 'live' is never replaced by 'backtest' rows
+    (:class:`LiveWeekError`): the real-time record is kept. Outcomes of the same (module,
+    entity, season, week) are replaced in both modes."""
+    if replace not in REPLACE_MODES:
+        raise ValueError(f"replace must be one of {REPLACE_MODES}, not {replace!r}")
     preds = _naive(_check(predictions, "predictions"))
     vers = _naive(_check(versions, "model_versions"))
     outs = _naive(_check(outcomes, "outcomes")) if outcomes is not None else None
@@ -256,16 +300,38 @@ def write_predictions(
     try:
         con.execute("BEGIN TRANSACTION")
         con.register("new_versions", vers.to_arrow())
-        con.execute(
-            "DELETE FROM predictions WHERE model_version IN "
-            "(SELECT model_version FROM new_versions)"
-        )
-        con.execute(
-            "DELETE FROM model_versions WHERE model_version IN "
-            "(SELECT model_version FROM new_versions)"
-        )
-        con.execute("INSERT INTO model_versions SELECT * FROM new_versions")
         con.register("new_predictions", preds.to_arrow())
+        if replace == "versions":
+            con.execute(
+                "DELETE FROM predictions WHERE model_version IN "
+                "(SELECT model_version FROM new_versions)"
+            )
+            con.execute(
+                "DELETE FROM model_versions WHERE model_version IN "
+                "(SELECT model_version FROM new_versions)"
+            )
+            con.execute("INSERT INTO model_versions SELECT * FROM new_versions")
+        else:
+            clash = con.execute(
+                "SELECT p.model_version, p.season, p.week FROM predictions p JOIN "
+                "(SELECT DISTINCT model_version, season, week FROM new_predictions "
+                " WHERE kind = 'backtest') n USING (model_version, season, week) "
+                "WHERE p.kind = 'live' LIMIT 1"
+            ).fetchone()
+            if clash is not None:
+                raise LiveWeekError(
+                    f"{clash[1]} week {clash[2]} already has a live list of {clash[0]}; a "
+                    "reconstructed run would overwrite the real-time record, so it is not stored"
+                )
+            con.execute(
+                "DELETE FROM predictions p USING (SELECT DISTINCT model_version, season, week "
+                "FROM new_predictions) n WHERE p.model_version = n.model_version "
+                "AND p.season = n.season AND p.week = n.week"
+            )
+            con.execute(
+                "INSERT INTO model_versions SELECT * FROM new_versions WHERE model_version "
+                "NOT IN (SELECT model_version FROM model_versions)"
+            )
         con.execute("INSERT INTO predictions SELECT * FROM new_predictions")
         if outs is not None:
             con.register("new_outcomes", outs.to_arrow())
@@ -285,6 +351,42 @@ def write_predictions(
         "model_versions": vers.height,
         "outcomes": 0 if outs is None else outs.height,
     }
+
+
+def register_version(path: Path | str, version: pl.DataFrame) -> bool:
+    """Record one trained model (a ``model_versions`` row) and make it the current one of its
+    (module, model, label, test season) (:func:`current_versions`). A version already stored
+    keeps its row; only if another version was written after it is its ``created_at`` moved to
+    the given time, so it is current again. Returns True when a new row was added."""
+    vers = _naive(_check(version, "model_versions"))
+    if vers.height != 1:
+        raise ValueError("register_version takes exactly one model_versions row")
+    row = vers.row(0, named=True)
+    con = connect(path)
+    try:
+        con.execute("BEGIN TRANSACTION")
+        con.register("new_version", vers.to_arrow())
+        stored = con.execute(
+            "SELECT count(*) FROM model_versions WHERE model_version = ?", [row["model_version"]]
+        ).fetchone()
+        added = not (stored and stored[0])
+        if added:
+            con.execute("INSERT INTO model_versions SELECT * FROM new_version")
+        else:
+            con.execute(
+                "UPDATE model_versions SET created_at = ? WHERE model_version = ? AND created_at "
+                "< (SELECT max(created_at) FROM model_versions WHERE module = ? AND model = ? "
+                "AND label = ? AND test_season IS NOT DISTINCT FROM ?)",
+                [row["created_at"], row["model_version"], row["module"], row["model"],
+                 row["label"], row["test_season"]],
+            )  # fmt: skip
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+    finally:
+        con.close()
+    return added
 
 
 def current_versions(path: Path | str, module: str, label: str | None = None) -> pl.DataFrame:

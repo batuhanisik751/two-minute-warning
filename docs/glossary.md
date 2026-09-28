@@ -23,6 +23,14 @@ How much a single play helped or hurt the offense's scoring chances. A 30-yard c
 - **Formula:** nflfastR's expected points after the play minus before it, for the offense
 - **Source:** fact_play.epa
 
+### FLEX-worthy finish
+
+The running back or receiver scored well enough to fill a FLEX slot that week. Informative only; it is not a label.
+
+- **Name:** `is_flex_finish`; **unit:** boolean; **used by:** waiver_radar
+- **Formula:** a RB or WR with weekly_pos_rank <= flex_worthy_rank (36); always false for QB and TE
+- **Source:** twm.modules.waiver_radar.labels.weekly_finishes
+
 ### Fantasy points
 
 The score a player earns for your fantasy team in one game, computed from his yards, touchdowns, catches and mistakes with your league's settings.
@@ -81,6 +89,14 @@ How many real leagues have the player on a roster. It checks the candidate pool 
 - **Formula:** FantasyPros' average share of leagues rostering the player across sites (fact_ranking.player_owned_avg) from the season's latest weekly ranking public at the as-of (the Friday before that week's games); owned_espn = ESPN's share (fact_ranking.player_owned_espn). 2020 partly, 2021 on
 - **Source:** fact_ranking.player_owned_avg, fact_ranking.player_owned_espn
 
+### Starter finish
+
+The player scored like a weekly starter in a 12-team league that week.
+
+- **Name:** `is_starter_finish`; **unit:** boolean; **used by:** waiver_radar
+- **Formula:** weekly_pos_rank <= the position's starter threshold (QB top 12, RB top 24, WR top 24, TE top 12)
+- **Source:** twm.modules.waiver_radar.labels.weekly_finishes
+
 ### WPA (win probability added) \*
 
 How much one play or decision changed a team's chance of winning.
@@ -88,6 +104,14 @@ How much one play or decision changed a team's chance of winning.
 - **Name:** `wpa`; **unit:** probability points; **used by:** decisions
 - **Formula:** win probability after the play minus before it, for the offense
 - **Source:** fact_play.wpa
+
+### Weekly position rank
+
+Where a player's score ranked at his position that week: rank 5 at WR means four receivers scored more. Built from the finished week, so it is outcome data for labels; a feature must rank only the games public at its as-of.
+
+- **Name:** `weekly_pos_rank`; **unit:** rank (1 = best); **used by:** waiver_radar
+- **Formula:** 1 + the number of players of the same position with more fantasy points that regular-season week, among every player with a stat line (rank 'min': ties share the better rank); position = his point-in-time roster position that week (fact_roster_week.position; without a row that week his latest earlier roster week of the season, else that game's fact_snaps.position); QB/RB/WR/TE only (fullbacks and others are not ranked). Column pos_rank of weekly_finishes
+- **Source:** twm.modules.waiver_radar.labels.weekly_finishes (fact_player_week, fact_roster_week.position, fact_snaps.position)
 
 ### Win probability \*
 
@@ -157,19 +181,109 @@ What an average player would have scored from the same chances (where he was tar
 
 ## Labels (what models predict)
 
-### Sustained hit (planned, step C2)
+### Best weekly rank in the window
+
+His best week at his position in the window. A label detail: never a model feature.
+
+- **Name:** `best_rank`; **unit:** rank; **used by:** waiver_radar
+- **Formula:** min(weekly_pos_rank) over the window weeks (NULL if never ranked)
+- **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### FLEX-worthy finishes in the window
+
+Informative: how often he was worth a FLEX start. A label detail: never a model feature.
+
+- **Name:** `n_flex_finishes`; **unit:** weeks; **used by:** waiver_radar
+- **Formula:** window weeks with is_flex_finish (RB/WR only)
+- **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Games in the label window
+
+How many games the player's team has in the window. A label detail: never a model feature.
+
+- **Name:** `window_games`; **unit:** games; **used by:** waiver_radar
+- **Formula:** len(window_weeks): 3, fewer in the last weeks of a season
+- **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Label status
+
+A pending label (the current season) is unknown, never guessed. A label detail: never a model feature.
+
+- **Name:** `label_status`; **unit:** 'final' or 'pending'; **used by:** waiver_radar
+- **Formula:** 'pending' until every game of every window week has a final score (fact_game.result) and stat lines in the cache, else 'final'
+- **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Label window weeks
+
+The weeks whose results decide the label. A label detail: never a model feature.
+
+- **Name:** `window_weeks`; **unit:** list of week numbers; **used by:** waiver_radar
+- **Formula:** the first 3 regular-season weeks after the as-of week N in which the player's as-of team has a game (its bye weeks skipped), up to the last regular-season week (dim_week.is_last_reg_week)
+- **Source:** twm.modules.waiver_radar.labels.label_rows (fact_game)
+
+### Short label window
+
+The window was cut short by the end of the regular season. A label detail: never a model feature.
+
+- **Name:** `is_short_window`; **unit:** boolean; **used by:** waiver_radar
+- **Formula:** window_games < 3
+- **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Starter finishes in the window
+
+The count behind y_hit and y_sustained. A label detail: never a model feature.
+
+- **Name:** `n_starter_finishes`; **unit:** weeks; **used by:** waiver_radar
+- **Formula:** window weeks with is_starter_finish
+- **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Sustained hit
 
 A stricter target: a player who stays startable, not a one-week spike.
 
-- **Name:** `y_sustained`; **unit:** boolean; **used by:** waiver_radar
-- **Formula:** as y_hit, but in at least two of those weeks
+- **Name:** `y_sustained`; **unit:** boolean (NULL while pending); **used by:** waiver_radar
+- **Formula:** n_starter_finishes >= 2: as y_hit, but in at least two window weeks
+- **Source:** twm.modules.waiver_radar.labels.label_rows
 
-### Waiver hit (planned, step C2)
+### Usable for training
+
+Whether a model may learn from this row. A label detail: never a model feature.
+
+- **Name:** `train_eligible`; **unit:** boolean; **used by:** waiver_radar
+- **Formula:** window_games >= 2 (PROJECT_SPEC 8.1: weeks with fewer remaining games are left out of training)
+- **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Waiver hit
 
 What the Waiver Radar predicts: will this player be startable soon?
 
-- **Name:** `y_hit`; **unit:** boolean; **used by:** waiver_radar
-- **Formula:** the player finishes at or above his position's starter threshold in at least one of the next three weeks he plays (bye extends the window)
+- **Name:** `y_hit`; **unit:** boolean (NULL while pending); **used by:** waiver_radar
+- **Formula:** n_starter_finishes >= 1: at least one starter finish in the label window (the next 3 regular-season weeks after the as-of week N in which his as-of team plays; a bye is skipped and extends the window, the season's last regular-season week ends it), counting only stat lines public strictly after the as-of
+- **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Weekly points in the window
+
+Week-by-week scores, for reports and eyeballing. A label detail: never a model feature.
+
+- **Name:** `window_points`; **unit:** list of points; **used by:** waiver_radar
+- **Formula:** fantasy points of each window week (0 for a week he played without a stat line, NULL for a week he did not play)
+- **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Weekly ranks in the window
+
+Week-by-week ranks, for reports and eyeballing. A label detail: never a model feature.
+
+- **Name:** `window_ranks`; **unit:** list of ranks; **used by:** waiver_radar
+- **Formula:** weekly_pos_rank of each window week (NULL where he had no stat line)
+- **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Window weeks played
+
+How many window weeks the player actually took the field on offense. A label detail: never a model feature.
+
+- **Name:** `n_window_played`; **unit:** weeks; **used by:** waiver_radar
+- **Formula:** window weeks with fact_snaps.offense_snaps > 0 or a stat line, for any team
+- **Source:** twm.modules.waiver_radar.labels.label_rows
 
 ## Concepts
 
@@ -216,7 +330,8 @@ The players who are probably still on waivers in a typical 12-team league. There
 A player 'finished as a starter' in a week when he scored well enough that a typical 12-team league would have started him.
 
 - **Name:** `starter_threshold`; **unit:** rank; **used by:** waiver_radar, shared
-- **Formula:** teams x starters at the position (config/league.yaml): QB top 12, RB top 24, WR top 24, TE top 12 by fantasy points that week; FLEX-worthy: RB/WR top 36
+- **Formula:** teams x starters at the position (config/league.yaml starter_rank_threshold): QB top 12, RB top 24, WR top 24, TE top 12 by fantasy points that week; FLEX-worthy (flex_worthy_rank): RB/WR top 36
+- **Source:** config/league.yaml; twm.modules.waiver_radar.labels.LabelRules
 
 ## Identifiers (never model features)
 

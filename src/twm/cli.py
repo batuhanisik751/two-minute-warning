@@ -295,7 +295,9 @@ def ids_report(
     typer.echo(f"wrote {target}")
 
 
-radar_app = typer.Typer(help="Waiver Radar: the candidate pool (players probably on waivers).")
+radar_app = typer.Typer(
+    help="Waiver Radar: the candidate pool (players probably on waivers) and its labels."
+)
 app.add_typer(radar_app, name="radar")
 
 
@@ -391,6 +393,134 @@ def radar_pool_report(
         raise typer.Exit(code=1) from e
     target = out if out.is_absolute() else ROOT / out
     csv_path = write_report(report, target)
+    for line in report.summary:
+        typer.echo(line)
+    typer.echo(f"wrote {target}")
+    typer.echo(f"wrote {csv_path}")
+
+
+def _list_text(values: list | None, *, digits: int | None = None) -> str:
+    if values is None:
+        return "?"
+    if digits is None:
+        return ",".join("-" if v is None else str(v) for v in values)
+    return ",".join("-" if v is None else f"{v:.{digits}f}" for v in values)
+
+
+@radar_app.command("labels")
+def radar_labels(
+    season: int = typer.Argument(..., help="Season, e.g. 2023."),
+    week: int = typer.Argument(..., help="Regular-season week N; the pool at its Tuesday as-of."),
+    pos: str | None = typer.Option(None, "--pos", help="Only this position (QB, RB, WR, TE)."),
+    hits_only: bool = typer.Option(False, "--hits-only", help="Only players with y_hit."),
+    show_all: bool = typer.Option(
+        False, "--all", help="Also list rostered players outside the pool."
+    ),
+    limit: int = typer.Option(30, "--limit", help="Rows to print (0 = all)."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+) -> None:
+    """Print one as-of's labelled pool: each player's window weeks, weekly ranks and labels.
+
+    y_hit = at least one starter finish (weekly rank at or above the starter threshold of his
+    position) in the next 3 weeks his team plays after week N; y_sustained = at least two.
+    docs/waiver_radar.md explains every rule.
+    """
+    import duckdb
+    import polars as pl
+
+    from twm.asof import AsOfView, WarehouseTooOldError, weekly_as_of
+    from twm.modules.waiver_radar.labels import label_rows, last_reg_weeks
+    from twm.modules.waiver_radar.pool import candidate_pool
+
+    path = _warehouse_or_exit(db)
+    try:
+        when = weekly_as_of(path, season, week)
+        last = last_reg_weeks(path, [season]).get(season)
+        if last is not None and week >= last:
+            typer.echo(
+                f"{season} week {week} is the last regular-season week: there is no window "
+                "after it, so it has no labels."
+            )
+            return
+        with AsOfView(path, when) as view:
+            pool = candidate_pool(view, season, week)
+        df = label_rows(path, pool)
+    except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot label the pool: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    if pool.height == 0:
+        typer.echo(
+            f"{season} week {week}, as-of {when:%Y-%m-%d %H:%M} UTC: the pool is empty (no "
+            "weekly roster was public yet; docs/waiver_radar.md)."
+        )
+        return
+    if pos is not None:
+        df = df.filter(pl.col("position") == pos.upper())
+    if not show_all:
+        df = df.filter(pl.col("in_pool"))
+    n_rows = df.height
+    n_hit = int(df.get_column("y_hit").fill_null(False).sum())
+    n_sus = int(df.get_column("y_sustained").fill_null(False).sum())
+    n_pending = int((df.get_column("label_status") == "pending").sum())
+    if hits_only:
+        df = df.filter(pl.col("y_hit").fill_null(False))
+    df = df.sort(
+        ["y_hit", "n_starter_finishes", "best_rank", "ppg_to_date", "gsis_id"],
+        descending=[True, True, False, True, False],
+        nulls_last=True,
+    )
+    who = "rostered players" if show_all else "pool players"
+    typer.echo(
+        f"{season} week {week}, as-of {when:%Y-%m-%d %H:%M} UTC: {n_rows} {who}"
+        + (f" at {pos.upper()}" if pos else "")
+        + f", {n_hit} y_hit, {n_sus} y_sustained, {n_pending} pending"
+    )
+    shown = df if limit == 0 else df.head(limit)
+    table = shown.select(
+        "name", "team", "position", "in_pool", "ppg_to_date",
+        pl.col("window_weeks").map_elements(_list_text, return_dtype=pl.String).alias("weeks"),
+        pl.col("window_ranks").map_elements(_list_text, return_dtype=pl.String,
+                                            skip_nulls=False).alias("ranks"),
+        pl.col("window_points").map_elements(lambda v: _list_text(v, digits=1),
+                                             return_dtype=pl.String,
+                                             skip_nulls=False).alias("points"),
+        "n_window_played", "n_starter_finishes", "y_hit", "y_sustained", "label_status",
+    )  # fmt: skip
+    with pl.Config(tbl_rows=-1, tbl_cols=-1, tbl_width_chars=220, float_precision=1,
+                   tbl_hide_dataframe_shape=True, tbl_hide_column_data_types=True):  # fmt: skip
+        typer.echo(str(table))
+
+
+@radar_app.command("labels-report")
+def radar_labels_report(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    out: Path = typer.Option(
+        Path("reports/waiver_radar/labels.md"),
+        "--out",
+        help="Markdown file to write (relative paths are under the project root); a CSV with "
+        "the same name is written next to it.",
+    ),
+    start: int = typer.Option(2013, "--start", help="First season (snap counts start 2013)."),
+    end: int | None = typer.Option(None, "--end", help="Last season (default: current)."),
+) -> None:
+    """Write the label report (base rates, windows, checks, example hits; markdown + CSV)."""
+    import duckdb
+
+    from twm.asof import WarehouseTooOldError
+    from twm.config import ROOT, settings
+    from twm.modules.waiver_radar.label_report import build_label_report, write_label_report
+
+    path = _warehouse_or_exit(db)
+    last = end if end is not None else settings().current_season
+    if start > last:
+        raise typer.BadParameter(f"--start {start} is after --end {last}")
+    try:
+        report = build_label_report(path, list(range(start, last + 1)))
+    except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot build the report: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    target = out if out.is_absolute() else ROOT / out
+    csv_path = write_label_report(report, target)
     for line in report.summary:
         typer.echo(line)
     typer.echo(f"wrote {target}")

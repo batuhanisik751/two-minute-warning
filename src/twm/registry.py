@@ -115,9 +115,23 @@ def _pool_texts() -> dict[str, str]:
     }
 
 
+def _label_texts() -> dict[str, str]:
+    """Config-derived pieces of the label entries (C2)."""
+    from twm.modules.waiver_radar.labels import MIN_TRAIN_GAMES, WINDOW_GAMES
+
+    lg = league()
+    return {
+        "thresholds": ", ".join(f"{p} top {n}" for p, n in lg.starter_rank_threshold.items()),
+        "flex": str(lg.flex_worthy_rank),
+        "window": str(WINDOW_GAMES),
+        "min_games": str(MIN_TRAIN_GAMES),
+    }
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
     pool = _pool_texts()
+    lab = _label_texts()
     return [
         # ---- fantasy basics ------------------------------------------------------------
         Entry(
@@ -153,10 +167,12 @@ def _entries() -> list[Entry]:
             kind="concept",
             modules=("waiver_radar", "shared"),
             unit="rank",
-            formula="teams x starters at the position (config/league.yaml): QB top 12, RB top "
-            "24, WR top 24, TE top 12 by fantasy points that week; FLEX-worthy: RB/WR top 36",
+            formula="teams x starters at the position (config/league.yaml "
+            f"starter_rank_threshold): {lab['thresholds']} by fantasy points that week; "
+            f"FLEX-worthy (flex_worthy_rank): RB/WR top {lab['flex']}",
             explanation="A player 'finished as a starter' in a week when he scored well enough "
             "that a typical 12-team league would have started him.",
+            source="config/league.yaml; twm.modules.waiver_radar.labels.LabelRules",
             step="C2",
         ),
         # ---- Waiver Radar candidate pool (C1) -------------------------------------------
@@ -430,17 +446,63 @@ def _entries() -> list[Entry]:
             explanation="A player who scores far above his opportunity usually comes back down; "
             "one who scores far below usually rises. Opportunity is 'stickier' than efficiency.",
         ),
-        # ---- labels ---------------------------------------------------------------------
+        # ---- labels (C2) ---------------------------------------------------------------
+        Entry(
+            name="weekly_pos_rank",
+            title="Weekly position rank",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="rank (1 = best)",
+            formula="1 + the number of players of the same position with more fantasy points "
+            "that regular-season week, among every player with a stat line (rank 'min': ties "
+            "share the better rank); position = his point-in-time roster position that week "
+            "(fact_roster_week.position; without a row that week his latest earlier roster "
+            "week of the season, else that game's fact_snaps.position); QB/RB/WR/TE only "
+            "(fullbacks and others are not ranked). Column pos_rank of weekly_finishes",
+            explanation="Where a player's score ranked at his position that week: rank 5 at WR "
+            "means four receivers scored more. Built from the finished week, so it is outcome "
+            "data for labels; a feature must rank only the games public at its as-of.",
+            source="twm.modules.waiver_radar.labels.weekly_finishes (fact_player_week, "
+            "fact_roster_week.position, fact_snaps.position)",
+            step="C2",
+        ),
+        Entry(
+            name="is_starter_finish",
+            title="Starter finish",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="boolean",
+            formula=f"weekly_pos_rank <= the position's starter threshold ({lab['thresholds']})",
+            explanation="The player scored like a weekly starter in a 12-team league that week.",
+            source="twm.modules.waiver_radar.labels.weekly_finishes",
+            step="C2",
+        ),
+        Entry(
+            name="is_flex_finish",
+            title="FLEX-worthy finish",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="boolean",
+            formula=f"a RB or WR with weekly_pos_rank <= flex_worthy_rank ({lab['flex']}); "
+            "always false for QB and TE",
+            explanation="The running back or receiver scored well enough to fill a FLEX slot "
+            "that week. Informative only; it is not a label.",
+            source="twm.modules.waiver_radar.labels.weekly_finishes",
+            step="C2",
+        ),
         Entry(
             name="y_hit",
             title="Waiver hit",
             kind="label",
             modules=("waiver_radar",),
-            unit="boolean",
-            formula="the player finishes at or above his position's starter threshold in at "
-            "least one of the next three weeks he plays (bye extends the window)",
+            unit="boolean (NULL while pending)",
+            formula="n_starter_finishes >= 1: at least one starter finish in the label window "
+            f"(the next {lab['window']} regular-season weeks after the as-of week N in which "
+            "his as-of team plays; a bye is skipped and extends the window, the season's last "
+            "regular-season week ends it), counting only stat lines public strictly after the "
+            "as-of",
             explanation="What the Waiver Radar predicts: will this player be startable soon?",
-            status="planned",
+            source="twm.modules.waiver_radar.labels.label_rows",
             step="C2",
         ),
         Entry(
@@ -448,12 +510,120 @@ def _entries() -> list[Entry]:
             title="Sustained hit",
             kind="label",
             modules=("waiver_radar",),
-            unit="boolean",
-            formula="as y_hit, but in at least two of those weeks",
+            unit="boolean (NULL while pending)",
+            formula="n_starter_finishes >= 2: as y_hit, but in at least two window weeks",
             explanation="A stricter target: a player who stays startable, not a one-week spike.",
-            status="planned",
+            source="twm.modules.waiver_radar.labels.label_rows",
             step="C2",
         ),
+        *[
+            Entry(
+                name=col,
+                title=title,
+                kind="label",
+                modules=("waiver_radar",),
+                unit=unit,
+                formula=formula,
+                explanation=explanation + " A label detail: never a model feature.",
+                source="twm.modules.waiver_radar.labels.label_rows" + extra,
+                step="C2",
+            )
+            for col, title, unit, formula, explanation, extra in (
+                (
+                    "window_weeks",
+                    "Label window weeks",
+                    "list of week numbers",
+                    f"the first {lab['window']} regular-season weeks after the as-of week N in "
+                    "which the player's as-of team has a game (its bye weeks skipped), up to the "
+                    "last regular-season week (dim_week.is_last_reg_week)",
+                    "The weeks whose results decide the label.",
+                    " (fact_game)",
+                ),
+                (
+                    "window_games",
+                    "Games in the label window",
+                    "games",
+                    f"len(window_weeks): {lab['window']}, fewer in the last weeks of a season",
+                    "How many games the player's team has in the window.",
+                    "",
+                ),
+                (
+                    "is_short_window",
+                    "Short label window",
+                    "boolean",
+                    f"window_games < {lab['window']}",
+                    "The window was cut short by the end of the regular season.",
+                    "",
+                ),
+                (
+                    "train_eligible",
+                    "Usable for training",
+                    "boolean",
+                    f"window_games >= {lab['min_games']} (PROJECT_SPEC 8.1: weeks with fewer "
+                    "remaining games are left out of training)",
+                    "Whether a model may learn from this row.",
+                    "",
+                ),
+                (
+                    "label_status",
+                    "Label status",
+                    "'final' or 'pending'",
+                    "'pending' until every game of every window week has a final score "
+                    "(fact_game.result) and stat lines in the cache, else 'final'",
+                    "A pending label (the current season) is unknown, never guessed.",
+                    "",
+                ),
+                (
+                    "n_window_played",
+                    "Window weeks played",
+                    "weeks",
+                    "window weeks with fact_snaps.offense_snaps > 0 or a stat line, for any team",
+                    "How many window weeks the player actually took the field on offense.",
+                    "",
+                ),
+                (
+                    "n_starter_finishes",
+                    "Starter finishes in the window",
+                    "weeks",
+                    "window weeks with is_starter_finish",
+                    "The count behind y_hit and y_sustained.",
+                    "",
+                ),
+                (
+                    "n_flex_finishes",
+                    "FLEX-worthy finishes in the window",
+                    "weeks",
+                    "window weeks with is_flex_finish (RB/WR only)",
+                    "Informative: how often he was worth a FLEX start.",
+                    "",
+                ),
+                (
+                    "best_rank",
+                    "Best weekly rank in the window",
+                    "rank",
+                    "min(weekly_pos_rank) over the window weeks (NULL if never ranked)",
+                    "His best week at his position in the window.",
+                    "",
+                ),
+                (
+                    "window_ranks",
+                    "Weekly ranks in the window",
+                    "list of ranks",
+                    "weekly_pos_rank of each window week (NULL where he had no stat line)",
+                    "Week-by-week ranks, for reports and eyeballing.",
+                    "",
+                ),
+                (
+                    "window_points",
+                    "Weekly points in the window",
+                    "list of points",
+                    "fantasy points of each window week (0 for a week he played without a stat "
+                    "line, NULL for a week he did not play)",
+                    "Week-by-week scores, for reports and eyeballing.",
+                    "",
+                ),
+            )
+        ],
         # ---- point-in-time ------------------------------------------------------------
         Entry(
             name="as_of",

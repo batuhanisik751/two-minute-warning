@@ -1,14 +1,18 @@
-# Waiver Radar: the candidate pool (step C1)
+# Waiver Radar: the candidate pool (step C1) and its labels (step C2)
 
 The Waiver Radar ranks players who are **probably still on waivers** (not on any team in a
 typical 12-team fantasy league) by how likely they are to become weekly starters soon. Before it
 can rank anyone it needs that list of available players, the *candidate pool*, for every
 Tuesday of every season we backtest (2013 on). This page explains how the pool is built, why
-it is built that way, and how well it matches reality where reality was recorded.
+it is built that way, and how well it matches reality where reality was recorded. The second
+half ([Labels](#labels-did-a-pool-player-become-a-starter-step-c2)) explains the right answers
+the models learn from: did a pool player really become a starter in the next weeks?
 
-Code: `src/twm/modules/waiver_radar/pool.py` (the pool), `report.py` (the report).
-Tables: `fact_roster_week` and `fact_ranking` (docs/warehouse.md). Tests:
-`tests/test_waiver_radar_pool.py`. Report: `reports/waiver_radar/pool_sizes.md` and `.csv`.
+Code: `src/twm/modules/waiver_radar/pool.py` (the pool), `report.py` (the pool report),
+`labels.py` (the labels), `label_report.py` (the label report). Tables: `fact_roster_week` and
+`fact_ranking` (docs/warehouse.md). Tests: `tests/test_waiver_radar_pool.py`,
+`tests/test_waiver_radar_labels.py`. Reports: `reports/waiver_radar/pool_sizes.md`,
+`reports/waiver_radar/labels.md` (each with a `.csv`).
 
 ## Why a stand-in, and which one
 
@@ -184,6 +188,179 @@ team has no roster that week); PPG counts weeks with a stat line, so a game play
 recorded stat does not lower a player's average; the current season's rosters are assumed to
 stay game-day snapshots (measured on the weeks cached so far).
 
+# Labels: did a pool player become a starter? (step C2)
+
+A model learns from past examples whose answer is known, and it is graded against those answers.
+For the Waiver Radar the question at the Tuesday as-of after week N is "will this pool player be
+startable soon?", and the **label** is what actually happened in the next few weeks
+(PROJECT_SPEC 8.1). Two labels:
+
+- **`y_hit`**: the player had at least one **starter finish** in his **window** (below);
+- **`y_sustained`**: at least two (a stricter target: not a one-week spike).
+
+Every universe row of the pool (C1: every rostered player, `in_pool` true or false) gets them,
+for as-of weeks 1 to the season's last regular-season week minus 1. Code:
+`src/twm/modules/waiver_radar/labels.py`.
+
+## Step 1: weekly finishes (`weekly_finishes`)
+
+Every regular-season week, every player with a stat line that week (`fact_player_week`) gets his
+fantasy points (config/scoring.yaml, full PPR) and is ranked at his position by points: rank 1
+is the week's best. **Ties share the better rank** (rank method "min": scores 20, 15, 15, 10
+rank 1, 2, 2, 4). Everyone with a stat line is ranked, stars included, so "WR24" means 23
+receivers scored more that week.
+
+**Which position.** The player's point-in-time position that week, never today's (nflverse's
+player table and `fact_player_week.position` show a player's current position for every past
+season):
+
+1. his weekly-roster row of that week (`fact_roster_week.position`);
+2. without one, his latest earlier roster week of the same season;
+3. without one, the position on that game's snap-count row (`fact_snaps.position`);
+4. otherwise none (he is not ranked).
+
+On the 2026-09-28 warehouse every stat line of 2013-2026 has a roster row of its own week, so
+the fallbacks 2-4 are used 0 times (the report counts them per season). A player who changes
+position (a receiver moved to running back) is ranked among receivers until the week his roster
+says running back. Only QB, RB, WR and TE are ranked. Fullbacks are not: the 2013-2015 rosters
+list them as `FB` (766 stat lines; 28 of them scored at least as much as that week's 24th RB);
+from 2016 the rosters have no `FB` position (the 2015 fullbacks are `RB` on the 2016 rosters,
+with `depth_chart_position` FB), so they are ranked with the running backs. Kickers and defenders
+with a stat line are not ranked either.
+
+A **starter finish** is a rank at or above the weekly starter threshold of the position
+(config/league.yaml `starter_rank_threshold` = 12 teams x starters: QB 12, RB 24, WR 24, TE 12;
+PROJECT_SPEC 7.2). A **FLEX-worthy finish** (informative, not a label) is a RB or WR ranked in
+the top `flex_worthy_rank` (36). Change the league shape in config/league.yaml and both follow.
+
+## Step 2: the window
+
+The window of an as-of after week N is **the next 3 regular-season weeks after N in which the
+player's team plays**. "His team" is the team of the pool row (his roster at the as-of). The
+schedule is nflverse's final schedule (`fact_game`): labels are written after the fact, so
+knowing the final schedule is fine here (features may not, they read `fact_schedule` through the
+as-of view).
+
+- **Byes.** A week his team is off is skipped, which extends the window by one week (PROJECT_SPEC
+  8.1). Team off in week N+2: the window is N+1, N+3, N+4. Two byes: two extra weeks.
+- **Season end.** The window never goes past the season's last regular-season week (from
+  `dim_week`: week 17 through 2020, week 18 from 2021). So at the as-of two weeks before the end
+  the window has 2 games, one week before the end 1 game, and the last week itself has no label
+  rows at all (no window after it). `window_games` counts the games; `is_short_window` = fewer
+  than 3; `train_eligible` = at least 2 (PROJECT_SPEC 8.1: "exclude weeks with <2 remaining
+  games from training"). Rows with 1 game keep their label (the report shows them) but models
+  must not train on them.
+- **The cancelled 2022 game.** nflverse's schedule leaves out the cancelled week-17 Buffalo at
+  Cincinnati game, so for those two teams week 17 looks like a bye (at the week-14 as-of their
+  window is 15, 16, 18; at week 16 it is 18 only).
+- **Moved games (split weeks).** The window is by week number: a week-N game played after the
+  Tuesday as-of (2020 week 12's Wednesday game and the other split weeks) belongs to week N,
+  never to the window of as-of N.
+- **Trades.** The window follows the as-of team's schedule. His games for a new team count when
+  they fall in the window weeks. A game for the new team in a week his old team was off is not
+  in the window (and does not extend it).
+
+## Step 3: the weeks he played
+
+A window week counts as **played** when he has `fact_snaps.offense_snaps > 0` or a stat line
+that week, for any team. A blocking tight end with snaps but no stat line played (0 points, no
+rank): 9,810 of 80,820 QB/RB/WR/TE player-weeks with offensive snaps in 2013-2025 have no stat
+line. A special-teams-only snap row is not played. A week he does not play (injured, inactive,
+benched, released) **still uses up a window slot**: only his team's byes extend the window.
+`n_window_played` counts the played weeks. A starter finish needs a stat line, so y_hit counts
+only weeks he played.
+
+## Step 4: final or pending
+
+A label is **final** once every game of every window week has a final score
+(`fact_game.result`) **and** at least one stat line in the cache. Until then it is **pending**:
+`y_hit`, `y_sustained` and the counts are NULL, never guessed. Why every game of the week and
+not only his team's: his rank compares him with everyone who played that week, so a missing
+Monday-night game could move him from 24th to 26th. Why stat lines too: a score can reach the
+cache before nflverse's stats; with the score alone everyone in that game would look like he
+did not play. (This is stricter than "his team's window games have a score".) On the
+2026-09-28 warehouse, 2026 weeks 1-2 are complete and week 3
+has one game, so every 2026 row (as-ofs 1 and 2) is pending.
+
+## Point in time: only what happened after the as-of
+
+Labels are hindsight on purpose, so `labels.py` reads the warehouse directly, not through the
+as-of view. Two guards keep the direction right (PROJECT_SPEC 6.2 rule 3, "labels strictly after
+as_of"):
+
+1. Every stat line and snap row passes `twm.asof.outcomes_after(rows, as_of)` before it is
+   joined: only rows that became public **strictly after** the as-of can count. A row stamped
+   exactly at the as-of was known then, so it is a feature row and never a label row.
+2. The window is restricted to weeks after N by number (so a moved week-N game stays out even
+   though it became public after the as-of).
+
+`tests/test_waiver_radar_labels.py` proves both: deleting every event row public at or before
+the as-of leaves the labels unchanged (four as-ofs, the split week included); a window-week stat
+line stamped at the as-of is ignored and one stamped a microsecond later counts; and the two
+deliberate mutations (let rows at the as-of in; start the window at week N) each make a test
+fail.
+
+## The label columns
+
+`label_rows(db, pool_rows)` returns the pool rows (in order) plus:
+
+| column | meaning |
+|---|---|
+| `window_weeks` | the window's week numbers (a list) |
+| `window_games` | how many (3; fewer at the end of the season) |
+| `is_short_window` | `window_games` < 3 |
+| `train_eligible` | `window_games` >= 2 |
+| `label_status` | `final` or `pending` |
+| `n_window_played` | window weeks he played (snaps or a stat line) |
+| `n_starter_finishes` | window weeks with a starter finish |
+| `n_flex_finishes` | window weeks with a FLEX-worthy finish (RB/WR; always 0 for QB and TE) |
+| `best_rank` | his best weekly rank in the window (NULL if never ranked) |
+| `window_ranks`, `window_points` | rank and points per window week (rank NULL without a stat line; points 0 for a snaps-only week, NULL for a week he did not play) |
+| `y_hit`, `y_sustained` | `n_starter_finishes` >= 1 / >= 2 |
+
+All of them are registered as labels in `src/twm/registry.py` (docs/glossary.md), so the
+feature guard refuses them as model inputs. `labels_history(db, seasons)` = the pool history
+(C1) with the labels; `weekly_finishes(db, seasons)` = step 1 on its own.
+
+## Base rates (report, 2026-09-28 warehouse)
+
+`uv run twm radar labels-report` labels every as-of 2013-2026 (212 as-ofs, 128,643 rows, 99,181
+of them in the pool; about 15 s). Full tables per season in `reports/waiver_radar/labels.md`.
+Train-eligible rows with a final label, walk-forward evaluation seasons 2014-2025 pooled:
+
+| rows | QB | RB | WR | TE | all |
+|---|---|---|---|---|---|
+| pool: y_hit | 9.3% | 13.3% | 10.8% | 9.8% | 10.9% (of 87,848) |
+| pool: y_sustained | 2.6% | 3.7% | 2.2% | 1.9% | 2.5% |
+| outside the pool: y_hit | 71.1% | 68.4% | 64.8% | 64.1% | 66.9% (of 25,415) |
+| outside the pool: y_sustained | 37.2% | 41.2% | 30.1% | 30.1% | 34.8% |
+
+Read: about 1 pool player in 9 has a starter week within his next three games, and 1 in 40 has
+two. That is the precision a model that picks pool players at random would get; the Radar must
+beat it. Players outside the pool (drafted high or scoring well) hit six times as often, as they
+should. 2013-2015 pool rates are higher (about 15%) because those universes are smaller (no
+practice-squad or inactive players on those rosters, see above), so fewer deep-bench players
+dilute them.
+
+Where rostership exists (2021-2025), the pool rows that real leagues had rostered in at least
+50% of leagues are few (1,106 of 44,545, 2.5%) but hit often (51.9%) and give 13% of the pool's
+hits (574 of 4,423); pool rows with a figure under 50% hit 13.9%, and the deep bench without a
+figure 2.3%. A model will find those "not really available" players easily, which flatters its
+precision; C4 should report its metrics with and without them.
+
+## Known limits of the labels
+
+- **The roster decides the position.** A player whose role differs from his roster position (a
+  roster quarterback used as a tight end, say) is ranked at his roster position, which may not
+  be the position a fantasy site lists him at.
+- **Fullbacks in 2013-2015** are not ranked with running backs (see step 1).
+- **Stat corrections** are baked into nflverse's stats (docs/warehouse.md); a label uses the
+  corrected numbers, which is what a league's final scores use too.
+- **Snap counts can arrive later than stats** in the live season. That only changes
+  `n_window_played` (a snaps-only week has no rank), never `y_hit`.
+- **The window follows the as-of team**, so a trade in the middle of the window can make it
+  cover a week the player sat out or skip a week he played (see step 2).
+
 ## Commands
 
 ```bash
@@ -191,6 +368,10 @@ uv run twm radar pool 2023 6                 # the pool at 2023 week 6's as-of, 
 uv run twm radar pool 2023 6 --pos RB --all  # every rostered RB, with why each one is out
 uv run twm radar pool 2019 6 --method prior_ppg --limit 0
 uv run twm radar pool-report                 # reports/waiver_radar/pool_sizes.md + .csv
+uv run twm radar labels 2023 6               # the labelled pool at 2023 week 6's as-of
+uv run twm radar labels 2023 6 --pos RB --hits-only
+uv run twm radar labels 2023 6 --all         # every rostered player, in the pool or not
+uv run twm radar labels-report               # reports/waiver_radar/labels.md + .csv
 ```
 
 `pool_history(db, seasons)` (Python) gives every as-of of the seasons in one frame: a week

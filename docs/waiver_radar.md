@@ -1,4 +1,4 @@
-# Waiver Radar: the candidate pool (step C1) and its labels (step C2)
+# Waiver Radar: the candidate pool (C1), its labels (C2) and its features (C3)
 
 The Waiver Radar ranks players who are **probably still on waivers** (not on any team in a
 typical 12-team fantasy league) by how likely they are to become weekly starters soon. Before it
@@ -6,13 +6,17 @@ can rank anyone it needs that list of available players, the *candidate pool*, f
 Tuesday of every season we backtest (2013 on). This page explains how the pool is built, why
 it is built that way, and how well it matches reality where reality was recorded. The second
 half ([Labels](#labels-did-a-pool-player-become-a-starter-step-c2)) explains the right answers
-the models learn from: did a pool player really become a starter in the next weeks?
+the models learn from: did a pool player really become a starter in the next weeks? The last
+part ([Features](#features-what-the-radar-knows-at-the-as-of-step-c3)) explains what the models
+learn FROM: each player's situation as it looked on that Tuesday.
 
 Code: `src/twm/modules/waiver_radar/pool.py` (the pool), `report.py` (the pool report),
-`labels.py` (the labels), `label_report.py` (the label report). Tables: `fact_roster_week` and
-`fact_ranking` (docs/warehouse.md). Tests: `tests/test_waiver_radar_pool.py`,
-`tests/test_waiver_radar_labels.py`. Reports: `reports/waiver_radar/pool_sizes.md`,
-`reports/waiver_radar/labels.md` (each with a `.csv`).
+`labels.py` (the labels), `label_report.py` (the label report), `features.py` (the features),
+`dataset.py` (pool + features + labels), `feature_report.py` (the feature report). Tables:
+`fact_roster_week`, `fact_ranking` and `fact_opportunity_week` (docs/warehouse.md). Tests:
+`tests/test_waiver_radar_pool.py`, `tests/test_waiver_radar_labels.py`,
+`tests/test_waiver_radar_features.py`. Reports: `reports/waiver_radar/pool_sizes.md`,
+`reports/waiver_radar/labels.md`, `reports/waiver_radar/features.md` (each with a `.csv`).
 
 ## Why a stand-in, and which one
 
@@ -51,6 +55,13 @@ is read through the as-of view (`twm.asof.AsOfView`), so only what was public th
    roster lists him**, at QB/RB/WR/TE (the position of that roster week, never today's) with a
    status in `pool.roster_statuses` (ACT active, INA inactive for the game, DEV practice
    squad). Injured reserve (RES), PUP, suspended, cut and retired players are out.
+   **Except before 2016:** the 2002-2015 rosters stamp each player's season-END status on every
+   week (a receiver who went on injured reserve in December is RES on his September rosters,
+   including weeks he played), so using it would leak the future. The pool therefore uses the
+   status only once the season's public rosters show some player changing status
+   (`statuses_are_weekly`; from week 1-3 of 2016 on), and otherwise keeps every rostered
+   QB/RB/WR/TE. Found in C3, fixed in the pool on 2026-09-28; the 2013-2015 pools grew as a
+   result.
    - "Latest row per player" matters because a game-day roster leaves out the teams on their
      bye week: those players keep last week's row.
    - "His team's latest roster lists him" matters because a released player often has no CUT
@@ -96,8 +107,11 @@ nflverse's weekly rosters are not all taken at the same moment. Among players wh
 week N (a snap-count or stat row that week), the share whose week-N roster status is **not**
 ACT is 6.6%-9.8% in 2002-2015 and 0%-0.18% in 2016-2026 (2026-09-27 cache; per season in
 `build_manifest.notes.regime_by_season` of `fact_roster_week` and in the report). A player who
-played on Sunday and shows RES on that week's roster went on injured reserve *after* the game:
-the 2002-2015 rosters were taken after the games and include later moves.
+played on Sunday and shows RES on that week's roster looked like a roster taken *after* the
+game. C3 found the main reason: the 2002-2015 rosters carry the season-final status on every
+week (see the universe rule above). Whether their MEMBERSHIP (who is on the team that week) was
+also recorded after the games cannot be told from the data, so the one-week delay below is kept
+as the safe choice.
 
 So the build measures this per season and sets `available_at` accordingly
 (`config/settings.yaml` `availability.roster_postgame_share_threshold`, 1%):
@@ -377,3 +391,262 @@ uv run twm radar labels-report               # reports/waiver_radar/labels.md + 
 `pool_history(db, seasons)` (Python) gives every as-of of the seasons in one frame: a week
 counts once all its games that should be over by its as-of have a final score in the cache, so
 the current season stops at the last complete week.
+
+# Features: what the Radar knows at the as-of (step C3)
+
+A model can only be as good as what it is told. For every pool row (every rostered QB, RB, WR
+and TE at the Tuesday as-of after week N) `features.py` describes the player's situation **as
+it looked that Tuesday**, in four families (PROJECT_SPEC 8.1). Every feature is registered in
+`src/twm/registry.py` with its exact formula (`uv run twm glossary snap_share_delta`,
+`docs/glossary.md`); `registry.check_features` refuses anything else, identifiers included.
+
+## The windows: last game, last 3, season
+
+Most opportunity features look back over **team games**: the regular-season games of the
+player's team at the as-of (the pool row's `team`) that are visible at the as-of.
+
+- `_last` is the team's most recent visible game; `_avg3` the mean over its last 3 (fewer in
+  weeks 1-2); `_season` the mean over all of them; `snap_share_delta` = last game minus the
+  mean of the up to 3 games before it.
+- **A game he missed counts as 0.** An injured, benched or inactive week is a real 0 in his
+  share, not a gap. A player traded in counts 0 in his new team's games before he arrived.
+- A feature is NULL only when his team has no visible game yet (its first game was moved past
+  the as-of, or it was off in week 1). At the week-1 as-of `last`, `avg3` and `season` are the
+  same one game and the delta is NULL.
+
+## Opportunity: what the player is given
+
+Fantasy points follow opportunity, and opportunity is steadier week to week than efficiency,
+so this family carries most of the signal.
+
+- **Snap share** (`snap_share_last`, `_avg3`, `_season`, `_delta`): the share of his team's
+  offensive snaps he played (Pro Football Reference, through `fact_snaps`). Coaches show a new
+  role in snaps before the box score does.
+- **Target share, air-yards share, WOPR** (`target_share_last`, `_avg3`, `air_yards_share_avg3`,
+  `wopr_avg3`): nflverse's per-game shares of his team's targets and air yards.
+- **Carry share** (`carry_share_last`, `_avg3`): his carries / his team's carries
+  (`fact_team_week.carries`, which equals the sum of the team's player carries in every game
+  2013-2025).
+- **Red zone and goal line** (`rz_targets_avg3`, `rz_carries_avg3`, `gl_opps_avg3`): targets and
+  runs from play-by-play inside the opponent's 20 (targets + runs inside the 10 for the goal
+  line), per game. Two-point tries do not count, nor do kneel-downs.
+- **Routes proxy** (`routes_proxy_avg3`): team dropbacks in the game (plays with
+  `qb_dropback = 1`: passes, sacks and scrambles, not two-point tries) x his snap share. nflverse
+  has no route counts, so this estimates how many pass plays he was on the field for.
+- **xFP and FPOE** (`xfp_last`, `xfp_avg3`, `fpoe_avg3`): expected fantasy points, what an
+  average player would have scored from the same targets and carries, and his points above
+  that (mostly luck, so it tends to shrink back; see below).
+- **Points** (`fantasy_points_last`, `_avg3`) with config/scoring.yaml, and the pool's columns:
+  `ppg_to_date`, `ppg_pos_rank`, `preseason_pos_rank` (NULL when no preseason list ranked him;
+  `preseason_ranked` says whether one did), `games_played_to_date`.
+
+### xFP: re-scored from ffopportunity
+
+`fact_opportunity_week` (new in C3, docs/warehouse.md) holds nflverse's ffopportunity weekly
+file: for every player-game the actual and the **expected** passing, rushing and receiving
+yards, touchdowns, two-point conversions, interceptions and receptions, from ffopportunity's
+models (which were trained on many seasons: the spec 6.3 caveat). xFP scores those expected
+stats with **our** config (`twm.scoring.xfp`), so it follows a league's settings. Lost fumbles
+and return or fumble-recovery touchdowns have no expected value: they add nothing to xFP, and
+FPOE = points - xFP carries them in full.
+
+**Check on real data** (`uv run twm radar features-report`, "xFP check"): with the weights
+ffopportunity uses for its own points (nflverse-PPR: 0.04 per passing yard, 4 per passing
+touchdown, -2 per interception, 1 per catch, 0.1 per rushing or receiving yard, 6 per touchdown,
+2 per two-point conversion), our xFP reproduces its `total_fantasy_points_exp` on 106,463 of
+106,560 player-games (99.9%) within rounding. Why "within rounding": ffopportunity stores every
+expected component and its three point subtotals with 2 decimals and computed the points from
+the unrounded values, so up to 0.14 points of difference is rounding alone (only 14% match to
+the cent). The other **97 player-games are rushing two-point tries**: ffopportunity's per-play
+rushing file shows that its `rush_fantasy_points_exp` adds 0.1 x the expected yards of a
+two-point try, which its own `rush_yards_gained_exp` leaves out (and real scoring does not pay
+for). Adding those yards back from the per-play file (`ff_opportunity_rush`, not in the
+warehouse) leaves 0 player-games outside the rounding bound (largest difference 0.079). We keep
+our version: a two-point try's yards are not fantasy yards.
+
+## Role change: who is out, who moved up
+
+**Depth chart** (`depth_rank_now`, `depth_rank_prev`, `depth_rank_change`, `depth_listed`).
+The chart in force at the as-of: from 2025 the team's latest daily snapshot taken at or before
+the as-of; before 2025 the latest weekly chart that is public (week N's chart counts from the
+Wednesday before week N, so at the Tuesday after week N it is week N's). His rank is his place
+in his position group: 1 + the number of group players with a better depth rank in any
+offensive slot of the group (ties share the better rank, so three starting receivers are all
+1 and the next receiver is 4). `_prev` is the same on the chart in force 7 days earlier, and
+`depth_rank_change` = previous - now (positive = promoted). `depth_listed` says whether he is
+on the chart at all (special teams included; NULL when his team has no public chart).
+
+Slot names map to position groups (`features.slot_group`, from the data: the weekly charts spell
+slots dozens of ways). A slot is split into its letters: any TE part makes it a tight-end slot
+(`TE/HB`, `HB-TE`, `FB/TE` hold tight ends on the weekly rosters), otherwise the first part
+decides: QB; RB, HB, FB and J (a jumbo back) are running backs; WR, LWR, RWR, SWR, WR1, WR2,
+WRE and WE are receivers (`WR\8`, `RB\``, `RB86` are typos of those); TE, LTE, RTE, H-B (an
+H-back) and F (both mostly tight ends on the rosters) are tight ends. Offensive-line slots and
+junk values (a newline, `19`) are not mapped.
+
+**Teammates who became unavailable: the key waiver signal.** When a starter goes down, his
+targets and carries go to somebody. A **teammate** is a QB, RB, WR or TE of the player's as-of
+team who played for it this season (offensive snaps or a stat line in a visible team game). He
+is **unavailable** at the as-of if ANY of these rules fires (each one is recorded, in this order,
+so the app can say why):
+
+1. `roster_status`: on the team's latest public weekly roster his status is not ACT, INA or DEV
+   (config/league.yaml `pool.roster_statuses`): injured reserve (RES), PUP, suspended, cut ...
+   Only in seasons whose statuses change from week to week: the 2002-2015 rosters repeat one
+   status all season, the one the player ended the season with (a receiver who went on injured
+   reserve in December is RES on his September rosters too), which would reveal the future
+   (docs/assumptions.md section 15). The rule turns itself on once the public rosters of the
+   season show any player with two different statuses, which never happens before 2016;
+2. `left_team`: he was on the team's roster earlier this season but is not on its latest public
+   roster (released or traded; a released player often has no CUT row, he just disappears);
+3. `injury_report`: the team's latest public injury report of the season lists him Out or
+   Doubtful;
+4. `missed_last_game`: no offensive snap and no stat line in the team's last game, after
+   averaging at least 50% of the snaps in the up to 3 team games before it. A backup who
+   missed a game is not "out" in any way that frees opportunity, so he does not count.
+
+From those teammates:
+
+- `vacated_target_share` / `vacated_carry_share`: the sum of their target (carry) shares
+  averaged over **their last 3 team games up to their last appearance**, i.e. before they became
+  unavailable (games they missed inside that window count as 0). A receiver on IR since week 5
+  keeps the share he had in weeks 3-5; it is not diluted by the weeks he has missed since.
+- `same_pos_vacated_target_share`, `same_pos_vacated_carry_share`,
+  `teammate_same_pos_unavailable`: the same restricted to his own position group.
+- `top_teammate_out`: an unavailable teammate of his position averaged a higher snap share than
+  he did over the same games (the teammate's window): someone who played ahead of him is out.
+- `joined_team_recently`: his latest roster team differs from his first one this season.
+- `teammates_out` (not a feature): the list, as JSON text, with each teammate's name, rules,
+  last week played and shares, for the plain-English reasons of step C6.
+
+Three real examples from the dataset (2026-09-28 cache; `twm radar features SEASON WEEK --team
+X --all` shows them): at the 2014 week-11 as-of Denver's Ronnie Hillman was out (Out on the
+report and no snap in the last game; 60% of the snaps and 49% of the carries in his last three
+games before that), and C.J. Anderson, in the pool, had just played 93% of the snaps (up 68 points) and
+taken 90% of the carries: he ranked RB 2, 3 and 7 in the next three weeks. At the 2015 week-9
+as-of Chicago's Matt Forte was out (Out, missed the last game; 62% of the carries) and Jeremy
+Langford (75% of the snaps, 62% of the carries in the last game) ranked RB 1, 17 and 17. At the
+2024 week-14 as-of San Francisco's Christian McCaffrey was on injured reserve on the latest
+roster and had missed the last game (55% of the carries), and Jordan Mason was on injured
+reserve too (25%); Isaac Guerendo (56% of the snaps, up 47 points) ranked RB 24, did not play,
+then ranked RB 11.
+
+## Context: the team and the schedule
+
+- **Team offense** (`team_epa_per_play`, `team_epa_per_play_neutral`, `team_plays_per_game`,
+  `team_pass_rate_neutral`): his team's expected points added per run or pass play so far (all
+  plays and in neutral situations, docs/warehouse.md "Garbage time"), its plays per game (pace:
+  more plays, more chances) and how often it passes when the score does not force it.
+- **Next opponents** (`opp_fp_allowed_next3`, `n_opp_games_seen`): for each of his team's next
+  3 opponents (the public schedule, weeks after N, byes skipped: the same window as the labels),
+  the fantasy points its defense allowed per game this season to players of his position
+  group, divided by the league average for that group (1.0 = average, above 1 = a soft
+  matchup), averaged over the 3. A scorer's position is his snap-count position in that game
+  (else his latest roster position). An opponent with no game yet counts as 1.0;
+  `n_opp_games_seen` says how much evidence there is (little in September). **No betting lines**
+  (spec 6.4): an upcoming game's line does not exist at a Tuesday as-of.
+- **Byes and games left** (`bye_in_next3`, `team_games_remaining`): whether weeks N+1 to N+3
+  contain a bye of his team (a week without a scheduled game, up to the last regular-season
+  week), and his team's regular-season games after week N. The cancelled 2022 week-17 Buffalo
+  at Cincinnati game (absent from nflverse) is counted as scheduled until week 17, as it was
+  then (config `availability.schedule_exceptions`).
+
+## Player
+
+`position` (a category: QB, RB, WR, TE; not an identifier), `age_at_asof` (from the birth
+date), `is_rookie` (his roster's entry year is this season), `draft_round` (NULL when undrafted,
+with `is_undrafted`), `years_exp` (his latest public roster row).
+
+## Timing: what is and is not known on Tuesday
+
+Every input is read through the as-of view (docs/warehouse.md), so a feature only ever sees rows
+public at the as-of. What that means in practice:
+
+- **The next week's injury report does not exist yet.** Reports for week N+1 come out Wednesday
+  to Friday; at the Tuesday as-of the latest report is week N's (for the game just played). A
+  starter hurt on Sunday shows up through `missed_last_game`, the week-N report or the roster.
+- **Monday and Tuesday roster moves appear in the next roster.** From 2016 a week's roster is
+  the game-day list; a player moved to injured reserve on Monday is still ACT on it and shows RES
+  only on next week's roster (public at next week's as-of). In 2002-2015 rosters were taken
+  after the games and are public a week later still (see "Rosters: two kinds of snapshot").
+- **Depth charts:** the daily chart taken at 10:00 UTC on Tuesday is in force at 14:00; the
+  one taken at 15:00 is not. Weekly charts before 2025 carry week N's chart until the next
+  Wednesday.
+- **A game moved past the as-of** (the split weeks) is not a team game yet: at the 2020 week-12
+  as-of Baltimore's and Pittsburgh's last game is their week-11 game.
+- **Model columns:** EPA (team offense) and ffopportunity's expectations (xFP, FPOE) come from
+  models trained on many seasons (spec 6.3): a mild, known leak in backtests, flagged in the
+  registry.
+
+`tests/test_waiver_radar_features.py` runs the leakage harness on `features_for` at four
+fixture as-ofs (a week-1 as-of, a split week, weekly charts), shows that deliberately leaky
+variants fail it (the next week's injury report, a teammate's future roster status, "last 3
+games" chosen by week number at a split week, a depth chart taken after the as-of) and that
+every input is filtered to the as-of a second time in memory, so even a read around the view
+(`wh.`) cannot leak through the reference path. The realdata tests run the harness on two real
+as-ofs (2014 week 6, 2020 week 12).
+
+## Two paths, one answer
+
+`features_for(view, season, week, pool_rows)` is the reference: everything read through one
+as-of view. `features_history(db, pool)` is the fast path for history: each season's inputs are
+read once with their `available_at` and filtered per as-of in memory. Every input is either one
+table's rows or a per-game total of one table (all rows of a game become public together), and
+tables are joined only after filtering, so both give the same numbers; the tests compare them on
+every fixture as-of and on six real ones (2013 week 2, 2014 week 6 with post-game rosters, 2016
+week 9, 2020 week 12 a split week, 2023 week 6, 2025 week 10 with daily charts).
+
+## The dataset and the feature report
+
+`uv run twm radar dataset` writes `data/waiver_radar/dataset.parquet` (gitignored): every
+labelled pool row of 2013-2026 (C1 pool columns, then the features, `teammates_out`, then the C2
+labels), one row per (season, week, player), sorted. On the 2026-09-28 warehouse: 128,643 rows
+(99,181 in the pool), 82 columns, 9.1 MB, built in about 35 s; two builds give byte-identical
+files.
+
+`uv run twm radar features-report` reads it and writes `reports/waiver_radar/features.md` (and a
+CSV): for the rows a model will learn from (in the pool, final label, train-eligible,
+2014-2025: 87,848 rows, 10.9% hits), per feature and position, the share missing, the mean for
+players who hit and who did not, and the **single-feature AUC**: the chance a random hit has a
+higher value than a random miss (0.5 = no signal). It is a sanity check, not a model. The
+strongest single features are the opportunity ones (xFP, snap share, target or carry share,
+the routes proxy: AUC 0.82-0.87 by position): most pool players are deep backups who never see
+the field, so "does he play at all" separates a lot. The teammate features are weak on their own
+(AUC about 0.51-0.53): a starter being out matters for the player next in line, not for the
+whole pool, which is what a model (C4) combines with his own snaps and depth-chart rank. A
+quick look at combinations (same rows): players whose same-position teammate who played ahead of
+them is out and whose snap share just rose by 20 points or more hit 24.0% of the time (4,489
+rows), players at depth rank 1-2 with at least 30% of the position's targets and carries
+vacated 26.2% (1,717 rows), against 10.9% for all pool rows.
+
+## Commands
+
+```bash
+uv run twm radar features 2023 6              # the pool at week 6's as-of with its key features
+uv run twm radar features 2023 6 --team min --all   # one team, everyone, and who is out and why
+uv run twm radar dataset                      # data/waiver_radar/dataset.parquet (2013-2026)
+uv run twm radar dataset --start 2020 --end 2021 --out /tmp/ds.parquet
+uv run twm radar features-report              # reports/waiver_radar/features.md + .csv
+uv run twm glossary vacated_target_share      # one feature's exact definition
+```
+
+The features need `fact_opportunity_week`, new in C3: a warehouse built before C3 is refused with
+a message; rebuild it once with `uv run twm build --start 1999` (about a minute).
+
+## Known limits of the features
+
+- **The universe of teammates** is the players who played for the team this season: a star on
+  injured reserve since the summer vacated nothing this season and is not counted.
+- **Long absences keep counting.** A teammate out since week 2 still adds his week-1/2 shares
+  in week 12, when the team has long since redistributed them (a "recently vacated" variant is
+  an open question for C4).
+- **Fullbacks** on 2013-2015 rosters (position FB) count as running backs among teammates.
+- **2013-2015 rosters carry season-final statuses** (docs/assumptions.md section 15): the
+  teammate rule `roster_status` is off for those seasons (the other three rules still work), and
+  the C1 pool universe, which keeps statuses ACT, INA and DEV, leaves out about 30-42 rostered
+  players per as-of who were healthy then but ended the season on a reserve list. An open
+  question for the owner before C4 trains on 2013-2015.
+- **Snap counts start in 2013**, so the dataset does too; xFP starts in 2006.
+- **Live runs** must ingest play-by-play, snaps and ffopportunity before scoring a week: a game
+  whose ffopportunity rows are missing would count 0 xFP (docs/progress.md "live runs must
+  check data freshness").

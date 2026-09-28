@@ -605,7 +605,9 @@ def test_pool_fallback_season(world):
     empty = _pool(db, 2014, 1)
     assert empty.height == 0 and empty.columns == list(wp.POOL_COLUMNS)
     p = _by_player(_pool(db, 2014, 2))
-    assert set(p) == {gid(n) for n in (201, 202, 203, 204, 205, 206, 208)}  # 207 is RES
+    # only week 1's roster is public and no player's status has changed yet, so statuses look
+    # season-level (as in 2002-2015) and are ignored: 207, listed RES, stays in the universe
+    assert set(p) == {gid(n) for n in (201, 202, 203, 204, 205, 206, 207, 208)}
     got = {int(k[-3:]): (r["preseason_source"], r["preseason_pos_rank"], r["in_pool"],
                          r["excluded_by"]) for k, r in p.items()}  # fmt: skip
     assert got == {
@@ -616,14 +618,17 @@ def test_pool_fallback_season(world):
         204: ("unranked", None, False, "ppg"),  # 1 game last season < 2; PPG rank 2 now
         205: ("rookie_draft", None, False, "rookie_draft"),  # round 1 rookie
         206: ("unranked", None, True, None),  # round 3 rookie: in the pool
+        207: ("unranked", None, False, "ppg"),  # PPG rank 1 (5 points in week 1)
     }
     assert (p[gid(201)]["prior_season_ppg"], p[gid(201)]["prior_season_games"]) == (10.0, 3)
     assert (p[gid(204)]["prior_season_ppg"], p[gid(204)]["prior_season_games"]) == (50.0, 1)
     assert p[gid(204)]["ppg_pos_rank"] == 2  # 207 (on IR) holds rank 1
     assert p[gid(201)]["team"] == "HOU"  # the roster's HST
     assert all(r["owned_avg"] is None for r in p.values())  # no rostership before 2020
-    # 204 was cut after week 1: at week 3's as-of (week-2 roster public) he is gone
-    assert gid(204) not in _by_player(_pool(db, 2014, 3))
+    # 204 was cut after week 1: at week 3's as-of (week-2 roster public) he is gone, and his
+    # ACT -> CUT change shows the statuses are weekly, so 207 (RES) is filtered out again
+    p3 = _by_player(_pool(db, 2014, 3))
+    assert gid(204) not in p3 and gid(207) not in p3
 
 
 def test_thresholds_derive_from_league_config():
@@ -683,7 +688,7 @@ def test_pool_weeks_only_counts_weeks_whose_games_are_in(world):
     hist = wp.pool_history(db, [2014, 2025], methods=("ecr", "prior_ppg"), rules=RULES)
     per = hist.group_by("season", "week", "method").len().sort("season", "week", "method")
     assert per.rows() == [
-        (2014, 2, "prior_ppg", 7), (2014, 3, "prior_ppg", 6),
+        (2014, 2, "prior_ppg", 8), (2014, 3, "prior_ppg", 6),  # week 2: 207 kept (status ignored)
         (2025, 1, "ecr", 15), (2025, 1, "prior_ppg", 15),
         (2025, 2, "ecr", 12), (2025, 2, "prior_ppg", 12),
     ]  # fmt: skip
@@ -723,6 +728,8 @@ class _Rewritten:
     """A deliberately LEAKY view: rewrites one piece of the pool's SQL (e.g. to read the raw
     warehouse ``wh.``), to prove the harness catches such a change in the real pool code."""
 
+    rewrites = 0  # counts rewritten queries across instances (checked by the test)
+
     def __init__(self, view: AsOfView, old: str, new: str):
         self._view, self._old, self._new = view, old, new
 
@@ -731,8 +738,10 @@ class _Rewritten:
         return self._view.as_of
 
     def sql(self, query: str, params=None) -> pl.DataFrame:
-        assert self._old in query, "the rewrite no longer matches the pool's SQL"
-        return self._view.sql(query.replace(self._old, self._new), params)
+        if self._old in query:
+            type(self).rewrites += 1
+            query = query.replace(self._old, self._new)
+        return self._view.sql(query, params)
 
 
 @pytest.mark.parametrize(
@@ -753,8 +762,10 @@ class _Rewritten:
 def test_a_leaky_pool_fails_the_harness(world, season, week, old, new, what):
     db, _ = world
     builder = _builder(season, week, lambda v: _Rewritten(v, old, new))
+    _Rewritten.rewrites = 0
     with pytest.raises(LeakageError):
         assert_future_invariant(builder, db, weekly_as_of(db, season, week), key=["gsis_id"])
+    assert _Rewritten.rewrites > 0, "the rewrite no longer matches the pool's SQL"
 
 
 def test_pool_reads_only_through_the_view(world):

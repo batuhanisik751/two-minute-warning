@@ -857,9 +857,11 @@ def test_report_tables_count_the_known_unmatched_ids(world):
     assert "ambiguous" in _issue(con, "unmatched", "fantasypros", "900010",
                                  dataset="ff_rankings_all[wp]")[2]  # fmt: skip
     assert _issue(con, "unmatched", "fantasypros", "900005", dataset="ff_rankings_week")[2] is None
-    # a dataset that is not cached is skipped and noted, never fetched
+    # a dataset that is not cached is skipped and noted, never fetched (ff_opportunity is a
+    # build input since C3, so the fixture always writes it; NGS is never written)
     notes = json.loads(manifest["report_id_coverage"]["notes"])
-    assert notes["coverage_datasets_skipped"]["ff_opportunity"] == [2024, 2025]
+    assert notes["coverage_datasets_skipped"]["ngs_passing"] == [2024, 2025]
+    assert "ff_opportunity" not in notes["coverage_datasets_skipped"]
     assert notes["preseason_pool_unmatched"] == {"2025": "2/3"}
     assert notes["fact_snaps_fantasy_match_rate"] == {"2024": 0.5, "2025": 0.517241}
     assert json.loads(manifest["report_id_unmatched"]["notes"])["n_rows_by_kind"]["conflict"] >= 1

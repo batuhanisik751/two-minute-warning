@@ -85,6 +85,10 @@ GAME_DATA_TABLES = {
     "fact_player_week": "player_stats",
     "fact_team_week": "team_stats",
     "fact_snaps": "snap_counts",
+    # ffopportunity's weekly file is rebuilt right after nflverse's play-by-play (C3: the 2026
+    # asset was updated 16 minutes after play_by_play_2026, GitHub releases API, 2026-09-28),
+    # so it uses the play-by-play lag (docs/assumptions.md section 9)
+    "fact_opportunity_week": "pbp",
 }
 
 # fact_schedule columns that can still change after the spring release (flexed or moved games,
@@ -393,6 +397,20 @@ TABLE_AVAILABILITY: dict[str, Availability] = {
             "event",
             "Snap counts are public after the game's data refresh: game end + "
             "game_data_lag_hours.snap_counts (6 h), joined on game_id.",
+            week_key=_SW,
+        ),
+        Availability(
+            "fact_opportunity_week",
+            "event",
+            "Expected fantasy-point components (ffopportunity) are rebuilt right after "
+            "nflverse's play-by-play (2026 asset updated 16 minutes after play_by_play_2026, "
+            "checked 2026-09-28): game end + game_data_lag_hours.pbp (6 h), joined on game_id. "
+            "The expected values come from models trained on many seasons (spec 6.3). "
+            "position (ffopportunity's) is left out of the as-of view.",
+            hindsight_columns={
+                "position": "ffopportunity's position for the player; when it was recorded is "
+                "not documented (it may be today's), so it is not used point-in-time",
+            },
             week_key=_SW,
         ),
         Availability(

@@ -523,6 +523,25 @@ def _build_fact_game(
     return out
 
 
+def _build_fact_opportunity_week(
+    con: duckdb.DuckDBPyConnection,
+    src: SourceFiles,
+    stats: TableStats,
+    arules: av.AvailabilityRules,
+) -> TableStats:
+    """ffopportunity's weekly expected stats (C3). ``season_type`` comes from the game's
+    fact_game row; rows without a player id (team rows upstream) are dropped and counted."""
+    table = sc.tables()["fact_opportunity_week"]
+    if not src.paths[table.source]:  # every requested season predates 2006
+        return _materialize(con, table, _empty_select(table), stats, arules)
+    _, inner = _source_select(con, _without_computed(table), src, stats)
+    cols = ", ".join(
+        "g.season_type AS season_type" if c.computed else f"s.{sc.q(c.name)}" for c in table.columns
+    )
+    sql = f"SELECT {cols} FROM ({inner}) s LEFT JOIN fact_game g ON g.game_id = s.game_id"
+    return _materialize(con, table, sql, stats, arules)
+
+
 def _build_fact_schedule(
     con: duckdb.DuckDBPyConnection, stats: TableStats, arules: av.AvailabilityRules
 ) -> TableStats:
@@ -1173,6 +1192,7 @@ def build_warehouse(
                 _build_coaches(con, stats, arules)
                 for name in ("fact_play", "fact_player_week", "fact_team_week"):
                     _build_from_source(con, specs[name], src, stats[name], arules)
+                _build_fact_opportunity_week(con, src, stats["fact_opportunity_week"], arules)
                 # B3: the id bridge first, then the tables that map ids through it
                 _stage_player_ids(con, src, stats["bridge_player_id"])
                 _build_fact_snaps(con, src, stats["fact_snaps"], arules)

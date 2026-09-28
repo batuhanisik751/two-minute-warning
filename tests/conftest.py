@@ -165,6 +165,35 @@ PLAYERS_DTYPES: dict[str, pl.DataType] = {
 }
 
 
+# ffopportunity weekly (fact_opportunity_week, C3): upstream season is a String and week a
+# Float64 in every season. Only the columns tests set; the rest are NULL in the warehouse.
+OPPORTUNITY_DTYPES: dict[str, pl.DataType] = {
+    "season": pl.String(),
+    "posteam": pl.String(),
+    "week": pl.Float64(),
+    "game_id": pl.String(),
+    "player_id": pl.String(),
+    "full_name": pl.String(),
+    "position": pl.String(),  # the id report reads it from the raw file
+    "rec_attempt": pl.Float64(),
+    "rush_attempt": pl.Float64(),
+    "receptions": pl.Float64(),
+    "receptions_exp": pl.Float64(),
+    "rec_yards_gained": pl.Float64(),
+    "rec_yards_gained_exp": pl.Float64(),
+    "rec_touchdown_exp": pl.Float64(),
+    "rush_yards_gained_exp": pl.Float64(),
+    "rush_touchdown_exp": pl.Float64(),
+    "pass_yards_gained_exp": pl.Float64(),
+    "pass_touchdown_exp": pl.Float64(),
+    "pass_interception_exp": pl.Float64(),
+    "total_fantasy_points": pl.Float64(),
+    "total_fantasy_points_exp": pl.Float64(),
+}
+
+OPPORTUNITY_FIRST_SEASON = 2006
+
+
 # ff_playerids (DynastyProcess) and weekly rosters: the id sources of the B3 bridge. Every id in
 # the fixtures is synthetic (9xxxxx, 8xxxxx ... numbers, "OneAl00"-style PFR slugs).
 FF_PLAYERIDS_DTYPES: dict[str, pl.DataType] = {
@@ -435,6 +464,7 @@ class RawCache:
         injuries: pl.DataFrame | list[dict[str, Any]] | None = None,
         depth_charts: pl.DataFrame | None = None,
         rosters: pl.DataFrame | list[dict[str, Any]] | None = None,
+        opportunity: list[dict[str, Any]] | None = None,
     ) -> None:
         """Write every per-season dataset a build needs, with sensible tiny defaults."""
         self.write("schedules", season, frame(games, SCHEDULE_DTYPES))
@@ -482,6 +512,17 @@ class RawCache:
         if depth_charts is None:
             depth_charts = daily_depth_chart(games) if season >= 2025 else legacy_depth_chart(games)
         self.write("depth_charts", season, depth_charts)
+        if season >= OPPORTUNITY_FIRST_SEASON:  # ffopportunity starts in 2006
+            if opportunity is None:
+                opportunity = [
+                    {"season": str(g["season"]), "posteam": g["home_team"],
+                     "week": float(g["week"]), "game_id": g["game_id"],
+                     "player_id": "00-0000001", "full_name": "Alpha One",
+                     "position": "QB", "receptions_exp": 0.5, "rec_yards_gained_exp": 5.0,
+                     "total_fantasy_points_exp": 1.0}
+                    for g in games
+                ]  # fmt: skip
+            self.write("ff_opportunity", season, frame(opportunity, OPPORTUNITY_DTYPES))
         if season >= 2002:  # weekly rosters start in 2002
             if rosters is None:
                 rosters = default_rosters(season, min(g["week"] for g in games))

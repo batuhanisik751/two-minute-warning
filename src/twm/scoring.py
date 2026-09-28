@@ -208,3 +208,68 @@ def score_sql(rules: ScoringRules | None = None, *, table_alias: str | None = No
         total = " + ".join(f"COALESCE(CAST({prefix}{c} AS DOUBLE), 0)" for c in cols)
         parts.append(f"({total}) * {_sql_number(rules.points[stat])}")
     return "(" + (" + ".join(parts) if parts else "0.0") + ")"
+
+
+# --------------------------------------------------------------------------------------
+# Expected fantasy points (xFP) from ffopportunity's expected stats (fact_opportunity_week)
+# --------------------------------------------------------------------------------------
+
+# Stat key -> the ffopportunity weekly column holding that stat's EXPECTED value: what an
+# average player would have produced from the same targets and carries (where on the field,
+# how deep, which down ...). Checked against data/schemas/ff_opportunity.json.
+XFP_COLUMNS: dict[str, str] = {
+    "passing.yards": "pass_yards_gained_exp",
+    "passing.touchdowns": "pass_touchdown_exp",
+    "passing.interceptions": "pass_interception_exp",
+    "passing.two_point_conversions": "pass_two_point_conv_exp",
+    "rushing.yards": "rush_yards_gained_exp",
+    "rushing.touchdowns": "rush_touchdown_exp",
+    "rushing.two_point_conversions": "rush_two_point_conv_exp",
+    "receiving.receptions": "receptions_exp",
+    "receiving.yards": "rec_yards_gained_exp",
+    "receiving.touchdowns": "rec_touchdown_exp",
+    "receiving.two_point_conversions": "rec_two_point_conv_exp",
+}
+# Stats with no expected counterpart in ffopportunity: they add nothing to xFP (so FPOE =
+# points - xFP carries them: a lost fumble lowers FPOE, a return touchdown raises it).
+XFP_WITHOUT_EXPECTATION: tuple[str, ...] = (
+    "misc.fumbles_lost",
+    "misc.special_teams_touchdowns",
+    "misc.fumble_recovery_touchdowns",
+)
+assert set(XFP_COLUMNS) | set(XFP_WITHOUT_EXPECTATION) == set(STAT_KEYS), "xFP map out of sync"
+
+
+def xfp_columns(rules: ScoringRules | None = None) -> dict[str, str]:
+    """Stat key -> expected-stat column, for the stats this rule set gives points for."""
+    rules = rules or ScoringRules.from_config()
+    return {k: c for k, c in XFP_COLUMNS.items() if rules.points.get(k, 0) != 0}
+
+
+def xfp[Frame: (pl.DataFrame, pl.LazyFrame)](
+    df: Frame, rules: ScoringRules | None = None, *, column: str = "xfp"
+) -> Frame:
+    """Add ``column``: expected fantasy points, the expected stats (ffopportunity ``*_exp``
+    columns of ``fact_opportunity_week``) scored with ``rules`` (default config/scoring.yaml).
+
+    Fumbles and return / fumble-recovery touchdowns have no expected value upstream, so they
+    add 0 (see :data:`XFP_WITHOUT_EXPECTATION`). A missing value counts as 0."""
+    rules = rules or ScoringRules.from_config()
+    cols = xfp_columns(rules)
+    names = df.collect_schema().names() if isinstance(df, pl.LazyFrame) else df.columns
+    missing = [c for c in cols.values() if c not in names]
+    if missing:
+        raise KeyError(f"cannot compute xFP: missing expected-stat columns {missing}")
+    terms = [pl.col(c).cast(pl.Float64).fill_null(0.0) * rules.points[k] for k, c in cols.items()]
+    return df.with_columns((pl.sum_horizontal(terms) if terms else pl.lit(0.0)).alias(column))
+
+
+def xfp_sql(rules: ScoringRules | None = None, *, table_alias: str | None = None) -> str:
+    """The same calculation as :func:`xfp` as a DuckDB SQL expression (DOUBLE)."""
+    rules = rules or ScoringRules.from_config()
+    prefix = f"{table_alias}." if table_alias else ""
+    parts = [
+        f"COALESCE(CAST({prefix}{c} AS DOUBLE), 0) * {_sql_number(rules.points[k])}"
+        for k, c in xfp_columns(rules).items()
+    ]
+    return "(" + (" + ".join(parts) if parts else "0.0") + ")"

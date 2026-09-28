@@ -296,7 +296,8 @@ def ids_report(
 
 
 radar_app = typer.Typer(
-    help="Waiver Radar: the candidate pool (players probably on waivers) and its labels."
+    help="Waiver Radar: the candidate pool (players probably on waivers), its labels, its "
+    "features and the training dataset."
 )
 app.add_typer(radar_app, name="radar")
 
@@ -521,6 +522,158 @@ def radar_labels_report(
         raise typer.Exit(code=1) from e
     target = out if out.is_absolute() else ROOT / out
     csv_path = write_label_report(report, target)
+    for line in report.summary:
+        typer.echo(line)
+    typer.echo(f"wrote {target}")
+    typer.echo(f"wrote {csv_path}")
+
+
+@radar_app.command("features")
+def radar_features(
+    season: int = typer.Argument(..., help="Season, e.g. 2023."),
+    week: int = typer.Argument(..., help="Regular-season week N; the pool at its Tuesday as-of."),
+    pos: str | None = typer.Option(None, "--pos", help="Only this position (QB, RB, WR, TE)."),
+    team: str | None = typer.Option(None, "--team", help="Only this team (e.g. KC)."),
+    show_all: bool = typer.Option(
+        False, "--all", help="Also list rostered players outside the pool."
+    ),
+    limit: int = typer.Option(25, "--limit", help="Rows to print (0 = all)."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+) -> None:
+    """Print one as-of's pool with its key features (reference path, through the as-of view)
+    and every unavailable teammate with the rule that fired. docs/waiver_radar.md explains
+    each feature; `twm glossary <feature>` too."""
+    import duckdb
+    import polars as pl
+
+    from twm.asof import AsOfView, WarehouseTooOldError, weekly_as_of
+    from twm.modules.waiver_radar.features import features_for, unavailable_teammates
+    from twm.modules.waiver_radar.pool import candidate_pool
+
+    path = _warehouse_or_exit(db)
+    try:
+        when = weekly_as_of(path, season, week)
+        with AsOfView(path, when) as view:
+            pool = candidate_pool(view, season, week)
+            feats = features_for(view, season, week, pool)
+            mates = unavailable_teammates(view, season)
+    except (LookupError, ValueError, KeyError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot compute the features: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    df = pool.select("gsis_id", "name", "team", "in_pool").join(feats, on="gsis_id")
+    if pos is not None:
+        df = df.filter(pl.col("position") == pos.upper())
+    if team is not None:
+        df = df.filter(pl.col("team") == team.upper())
+        mates = mates.filter(pl.col("team") == team.upper())
+    if not show_all:
+        df = df.filter(pl.col("in_pool"))
+    df = df.sort(
+        ["same_pos_vacated_target_share", "snap_share_last", "gsis_id"],
+        descending=[True, True, False],
+        nulls_last=True,
+    )
+    typer.echo(
+        f"{season} week {week}, as-of {when:%Y-%m-%d %H:%M} UTC: {df.height} "
+        + ("rostered" if show_all else "pool")
+        + " players, most vacated same-position targets first"
+    )
+    cols = ["name", "team", "position", "snap_share_last", "snap_share_avg3",
+            "snap_share_delta", "target_share_avg3", "carry_share_avg3", "xfp_avg3",
+            "depth_rank_now", "depth_rank_change", "same_pos_vacated_target_share",
+            "same_pos_vacated_carry_share", "top_teammate_out"]  # fmt: skip
+    shown = df.select(cols) if limit == 0 else df.select(cols).head(limit)
+    cfg = dict(tbl_rows=-1, tbl_cols=-1, tbl_width_chars=240, float_precision=2,
+               tbl_hide_dataframe_shape=True, tbl_hide_column_data_types=True)  # fmt: skip
+    with pl.Config(**cfg):
+        typer.echo(str(shown))
+        typer.echo(f"unavailable teammates ({mates.height}):")
+        typer.echo(
+            str(
+                mates.select("team", "name", "position", "rules", "last_week",
+                             "target_share_avg3", "carry_share_avg3", "snap_share_avg3")
+            )
+        )  # fmt: skip
+
+
+@radar_app.command("dataset")
+def radar_dataset(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    out: Path = typer.Option(
+        Path("data/waiver_radar/dataset.parquet"),
+        "--out",
+        help="Parquet file to write (relative paths are under the project root; data/ is "
+        "gitignored).",
+    ),
+    start: int = typer.Option(2013, "--start", help="First season (snap counts start 2013)."),
+    end: int | None = typer.Option(None, "--end", help="Last season (default: current)."),
+) -> None:
+    """Build the training dataset: pool rows + features + labels, one row per (season, week,
+    player), sorted; deterministic (the same warehouse gives the same file)."""
+    import time
+
+    import duckdb
+
+    from twm.asof import WarehouseTooOldError
+    from twm.config import ROOT, settings
+    from twm.modules.waiver_radar.dataset import build_dataset, write_dataset
+
+    path = _warehouse_or_exit(db)
+    last = end if end is not None else settings().current_season
+    if start > last:
+        raise typer.BadParameter(f"--start {start} is after --end {last}")
+    t0 = time.perf_counter()
+    try:
+        df = build_dataset(path, list(range(start, last + 1)))
+    except (LookupError, ValueError, KeyError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot build the dataset: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    target = out if out.is_absolute() else ROOT / out
+    write_dataset(df, target)
+    secs = time.perf_counter() - t0
+    n_pool = int(df.get_column("in_pool").sum()) if df.height else 0
+    typer.echo(
+        f"{df.height:,} rows ({n_pool:,} in the pool), {df.width} columns, seasons "
+        f"{start}-{last}, {target.stat().st_size / 1e6:.1f} MB, {secs:.0f} s"
+    )
+    typer.echo(f"wrote {target}")
+
+
+@radar_app.command("features-report")
+def radar_features_report(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    dataset: Path = typer.Option(
+        Path("data/waiver_radar/dataset.parquet"),
+        "--dataset",
+        help="The dataset from `twm radar dataset` (relative paths are under the project root).",
+    ),
+    out: Path = typer.Option(
+        Path("reports/waiver_radar/features.md"),
+        "--out",
+        help="Markdown file to write (relative paths are under the project root); a CSV with "
+        "the same name is written next to it.",
+    ),
+) -> None:
+    """Write the feature report (null rates, means for hits and misses, single-feature AUC per
+    position, the xFP check; markdown + CSV) from the dataset."""
+    import duckdb
+    import polars as pl
+
+    from twm.config import ROOT
+    from twm.modules.waiver_radar.feature_report import build_feature_report, write_feature_report
+
+    path = _warehouse_or_exit(db)
+    source = dataset if dataset.is_absolute() else ROOT / dataset
+    if not source.exists():
+        typer.echo(f"dataset not found: {source}; run `twm radar dataset` first", err=True)
+        raise typer.Exit(code=1)
+    try:
+        report = build_feature_report(pl.read_parquet(source), path)
+    except (LookupError, ValueError, KeyError, duckdb.Error) as e:
+        typer.echo(f"cannot build the report: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    target = out if out.is_absolute() else ROOT / out
+    csv_path = write_feature_report(report, target)
     for line in report.summary:
         typer.echo(line)
     typer.echo(f"wrote {target}")

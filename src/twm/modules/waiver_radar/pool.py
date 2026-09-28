@@ -19,7 +19,9 @@ high on either list was drafted or has been picked up by now in a typical 12-tea
 - **Universe.** Every player on an NFL roster at the as-of: his latest weekly-roster row of the
   season that is public by then (``fact_roster_week``), if his team's latest public roster
   lists him, at QB/RB/WR/TE (the position of that roster week, never today's), with a status
-  in ``roster_statuses`` (ACT, INA, DEV). docs/waiver_radar.md has the full rules.
+  in ``roster_statuses`` (ACT, INA, DEV) when the season's rosters carry weekly statuses (from
+  2016; before that the status is the season-final one and is ignored, see
+  :func:`statuses_are_weekly`). docs/waiver_radar.md has the full rules.
 
 Everything is read through an :class:`~twm.asof.AsOfView`, so nothing after the as-of can
 leak in (tests/test_waiver_radar_pool.py runs the leakage harness on it). Rostership numbers
@@ -95,7 +97,28 @@ def _sql_list(values: Iterable[str]) -> str:
     return ", ".join("'" + v.replace("'", "''") + "'" for v in values)
 
 
-def _base_sql(season: int, rules: PoolRules) -> str:
+def statuses_are_weekly(rosters: pl.DataFrame) -> bool:
+    """Do the season's public weekly rosters carry a status OF THAT WEEK?
+
+    The 2002-2015 rosters do not: no player's status ever changes within one of those seasons
+    (a player who ended the season on injured reserve is RES on every week's roster, the
+    weeks he played included), so their status is hindsight and roster_status must not use
+    it. From 2016 statuses change from week to week (ACT, then RES ...). Decided from the
+    rosters public at the as-of: statuses count as weekly once any player shows two different
+    ones (at a week-1 as-of no rule-1 teammate can exist anyway: he would have played in
+    the same game-day week)."""
+    if rosters.height == 0:
+        return False
+    changed = (
+        rosters.filter(pl.col("status").is_not_null())
+        .group_by("gsis_id")
+        .agg(pl.col("status").n_unique().alias("n"))
+        .filter(pl.col("n") > 1)
+    )
+    return changed.height > 0
+
+
+def _base_sql(season: int, rules: PoolRules, *, apply_status: bool = True) -> str:
     """One row per universe player with every input of both methods (see module docstring).
 
     Read through the as-of view: each table name below is its point-in-time view."""
@@ -103,6 +126,10 @@ def _base_sql(season: int, rules: PoolRules) -> str:
     pts = score_sql(rules.scoring)
     positions = _sql_list(FANTASY_POSITIONS)
     statuses = _sql_list(rules.roster_statuses)
+    # Statuses are trusted only when the season's rosters carry a status OF THAT WEEK; the
+    # 2002-2015 rosters stamp the season-final status on every week (a player who ended the
+    # season on IR is RES even in weeks he played), so filtering on it would leak the future.
+    where = f"WHERE r.status IN ({statuses})" if apply_status else ""
     return f"""
     WITH latest AS (
         -- each player's latest public roster row of the season (a team on its bye week is
@@ -209,7 +236,7 @@ def _base_sql(season: int, rules: PoolRules) -> str:
     LEFT JOIN ppg p USING (gsis_id)
     LEFT JOIN rookie rk USING (gsis_id)
     LEFT JOIN own o USING (gsis_id)
-    WHERE r.status IN ({statuses})
+    {where}
     ORDER BY r.position, r.gsis_id"""
 
 
@@ -238,7 +265,8 @@ BASE_SCHEMA = {
 
 
 def _base(view: AsOfView, season: int, week: int, rules: PoolRules) -> pl.DataFrame:
-    df = view.sql(_base_sql(season, rules))
+    rosters = view.sql(f"SELECT gsis_id, status FROM fact_roster_week WHERE season = {int(season)}")
+    df = view.sql(_base_sql(season, rules, apply_status=statuses_are_weekly(rosters)))
     df = df.cast({c: t for c, t in BASE_SCHEMA.items() if c in df.columns}, strict=False)
     return df.select(list(BASE_SCHEMA)).with_columns(
         pl.lit(int(season), dtype=pl.Int32).alias("season"),

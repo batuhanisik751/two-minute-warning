@@ -39,6 +39,9 @@ uv run twm radar pool 2023 6  # Waiver Radar candidate pool at week 6's as-of (d
 uv run twm radar pool-report  # pool sizes and validation -> reports/waiver_radar/pool_sizes.md
 uv run twm radar labels 2023 6  # did each pool player become a weekly starter soon after? (labels)
 uv run twm radar labels-report  # label base rates and checks -> reports/waiver_radar/labels.md
+uv run twm radar features 2023 6 --team min  # the features at week 6's as-of, teammates out
+uv run twm radar dataset      # pool + features + labels 2013-2026 -> data/waiver_radar/dataset.parquet
+uv run twm radar features-report  # single-feature check -> reports/waiver_radar/features.md
 uv run pytest                 # offline tests (the default); `uv run pytest -m network` runs the live drift check
 ```
 
@@ -50,7 +53,7 @@ Dataset names: `uv run twm ingest --help` or `DATASETS` in `src/twm/sources/nflv
 - `data/schemas/<dataset>.json` (committed) records each dataset's columns and dtypes. Every current-season or one-file load is compared with it: a missing column raises `SchemaDriftError`, a changed dtype or a new column is logged. Snapshots are written on the first current-season fetch of a dataset and refreshed **deliberately** with `uv run python scripts/refresh_snapshots.py` (review the diff, then commit), never by `twm ingest`.
 - What we verified about the data, and where it differs from the spec: `docs/assumptions.md`. Re-verify from the cache with `uv run python scripts/verify_sources.py` (no network unless you pass `--allow-download`).
 
-See `PROJECT_SPEC.md` for the full specification, `docs/warehouse.md` for the DuckDB warehouse, `docs/scoring.md` for how fantasy points are computed, `docs/waiver_radar.md` for the Waiver Radar's candidate pool and labels and `docs/progress.md` for the build log.
+See `PROJECT_SPEC.md` for the full specification, `docs/warehouse.md` for the DuckDB warehouse, `docs/scoring.md` for how fantasy points are computed, `docs/waiver_radar.md` for the Waiver Radar's candidate pool, labels and features and `docs/progress.md` for the build log.
 
 ## Attribution
 

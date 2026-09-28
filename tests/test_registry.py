@@ -49,9 +49,23 @@ def test_identifiers_are_real_columns():
 
 
 def test_available_features_are_real_columns():
+    """A feature is a warehouse column, or a column the Waiver Radar feature code computes
+    (C3: twm.modules.waiver_radar.features), or one of the per-game values it computes from
+    warehouse columns (snap share = offense_pct, carry share, xFP, FPOE)."""
+    from twm.modules.waiver_radar.features import FEATURE_COLUMNS
+
     cols = set().union(*warehouse_columns().values())
+    computed = {"offense_snap_share", "carry_share", "xfp", "fpoe"}
     for e in rg.entries(kind="feature", status="available"):
-        assert e.name in cols or e.name == "offense_snap_share", e.name
+        assert e.name in cols or e.name in computed or e.name in FEATURE_COLUMNS, e.name
+
+
+def test_every_waiver_radar_feature_is_registered():
+    from twm.modules.waiver_radar.features import FEATURE_COLUMNS
+
+    used = rg.check_features(FEATURE_COLUMNS, "waiver_radar")
+    assert [e.name for e in used] == list(FEATURE_COLUMNS)
+    assert all(e.step == "C3" or e.name in ("ppg_to_date", "preseason_pos_rank") for e in used)
 
 
 def test_check_features_accepts_available_features():
@@ -66,13 +80,21 @@ def test_check_features_accepts_available_features():
         ("team", "identifier can never be a feature"),
         ("y_hit", "registered as a label"),
         ("fantasy_points", "registered as a metric"),
-        ("carry_share", "planned for C3"),
-        ("snap_shar", "not registered (did you mean offense_snap_share?)"),
+        ("snap_shar", "not registered (did you mean snap_share_last?)"),
     ],
 )
 def test_check_features_refuses(column, message):
     with pytest.raises(rg.FeatureCheckError, match=re.escape(message)):
         rg.check_features(["target_share", column], "waiver_radar")
+
+
+def test_check_features_refuses_planned_entries(monkeypatch):
+    planned = rg.Entry(name="future_signal", title="F", kind="feature",
+                       modules=("waiver_radar",), unit="u", formula="f", explanation="e",
+                       status="planned", step="C9")  # fmt: skip
+    monkeypatch.setitem(rg.REGISTRY, "future_signal", planned)
+    with pytest.raises(rg.FeatureCheckError, match="planned for C9"):
+        rg.check_features(["target_share", "future_signal"], "waiver_radar")
 
 
 def test_check_features_reports_every_problem_at_once():

@@ -128,6 +128,279 @@ def _label_texts() -> dict[str, str]:
     }
 
 
+def _feature_entries() -> list[Entry]:
+    """The Waiver Radar model features of step C3 (twm.modules.waiver_radar.features), one
+    entry per column. Windows: 'last' = the team's most recent game visible at the as-of,
+    'avg3' = its last 3, 'season' = all of them; a game the player missed counts as 0."""
+    from twm.modules.waiver_radar.features import FeatureRules
+
+    r = FeatureRules.from_config()
+    win = (
+        "team games = regular-season games of the player's as-of team visible at the as-of; "
+        "last = the most recent, avg3 = mean over the last "
+        f"{r.window} (fewer early in the season), season = mean over all; a game he missed "
+        "counts as 0; NULL only when the team has no visible game"
+    )
+    feat = "twm.modules.waiver_radar.features"
+    rows: list[tuple[str, str, str, str, str, str, str | None]] = [
+        # name, title, unit, formula, explanation, source, reason template
+        ("snap_share_last", "Snap share, last game", "share (0-1)",
+         f"offense_snap_share in the team's last game ({win})",
+         "How much he played in the most recent game. A jump is often the first sign of a "
+         "bigger role.", "fact_snaps.offense_pct",
+         "{player} played {value:.0%} of the snaps last game"),
+        ("snap_share_avg3", "Snap share, last 3 games", "share (0-1)",
+         f"mean offense_snap_share over the team's last 3 games ({win})",
+         "His usual playing time lately, less noisy than one game.", "fact_snaps.offense_pct",
+         "{player} averaged {value:.0%} of the snaps over the last {weeks} games"),
+        ("snap_share_season", "Snap share, season", "share (0-1)",
+         f"mean offense_snap_share over all team games of the season ({win})",
+         "His playing time over the whole season so far.", "fact_snaps.offense_pct", None),
+        ("snap_share_delta", "Snap share change", "share points",
+         "snap_share_last minus the mean snap share of the up to 3 team games before the last "
+         "(NULL when the last game is the team's first)",
+         "Did his playing time just go up or down? A big rise means the coaches trust him "
+         "more.", "fact_snaps.offense_pct",
+         "{player}'s snap share went from {prev:.0%} to {value:.0%}"),
+        ("target_share_last", "Target share, last game", "share (0-1)",
+         f"nflverse target_share in the team's last game, 0 without a stat line ({win})",
+         "The share of his team's passes thrown his way last game.",
+         "fact_player_week.target_share", "{player} drew {value:.0%} of the targets last game"),
+        ("target_share_avg3", "Target share, last 3 games", "share (0-1)",
+         f"mean nflverse target_share over the team's last 3 games ({win})",
+         "How much of the passing game goes to him lately.", "fact_player_week.target_share",
+         "{player} drew {value:.0%} of his team's targets over the last {weeks} games"),
+        ("air_yards_share_avg3", "Air-yards share, last 3 games", "share (0-1)",
+         f"mean nflverse air_yards_share over the team's last 3 games ({win}); can be "
+         "slightly negative (passes behind the line)",
+         "How much of the team's downfield passing is aimed at him.",
+         "fact_player_week.air_yards_share", None),
+        ("wopr_avg3", "WOPR, last 3 games", "index (about 0-1)",
+         f"mean nflverse wopr (1.5 x target share + 0.7 x air-yards share) over the team's "
+         f"last 3 games ({win})", "One number for a receiver's recent opportunity.",
+         "fact_player_week.wopr", None),
+        ("carry_share_last", "Carry share, last game", "share (0-1)",
+         f"carry_share in the team's last game ({win})",
+         "The share of his team's runs he got last game.",
+         "fact_player_week.carries, fact_team_week.carries",
+         "{player} got {value:.0%} of the carries last game"),
+        ("carry_share_avg3", "Carry share, last 3 games", "share (0-1)",
+         f"mean carry_share over the team's last 3 games ({win})",
+         "How much of the running game goes to him lately.",
+         "fact_player_week.carries, fact_team_week.carries",
+         "{player} got {value:.0%} of his team's carries over the last {weeks} games"),
+        ("rz_targets_avg3", "Red-zone targets per game", "targets per game",
+         f"mean over the team's last 3 games of his targets on pass plays (not two-point "
+         f"tries) with yardline_100 <= {r.red_zone_yardline} ({win})",
+         "Targets inside the opponent's 20-yard line, where touchdowns come from.",
+         "fact_play.receiver_player_id, yardline_100", None),
+        ("rz_carries_avg3", "Red-zone carries per game", "carries per game",
+         f"mean over the team's last 3 games of his runs (play_type run, not two-point tries; "
+         f"kneels excluded) with yardline_100 <= {r.red_zone_yardline} ({win})",
+         "Carries inside the opponent's 20-yard line.",
+         "fact_play.rusher_player_id, yardline_100", None),
+        ("gl_opps_avg3", "Goal-line opportunities per game", "looks per game",
+         f"mean over the team's last 3 games of his targets plus carries (as above) with "
+         f"yardline_100 <= {r.goal_line_yardline} ({win})",
+         "Chances inside the 10-yard line: the most valuable touches in fantasy.",
+         "fact_play", "{player} had {value:.1f} goal-line chances per game lately"),
+        ("routes_proxy_avg3", "Routes proxy", "dropbacks per game",
+         f"mean over the team's last 3 games of (team dropbacks in the game x his snap share "
+         f"in it); dropbacks = plays with qb_dropback = 1 that are not two-point tries "
+         f"(passes, sacks, scrambles) ({win})",
+         "About how many pass plays he was on the field for: a stand-in for routes run, "
+         "which nflverse does not publish.", "fact_play.qb_dropback, fact_snaps.offense_pct",
+         None),
+        ("xfp_last", "xFP, last game", "points",
+         f"xfp in the team's last game, 0 without a row ({win})",
+         "Expected fantasy points from his chances last game.", "fact_opportunity_week", None),
+        ("xfp_avg3", "xFP, last 3 games", "points per game",
+         f"mean xfp over the team's last 3 games ({win})",
+         "What his recent chances were worth per game, whatever he did with them.",
+         "fact_opportunity_week",
+         "{player}'s chances were worth {value:.1f} fantasy points per game lately"),
+        ("fpoe_avg3", "FPOE, last 3 games", "points per game",
+         f"mean over the team's last 3 games of (fantasy_points - xfp) ({win})",
+         "Scoring above or below his chances lately; mostly luck, so it is weighted low.",
+         "fact_player_week, fact_opportunity_week", None),
+        ("fantasy_points_last", "Fantasy points, last game", "points",
+         f"fantasy points (config/scoring.yaml) in the team's last game ({win})",
+         "What he scored last game.", "fact_player_week (twm.scoring.score_sql)",
+         "{player} scored {value:.1f} fantasy points last game"),
+        ("fantasy_points_avg3", "Fantasy points, last 3 games", "points per game",
+         f"mean fantasy points over the team's last 3 games ({win})",
+         "His recent scoring per game.", "fact_player_week (twm.scoring.score_sql)", None),
+        ("ppg_pos_rank", "PPG rank at his position", "rank (1 = best)",
+         "rank of ppg_to_date within his roster position among roster players with a game "
+         "(ties share the better rank; the candidate pool's ppg_pos_rank)",
+         "Where his points per game rank at his position so far.",
+         "twm.modules.waiver_radar.pool", None),
+        ("preseason_ranked", "Ranked before the season", "boolean",
+         "preseason_pos_rank is not NULL (FantasyPros ECR 2020 on; last season's PPG rank "
+         "or a round 1-2 rookie before)",
+         "Whether any preseason list ranked him at all.", "twm.modules.waiver_radar.pool",
+         None),
+        ("games_played_to_date", "Games played this season", "games",
+         "regular-season games with a stat line visible at the as-of (the pool's "
+         "games_to_date)", "How many games he has a stat line in so far.",
+         "twm.modules.waiver_radar.pool", None),
+        ("depth_rank_now", "Depth-chart rank now", "rank (1 = starter)",
+         "on his team's depth chart in force at the as-of (daily charts 2025+: the team's "
+         "latest snapshot with dt <= as-of; weekly charts: the latest visible week's chart), "
+         "1 + the number of players of his position group with a better (lower) depth rank "
+         "in any offensive slot of the group; ties share the better rank. Slots map to groups "
+         "by twm.modules.waiver_radar.features.slot_group (QB; RB, HB, FB, J; WR, LWR, RWR, "
+         "SWR, WR1/WR2, WRE, WE; TE, LTE, RTE, H-B, F and combined slots with TE). NULL when "
+         "he is not in a slot of his group",
+         "Where the team lists him at his position: 1 is the starter.",
+         "fact_depth_chart.position, depth_rank", None),
+        ("depth_rank_prev", "Depth-chart rank a week earlier", "rank (1 = starter)",
+         f"depth_rank_now computed from the chart in force {r.depth_prev_lag.days} days "
+         "before the as-of", "Where he was listed a week ago.",
+         "fact_depth_chart", None),
+        ("depth_rank_change", "Depth-chart move", "ranks (positive = promoted)",
+         "depth_rank_prev - depth_rank_now (NULL unless both exist)",
+         "How many spots he moved up the depth chart in a week.", "fact_depth_chart",
+         "{player} moved from {prev:.0f} to {value:.0f} on the depth chart"),
+        ("depth_listed", "On the depth chart", "boolean",
+         "his gsis_id is on his team's chart in force at the as-of in any slot (offense, "
+         "defense or special teams); NULL when the team has no visible chart",
+         "Whether the team lists him at all.", "fact_depth_chart", None),
+        ("vacated_target_share", "Vacated target share", "share (sum)",
+         "sum over his unavailable teammates (see teammate_unavailable) of their "
+         "target_share averaged over the team's last 3 games up to their last appearance "
+         "(before they became unavailable; games they missed count as 0)",
+         "Targets that teammates who are now out used to get: somebody has to catch them.",
+         "fact_player_week, fact_roster_week, fact_injury_report, fact_snaps",
+         "{teammate} is out, leaving {value:.0%} of the targets"),
+        ("vacated_carry_share", "Vacated carry share", "share (sum)",
+         "as vacated_target_share, with carry_share", "Carries freed up by teammates who "
+         "are out.", "fact_player_week, fact_team_week, fact_roster_week",
+         "{teammate} is out, leaving {value:.0%} of the carries"),
+        ("same_pos_vacated_target_share", "Vacated target share at his position",
+         "share (sum)",
+         "vacated_target_share over unavailable teammates of his own position group only",
+         "Targets freed up by players at his own position: the most direct path to more "
+         "work.", "as vacated_target_share",
+         "{teammate} ({value:.0%} of the targets) is out at his position"),
+        ("same_pos_vacated_carry_share", "Vacated carry share at his position",
+         "share (sum)",
+         "vacated_carry_share over unavailable teammates of his own position group only",
+         "Carries freed up by players at his own position.", "as vacated_carry_share",
+         "{teammate} ({value:.0%} of the carries) is out at his position"),
+        ("teammate_same_pos_unavailable", "Teammates out at his position", "players",
+         "number of unavailable teammates of his position group", "How many players at his "
+         "position are out.", "as vacated_target_share", None),
+        ("top_teammate_out", "A player ahead of him is out", "boolean",
+         "an unavailable same-position teammate averaged a higher snap share than he did "
+         "over the same games (the teammate's last 3 team games up to his last appearance)",
+         "Someone who played ahead of him is out: the classic waiver opportunity.",
+         "fact_snaps, as vacated_target_share",
+         "{teammate}, who played ahead of {player}, is out"),
+        ("joined_team_recently", "New team this season", "boolean",
+         "his latest visible roster team differs from his earliest roster team this season",
+         "He changed teams during the season (trade or signing).", "fact_roster_week", None),
+        ("team_epa_per_play", "Team EPA per play", "points per play",
+         "mean epa over his team's run and pass plays (no two-point tries) in the season's "
+         "visible games", "How efficient his offense is: good offenses create more points to "
+         "go around.", "fact_play.epa", None),
+        ("team_epa_per_play_neutral", "Team EPA per play (neutral)", "points per play",
+         "as team_epa_per_play, neutral situations only (fact_play.is_neutral)",
+         "Offensive efficiency when the game is close, the fairest view of a team.",
+         "fact_play.epa, is_neutral", None),
+        ("team_plays_per_game", "Team plays per game", "plays per game",
+         "his team's run and pass plays (no two-point tries) / its visible games",
+         "Pace: more plays mean more chances for everybody.", "fact_play", None),
+        ("team_pass_rate_neutral", "Team neutral pass rate", "share (0-1)",
+         "share of his team's neutral-situation run and pass plays with pass = 1 (passes, "
+         "sacks, scrambles)", "How pass-heavy his team is when the score does not force it.",
+         "fact_play.pass, is_neutral", None),
+        ("opp_fp_allowed_next3", "Next opponents' points allowed", "ratio (1 = average)",
+         "mean over his team's next 3 scheduled opponents (fact_schedule weeks after N, byes "
+         "skipped; the listed cancelled games count until played) of: fantasy points the "
+         "opponent's defense allowed per game to his position group this season (visible "
+         "games; the scorer's snap-count position of that game, else his latest roster "
+         "position) / the league average per team-game for the group; an opponent without a "
+         "visible game counts 1.0; NULL when his team has no game left. No betting lines "
+         "(spec 6.4)", "Whether his next matchups are soft (above 1) or tough (below 1) for "
+         "his position.", "fact_schedule, fact_player_week, fact_snaps",
+         "{player}'s next opponents allow {value:.2f} times the average to his position"),
+        ("n_opp_games_seen", "Opponent games observed", "games",
+         "sum of the visible games of the next opponents used by opp_fp_allowed_next3",
+         "How much evidence the matchup number rests on (little early in the season).",
+         "fact_game", None),
+        ("bye_in_next3", "Bye in the next 3 weeks", "boolean",
+         "his team has no scheduled game in at least one of the calendar weeks N+1 to N+3 "
+         "(capped at the last regular-season week)", "A bye costs a week of production.",
+         "fact_schedule, dim_week", None),
+        ("team_games_remaining", "Games remaining", "games",
+         "his team's regular-season fixtures after week N (fact_schedule, plus listed "
+         "cancelled games)", "How much season is left to use him.", "fact_schedule", None),
+        ("position", "Position", "category (QB, RB, WR, TE)",
+         "his point-in-time roster position (the pool's position)",
+         "Which position he plays; hit rates differ by position. A category, not an "
+         "identifier.", "fact_roster_week.position", None),
+        ("age_at_asof", "Age", "years",
+         "(as-of date - dim_player.birth_date) / 365.25; NULL without a public birth date",
+         "Younger players are likelier to grow into a bigger role.", "dim_player.birth_date",
+         None),
+        ("is_rookie", "Rookie", "boolean",
+         "his latest visible roster row's entry_year equals the season",
+         "First-year players often earn more snaps as the season goes on.",
+         "fact_roster_week.entry_year", None),
+        ("draft_round", "Draft round", "round (1-7)",
+         "dim_player.draft_round; NULL when undrafted (see is_undrafted)",
+         "Teams give early picks more chances.", "dim_player.draft_round", None),
+        ("is_undrafted", "Undrafted", "boolean",
+         "no draft round in dim_player at the as-of", "He was not drafted.",
+         "dim_player.draft_round", None),
+        ("years_exp", "Years of experience", "seasons",
+         "his latest visible roster row's years_exp", "Seasons in the league before this one.",
+         "fact_roster_week.years_exp", None),
+    ]  # fmt: skip
+    return [
+        Entry(
+            name=name,
+            title=title,
+            kind="feature",
+            modules=("waiver_radar",),
+            unit=unit,
+            formula=formula,
+            explanation=explanation,
+            source=f"{feat}; {source}",
+            step="C3",
+            model_output=name in ("xfp_last", "xfp_avg3", "fpoe_avg3")
+            or name.startswith("team_epa"),
+            reason_template=template,
+        )
+        for name, title, unit, formula, explanation, source, template in rows
+    ] + [
+        Entry(
+            name="teammate_unavailable",
+            title="Unavailable teammate",
+            kind="concept",
+            modules=("waiver_radar",),
+            unit="rule that fired",
+            formula="a teammate (same as-of team, QB/RB/WR/TE, who played for the team this "
+            "season) is unavailable at the as-of if ANY of: roster_status = his row on the "
+            "team's latest visible weekly roster has a status other than "
+            f"{', '.join(r.available_statuses)} (RES, PUP, SUS, CUT ...), used only in "
+            "seasons whose roster statuses change from week to week (2016 on: the 2002-2015 "
+            "rosters repeat one, season-final status on every week); left_team = he was "
+            "on the team's roster earlier this season but not on its latest visible roster "
+            "(released or traded); injury_report = the team's latest visible injury report of "
+            f"the season lists him {' or '.join(r.injury_statuses)}; missed_last_game = no "
+            "offensive snap or stat line in the team's last game after averaging at least "
+            f"{r.missed_game_min_snap_share:.0%} snap share in the up to {r.window} team games "
+            "before it",
+            explanation="A teammate who is out now: his targets and carries are up for grabs. "
+            "Each rule is recorded so the app can say why.",
+            source=f"{feat} (fact_roster_week, fact_injury_report, fact_snaps)",
+            step="C3",
+        ),
+    ]
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
     pool = _pool_texts()
@@ -200,7 +473,7 @@ def _entries() -> list[Entry]:
         Entry(
             name="preseason_pos_rank",
             title="Preseason position rank",
-            kind="metric",
+            kind="feature",
             modules=("waiver_radar",),
             unit="rank (1 = best)",
             formula="2020 on (method ecr): the player's rank among his position's players on "
@@ -219,7 +492,7 @@ def _entries() -> list[Entry]:
         Entry(
             name="ppg_to_date",
             title="Points per game this season",
-            kind="metric",
+            kind="feature",
             modules=("waiver_radar",),
             unit="points per game",
             formula="fantasy points (config/scoring.yaml) summed over the season's "
@@ -309,11 +582,15 @@ def _entries() -> list[Entry]:
             kind="feature",
             modules=("waiver_radar", "regression_watch"),
             unit="share (0-1)",
-            formula="player carries / team carries in that game",
+            formula="player carries / team carries in that game (fact_player_week.carries / "
+            "fact_team_week.carries; 0 when the team had no carry)",
             explanation="The share of his team's running plays given to a player: the "
             "running-back version of target share.",
-            status="planned",
+            source="fact_player_week.carries, fact_team_week.carries",
             step="C3",
+            verified="team carries equal the sum of the team's player carries on all 6,814 "
+            "regular-season team-games 2013-2025; player carries equal his play-by-play runs "
+            "and kneels without two-point tries on 99.996% of player-games",
         ),
         Entry(
             name="implied_team_total",
@@ -414,14 +691,21 @@ def _entries() -> list[Entry]:
             kind="feature",
             modules=("regression_watch", "waiver_radar"),
             unit="points",
-            formula="the ffopportunity model's expected stats for a player's targets and "
-            "carries, re-scored with config/scoring.yaml",
+            formula="sum over stats of (expected stat x points per unit in config/scoring.yaml)"
+            ": the ffopportunity model's expected passing, rushing and receiving yards, "
+            "touchdowns, two-point conversions, interceptions and receptions of a player-game "
+            "(fact_opportunity_week *_exp columns); fumbles and return or fumble-recovery "
+            "touchdowns have no expected value and add 0",
             explanation="What an average player would have scored from the same chances "
             "(where he was targeted, where he carried the ball). Opportunity is sticky week to "
             "week.",
-            status="planned",
-            step="D1",
+            source="twm.scoring.xfp / xfp_sql on fact_opportunity_week",
+            step="C3",
             model_output=True,
+            verified="with nflverse-PPR weights it reproduces ffopportunity's "
+            "total_fantasy_points_exp within the rounding of its 2-decimal columns on every "
+            "row except rushing two-point tries, whose expected yards ffopportunity adds to "
+            "the points but not to rush_yards_gained_exp (docs/waiver_radar.md)",
         ),
         Entry(
             name="fpoe",
@@ -429,11 +713,12 @@ def _entries() -> list[Entry]:
             kind="feature",
             modules=("regression_watch", "waiver_radar"),
             unit="points",
-            formula="fantasy_points - xfp",
+            formula="fantasy_points - xfp (the same player-game; a lost fumble or a return "
+            "touchdown counts fully, having no expected value)",
             explanation="Points above or below what his chances were worth: partly skill, "
             "largely luck, and it tends to shrink toward zero.",
-            status="planned",
-            step="D1",
+            source="twm.scoring.score_sql - twm.scoring.xfp_sql",
+            step="C3",
             model_output=True,
         ),
         Entry(
@@ -446,6 +731,7 @@ def _entries() -> list[Entry]:
             explanation="A player who scores far above his opportunity usually comes back down; "
             "one who scores far below usually rises. Opportunity is 'stickier' than efficiency.",
         ),
+        *_feature_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
             name="weekly_pos_rank",

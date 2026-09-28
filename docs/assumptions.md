@@ -290,6 +290,28 @@ in step F2.
 - **Update timing:** the 2026 file already contained 23 rows for Week 3 two days after the
   Thursday game, so it is refreshed in season on roughly the pbp schedule. Live lag to be
   logged each Tuesday.
+- **Update timing, checked 2026-09-28 (C3)** with the GitHub releases API (by the orchestrator
+  of step C3, recorded in its design brief): the ffopportunity weekly 2026 release asset was
+  updated at 00:50 UTC, 16 minutes after nflverse's `play_by_play_2026` asset (00:34 UTC): it is
+  rebuilt right after play-by-play. So `fact_opportunity_week.available_at` = the game's end +
+  `game_data_lag_hours.pbp` (6 h), like play-by-play (section 12). One observation: live runs
+  should keep logging the real arrival time (E4).
+- **Warehouse table (C3):** `fact_opportunity_week`, 106,560 player-games 2006-2026 on the
+  2026-09-28 cache. Upstream `season` is a String and `week` a Float64 in every season (cast).
+  6,441 rows have no `player_id`: at most one per team-game, the passes without an identified
+  target (28,046 in all, in `rec_attempt`); dropped. One `player_id` (a tight end) appears twice
+  in two 2013 games, the second time under an outside linebacker's name; the QB/RB/WR/TE row is
+  kept.
+- **xFP re-scoring verified (C3):** every expected component (`*_exp`) and ffopportunity's point
+  subtotals are stored with 2 decimals, and its points were computed from unrounded values, so
+  re-scoring cannot match to the cent (it does on 14% of player-games). With nflverse-PPR
+  weights our xFP is within the rounding bound (0.1412 points) of `total_fantasy_points_exp` on
+  106,463 of 106,560 player-games; the other 97 all have an expected rushing two-point
+  conversion: the per-play file (`ff_opportunity_rush`) shows ffopportunity adds 0.1 x the
+  expected yards of a two-point try (`rush_yards_exp` on `two_point_attempt = 1` plays) to
+  `rush_fantasy_points_exp` but not to `rush_yards_gained_exp`. Adding those yards back leaves 0
+  player-games outside the bound (largest difference 0.079). Our xFP leaves them out, like real
+  scoring.
 - Section 6.3 caveat applies (model trained across seasons).
 
 ## 10. Other observations
@@ -419,7 +441,8 @@ moment the whole row was public, and every estimate errs late.
 | `dim_coach` | first kickoff | |
 | `fact_roster_week` (C1) | game-day seasons (2016 on): week N's `asof_weekly_utc`; post-game seasons (2002-2015): week N+1's as-of (the last week: its own as-of + 7 days). The regime is measured per season by the build (`availability.roster_postgame_share_threshold`, 1%) | Among players who played in week N (snap or stat row), the share whose week-N roster status is not ACT: 6.6%-9.8% every season 2002-2015, 0%-0.18% every season 2016-2026 (see §15). A post-game roster can contain moves made after the Tuesday as-of, so it waits a week (the A3 proposal, "like legacy depth charts", would have leaked those moves) |
 | `fact_ranking` (C1) | the day after `scrape_date`, 00:00 UTC | The scrape's time of day is unknown (A3 proposed 12:00 UTC the same day; the end of the day errs later). The Tuesday as-of therefore sees the previous Friday's weekly ranking |
-| ff_opportunity, draft, combine, participation (not in the warehouse yet) | A3 proposals, to implement when those tables are added: ff_opportunity `dim_week.last_game_end_utc_est` + lag; draft/combine the draft day / March; participation Feb 15 of the next year (never in-season) | |
+| `fact_opportunity_week` (C3, ffopportunity weekly) | the row's game end + `game_data_lag_hours.pbp` (6 h), joined on `game_id`, like play-by-play (the A3 proposal was a per-week constant; per game is what the other game-data tables do, so a split-week game waits for its own end) | The 2026 asset is rebuilt 16 minutes after `play_by_play_2026` (GitHub releases API, 2026-09-28, section 9). Every row's `game_id` is in the schedule; 113 rows (split-week games) are public only after their own week's as-of. |
+| draft, combine, participation (not in the warehouse yet) | A3 proposals, to implement when those tables are added: draft/combine the draft day / March; participation Feb 15 of the next year (never in-season) | |
 
 Verified on a full 1999-2026 build (2026-09-27, rebuilt after the B2 review): no event row has
 a NULL `available_at`; for
@@ -519,11 +542,12 @@ Verified on the full 1999-2026 cache (2026-09-27) while building `fact_roster_we
 
 - **Snapshot timing.** Among players who played in week N (a snap-count or player-stats row that
   week), the share whose week-N roster status is not ACT is 6.6%-9.8% in every season
-  2002-2015 and 0%-0.18% in every season 2016-2026. A player who played and shows RES that
-  same week went on injured reserve after the game: the 2002-2015 rosters were taken after the
-  games (and may include moves up to the next week), the 2016+ rosters on game day. The build
-  measures this per season (`build_manifest.notes.regime_by_season`) and delays post-game
-  rosters by a week (§12).
+  2002-2015 and 0%-0.18% in every season 2016-2026. C1 read this as "the 2002-2015 rosters
+  were taken after the games"; C3 found the main cause is that their status is the season-final
+  one on every week (last bullet). The build still measures this per season
+  (`build_manifest.notes.regime_by_season`) and delays the 2002-2015 rosters by a week (§12):
+  whether their membership was recorded after the games cannot be told from the data, so the
+  delay is kept as the safe choice. The pool ignores their status (docs/waiver_radar.md).
 - **Duplicates.** 16,302 (season, week, gsis_id) groups have more than one row (33,771 rows),
   all in 2002-2015 except 13 in 2019: trades show the old team's TRC/TRD/TRT row next to the
   new team's; 151 rows have no gsis_id.
@@ -540,3 +564,17 @@ Verified on the full 1999-2026 cache (2026-09-27) while building `fact_roster_we
   roster position of the week is the point-in-time position.
 - **`rookie_year` is partly hindsight.** 17 rows carry a rookie year later than the roster's
   season; `entry_year` never does. The as-of view hides `rookie_year`.
+- **2002-2015 statuses are one value per season (found in C3, 2026-09-28 cache).** In every
+  season 2004-2015 no player's status changes from one roster week to the next (0 players; in
+  2016-2019 between 384 and 1,616 players a season do), and 98-115 players a season in 2013-2015
+  are RES on every week's roster although they played (Chicago's 2015 roster lists two
+  receivers and a tight end RES in every week, including weeks in which they played 77-100% of
+  the offensive snaps). So the 2002-2015 status is the player's status when the season's file was
+  compiled (apparently its end), stamped on every week: hindsight. Team membership does change
+  week to week in those seasons (about 450 team stints a season start after week 1 and as many end
+  early), so presence on a roster is usable. Consequences: the Waiver Radar's teammate rule
+  `roster_status` only uses statuses once they are seen to change within the season (never for
+  2002-2015); and the C1 pool universe (statuses ACT, INA, DEV) leaves out in 2013-2015 about
+  30-42 rostered QB/RB/WR/TE per as-of whose season-final status is RES although they play later
+  that season (507, 507 and 712 player-as-of rows; 2016: 149, legitimately returning players).
+  An open question for the owner (docs/waiver_radar.md "Known limits of the features").

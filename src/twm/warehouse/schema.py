@@ -819,6 +819,96 @@ def fact_ranking_spec() -> Table:
     )
 
 
+# ---- expected fantasy points (C3, ffopportunity weekly) -----------------------------------
+
+# The actual and expected (``_exp``) stat components xFP is re-scored from (twm.scoring.xfp),
+# ffopportunity's own point totals (a cross-check only: its scoring is fixed upstream), and the
+# attempts behind them. Everything else in the 159-column file (first downs, ``_diff`` and
+# ``_team`` columns) is left out; the names are checked against the snapshot at import.
+OPPORTUNITY_COMPONENTS = (
+    "pass_attempt", "rec_attempt", "rush_attempt",
+    "pass_completions", "pass_completions_exp", "receptions", "receptions_exp",
+    "pass_yards_gained", "pass_yards_gained_exp", "rec_yards_gained", "rec_yards_gained_exp",
+    "rush_yards_gained", "rush_yards_gained_exp",
+    "pass_touchdown", "pass_touchdown_exp", "rec_touchdown", "rec_touchdown_exp",
+    "rush_touchdown", "rush_touchdown_exp",
+    "pass_two_point_conv", "pass_two_point_conv_exp", "rec_two_point_conv",
+    "rec_two_point_conv_exp", "rush_two_point_conv", "rush_two_point_conv_exp",
+    "pass_interception", "pass_interception_exp", "rec_fumble_lost", "rush_fumble_lost",
+    "pass_fantasy_points", "pass_fantasy_points_exp", "rec_fantasy_points",
+    "rec_fantasy_points_exp", "rush_fantasy_points", "rush_fantasy_points_exp",
+    "total_fantasy_points", "total_fantasy_points_exp",
+)  # fmt: skip
+
+
+def fact_opportunity_week_spec() -> Table:
+    _check_names(
+        "ff_opportunity",
+        ["season", "week", "game_id", "player_id", "full_name", "position", "posteam",
+         *OPPORTUNITY_COMPONENTS],
+    )  # fmt: skip
+    cols = [
+        # upstream season is a String ('2026') and week a Float64 in every season 2006-2026
+        Column("season", "INTEGER", doc="NFL season (a string upstream)"),
+        Column("week", "INTEGER", doc="game week (a float upstream; integral, checked)"),
+        Column(
+            "season_type",
+            "VARCHAR",
+            computed=True,
+            doc="REG or POST, from the game's fact_game row (ffopportunity has no game type)",
+        ),
+        Column("game_id", "VARCHAR"),
+        Column("player_id", "VARCHAR", doc="the player's gsis_id (rows without one are dropped)"),
+        Column("full_name", "VARCHAR", doc="player name as ffopportunity writes it"),
+        Column(
+            "position",
+            "VARCHAR",
+            doc="ffopportunity's position for the player (hidden point-in-time: it is not "
+            "known when it was recorded); only used to pick a row when an id repeats",
+        ),
+        Column(
+            "posteam",
+            "VARCHAR",
+            transform=normalize_team_sql,
+            doc="the player's team in that game (current abbreviation; upstream already uses it)",
+        ),
+    ]
+    for name in OPPORTUNITY_COMPONENTS:
+        if name.endswith("_attempt"):
+            doc = "attempts (passes thrown, targets, carries) in the game"
+        elif "fantasy_points" in name:
+            doc = (
+                "ffopportunity's own points (its fixed PPR scoring, 2-dp): a cross-check only; "
+                "xFP is re-scored from the _exp components with config/scoring.yaml"
+            )
+        elif name.endswith("_exp"):
+            doc = "expected value from ffopportunity's model (rounded to 0.01 upstream)"
+        else:
+            doc = "actual value"
+        cols.append(Column(name, "DOUBLE", doc=doc))
+    return Table(
+        name="fact_opportunity_week",
+        source="ff_opportunity",
+        primary_key=("game_id", "player_id"),
+        columns=tuple(cols),
+        # upstream repeats one gsis_id under a second name in two 2013 games (a TE's target
+        # also listed for an OLB of another name): the row at a QB/RB/WR/TE position wins
+        dedupe_order=(
+            "CASE WHEN position IN ('QB', 'RB', 'WR', 'TE') THEN 0 ELSE 1 END",
+            "full_name NULLS LAST",
+        ),
+        doc=(
+            "One row per player per game (2006+, regular season and playoffs) from nflverse's "
+            "ffopportunity weekly file: the actual and EXPECTED stat components (what an "
+            "average player would have produced from the same targets and carries, from "
+            "ffopportunity's models: spec 6.3 caveat). xFP = the _exp components re-scored "
+            "with config/scoring.yaml (twm.scoring.xfp). Rows without a player id (a team's "
+            "passes without an identified target) are dropped and counted; a (game, player) "
+            "listed twice upstream keeps the row at a QB/RB/WR/TE position."
+        ),
+    )
+
+
 # ---- dimensions --------------------------------------------------------------------------
 
 
@@ -1160,6 +1250,7 @@ def tables() -> dict[str, Table]:
         fact_play_spec(),
         fact_player_week_spec(),
         fact_team_week_spec(),
+        fact_opportunity_week_spec(),
         fact_snaps_spec(),
         fact_injury_report_spec(),
         fact_depth_chart_spec(),
@@ -1179,6 +1270,7 @@ SOURCE_DATASETS = (
     "pbp",
     "player_stats",
     "team_stats",
+    "ff_opportunity",
     "snap_counts",
     "injuries",
     "depth_charts",

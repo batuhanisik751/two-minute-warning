@@ -1,0 +1,241 @@
+position,feature,family,n,n_hit,null_rate,mean_hit,mean_miss,auc,direction
+QB,age_at_asof,player,13099,1202,0.0547,28.8469,28.043,0.5385,+
+QB,air_yards_share_avg3,opportunity,13099,1202,0.0,0.0002,0.0001,0.5006,-
+QB,bye_in_next3,context,13099,1202,0.0,0.1897,0.2069,0.5086,-
+QB,carry_share_avg3,opportunity,13099,1202,0.0,0.0734,0.013,0.8318,+
+QB,carry_share_last,opportunity,13099,1202,0.0,0.079,0.0129,0.7749,+
+QB,depth_listed,role change,13099,1202,0.0,0.9667,0.7247,0.621,+
+QB,depth_rank_change,role change,13099,1202,0.3153,0.0328,0.0025,0.5142,+
+QB,depth_rank_now,role change,13099,1202,0.2569,1.3959,2.1696,0.7959,-
+QB,depth_rank_prev,role change,13099,1202,0.2999,1.425,2.1664,0.7837,-
+QB,draft_round,player,13099,1202,0.2703,2.2268,3.7318,0.7211,-
+QB,fantasy_points_avg3,opportunity,13099,1202,0.0,9.0379,1.1533,0.8554,+
+QB,fantasy_points_last,opportunity,13099,1202,0.0,9.7652,1.1108,0.8285,+
+QB,fpoe_avg3,opportunity,13099,1202,0.0,-1.1996,-0.2197,0.6415,-
+QB,games_played_to_date,opportunity,13099,1202,0.0,5.183,1.2952,0.8342,+
+QB,gl_opps_avg3,opportunity,13099,1202,0.0,0.1783,0.0255,0.6407,+
+QB,is_rookie,player,13099,1202,0.0012,0.1339,0.1716,0.5188,-
+QB,is_undrafted,player,13099,1202,0.0,0.1123,0.2863,0.587,-
+QB,joined_team_recently,role change,13099,1202,0.0,0.0275,0.0548,0.5137,-
+QB,n_opp_games_seen,context,13099,1202,0.0,23.5657,22.0318,0.5385,+
+QB,opp_fp_allowed_next3,context,13099,1202,0.0,1.0109,0.9998,0.5224,+
+QB,ppg_pos_rank,opportunity,13099,1202,0.5522,32.1436,45.2376,0.786,-
+QB,ppg_to_date,opportunity,13099,1202,0.5522,10.9622,5.129,0.7873,+
+QB,preseason_pos_rank,opportunity,13099,1202,0.39,34.4486,56.6214,0.7995,-
+QB,preseason_ranked,opportunity,13099,1202,0.0,0.8586,0.5849,0.6369,+
+QB,routes_proxy_avg3,opportunity,13099,1202,0.0,24.0499,3.53,0.8592,+
+QB,rz_carries_avg3,opportunity,13099,1202,0.0,0.321,0.0459,0.7033,+
+QB,rz_targets_avg3,opportunity,13099,1202,0.0,0.0044,0.0013,0.5049,+
+QB,same_pos_vacated_carry_share,role change,13099,1202,0.0,0.0307,0.0182,0.5525,+
+QB,same_pos_vacated_target_share,role change,13099,1202,0.0,0.0002,0.0001,0.5013,+
+QB,snap_share_avg3,opportunity,13099,1202,0.0,0.6515,0.0943,0.8616,+
+QB,snap_share_delta,opportunity,13099,1202,0.0721,0.0953,-0.0015,0.6135,+
+QB,snap_share_last,opportunity,13099,1202,0.0,0.6996,0.0934,0.8334,+
+QB,snap_share_season,opportunity,13099,1202,0.0,0.5828,0.0923,0.8698,+
+QB,target_share_avg3,opportunity,13099,1202,0.0,0.0008,0.0003,0.5128,+
+QB,target_share_last,opportunity,13099,1202,0.0,0.0007,0.0003,0.5051,+
+QB,team_epa_per_play,context,13099,1202,0.0,-0.0533,-0.005,0.627,-
+QB,team_epa_per_play_neutral,context,13099,1202,0.0,-0.0573,-0.006,0.6079,-
+QB,team_games_remaining,context,13099,1202,0.0,8.3295,8.714,0.5264,-
+QB,team_pass_rate_neutral,context,13099,1202,0.0,0.5742,0.5875,0.5767,-
+QB,team_plays_per_game,context,13099,1202,0.0,61.6619,62.2477,0.5423,-
+QB,teammate_same_pos_unavailable,role change,13099,1202,0.0,0.3303,0.1992,0.5567,+
+QB,top_teammate_out,role change,13099,1202,0.0,0.2479,0.1663,0.5408,+
+QB,vacated_carry_share,role change,13099,1202,0.0,0.2103,0.1536,0.5582,+
+QB,vacated_target_share,role change,13099,1202,0.0,0.1582,0.1385,0.5464,+
+QB,wopr_avg3,opportunity,13099,1202,0.0,0.0013,0.0005,0.5111,+
+QB,xfp_avg3,opportunity,13099,1202,0.0,10.2375,1.373,0.8644,+
+QB,xfp_last,opportunity,13099,1202,0.0,10.9985,1.3438,0.8376,+
+QB,years_exp,player,13099,1202,0.0012,5.6364,4.2721,0.5808,+
+RB,age_at_asof,player,20826,2716,0.0765,25.6454,25.7814,0.5253,-
+RB,air_yards_share_avg3,opportunity,20826,2716,0.0,0.0029,0.0013,0.5327,+
+RB,bye_in_next3,context,20826,2716,0.0,0.2228,0.1982,0.5123,+
+RB,carry_share_avg3,opportunity,20826,2716,0.0,0.1982,0.0457,0.8211,+
+RB,carry_share_last,opportunity,20826,2716,0.0,0.2222,0.0455,0.7926,+
+RB,depth_listed,role change,20826,2716,0.0,0.9444,0.6453,0.6496,+
+RB,depth_rank_change,role change,20826,2716,0.4723,0.0546,0.0054,0.5168,+
+RB,depth_rank_now,role change,20826,2716,0.4152,2.5726,2.6699,0.5275,-
+RB,depth_rank_prev,role change,20826,2716,0.4549,2.6172,2.6659,0.5157,-
+RB,draft_round,player,20826,2716,0.4647,4.0281,4.7483,0.6322,-
+RB,fantasy_points_avg3,opportunity,20826,2716,0.0,5.011,1.2582,0.8201,+
+RB,fantasy_points_last,opportunity,20826,2716,0.0,5.636,1.2595,0.7883,+
+RB,fpoe_avg3,opportunity,20826,2716,0.0,-0.3396,-0.1288,0.5615,-
+RB,games_played_to_date,opportunity,20826,2716,0.0,6.0195,3.1399,0.727,+
+RB,gl_opps_avg3,opportunity,20826,2716,0.0,0.4507,0.1082,0.6884,+
+RB,is_rookie,player,20826,2716,0.0035,0.2408,0.2598,0.5095,-
+RB,is_undrafted,player,20826,2716,0.0,0.2927,0.4905,0.5989,-
+RB,joined_team_recently,role change,20826,2716,0.0,0.0409,0.0881,0.5236,-
+RB,n_opp_games_seen,context,20826,2716,0.0,22.8571,21.7102,0.5267,+
+RB,opp_fp_allowed_next3,context,20826,2716,0.0,1.0028,0.9996,0.5093,+
+RB,ppg_pos_rank,opportunity,20826,2716,0.2996,67.8553,94.5035,0.7653,-
+RB,ppg_to_date,opportunity,20826,2716,0.2996,5.2176,2.5553,0.7664,+
+RB,preseason_pos_rank,opportunity,20826,2716,0.2939,73.6388,105.9694,0.7344,-
+RB,preseason_ranked,opportunity,20826,2716,0.0,0.8012,0.6918,0.5547,+
+RB,routes_proxy_avg3,opportunity,20826,2716,0.0,10.16,3.3583,0.7985,+
+RB,rz_carries_avg3,opportunity,20826,2716,0.0,0.8006,0.1853,0.7391,+
+RB,rz_targets_avg3,opportunity,20826,2716,0.0,0.1833,0.0529,0.6189,+
+RB,same_pos_vacated_carry_share,role change,20826,2716,0.0,0.1832,0.1306,0.5486,+
+RB,same_pos_vacated_target_share,role change,20826,2716,0.0,0.0416,0.0292,0.5472,+
+RB,snap_share_avg3,opportunity,20826,2716,0.0,0.264,0.0892,0.799,+
+RB,snap_share_delta,opportunity,20826,2716,0.0885,0.0566,0.0012,0.5895,+
+RB,snap_share_last,opportunity,20826,2716,0.0,0.2936,0.0894,0.7901,+
+RB,snap_share_season,opportunity,20826,2716,0.0,0.2221,0.0846,0.785,+
+RB,target_share_avg3,opportunity,20826,2716,0.0,0.0452,0.0132,0.7746,+
+RB,target_share_last,opportunity,20826,2716,0.0,0.05,0.0133,0.7191,+
+RB,team_epa_per_play,context,20826,2716,0.0,0.0015,-0.0009,0.5014,+
+RB,team_epa_per_play_neutral,context,20826,2716,0.0,-0.0023,-0.0004,0.5065,-
+RB,team_games_remaining,context,20826,2716,0.0,8.4161,8.8716,0.5308,-
+RB,team_pass_rate_neutral,context,20826,2716,0.0,0.5916,0.5884,0.5152,+
+RB,team_plays_per_game,context,20826,2716,0.0,62.4807,62.2215,0.5196,+
+RB,teammate_same_pos_unavailable,role change,20826,2716,0.0,0.743,0.6497,0.5295,+
+RB,top_teammate_out,role change,20826,2716,0.0,0.3686,0.3538,0.5074,+
+RB,vacated_carry_share,role change,20826,2716,0.0,0.2088,0.1556,0.5482,+
+RB,vacated_target_share,role change,20826,2716,0.0,0.1547,0.1355,0.5405,+
+RB,wopr_avg3,opportunity,20826,2716,0.0,0.0698,0.0207,0.771,+
+RB,xfp_avg3,opportunity,20826,2716,0.0,5.3506,1.3869,0.8246,+
+RB,xfp_last,opportunity,20826,2716,0.0,5.9703,1.39,0.7994,+
+RB,years_exp,player,20826,2716,0.0035,2.7596,2.4964,0.5238,+
+TE,age_at_asof,player,20847,1979,0.1056,26.7655,26.5194,0.5096,+
+TE,air_yards_share_avg3,opportunity,20847,1979,0.0,0.0657,0.0168,0.811,+
+TE,bye_in_next3,context,20847,1979,0.0,0.2041,0.1994,0.5024,+
+TE,carry_share_avg3,opportunity,20847,1979,0.0,0.0008,0.0002,0.5126,+
+TE,carry_share_last,opportunity,20847,1979,0.0,0.0008,0.0002,0.5062,+
+TE,depth_listed,role change,20847,1979,0.0,0.9565,0.664,0.6463,+
+TE,depth_rank_change,role change,20847,1979,0.4133,0.0175,0.0149,0.5009,-
+TE,depth_rank_now,role change,20847,1979,0.3614,1.7659,2.3123,0.6702,-
+TE,depth_rank_prev,role change,20847,1979,0.4002,1.7724,2.3161,0.6694,-
+TE,draft_round,player,20847,1979,0.4817,3.4781,4.2903,0.6395,-
+TE,fantasy_points_avg3,opportunity,20847,1979,0.0,4.1499,1.1407,0.808,+
+TE,fantasy_points_last,opportunity,20847,1979,0.0,4.3606,1.1478,0.7556,+
+TE,fpoe_avg3,opportunity,20847,1979,0.0,-0.171,-0.0634,0.5438,-
+TE,games_played_to_date,opportunity,20847,1979,0.0,5.8615,2.8425,0.7519,+
+TE,gl_opps_avg3,opportunity,20847,1979,0.0,0.1805,0.0539,0.6226,+
+TE,is_rookie,player,20847,1979,0.0025,0.1348,0.2081,0.5366,-
+TE,is_undrafted,player,20847,1979,0.0,0.2274,0.5083,0.6405,-
+TE,joined_team_recently,role change,20847,1979,0.0,0.0227,0.0772,0.5272,-
+TE,n_opp_games_seen,context,20847,1979,0.0,22.3825,21.8882,0.5108,+
+TE,opp_fp_allowed_next3,context,20847,1979,0.0,1.0063,0.9987,0.5138,+
+TE,ppg_pos_rank,opportunity,20847,1979,0.35,46.3847,67.0109,0.7401,-
+TE,ppg_to_date,opportunity,20847,1979,0.35,4.5547,2.5756,0.7341,+
+TE,preseason_pos_rank,opportunity,20847,1979,0.3576,45.6799,74.7983,0.7591,-
+TE,preseason_ranked,opportunity,20847,1979,0.0,0.8777,0.6178,0.63,+
+TE,routes_proxy_avg3,opportunity,20847,1979,0.0,18.6077,7.2128,0.8159,+
+TE,rz_carries_avg3,opportunity,20847,1979,0.0,0.007,0.0015,0.5066,+
+TE,rz_targets_avg3,opportunity,20847,1979,0.0,0.3719,0.1073,0.6945,+
+TE,same_pos_vacated_carry_share,role change,20847,1979,0.0,0.0007,0.0003,0.5022,+
+TE,same_pos_vacated_target_share,role change,20847,1979,0.0,0.0294,0.0269,0.5135,+
+TE,snap_share_avg3,opportunity,20847,1979,0.0,0.4967,0.1932,0.8188,+
+TE,snap_share_delta,opportunity,20847,1979,0.0838,0.0426,0.0047,0.5646,+
+TE,snap_share_last,opportunity,20847,1979,0.0,0.5192,0.1949,0.8123,+
+TE,snap_share_season,opportunity,20847,1979,0.0,0.4656,0.1847,0.8164,+
+TE,target_share_avg3,opportunity,20847,1979,0.0,0.0779,0.0214,0.8305,+
+TE,target_share_last,opportunity,20847,1979,0.0,0.0829,0.0215,0.7892,+
+TE,team_epa_per_play,context,20847,1979,0.0,-0.0169,-0.0028,0.537,-
+TE,team_epa_per_play_neutral,context,20847,1979,0.0,-0.0137,-0.0036,0.5218,-
+TE,team_games_remaining,context,20847,1979,0.0,8.6827,8.8029,0.5078,-
+TE,team_pass_rate_neutral,context,20847,1979,0.0,0.5824,0.5881,0.5318,-
+TE,team_plays_per_game,context,20847,1979,0.0,62.1528,62.1521,0.5036,-
+TE,teammate_same_pos_unavailable,role change,20847,1979,0.0,0.4588,0.434,0.5136,+
+TE,top_teammate_out,role change,20847,1979,0.0,0.1961,0.2696,0.5368,-
+TE,vacated_carry_share,role change,20847,1979,0.0,0.1553,0.1587,0.5067,-
+TE,vacated_target_share,role change,20847,1979,0.0,0.1491,0.1362,0.5223,+
+TE,wopr_avg3,opportunity,20847,1979,0.0,0.1629,0.0438,0.8307,+
+TE,xfp_avg3,opportunity,20847,1979,0.0,4.3209,1.2041,0.827,+
+TE,xfp_last,opportunity,20847,1979,0.0,4.5616,1.207,0.7854,+
+TE,years_exp,player,20847,1979,0.0025,3.6351,2.8181,0.5793,+
+WR,age_at_asof,player,36866,3829,0.1141,25.951,25.9759,0.5094,-
+WR,air_yards_share_avg3,opportunity,36866,3829,0.0,0.1642,0.0441,0.8338,+
+WR,bye_in_next3,context,36866,3829,0.0,0.2113,0.1994,0.5059,+
+WR,carry_share_avg3,opportunity,36866,3829,0.0,0.0058,0.0022,0.5702,+
+WR,carry_share_last,opportunity,36866,3829,0.0,0.0063,0.0022,0.5391,+
+WR,depth_listed,role change,36866,3829,0.0,0.9543,0.5909,0.6817,+
+WR,depth_rank_change,role change,36866,3829,0.4384,0.0423,0.0182,0.5047,+
+WR,depth_rank_now,role change,36866,3829,0.3859,2.2595,3.4479,0.7121,-
+WR,depth_rank_prev,role change,36866,3829,0.4257,2.292,3.444,0.7059,-
+WR,draft_round,player,36866,3829,0.469,3.2831,4.0785,0.6194,-
+WR,fantasy_points_avg3,opportunity,36866,3829,0.0,6.6898,1.7388,0.844,+
+WR,fantasy_points_last,opportunity,36866,3829,0.0,6.9286,1.7456,0.7934,+
+WR,fpoe_avg3,opportunity,36866,3829,0.0,-0.2327,-0.1554,0.5196,-
+WR,games_played_to_date,opportunity,36866,3829,0.0,6.4513,3.2394,0.7483,+
+WR,gl_opps_avg3,opportunity,36866,3829,0.0,0.214,0.0579,0.6473,+
+WR,is_rookie,player,36866,3829,0.0036,0.1623,0.2616,0.5496,-
+WR,is_undrafted,player,36866,3829,0.0,0.2565,0.4936,0.6186,-
+WR,joined_team_recently,role change,36866,3829,0.0,0.0235,0.087,0.5318,-
+WR,n_opp_games_seen,context,36866,3829,0.0,22.4422,21.8046,0.5141,+
+WR,opp_fp_allowed_next3,context,36866,3829,0.0,1.0033,1.0011,0.5088,+
+WR,ppg_pos_rank,opportunity,36866,3829,0.3451,81.4937,126.5522,0.7891,-
+WR,ppg_to_date,opportunity,36866,3829,0.3451,7.1935,3.5962,0.7872,+
+WR,preseason_pos_rank,opportunity,36866,3829,0.3453,89.5034,142.1365,0.7477,-
+WR,preseason_ranked,opportunity,36866,3829,0.0,0.8851,0.628,0.6285,+
+WR,routes_proxy_avg3,opportunity,36866,3829,0.0,21.6943,6.8745,0.8472,+
+WR,rz_carries_avg3,opportunity,36866,3829,0.0,0.0241,0.0083,0.5188,+
+WR,rz_targets_avg3,opportunity,36866,3829,0.0,0.4747,0.1302,0.7312,+
+WR,same_pos_vacated_carry_share,role change,36866,3829,0.0,0.0046,0.0046,0.5023,+
+WR,same_pos_vacated_target_share,role change,36866,3829,0.0,0.0804,0.0791,0.5058,+
+WR,snap_share_avg3,opportunity,36866,3829,0.0,0.5677,0.1798,0.8509,+
+WR,snap_share_delta,opportunity,36866,3829,0.0909,0.0394,0.0048,0.5565,+
+WR,snap_share_last,opportunity,36866,3829,0.0,0.5878,0.1817,0.8341,+
+WR,snap_share_season,opportunity,36866,3829,0.0,0.5301,0.1714,0.8503,+
+WR,target_share_avg3,opportunity,36866,3829,0.0,0.1228,0.0336,0.8511,+
+WR,target_share_last,opportunity,36866,3829,0.0,0.1276,0.0339,0.8178,+
+WR,team_epa_per_play,context,36866,3829,0.0,-0.003,-0.0042,0.5035,+
+WR,team_epa_per_play_neutral,context,36866,3829,0.0,0.0001,-0.0036,0.5053,+
+WR,team_games_remaining,context,36866,3829,0.0,8.6213,8.8458,0.5147,-
+WR,team_pass_rate_neutral,context,36866,3829,0.0,0.5856,0.5865,0.5038,-
+WR,team_plays_per_game,context,36866,3829,0.0,62.1809,62.2237,0.5041,-
+WR,teammate_same_pos_unavailable,role change,36866,3829,0.0,0.9462,0.9321,0.5071,+
+WR,top_teammate_out,role change,36866,3829,0.0,0.3006,0.4472,0.5733,-
+WR,vacated_carry_share,role change,36866,3829,0.0,0.1626,0.1551,0.5198,+
+WR,vacated_target_share,role change,36866,3829,0.0,0.1445,0.1365,0.5226,+
+WR,wopr_avg3,opportunity,36866,3829,0.0,0.2991,0.0813,0.8502,+
+WR,xfp_avg3,opportunity,36866,3829,0.0,6.9226,1.8942,0.852,+
+WR,xfp_last,opportunity,36866,3829,0.0,7.1571,1.8978,0.8169,+
+WR,years_exp,player,36866,3829,0.0036,3.1762,2.5624,0.5723,+
+all,age_at_asof,player,91638,9726,0.0951,26.3898,26.3715,0.512,-
+all,air_yards_share_avg3,opportunity,91638,9726,0.0,0.0789,0.022,0.681,+
+all,bye_in_next3,context,91638,9726,0.0,0.2104,0.2002,0.5051,+
+all,carry_share_avg3,opportunity,91638,9726,0.0,0.0669,0.0129,0.6534,+
+all,carry_share_last,opportunity,91638,9726,0.0,0.0744,0.0129,0.631,+
+all,depth_listed,role change,91638,9726,0.0,0.9535,0.6392,0.6572,+
+all,depth_rank_change,role change,91638,9726,0.4228,0.0393,0.0121,0.508,+
+all,depth_rank_now,role change,91638,9726,0.3685,2.1313,2.801,0.6452,-
+all,depth_rank_prev,role change,91638,9726,0.4085,2.1603,2.7975,0.6378,-
+all,draft_round,player,91638,9726,0.4425,3.3649,4.1975,0.6287,-
+all,fantasy_points_avg3,opportunity,91638,9726,0.0,5.9944,1.4097,0.8327,+
+all,fantasy_points_last,opportunity,91638,9726,0.0,6.3957,1.4082,0.7914,+
+all,fpoe_avg3,opportunity,91638,9726,0.0,-0.3695,-0.1377,0.5507,-
+all,games_played_to_date,opportunity,91638,9726,0.0,6.054,2.8436,0.7564,+
+all,gl_opps_avg3,opportunity,91638,9726,0.0,0.2689,0.0634,0.6547,+
+all,is_rookie,player,91638,9726,0.003,0.1752,0.2358,0.5303,-
+all,is_undrafted,player,91638,9726,0.0,0.2429,0.4662,0.6117,-
+all,joined_team_recently,role change,91638,9726,0.0,0.0287,0.0803,0.5258,-
+all,n_opp_games_seen,context,91638,9726,0.0,22.6848,21.836,0.5196,+
+all,opp_fp_allowed_next3,context,91638,9726,0.0,1.0047,1.0,0.5118,+
+all,ppg_pos_rank,opportunity,91638,9726,0.3655,64.7503,96.5242,0.7158,-
+all,ppg_to_date,opportunity,91638,9726,0.3655,6.5449,3.2469,0.7628,+
+all,preseason_pos_rank,opportunity,91638,9726,0.3428,69.4099,106.8109,0.7018,-
+all,preseason_ranked,opportunity,91638,9726,0.0,0.8569,0.6335,0.6117,+
+all,routes_proxy_avg3,opportunity,91638,9726,0.0,18.1364,5.6893,0.8208,+
+all,rz_carries_avg3,opportunity,91638,9726,0.0,0.2742,0.0513,0.6027,+
+all,rz_targets_avg3,opportunity,91638,9726,0.0,0.3143,0.0891,0.6621,+
+all,same_pos_vacated_carry_share,role change,91638,9726,0.0,0.0569,0.0334,0.529,+
+all,same_pos_vacated_target_share,role change,91638,9726,0.0,0.0493,0.0445,0.5202,+
+all,snap_share_avg3,opportunity,91638,9726,0.0,0.4788,0.1505,0.8223,+
+all,snap_share_delta,opportunity,91638,9726,0.0861,0.0518,0.0031,0.5736,+
+all,snap_share_last,opportunity,91638,9726,0.0,0.5055,0.1515,0.8114,+
+all,snap_share_season,opportunity,91638,9726,0.0,0.4375,0.1438,0.8171,+
+all,target_share_avg3,opportunity,91638,9726,0.0,0.0769,0.0214,0.7672,+
+all,target_share_last,opportunity,91638,9726,0.0,0.0812,0.0216,0.7376,+
+all,team_epa_per_play,context,91638,9726,0.0,-0.0108,-0.0033,0.5209,-
+all,team_epa_per_play_neutral,context,91638,9726,0.0,-0.0105,-0.0033,0.517,-
+all,team_games_remaining,context,91638,9726,0.0,8.5404,8.8225,0.5188,-
+all,team_pass_rate_neutral,context,91638,9726,0.0,0.5852,0.5874,0.5129,-
+all,team_plays_per_game,context,91638,9726,0.0,62.1948,62.2102,0.5019,-
+all,teammate_same_pos_unavailable,role change,91638,9726,0.0,0.7142,0.6485,0.5237,+
+all,top_teammate_out,role change,91638,9726,0.0,0.2918,0.3449,0.5265,-
+all,vacated_carry_share,role change,91638,9726,0.0,0.1799,0.1558,0.5269,+
+all,vacated_target_share,role change,91638,9726,0.0,0.15,0.1365,0.5302,+
+all,wopr_avg3,opportunity,91638,9726,0.0,0.1705,0.0475,0.7602,+
+all,xfp_avg3,opportunity,91638,9726,0.0,6.3639,1.5474,0.8406,+
+all,xfp_last,opportunity,91638,9726,0.0,6.7723,1.5459,0.8104,+
+all,years_exp,player,91638,9726,0.003,3.4572,2.8556,0.5559,+

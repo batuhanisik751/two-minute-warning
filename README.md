@@ -44,6 +44,9 @@ uv run twm radar dataset      # pool + features + labels 2013-2026 -> data/waive
 uv run twm radar features-report  # single-feature check -> reports/waiver_radar/features.md
 uv run twm radar backtest --label y_hit --label y_sustained   # walk-forward backtest 2014-2025 (~4 min; regenerates reports/waiver_radar/backtest.md)
                               # -> reports/waiver_radar/backtest.md, data/predictions.duckdb
+uv run twm radar evaluate     # grades the stored predictions with 95% intervals, breakouts caught
+                              # -> reports/waiver_radar/evaluation.md (+ .csv, figures/), ~5 s
+uv run jupyter lab notebooks/01_waiver_radar.ipynb   # the Waiver Radar explained step by step
 uv run pytest                 # offline tests (the default); `uv run pytest -m network` runs the live drift check
 ```
 
@@ -55,7 +58,7 @@ Dataset names: `uv run twm ingest --help` or `DATASETS` in `src/twm/sources/nflv
 - `data/schemas/<dataset>.json` (committed) records each dataset's columns and dtypes. Every current-season or one-file load is compared with it: a missing column raises `SchemaDriftError`, a changed dtype or a new column is logged. Snapshots are written on the first current-season fetch of a dataset and refreshed **deliberately** with `uv run python scripts/refresh_snapshots.py` (review the diff, then commit), never by `twm ingest`.
 - What we verified about the data, and where it differs from the spec: `docs/assumptions.md`. Re-verify from the cache with `uv run python scripts/verify_sources.py` (no network unless you pass `--allow-download`).
 
-See `PROJECT_SPEC.md` for the full specification, `docs/warehouse.md` for the DuckDB warehouse, `docs/scoring.md` for how fantasy points are computed, `docs/waiver_radar.md` for the Waiver Radar's candidate pool, labels, features and models and `docs/progress.md` for the build log.
+See `PROJECT_SPEC.md` for the full specification, `docs/warehouse.md` for the DuckDB warehouse, `docs/scoring.md` for how fantasy points are computed, `docs/waiver_radar.md` for the Waiver Radar's candidate pool, labels, features, models and evaluation, `notebooks/01_waiver_radar.ipynb` for a guided tour of it and `docs/progress.md` for the build log.
 
 ## Attribution
 

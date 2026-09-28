@@ -89,3 +89,123 @@ def test_calibration_bins_are_equal_count_and_deterministic():
     # ties split by id: p0,p1 | p2,p3 | p4,p5 | p6,p7 | p8,p9
     assert bins.get_column("observed").to_list() == pytest.approx([0.0, 0.5, 0.0, 1.0, 0.5])
     assert m.calibration_bins(df.head(0), prob="p", label="y", id_cols=["id"]).height == 0
+
+
+def test_calibration_bins_count_hits():
+    df = pl.DataFrame({"p": [0.1, 0.2, 0.3, 0.4], "y": [0, 1, 1, 1], "id": ["a", "b", "c", "d"]})
+    bins = m.calibration_bins(df, prob="p", label="y", id_cols=["id"], n_bins=2)
+    assert bins.get_column("n_pos").to_list() == [1, 2]
+
+
+def test_calibration_fixed_bins_list_every_bin_with_counts():
+    df = pl.DataFrame({"p": [0.02, 0.05, 0.15, 0.95, 1.0, None], "y": [0, 1, 0, 1, 1, 1]})
+    bins = m.calibration_fixed_bins(df, prob="p", label="y", n_bins=10)
+    assert bins.height == 10  # empty bins are listed too
+    assert bins.get_column("n").to_list() == [2, 1, 0, 0, 0, 0, 0, 0, 0, 2]  # NULL p left out
+    assert bins.get_column("n_pos").to_list() == [1, 0, 0, 0, 0, 0, 0, 0, 0, 2]
+    first, last = bins.row(0, named=True), bins.row(9, named=True)
+    assert first["lo"] == 0.0 and first["hi"] == pytest.approx(0.1)
+    assert first["mean_pred"] == pytest.approx(0.035) and first["observed"] == pytest.approx(0.5)
+    assert last["mean_pred"] == pytest.approx(0.975)  # 1.0 falls in the last bin
+    assert bins.row(4, named=True)["observed"] is None
+
+
+def _lists(values: dict[int, list[float]]) -> pl.DataFrame:
+    """A per-group table: season -> the p_at_k of its lists."""
+    rows = [
+        {"season": s, "week": w + 1, "position": "WR", "p_at_k": v}
+        for s, vals in values.items()
+        for w, v in enumerate(vals)
+    ]
+    return pl.DataFrame(rows)
+
+
+def test_block_bootstrap_is_deterministic_and_resamples_whole_seasons():
+    g = _lists({2014: [0.2, 0.4], 2015: [0.5, 0.7, 0.6], 2016: [0.1], 2017: [0.9, 0.8]})
+    a = m.block_bootstrap(g, n_boot=500, seed=11)
+    b = m.block_bootstrap(g, n_boot=500, seed=11)
+    assert a == b  # same seed, same interval
+    assert a.value == pytest.approx(g["p_at_k"].mean())  # the point value is the plain mean
+    assert (a.n_blocks, a.n_groups, a.n_boot, a.level) == (4, 8, 500, 0.95)
+    # another seed draws other resamples (with 4 seasons the interval may still coincide)
+    assert not np.array_equal(m.block_indices(4, 500, 11), m.block_indices(4, 500, 12))
+    # by hand: the same resamples, each the mean over the groups of the drawn seasons
+    idx = m.block_indices(4, 500, 11)
+    sums = np.array([0.6, 1.8, 0.1, 1.7])
+    counts = np.array([2, 3, 1, 2])
+    vals = sums[idx].sum(axis=1) / counts[idx].sum(axis=1)
+    lo, hi = np.quantile(vals, [0.025, 0.975])
+    assert (a.lo, a.hi) == (pytest.approx(lo), pytest.approx(hi))
+    # the interval lies between the worst and the best season
+    assert 0.1 <= a.lo <= a.value <= a.hi <= 0.85
+
+
+def test_block_bootstrap_of_identical_seasons_has_zero_width():
+    g = _lists({s: [0.3, 0.5] for s in range(2014, 2026)})
+    iv = m.block_bootstrap(g)
+    assert iv.value == pytest.approx(0.4)
+    assert iv.lo == pytest.approx(0.4) and iv.hi == pytest.approx(0.4)
+    assert iv.n_boot == m.N_BOOT and iv.n_blocks == 12
+    one = m.block_bootstrap(_lists({2020: [0.1, 0.3]}))  # one season: nothing to resample
+    assert one.lo == pytest.approx(0.2) and one.hi == pytest.approx(0.2)
+    empty = m.block_bootstrap(g.head(0))
+    assert empty.value is None and empty.lo is None
+
+
+def test_paired_bootstrap_measures_the_gap_not_the_seasons():
+    a = _lists({2014: [0.2, 0.4], 2015: [0.9], 2016: [0.5, 0.1, 0.3]})
+    # b is a minus 0.05 in every list: the seasons differ a lot, the gap never does
+    b = a.with_columns(pl.col("p_at_k") - 0.05)
+    iv = m.paired_block_bootstrap(a, b, keys=["season", "week", "position"])
+    assert iv.value == pytest.approx(0.05)
+    assert iv.lo == pytest.approx(0.05) and iv.hi == pytest.approx(0.05)
+    assert iv.share_above_zero == 1.0
+    unpaired_a = m.block_bootstrap(a)
+    assert unpaired_a.hi - unpaired_a.lo > 0.1  # the seasons alone vary widely
+    # a real gap that changes sign: the interval covers 0 and the share is in between
+    c = a.with_columns(
+        pl.when(pl.col("season") == 2015).then(pl.col("p_at_k") + 0.2)
+        .otherwise(pl.col("p_at_k") - 0.1).alias("p_at_k")
+    )  # fmt: skip
+    iv2 = m.paired_block_bootstrap(a, c, keys=["season", "week", "position"])
+    assert iv2.lo < 0 < iv2.hi and 0 < iv2.share_above_zero < 1
+    assert iv2.value == pytest.approx((0.1 * 5 - 0.2) / 6)
+    with pytest.raises(ValueError, match="same groups"):
+        m.paired_block_bootstrap(a, b.head(3), keys=["season", "week", "position"])
+
+
+def test_first_events_and_caught_before_never_use_later_ranks():
+    # the event (a breakout) of each player: A in week 3, B in week 2, C in week 4, E none
+    rows = pl.DataFrame(
+        {
+            "id": ["A"] * 4 + ["B"] * 4 + ["C"] * 4 + ["E"] * 2,
+            "week": [1, 2, 3, 4] * 3 + [1, 2],
+            "ev": [False, False, True, True, False, True, False, False,
+                   False, False, False, True, False, False],
+        }
+    )  # fmt: skip
+    events = m.first_events(rows, entity=["id"], order="week", event="ev")
+    assert events.rows() == [("A", 3), ("B", 2), ("C", 4)]
+    ranked = pl.DataFrame(
+        {
+            "id": ["A"] * 4 + ["B"] * 3 + ["C"] * 2 + ["E"],
+            "week": [1, 2, 3, 4, 1, 2, 3, 1, 4, 1],
+            "rank": [15, 8, 12, 1, 11, 11, 2, 3, 20, 1],
+        }
+    )
+    got = m.caught_before(events, ranked, entity=["id"], order="week", k=10, recent=2)
+    r = {x["id"]: x for x in got.iter_rows(named=True)}
+    # A: top 10 in week 2, before his week-3 event; week 4's rank 1 comes after it
+    assert r["A"]["caught"] and r["A"]["best_rank"] == 8 and r["A"]["best_order"] == 2
+    assert r["A"]["first_top_k"] == 2 and r["A"]["caught_recent"]  # week 2 is in weeks 2-3
+    # B: rank 2 in week 3 is AFTER his week-2 event: not caught
+    assert not r["B"]["caught"] and r["B"]["best_rank"] == 11 and r["B"]["first_top_k"] is None
+    # C: rank 3 in week 1, three weeks before his week-4 event: caught, but not recently
+    assert r["C"]["caught"] and not r["C"]["caught_recent"] and r["C"]["best_order"] == 1
+    assert "E" not in r  # no event, not a breakout
+    # an event without any ranked row is not caught
+    alone = m.caught_before(
+        pl.DataFrame({"id": ["Z"], "event_order": [3]}), ranked, entity=["id"], order="week"
+    )
+    assert alone.rows(named=True)[0]["caught"] is False
+    assert alone.rows(named=True)[0]["best_rank"] is None

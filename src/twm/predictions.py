@@ -287,6 +287,36 @@ def write_predictions(
     }
 
 
+def current_versions(path: Path | str, module: str, label: str | None = None) -> pl.DataFrame:
+    """The model versions that currently stand for each (model, label, test season) of a
+    module: the one written last (``created_at``). A backtest re-run after a code or data
+    change writes new versions and leaves the old ones in the store; this picks the new ones.
+    Raises if two versions of the same (model, label, test season) share the latest time
+    (the store cannot tell which one counts). Sorted by (model, label, test_season)."""
+    where = "module = ?" + (" AND label = ?" if label is not None else "")
+    params = [module] + ([label] if label is not None else [])
+    con = connect(path, read_only=True)
+    try:
+        out = con.execute(
+            "SELECT * FROM (SELECT *, max(created_at) OVER (PARTITION BY model, label, "
+            f"test_season) AS _latest FROM model_versions WHERE {where}) "
+            "WHERE created_at = _latest ORDER BY model, label, test_season, model_version",
+            params,
+        ).pl()
+    finally:
+        con.close()
+    out = out.drop("_latest")
+    dup = out.filter(pl.struct("model", "label", "test_season").is_duplicated())
+    if dup.height:
+        first = dup.row(0, named=True)
+        raise ValueError(
+            f"{dup.height} model versions tie for the latest write of the same model, label and "
+            f"test season (e.g. {first['model']} {first['label']} {first['test_season']}); "
+            "re-run the backtest"
+        )
+    return out
+
+
 def read_table(path: Path | str, table: str, where: str = "") -> pl.DataFrame:
     """A whole table (optionally filtered with a SQL ``where`` clause), sorted by its key."""
     if table not in TABLES:

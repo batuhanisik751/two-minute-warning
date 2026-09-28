@@ -1,4 +1,4 @@
-# Waiver Radar: the candidate pool (C1), its labels (C2), its features (C3) and its models (C4)
+# Waiver Radar: the candidate pool (C1), its labels (C2), its features (C3), its models (C4) and their evaluation (C5)
 
 The Waiver Radar ranks players who are **probably still on waivers** (not on any team in a
 typical 12-team fantasy league) by how likely they are to become weekly starters soon. Before it
@@ -8,24 +8,29 @@ it is built that way, and how well it matches reality where reality was recorded
 half ([Labels](#labels-did-a-pool-player-become-a-starter-step-c2)) explains the right answers
 the models learn from: did a pool player really become a starter in the next weeks? The next
 part ([Features](#features-what-the-radar-knows-at-the-as-of-step-c3)) explains what the models
-learn FROM: each player's situation as it looked on that Tuesday. The last part
+learn FROM: each player's situation as it looked on that Tuesday. Then
 ([Models and backtest](#models-and-backtest-step-c4)) explains how the models are trained and
-graded, and how well they did.
+graded, and the last part ([Evaluation](#evaluation-how-good-and-how-sure-step-c5)) how good
+they are, how sure we can be, and where they fail. A guided tour for a first-season fantasy
+player: `notebooks/01_waiver_radar.ipynb`.
 
 Code: `src/twm/modules/waiver_radar/pool.py` (the pool), `report.py` (the pool report),
 `labels.py` (the labels), `label_report.py` (the label report), `features.py` (the features),
 `dataset.py` (pool + features + labels), `feature_report.py` (the feature report),
 `expert_ranks.py` (the experts' ranks for the expert baseline), `models.py` (baselines and
-models), `backtest.py` (the backtest and its report); `src/twm/backtest/walkforward.py` (the
-walk-forward harness), `src/twm/backtest/metrics.py`, `src/twm/predictions.py` (the predictions
-store). Tables:
+models), `backtest.py` (the backtest and its report), `evaluation.py` (the evaluation and its
+report), `figures.py` (the evaluation's charts); `src/twm/backtest/walkforward.py` (the
+walk-forward harness), `src/twm/backtest/metrics.py` (metrics, the season-block bootstrap,
+"caught before it happened"), `src/twm/predictions.py` (the predictions store). Tables:
 `fact_roster_week`, `fact_ranking` and `fact_opportunity_week` (docs/warehouse.md). Tests:
 `tests/test_waiver_radar_pool.py`, `tests/test_waiver_radar_labels.py`,
 `tests/test_waiver_radar_features.py`, `tests/test_waiver_radar_expert_ranks.py`,
 `tests/test_waiver_radar_models.py`, `tests/test_walkforward.py`, `tests/test_backtest_metrics.py`,
-`tests/test_predictions_store.py`. Reports: `reports/waiver_radar/pool_sizes.md`,
-`reports/waiver_radar/labels.md`, `reports/waiver_radar/features.md`,
-`reports/waiver_radar/backtest.md` (each with a `.csv`).
+`tests/test_predictions_store.py`, `tests/test_waiver_radar_evaluation.py`. Reports:
+`reports/waiver_radar/pool_sizes.md`, `reports/waiver_radar/labels.md`,
+`reports/waiver_radar/features.md`, `reports/waiver_radar/backtest.md`,
+`reports/waiver_radar/evaluation.md` (each with a `.csv`; the evaluation's charts are in
+`reports/waiver_radar/figures/`).
 
 ## Why a stand-in, and which one
 
@@ -873,3 +878,181 @@ Options: `--dataset` (default `data/waiver_radar/dataset.parquet`; rebuild it wi
 - **Quarterbacks:** the model adds nothing over last week's points.
 - **Calibration** is fit on one season; the lowest probabilities round to 0%.
 - **One setting for the whole season:** no refit during a season (spec default).
+
+# Evaluation: how good, and how sure? (step C5)
+
+C4 answered "does the Radar beat the naive baselines?" (yes). C5 grades it in full: per
+position, per season, by rank, how well its percentages can be trusted, how many breakouts it
+saw coming, and, for every one of those numbers, **how sure we can be**. Code:
+`src/twm/modules/waiver_radar/evaluation.py`, `figures.py`; the reusable parts (the bootstrap,
+"caught before it happened", calibration bins) in `src/twm/backtest/metrics.py`. Report:
+`reports/waiver_radar/evaluation.md` (+ CSV with every number, + 5 figures). The walk-through
+for a beginner: `notebooks/01_waiver_radar.ipynb`.
+
+## One source of truth: the predictions store
+
+The evaluation re-predicts nothing. It reads every ranking the backtest stored
+(`data/predictions.duckdb`, read-only) and the outcomes stored beside them, so the report, the
+figures, the notebook and the future time machine (C6) show exactly the same lists. For each
+(model, label, test season) it uses the model version written last (a backtest re-run after a
+change adds new versions and leaves the old ones behind); two versions written at the same
+moment stop it with an error. The dataset adds only what the store does not hold: names and
+teams, the rostership figures (for "without rostered"), whether an experts' page existed, and the
+labels and weekly ranks of players who have left the pool (for breakouts). Before anything is
+computed, the dataset's labels and pool rows are checked against the store's outcomes, row by
+row: if they disagree (the dataset was rebuilt after the backtest), the evaluation stops and
+asks for a new backtest. The stored ranks are recomputed with the backtest's ranking rule and
+must match exactly.
+
+Checks that it all adds up (tests): on a synthetic store every precision, bucket rate,
+difference and breakout count equals a direct SQL recomputation; scrambling every model input
+in the dataset changes nothing (nothing is re-predicted); and the committed report agrees with
+C4's `backtest.csv` on every number both report (all 536 of them, 47.8% included).
+
+## How sure? The season-block bootstrap
+
+Twelve seasons are a small sample: another twelve would give somewhat different numbers. A
+**95% interval** says how much. It comes from the **season-block bootstrap**: draw 12 seasons at
+random from the 12 test seasons, with replacement (some twice, some not at all), recompute the
+number on the drawn seasons, repeat 2,000 times with a fixed seed, and keep the middle 95% of
+the results. Whole seasons are drawn, never single weeks, because the weeks of one season are
+not independent: the same players, the same coaches, the same model trained before the season.
+Drawing weeks one by one would pretend there are 732 independent tries and give intervals that
+are too narrow.
+
+For a comparison ("the Radar minus last week's points"), both methods are graded on the same
+drawn seasons in every resample: a **paired** difference. A season that was hard for everyone
+counts against both at once, so the interval measures the gap, not how hard the seasons were.
+If a difference's interval stays above zero, the Radar's lead is not luck. The report also
+gives the share of resamples in which the model was ahead and the number of seasons it won.
+
+Every rate in the report comes with its counts: the number of lists (weeks x positions), rows,
+hits, and hits among the top-10 picks.
+
+## Results (2026-09-28, `uv run twm radar evaluate`)
+
+Precision@10, 2014-2025, with the 95% interval (732 weekly lists):
+
+| method | `y_hit` | without rostered | `y_sustained` | without rostered |
+|---|---|---|---|---|
+| logistic regression (the Radar) | **47.8%** (46.2-49.5) | 45.5% (43.6-47.5) | **16.0%** (15.0-17.0) | 14.5% (13.3-15.8) |
+| LightGBM | 47.6% (45.9-49.6) | 45.2% (43.2-47.1) | 15.4% (14.3-16.5) | 14.0% (12.6-15.4) |
+| last week's points | 40.4% (38.8-42.0) | 38.9% (37.1-40.8) | 12.6% (11.5-13.8) | 11.7% (10.5-13.1) |
+| snap-share change | 24.6% (23.1-26.2) | 23.8% (22.3-25.2) | 7.3% (6.7-7.9) | 6.9% (6.3-7.5) |
+| a random pick (base rate) | 10.6% | | 2.5% | |
+
+- **For a manager:** if you had added the Radar's top 10 at a position every Tuesday, about 5 of
+  them (3,501 of 7,320 picks) gave you a starter week within three games.
+- **The Radar beats last week's points** by 7.4 points (95% interval 6.2 to 8.7; 12 of 12
+  seasons; 6.6 points without rostered players), and the snap-share change by 23.2 (21.6 to
+  24.7). For `y_sustained`: +3.4 (2.7 to 4.0) and +8.7 (7.8 to 9.5). The acceptance test of C4
+  holds with room to spare.
+- **Logistic regression vs LightGBM:** +0.2 points (-0.3 to +0.8) for `y_hit`, a tie as C4
+  said; +0.6 (0.2 to 1.0) for `y_sustained`, where the logistic regression is ahead in 10 of 12
+  seasons.
+- **Per season** the Radar ranges from 42.3% (2020) to 53.1% (2025), median 47.4%.
+- **Per position:** RB 54.2%, WR 50.8%, TE 42.8%, QB 43.4%. Against last week's points it gains
+  7.9 (RB), 10.4 (WR) and 11.1 (TE) points, all with intervals well above zero, but **at QB
+  +0.3 (-0.6 to +1.3): nothing**. The same holds without rostered players and for `y_sustained`.
+- **By rank:** the Radar's ranks 1-5 hit 56.4%, 6-10 39.3%, 11-25 24.0%. Its lead over last
+  week's points is 12.3 points at ranks 1-5 and only 2.5 and 1.6 below: it is best exactly where a
+  manager picks.
+- **PR-AUC and Brier** (all rows): 0.433 and 0.0736 for `y_hit` (an uninformative forecast: Brier
+  0.0950), per season and per position in the report.
+- **Calibration:** in the fixed-width bins (0-10%, 10-20% ...), `y_hit` predictions match the
+  observed rate within 5 points in every bin with 1,000+ predictions (up to 70%); the 246
+  predictions of 70-80% hit 66.7% (9.4 points too high) and the 107 above 80% are fewer still.
+  `y_sustained` is good up to 30%, but its 523 predictions of 30-40% hit only 20.3% (13.4 points
+  too high): a `y_sustained` probability above 30% should be read as "likely one good week", not
+  "two".
+- **The experts** (2020-2025, the 356 lists with a FantasyPros page): Radar 48.4%, experts 46.9%,
+  difference +1.5 points with an interval of -0.4 to +2.9 (5 of 6 seasons won). The interval
+  includes zero: **the Radar cannot claim to beat the experts** (and they had not even seen the
+  weekend's games). Six seasons make these intervals wide.
+
+## Breakouts caught
+
+The spec asks for the share of breakouts the Radar "ranked top-10 at least once beforehand".
+The exact definition, made from the data:
+
+- A **breakout** is a player-season in which a player the Radar ranked (a pool row) had **two
+  starter weeks within one 3-game window** (`y_sustained`) at that Tuesday or a later one of the
+  same season. By then he may have left the pool (scoring well moves a player out of it), so the
+  labels of every rostered player are used, not only the pool's. His **breakout Tuesday** is the
+  first such as-of that is not before his first Tuesday in the pool. (A player who was already a
+  starter before he ever entered the pool is not a breakout of that earlier stretch.)
+- A method **caught** him when it ranked him in the **top 10 of his position at the breakout
+  Tuesday or an earlier Tuesday of that season**. A ranking made after the breakout Tuesday never
+  counts, so nothing is judged with hindsight. A stricter version asks for a top-10 rank in the **3
+  Tuesdays up to the breakout** (a manager who added him in September may have dropped him by
+  November).
+- Every method is judged with its own lists; the experts only on the lists where their page
+  existed (every method is then limited to those lists, and only breakouts whose breakout
+  Tuesday's list had a page count).
+
+Results 2014-2025 (`y_hit` lists; 870 breakouts, 832 of them still in the pool at the breakout
+Tuesday):
+
+| method | caught (95% interval) | in the 3 Tuesdays before | different players it put in a top 10 |
+|---|---|---|---|
+| the Radar | 55.5% (51.9-58.7), 483 | 45.5%, 396 | 1,614 |
+| LightGBM | 58.0% (54.6-61.2), 505 | 47.2%, 411 | 1,690 |
+| last week's points | 56.4% (54.6-58.3), 491 | 40.6%, 353 | 2,589 |
+| snap-share change | 42.4% (38.9-46.7), 369 | 31.3%, 272 | 3,365 |
+
+Read this honestly: **"ever in the top 10" does not separate the Radar from last week's points**
+(-0.9 points, interval -3.6 to +1.4). That measure rewards a method whose top 10 changes a lot
+from week to week, and last week's points reshuffles its list every Tuesday: it put 2,589
+different players in a top 10, the Radar 1,614. Close to the breakout, the Radar is ahead: +4.9
+points in the 3 Tuesdays before (1.7 to 8.2). On the experts' lists (2020-2025, 420 breakouts)
+the Radar caught 49.3%, the experts 51.2% (-1.9, interval -4.1 to +0.4). With the `y_sustained`
+lists the picture is the same (55.1%).
+
+The biggest breakouts caught and missed are listed in the report with their weekly ranks. Some
+of them are the proxy pool's blind spot rather than waiver finds: before 2020 the pool's
+preseason list is last season's points per game, so a player who barely played the season
+before, or a rookie drafted from round 3 on, is unranked and can be in the pool although real
+leagues drafted him (the report shows his preseason rank and, from 2020, his rostership).
+
+## The figures (`reports/waiver_radar/figures/`)
+
+1. `precision_by_season.png`: precision@10 per season, one line per method, with the base rate.
+2. `precision_pooled.png`: pooled precision@10 with 95% intervals, all positions and each one.
+3. `hit_rate_by_rank.png`: hit rate of ranks 1-5, 6-10 and 11-25 per method.
+4. `calibration.png`: the Radar's predicted chance against the observed rate, both labels, with
+   the number of predictions in every bin.
+5. `breakouts_caught.png`: breakouts caught per method, with the "3 Tuesdays before" version and
+   the number of players each method flagged.
+
+Each title states its takeaway and is computed from the numbers; colors follow the method and
+are checked for colorblind readers, and every chart also has labels or marker shapes. Two runs
+give byte-identical PNGs.
+
+## Known limits
+
+- **Twelve seasons.** The bootstrap's percentile intervals are honest about season-to-season
+  swings but cannot know about changes the 12 seasons never showed (a new kind of offense, a
+  rule change). With only 12 blocks such intervals tend to run a little narrow, so treat a
+  lower bound close to zero as "not proven"; with 6 seasons (the experts) they are rough.
+- **The proxy pool** still flatters every method a little: the "without rostered" numbers only
+  exist from 2020, and before 2020 a few drafted players sit in the pool (see breakouts).
+- **Breakouts** depend on a definition (two starter weeks in one window); a player who broke
+  out while already rostered in every league is still counted if the proxy had him in the pool.
+- **Calibration above 60%** (`y_hit`) and above 30% (`y_sustained`) rests on few predictions and
+  runs high.
+- **The current version rule** (last written wins) is simple; C6 will need to decide which
+  version a live list uses.
+
+## Commands
+
+```bash
+uv run twm radar evaluate                      # both labels -> reports/waiver_radar/evaluation.md,
+                                               # evaluation.csv and figures/ (about 5 seconds)
+uv run twm radar evaluate --label y_hit --no-figures
+uv run twm radar evaluate --store /tmp/p.duckdb --out /tmp/eval/evaluation.md
+uv run jupyter nbconvert --to notebook --execute --inplace \
+  --ExecutePreprocessor.record_timing=False notebooks/01_waiver_radar.ipynb   # refresh the notebook
+```
+
+Options: `--label` (repeatable; default both), `--store`, `--dataset`, `--out`, `--figures`
+(default `figures/` next to the report). The command only reads the store and the dataset.

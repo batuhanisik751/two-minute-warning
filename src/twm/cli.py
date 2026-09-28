@@ -780,6 +780,111 @@ def radar_backtest(
     typer.echo(f"{time.perf_counter() - t0:.0f} s")
 
 
+@radar_app.command("evaluate")
+def radar_evaluate(
+    labels: list[str] | None = typer.Option(
+        None,
+        "--label",
+        help="Label(s) to evaluate (repeatable; default both): y_hit, y_sustained.",
+    ),
+    store: Path | None = typer.Option(
+        None,
+        "--store",
+        help="Predictions store to read (default: settings paths.predictions, "
+        "data/predictions.duckdb). Read only.",
+    ),
+    dataset: Path = typer.Option(
+        Path("data/waiver_radar/dataset.parquet"),
+        "--dataset",
+        help="The dataset (names, rostership, experts' coverage, labels outside the pool).",
+    ),
+    out: Path = typer.Option(
+        Path("reports/waiver_radar/evaluation.md"),
+        "--out",
+        help="Markdown report to write (relative paths are under the project root); a CSV with "
+        "every number is written next to it.",
+    ),
+    figures: Path | None = typer.Option(
+        None,
+        "--figures",
+        help="Folder for the PNG figures (default: `figures/` next to the report).",
+    ),
+    no_figures: bool = typer.Option(False, "--no-figures", help="Skip the figures."),
+) -> None:
+    """Evaluate the Waiver Radar backtest from the predictions store: precision@10 with
+    season-block bootstrap intervals, paired differences, rank buckets, PR-AUC, Brier,
+    calibration and breakouts caught, with and without rostered players; writes the report,
+    its CSV and the figures (docs/waiver_radar.md 'Evaluation')."""
+    import time
+
+    import polars as pl
+
+    from twm import predictions as pr
+    from twm.config import ROOT
+    from twm.modules.waiver_radar import evaluation as ev
+    from twm.modules.waiver_radar.models import LABELS
+
+    t0 = time.perf_counter()
+    chosen = list(dict.fromkeys(labels or LABELS))
+    bad = [lb for lb in chosen if lb not in LABELS]
+    if bad:
+        raise typer.BadParameter(f"unknown label(s) {bad}; choose from {list(LABELS)}")
+    source = dataset if dataset.is_absolute() else ROOT / dataset
+    if not source.exists():
+        typer.echo(f"dataset not found: {source}; run `twm radar dataset` first", err=True)
+        raise typer.Exit(code=1)
+    store_path = store if store is not None else pr.default_path()
+    store_path = store_path if store_path.is_absolute() else ROOT / store_path
+    target = out if out.is_absolute() else ROOT / out
+    fig_dir = figures if figures is not None else target.parent / "figures"
+    fig_dir = fig_dir if fig_dir.is_absolute() else ROOT / fig_dir
+    try:
+        ds = pl.read_parquet(source)
+        evals = [ev.evaluate_label(ev.load(store_path, ds, lb)) for lb in chosen]
+    except (ev.EvaluationError, ValueError) as e:
+        typer.echo(f"cannot evaluate: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    fig_names: list[str] = []
+    if not no_figures:
+        from twm.modules.waiver_radar.figures import write_figures
+
+        for path in write_figures(evals, fig_dir):
+            try:
+                fig_names.append(path.relative_to(target.parent).as_posix())
+            except ValueError:
+                fig_names.append(path.name)
+    args = ["uv run twm radar evaluate", *(f"--label {lb}" for lb in labels or [])]
+    report = ev.build_evaluation_report(
+        evals,
+        generated=f"Generated at {pr.now_utc():%Y-%m-%d %H:%M} UTC in "
+        f"{time.perf_counter() - t0:.0f} s.",
+        command=" ".join(args),
+        store_name=_display_path(store_path, ROOT),
+        dataset_name=_display_path(source, ROOT),
+        figures=fig_names,
+    )
+    csv_path = ev.write_evaluation_report(report, target)
+    for line in report.summary:
+        typer.echo(line)
+    typer.echo(f"wrote {_display_path(target, ROOT)}")
+    typer.echo(f"wrote {_display_path(csv_path, ROOT)}")
+    if fig_names:
+        typer.echo(f"wrote {len(fig_names)} figures in {_display_path(fig_dir, ROOT)}")
+    typer.echo(f"{time.perf_counter() - t0:.0f} s")
+
+
+def _display_path(path: Path, root: Path) -> str:
+    """A path relative to the project root when it is inside it (reports never carry a local
+    absolute path), else the path as given."""
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        try:
+            return path.relative_to(root).as_posix()
+        except ValueError:
+            return str(path)
+
+
 @app.command()
 def glossary(
     name: str | None = typer.Argument(None, help="One term, e.g. `twm glossary wopr`."),

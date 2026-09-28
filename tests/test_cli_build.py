@@ -103,7 +103,10 @@ def test_doctor_lists_warehouse_tables(raw, db_path, monkeypatch):
     lines = [ln.split() for ln in result.output.splitlines() if ln.rstrip().endswith(" rows")]
     counts = {name: int(n.replace(",", "")) for name, n, _rows in lines}
     assert counts["fact_game"] == 14 and counts["dim_week"] == 8
-    assert "not built" not in result.output and "Warehouse:" in result.output
+    # only the warehouse line matters here; other outputs (e.g. the Radar dataset) may be missing on
+    # a fresh checkout such as CI
+    warehouse = [ln for ln in result.output.splitlines() if "Warehouse:" in ln]
+    assert warehouse and "not built" not in warehouse[0]
     assert result.output.rstrip().splitlines()[-1].startswith("ok: ")
 
 

@@ -46,13 +46,69 @@ def _diff(name: str, expected: str, got: str) -> str:
     )
 
 
+# Model probabilities are pinned to 4 decimals, but linear-algebra libraries round the last digit
+# differently on macOS and Linux (CI). Decimal columns may differ by at most this much; every
+# other value (ranks, ids, labels, counts, text) must match exactly.
+FLOAT_TOLERANCE = 1e-3
+
+
+def _close(a: object, b: object) -> bool:
+    """JSON values equal, floats within FLOAT_TOLERANCE, recursively."""
+    if isinstance(a, float) and isinstance(b, float):
+        return abs(a - b) <= FLOAT_TOLERANCE
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_close(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_close(x, y) for x, y in zip(a, b, strict=True))
+    return a == b
+
+
+def _equivalent(name: str, expected: str, got: str) -> bool:
+    """Equal up to FLOAT_TOLERANCE in decimal columns (CSV) or float values (JSON)."""
+    if name.endswith(".json"):
+        import json
+
+        return _close(json.loads(expected), json.loads(got))
+    if not name.endswith(".csv"):
+        return False
+    import io
+
+    import polars as pl
+
+    e = pl.read_csv(io.StringIO(expected), infer_schema_length=None)
+    g = pl.read_csv(io.StringIO(got), infer_schema_length=None)
+    if e.columns != g.columns or e.height != g.height:
+        return False
+    for col in e.columns:
+        a, b = e.get_column(col), g.get_column(col)
+        if a.dtype.is_float() and b.dtype.is_float():
+            if a.is_null().to_list() != b.is_null().to_list():
+                return False
+            diff = (a - b).abs().drop_nulls()
+            if diff.len() and diff.max() > FLOAT_TOLERANCE:
+                return False
+        elif a.to_list() != b.to_list():
+            return False
+    return True
+
+
 @pytest.mark.parametrize("name", EXPECTED)
 def test_output_matches_the_frozen_answer(produced, name):
     expected = (world.EXPECTED_DIR / name).read_text()
     got = produced.get(name)
     assert got is not None, f"{name} is no longer produced; run tests/golden/update.py"
-    if got != expected:
+    if got != expected and not _equivalent(name, expected, got):
         pytest.fail(_diff(name, expected, got), pytrace=False)
+
+
+def test_the_tolerance_only_forgives_float_noise():
+    row = "model,season,rank,gsis_id,score\nlogit,2023,{rank},00-0099156,{score}\n"
+    base = row.format(rank=2, score="0.339000")
+    assert _equivalent("x.csv", base, row.format(rank=2, score="0.338800"))
+    assert not _equivalent("x.csv", base, row.format(rank=2, score="0.337000"))
+    assert not _equivalent("x.csv", base, row.format(rank=3, score="0.339000"))
+    assert _equivalent("x.json", '{"p": [0.5, "a"]}', '{"p": [0.5004, "a"]}')
+    assert not _equivalent("x.json", '{"p": [0.5, "a"]}', '{"p": [0.5, "b"]}')
 
 
 def test_every_output_has_a_frozen_answer(produced):

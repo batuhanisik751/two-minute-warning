@@ -7,7 +7,7 @@
 data/*
 !data/manual/
 !data/schemas/
-models/
+models
 reports/league/
 # generated on demand by `twm ids`; changes with every data refresh
 reports/ids/

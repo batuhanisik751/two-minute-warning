@@ -7,8 +7,15 @@
     "node": ">=22"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit --incremental false",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "next typegen && tsc --noEmit --incremental false",
     "lint": "eslint",
+    "test": "tsx --test tests/unit/*.test.ts",
+    "test:smoke": "tsx --test --test-concurrency=1 tests/smoke/*.test.ts",
+    "test:smoke:run": "tsx tests/run-smoke.ts",
+    "db:test-setup": "tsx tests/setup-db.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:check": "drizzle-kit check && node scripts/check-migrations.mjs"
@@ -18,18 +25,24 @@
     "next": "16.3.5",
     "pg": "8.23.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "react-is": "19.2.8",
+    "recharts": "3.10.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/jsdom": "30.0.0",
     "@types/node": "^22",
     "@types/pg": "8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "axe-core": "4.13.0",
     "drizzle-kit": "0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
+    "jsdom": "26.1.0",
     "tailwindcss": "^4",
+    "tsx": "4.23.15",
     "typescript": "^5"
   }
 }

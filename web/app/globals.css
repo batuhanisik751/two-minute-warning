@@ -1,0 +1,261 @@
+@import "tailwindcss";
+
+/* Theme tokens. Light by default; dark follows the system unless the reader chose a theme
+   with the toggle (data-theme on <html>, set by the inline script in app/layout.tsx before
+   the first paint). tests/unit/contrast.test.ts checks every text/background pair below in
+   both themes against WCAG AA. Keep the two dark blocks identical. */
+:root {
+  color-scheme: light;
+  --bg: #f6f6f3;
+  --surface: #ffffff;
+  --raised: #eceee9;
+  --fg: #16191e;
+  --muted: #545b66;
+  --border: #cfd3d8;
+  --accent: #0a6446;
+  --accent-soft: #e2f0e9;
+  --on-accent: #ffffff;
+  --live: #0a6446;
+  --recon: #5b4a9e;
+  --hit: #0a6446;
+  --miss: #545b66;
+  --pending: #7a5200;
+  --warn-bg: #fff4dc;
+  --warn-fg: #5c3d00;
+  --focus: #1f5fd1;
+  --chart-a: #2563a8;
+  --chart-b: #c2410c;
+  --chart-c: #0a6446;
+  --chart-grid: #d9dce0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f1216;
+    --surface: #171b21;
+    --raised: #1f242c;
+    --fg: #e9ebef;
+    --muted: #a3aab5;
+    --border: #343b46;
+    --accent: #58c795;
+    --accent-soft: #15302a;
+    --on-accent: #07140e;
+    --live: #58c795;
+    --recon: #b3a6f0;
+    --hit: #58c795;
+    --miss: #a3aab5;
+    --pending: #e5b85a;
+    --warn-bg: #33270d;
+    --warn-fg: #f3d9a1;
+    --focus: #8ab4ff;
+    --chart-a: #7fb2ee;
+    --chart-b: #f29a61;
+    --chart-c: #58c795;
+    --chart-grid: #2c323b;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1216;
+  --surface: #171b21;
+  --raised: #1f242c;
+  --fg: #e9ebef;
+  --muted: #a3aab5;
+  --border: #343b46;
+  --accent: #58c795;
+  --accent-soft: #15302a;
+  --on-accent: #07140e;
+  --live: #58c795;
+  --recon: #b3a6f0;
+  --hit: #58c795;
+  --miss: #a3aab5;
+  --pending: #e5b85a;
+  --warn-bg: #33270d;
+  --warn-fg: #f3d9a1;
+  --focus: #8ab4ff;
+  --chart-a: #7fb2ee;
+  --chart-b: #f29a61;
+  --chart-c: #58c795;
+  --chart-grid: #2c323b;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-live: var(--live);
+  --color-recon: var(--recon);
+  --color-hit: var(--hit);
+  --color-miss: var(--miss);
+  --color-pending: var(--pending);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-fg: var(--warn-fg);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Base styles live in the base layer: unlayered CSS would beat every Tailwind utility
+   (a { color } would override text-on-accent on the active navigation link). */
+@layer base {
+  html {
+    background-color: var(--bg);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+  }
+
+  a {
+    color: var(--accent);
+    text-underline-offset: 2px;
+  }
+
+  /* Focus: one visible ring everywhere (two layers so a control that removes its outline
+     still shows the shadow ring). */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px var(--bg);
+  }
+
+  main:focus {
+    outline: none;
+  }
+
+  details > summary {
+    cursor: pointer;
+  }
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 3px solid Highlight;
+    box-shadow: none;
+  }
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A term with an explanation: the word itself is the button (dotted underline). */
+.term-button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: inherit;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+.term-button:hover,
+.term-button[aria-expanded="true"] {
+  text-decoration-style: solid;
+  color: var(--accent);
+}
+
+/* The skip link: the first focusable element, off-screen until focused. */
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: 0.75rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  border: 2px solid var(--accent);
+  border-radius: 0.375rem;
+  background-color: var(--surface);
+  color: var(--fg);
+  padding: 0.625rem 1rem;
+  font-weight: 600;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* Tables scroll inside their own region on narrow screens, never the page. */
+.table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.data-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.875rem;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  font-weight: 600;
+  color: var(--muted);
+  background-color: var(--raised);
+}
+
+.data-table tbody th {
+  background-color: transparent;
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.data-table td.num,
+.data-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table caption {
+  text-align: left;
+  font-weight: 600;
+  padding: 0.25rem 0 0.5rem;
+}
+
+/* Reconstructed lists get a dashed frame, live lists a solid one: the text label says which,
+   the frame only repeats it. */
+.frame-live {
+  border: 2px solid var(--live);
+}
+
+.frame-recon {
+  border: 2px dashed var(--recon);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

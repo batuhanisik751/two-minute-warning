@@ -50,8 +50,28 @@ jobs:
       - run: uv sync --all-extras --locked
       - run: uv run pytest -m postgres -rs
 
+  # The website (web/): types, lint, unit tests, migrations in sync, a build that needs no
+  # database, then the smoke + accessibility tier against the built app. That tier seeds two
+  # throwaway databases on the service below (twm_web_test, twm_web_test_empty: Drizzle's
+  # migrator, then the fictional seed in web/tests/seed.ts), starts `next start` on each and
+  # runs web/tests/smoke with SMOKE_REQUIRE=1, so a server that cannot be reached is a
+  # failure, never a skip (web/README.md).
   web:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: twm
+          POSTGRES_PASSWORD: twm
+          POSTGRES_DB: twm
+        ports: ["5434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U twm -d twm"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     defaults:
       run:
         working-directory: web
@@ -65,5 +85,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm test
       # the committed migrations must match db/schema.ts (never connects to a database)
       - run: npm run db:check
+      - run: npm run build
+      - run: npm run test:smoke:run

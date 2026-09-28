@@ -1,0 +1,111 @@
+# The scheduled pipeline (step E4): refresh the nflverse data, rebuild the warehouse, score the
+# Waiver Radar week whose list is due with the owner-approved model, publish to the public
+# database. docs/deploy.md "The scheduled pipeline". All logic lives in `twm pipeline run`
+# (src/twm/pipeline/); this file only sets up the runner, the cache and the artifact.
+#
+# The job NEVER commits (permissions: contents: read). Results go to the database (only when
+# the DATABASE_URL secret exists; without it everything runs and the publish is skipped with a
+# warning) and to the run's artifact (report, list, logs; 90 days).
+name: Pipeline
+
+on:
+  schedule:
+    # Must equal config/settings.yaml `pipeline:` (tests/test_workflows.py checks it). UTC.
+    # Nightly in season; in the offseason the job goes ahead only on Tuesdays (the gate).
+    - cron: "47 10 * * *"
+    # Tuesday retries after the 14:00 UTC as-of (snap counts can lag). The LAST one is the
+    # deadline: a week whose data is still missing then fails the run, and GitHub emails.
+    - cron: "17 15 * * 2"
+    - cron: "47 18 * * 2"
+    - cron: "17 21 * * 2"
+    - cron: "17 3 * * 3"
+  workflow_dispatch:
+    inputs:
+      week:
+        description: "Week to score (empty: the week whose list is due now, if any)"
+        type: string
+        default: ""
+      dry_run:
+        description: "Publish with --dry-run (everything written is rolled back)"
+        type: boolean
+        default: false
+      skip_publish:
+        description: "Run every stage but do not publish"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One run at a time. A run started while another is going waits; a running one is never
+# cancelled. (GitHub keeps one waiting run per group: a newer one replaces it, which is
+# fine, since every run does the whole job.)
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    # The CA bundle path twm publish uses was checked on Ubuntu 24.04
+    # (/etc/ssl/certs/ca-certificates.crt); the preflight stage prints it on every run.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # every `uv run` uses the locked runtime dependencies only (no dev tools)
+    env:
+      UV_NO_DEV: "1"
+      UV_LOCKED: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync
+
+      # The nflverse cache (data/raw, about 500 MB): one entry per ISO week; a miss restores
+      # the newest older week, and a runner without any cache downloads everything (the
+      # pipeline notices the missing seasons). Saved only after a successful ingest.
+      - name: Cache key
+        id: key
+        run: echo "raw=nflverse-raw-v1-$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - name: Restore the nflverse cache
+        id: raw
+        uses: actions/cache/restore@v6
+        with:
+          path: data/raw
+          key: ${{ steps.key.outputs.raw }}
+          restore-keys: nflverse-raw-v1-
+
+      - name: Run the pipeline
+        id: run
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EVENT: ${{ github.event_name }}
+          CRON: ${{ github.event.schedule }}
+          WEEK: ${{ inputs.week }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          SKIP_PUBLISH: ${{ inputs.skip_publish }}
+          RUN_ID: gh-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          args=(--trigger "$EVENT" --out "$RUNNER_TEMP/twm-run" --run-id "$RUN_ID" --github)
+          if [ -n "$CRON" ]; then args+=(--cron "$CRON"); fi
+          if [ -n "$WEEK" ]; then args+=(--week "$WEEK"); fi
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          if [ "$SKIP_PUBLISH" = "true" ]; then args+=(--skip-publish); fi
+          uv run twm pipeline run "${args[@]}"
+
+      - name: Save the nflverse cache
+        if: always() && steps.raw.outputs.cache-hit != 'true' && steps.run.outputs.ingest == 'ok'
+        uses: actions/cache/save@v6
+        with:
+          path: data/raw
+          key: ${{ steps.key.outputs.raw }}
+
+      - name: Upload the run's files
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pipeline-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/twm-run
+          retention-days: 90
+          if-no-files-found: warn

@@ -195,7 +195,13 @@ def test_collect_lists_and_picks(synthetic: ps.Synthetic) -> None:
     assert first["chance"] == pytest.approx(0.875) and first["chance_low"] < first["chance"]
     assert first["tier"] == "must-add" and first["reasons"][0].startswith("Reason 1")
     back = data.picks.filter(pl.col("kind") == "backtest")
-    assert back.get_column("chance").null_count() == back.height  # the backtest had no band
+    # walk-forward chances (E2 review): 2025's lists from the 2024 backtest; 2024 is the first
+    # backtest season of this store, so its lists have no earlier season and stay NULL
+    b24, b25 = (back.filter(pl.col("season") == s) for s in (2024, 2025))
+    assert b24.get_column("chance").null_count() == b24.height == 300
+    assert b24.get_column("tier").null_count() == 300
+    assert b25.get_column("chance").null_count() == 0
+    assert set(b25.get_column("tier").to_list()) <= {"must-add", "speculative", "watch"}
     assert set(back.get_column("reasons").list.len().to_list()) == {0}
     # the QB note of the weekly report, only on the current season's lists
     notes = lists.filter(pl.col("note").is_not_null())
@@ -232,6 +238,22 @@ def test_collect_other_tables(synthetic: ps.Synthetic) -> None:
     assert t["glossary"].height > 50
     assert data.meta["current_week"] == "2" and data.meta["data_through_week"] == "2"
     assert data.data_as_of is not None and data.data_as_of.isoformat().startswith("2026-09-22")
+
+
+def test_current_as_of_is_the_official_as_of_of_the_current_week(synthetic: ps.Synthetic) -> None:
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    from twm.asof import weekly_as_of
+
+    meta = col.collect(synthetic.inputs).meta
+    assert meta["current_as_of"] == "2026-09-22T14:00:00+00:00"
+    assert meta["current_as_of"] == weekly_as_of(synthetic.inputs.warehouse, 2026, 2).isoformat()
+    # at the as-of itself the week is current; before the season's first as-of, empty
+    at = col.collect(replace(synthetic.inputs, now=datetime(2026, 9, 29, 14, 0, tzinfo=UTC))).meta
+    assert (at["current_week"], at["current_as_of"]) == ("3", "2026-09-29T14:00:00+00:00")
+    early = col.collect(replace(synthetic.inputs, now=datetime(2026, 9, 10, tzinfo=UTC))).meta
+    assert (early["current_week"], early["current_as_of"]) == ("", "")
 
 
 def test_track_record_equals_the_csv(synthetic: ps.Synthetic) -> None:
@@ -369,3 +391,61 @@ def test_every_table_is_written_in_order() -> None:
     assert WRITE_ORDER.index("dim_player") < WRITE_ORDER.index("radar_pick")
     assert WRITE_ORDER.index("radar_list") < WRITE_ORDER.index("radar_pick")
     assert WRITE_ORDER.index("model_versions") < WRITE_ORDER.index("radar_list")
+
+
+# --------------------------------------------------------------------------------------
+# Walk-forward chances of the backtest lists (reviewer's rule after E2)
+# --------------------------------------------------------------------------------------
+
+
+def _flip_outcomes(syn: ps.Synthetic, season: int) -> None:
+    """Invert every final y_hit of ``season`` in the store and the dataset (they must agree)."""
+    import duckdb
+
+    con = duckdb.connect(str(syn.inputs.store))
+    try:
+        con.execute("UPDATE outcomes SET y_hit = NOT y_hit WHERE season = ?", [season])
+    finally:
+        con.close()
+    ds = pl.read_parquet(syn.inputs.dataset)
+    ds.with_columns(
+        pl.when(pl.col("season") == season).then(~pl.col("y_hit")).otherwise(pl.col("y_hit"))
+        .alias("y_hit")
+    ).write_parquet(syn.inputs.dataset)  # fmt: skip
+
+
+def _chances(syn: ps.Synthetic, season: int) -> list:
+    picks = col.collect(syn.inputs).picks
+    return (
+        picks.filter((pl.col("kind") == "backtest") & (pl.col("season") == season))
+        .sort("week", "position", "rank")
+        .select("chance", "chance_low", "chance_high", "tier")
+        .rows()
+    )
+
+
+def test_backtest_chances_never_use_their_own_or_later_seasons(tmp_path: Path) -> None:
+    syn = ps.build(tmp_path, live_weeks=())
+    before = _chances(syn, 2025)
+    assert before and all(c is not None for c, *_ in before)
+    # the same number the weekly list's code gives for a 2025 list: bins of 2014-2024 only
+    from twm.modules.waiver_radar import confidence as cf
+
+    conf = cf.from_store(syn.inputs.store, model="logit", label="y_hit",
+                         seasons=cf.seasons_before(2025))  # fmt: skip
+    assert conf.seasons == (2024, 2024)
+    picks = col.collect(syn.inputs).picks.filter(
+        (pl.col("kind") == "backtest") & (pl.col("season") == 2025)
+    )
+    band = conf.band(picks.get_column("model_prob").to_numpy())
+    assert picks.get_column("chance").to_list() == [
+        round(x, 4) for x in band.get_column("chance").to_list()
+    ]
+    # 1. season 2025's own outcomes change: its chances do not
+    _flip_outcomes(syn, 2025)
+    assert _chances(syn, 2025) == before
+    # 2. an earlier season's outcomes change: they do (the property is not vacuous)
+    _flip_outcomes(syn, 2024)
+    assert _chances(syn, 2025) != before
+    # 2024 (the first backtest season here) never gets a chance
+    assert {r[0] for r in _chances(syn, 2024)} == {None}

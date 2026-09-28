@@ -909,6 +909,22 @@ def _project_path(path: Path) -> Path:
     return path if path.is_absolute() else ROOT / path
 
 
+def _pinned_production(dataset, season: int, store: Path):
+    """The owner-approved Waiver Radar model for ``season`` (:func:`twm.pins.load_pinned`),
+    recorded in the store's model_versions (so its lists can be published) and compared with
+    today's training data (a difference is a warning: the approved model is used anyway)."""
+    from twm import pins
+    from twm import predictions as pr
+    from twm.modules.waiver_radar import production as prod
+
+    pm, pin = pins.load_pinned(prod.MODULE, season)
+    note = pins.identity_note(pm, dataset)
+    if note:
+        typer.echo(f"WARNING: {note}", err=True)
+    registered = pr.register_version(store, prod.version_frame(pm))
+    return prod.Ensured(pm, True, pin.path(), registered)
+
+
 @radar_app.command("score")
 def radar_score(
     season: int | None = typer.Option(
@@ -960,6 +976,13 @@ def radar_score(
         help="Pretend it is this UTC time (ISO), to reproduce a run; the list is then never "
         "stored as 'live'.",
     ),
+    pinned: bool = typer.Option(
+        False,
+        "--pinned",
+        help="Score with the owner-approved model of config/production_models.yaml (checked "
+        "file and version; refused otherwise) instead of the store's current one; never "
+        "trains. The scheduled job always uses this.",
+    ),
 ) -> None:
     """Score a week's Waiver Radar list with the production model: checks that the week's data
     has arrived (exit code 3 if not), stores every prediction with its band, priority and
@@ -1009,10 +1032,15 @@ def radar_score(
     store_path = _project_path(store if store is not None else pr.default_path())
     models_root = _project_path(models_dir) if models_dir is not None else None
     try:
-        ens = prod.ensure_production(
-            pl.read_parquet(source), chosen_season, store=store_path, root=models_root,
-            retrain=retrain,
-        )  # fmt: skip
+        frame = pl.read_parquet(source)
+        if pinned:
+            if retrain:
+                raise typer.BadParameter("--pinned never trains: drop --retrain")
+            ens = _pinned_production(frame, chosen_season, store_path)
+        else:
+            ens = prod.ensure_production(
+                frame, chosen_season, store=store_path, root=models_root, retrain=retrain
+            )
         conf = cf.from_store(
             store_path, model=ens.model.model, label=ens.model.label,
             seasons=cf.seasons_before(chosen_season),
@@ -1053,8 +1081,9 @@ def radar_score(
         f"{chosen_season} week {chosen_week}, as-of {as_of:%a %Y-%m-%d %H:%M} UTC: stored as "
         f"'{run.kind}'" + (" (INCOMPLETE DATA)" if run.incomplete else "")
     )
+    how = "the approved model" if pinned else ("reused" if ens.reused else "trained now")
     typer.echo(
-        f"model {m.model_version} ({'reused' if ens.reused else 'trained now'}; trained on "
+        f"model {m.model_version} ({how}; trained on "
         f"{m.training_seasons[0]}-{m.training_seasons[-1]}, calibrated on {m.fold.val_season})"
     )
     if run.incomplete:
@@ -1265,6 +1294,9 @@ def score(
     dataset: Path = typer.Option(
         Path("data/waiver_radar/dataset.parquet"), "--dataset", help="The training dataset."
     ),
+    pinned: bool = typer.Option(
+        False, "--pinned", help="Use the owner-approved model (config/production_models.yaml)."
+    ),
 ) -> None:
     """Score every module's list at an official as-of (waiver_radar: `twm radar score`).
 
@@ -1302,6 +1334,7 @@ def score(
             season=season, week=week, allow_incomplete=allow_incomplete, limit=limit,
             retrain=retrain, db=db, store=store, dataset=dataset, models_dir=None,
             evaluation_csv=Path("reports/waiver_radar/evaluation.csv"), out=None, now=None,
+            pinned=pinned,
         )  # fmt: skip
 
 
@@ -1315,6 +1348,258 @@ def _display_path(path: Path, root: Path) -> str:
             return path.relative_to(root).as_posix()
         except ValueError:
             return str(path)
+
+
+# --------------------------------------------------------------------------------------
+# The owner-approved production models (step E4): `twm model pin|check|candidate`
+# --------------------------------------------------------------------------------------
+
+model_app = typer.Typer(
+    help="The owner-approved production models (config/production_models.yaml, "
+    "artifacts/production_models/): approve, check, train a candidate for review.",
+    no_args_is_help=True,
+)
+app.add_typer(model_app, name="model")
+
+
+@model_app.command("check")
+def model_check(
+    module: str = typer.Argument("waiver_radar", help="Module: waiver_radar."),
+    season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+) -> None:
+    """Check that the approved model loads: pin present, file present, sha256 and version
+    match (exit 1 otherwise). The scheduled job runs this first."""
+    from twm import pins
+    from twm.config import settings
+
+    key = _module_or_exit(module)
+    chosen = season if season is not None else settings().current_season
+    try:
+        pm, pin = pins.load_pinned(key, chosen)
+    except pins.PinError as e:
+        typer.echo(f"not usable: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"{key} {chosen}: approved model {pm.model_version} ({pin.file}, sha256 "
+               f"{pin.sha256[:12]}..., approved {pin.approved or '?'})")  # fmt: skip
+    typer.echo(f"  {pm.describe()}")
+
+
+@model_app.command("pin")
+def model_pin(
+    module: str = typer.Argument("waiver_radar", help="Module: waiver_radar."),
+    version: str | None = typer.Option(
+        None, "--version", help="A model saved under models/<module>/ (e.g. logit-5828a0...)."
+    ),
+    file: Path | None = typer.Option(
+        None,
+        "--file",
+        help="A model file written by this code (e.g. from the retrain "
+        "workflow's artifact), instead of --version.",
+    ),
+    season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+) -> None:
+    """Approve a production model: write it to artifacts/production_models/<module>/ and pin
+    it in config/production_models.yaml (with its sha256). Review both files, then commit
+    them: the scheduled job uses only the committed pin."""
+    from twm import pins
+    from twm.config import ROOT, settings
+    from twm.modules.waiver_radar import production as prod
+
+    key = _module_or_exit(module)
+    if (version is None) == (file is None):
+        raise typer.BadParameter("give exactly one of --version and --file")
+    chosen = season if season is not None else settings().current_season
+    source = _project_path(file) if file is not None else prod.model_path(str(version))
+    try:
+        pm = prod.load_model(source)
+    except prod.ProductionModelError as e:
+        typer.echo(f"not pinned: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    if version is not None and pm.model_version != version:
+        typer.echo(f"not pinned: {source} holds {pm.model_version}, not {version}", err=True)
+        raise typer.Exit(code=1)
+    if int(pm.season) != chosen or pm.model != prod.MODEL or pm.label != prod.LABEL:
+        typer.echo(
+            f"not pinned: {pm.model_version} is a {pm.model}/{pm.label} model for season "
+            f"{pm.season}, not the production {prod.MODEL}/{prod.LABEL} model for {chosen}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    pin = pins.approve(pm)
+    typer.echo(f"pinned {key} {chosen}: {pin.model_version}")
+    typer.echo(f"  wrote {pin.file} (sha256 {pin.sha256[:12]}...)")
+    typer.echo(f"  wrote {_display_path(pins.default_pin_path(), ROOT)}")
+    typer.echo("  review both files, then commit them (the scheduled job uses only the "
+               "committed pin)")  # fmt: skip
+
+
+@model_app.command("candidate")
+def model_candidate(
+    module: str = typer.Argument("waiver_radar", help="Module: waiver_radar."),
+    out: Path = typer.Option(..., "--out", help="Folder for the candidate's files."),
+    season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+    dataset: Path = typer.Option(
+        Path("data/waiver_radar/dataset.parquet"), "--dataset", help="The training dataset."
+    ),
+) -> None:
+    """Train a candidate production model for review (the retrain workflow): writes, under
+    --out, the model file and the pin laid out like the repository
+    (artifacts/production_models/..., config/production_models.yaml) plus retrain_report.md
+    comparing it with the approved model. Nothing in the repository changes; to approve it,
+    copy the two files into the checkout, review `git diff`, commit."""
+    import polars as pl
+
+    from twm import pins
+    from twm.backtest.walkforward import WalkForwardError
+    from twm.config import settings
+    from twm.modules.waiver_radar import production as prod
+    from twm.pipeline.report import candidate_report
+
+    _module_or_exit(module)
+    chosen = season if season is not None else settings().current_season
+    source = _project_path(dataset)
+    if not source.exists():
+        typer.echo(f"dataset not found: {source}; run `twm radar dataset` first", err=True)
+        raise typer.Exit(code=1)
+    frame = pl.read_parquet(source)
+    try:
+        pm = prod.train_production(frame, chosen)
+    except (prod.ProductionModelError, WalkForwardError, ValueError) as e:
+        typer.echo(f"cannot train: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    base = _project_path(out)
+    pin_path = base / "config" / pins.PIN_FILE
+    current = pins.read_pins()
+    if current:
+        pins.write_pins(current, pin_path)
+    pin = pins.approve(pm, root=base, path=pin_path)
+    try:
+        old, _ = pins.load_pinned(prod.MODULE, chosen)
+    except pins.PinError as e:
+        old, old_note = None, str(e)
+    else:
+        old_note = ""
+    text = candidate_report(pm, pin, frame, old=old, old_note=old_note)
+    (base / "retrain_report.md").write_text(text)
+    typer.echo(f"candidate {pm.model_version} for {chosen}: {pm.describe()}")
+    typer.echo(f"wrote {base / pin.file}, {pin_path} and {base / 'retrain_report.md'}")
+
+
+# --------------------------------------------------------------------------------------
+# The scheduled pipeline (step E4): `twm pipeline run|plan`
+# --------------------------------------------------------------------------------------
+
+pipeline_app = typer.Typer(
+    help="The scheduled pipeline (.github/workflows/pipeline.yml): every stage in order.",
+    no_args_is_help=True,
+)
+app.add_typer(pipeline_app, name="pipeline")
+
+
+def _week_option(week: str | None) -> int | None:
+    if week is None or not week.strip():
+        return None
+    try:
+        return int(week)
+    except ValueError as e:
+        raise typer.BadParameter(f"--week {week!r} is not a week number") from e
+
+
+@pipeline_app.command("run")
+def pipeline_run(
+    out: Path | None = typer.Option(
+        None, "--out", help="Folder for the run's files (default: data/pipeline/<run id>)."
+    ),
+    trigger: str = typer.Option(
+        "manual",
+        "--trigger",
+        help="schedule (a cron run) or manual (always runs); GitHub's "
+        "event names schedule / workflow_dispatch are accepted.",
+    ),
+    cron: str | None = typer.Option(
+        None, "--cron", help="The cron line that started a scheduled run (github.event.schedule)."
+    ),
+    week: str | None = typer.Option(
+        None, "--week", help="Score this week instead of the one whose list is due (empty: auto)."
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Publish with --dry-run (rolled back)."),
+    skip_publish: bool = typer.Option(
+        False, "--skip-publish", help="Run everything, publish nothing."
+    ),
+    publish: str = typer.Option(
+        "auto",
+        "--publish",
+        help="auto (remote when DATABASE_URL is set in the environment, "
+        "else skipped with a warning), local, remote or skip.",
+    ),
+    github: bool | None = typer.Option(
+        None,
+        "--github/--no-github",
+        help="Write GitHub annotations, job summary and step "
+        "outputs (default: when GITHUB_ACTIONS is set).",
+    ),
+    run_id: str | None = typer.Option(
+        None, "--run-id", help="Id for pipeline_runs (default: a new one)."
+    ),
+    now: str | None = typer.Option(
+        None, "--now", hidden=True, help="Pretend clock (ISO, UTC): rehearsals; never 'live'."
+    ),
+) -> None:
+    """Run the scheduled pipeline: preflight, gate, ingest, build, plan, dataset, backtest,
+    score, export, publish (docs/deploy.md 'The scheduled pipeline'). Exit codes: 0 done
+    (also: publish skipped, offseason day, week not ready on an early attempt; each with a
+    warning), 1 a stage failed, 3 the week's data had not arrived by the last attempt."""
+    import os
+    import uuid
+
+    from twm.config import ROOT
+    from twm.pipeline import runner as rn
+
+    trig = {"workflow_dispatch": "manual", "schedule": "schedule", "manual": "manual"}.get(trigger)
+    if trig is None:
+        raise typer.BadParameter(f"--trigger {trigger!r}: use schedule or manual")
+    rid = run_id or uuid.uuid4().hex
+    folder = _project_path(out) if out is not None else ROOT / "data" / "pipeline" / rid
+    keys = ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID")
+    server, repo, gh_run = (os.environ.get(k, "") for k in keys)
+    opts = rn.Options(
+        out=folder, trigger=trig, cron=cron or None, week=_week_option(week),
+        now=_clock(now) if now is not None else None, dry_run=dry_run,
+        skip_publish=skip_publish, publish=publish,
+        github=github if github is not None else os.environ.get("GITHUB_ACTIONS") == "true",
+        run_id=rid, run_url=f"{server}/{repo}/actions/runs/{gh_run}" if gh_run else "",
+    )  # fmt: skip
+    result = rn.run(opts)
+    typer.echo(f"run files: {folder}")
+    raise typer.Exit(code=result.exit_code)
+
+
+@pipeline_app.command("plan")
+def pipeline_plan(
+    trigger: str = typer.Option("schedule", "--trigger", help="schedule or manual."),
+    cron: str | None = typer.Option(None, "--cron", help="The cron line of a scheduled run."),
+    now: str | None = typer.Option(None, "--now", help="The clock (ISO, UTC; default: now)."),
+) -> None:
+    """Show what a run would do now (reads the cache and the warehouse; changes nothing):
+    the gate, the week whose list is due and whether this attempt is the last one."""
+    from twm.config import settings
+    from twm.pipeline import schedule as sc
+
+    s = settings()
+    clock = _clock(now)
+    season = s.current_season
+    dates = sc.season_dates_from_cache(s.path("raw_cache"), season)
+    g = sc.gate(clock, trigger=trigger, cron=cron, dates=dates, cfg=s.pipeline)
+    typer.echo(f"{clock:%a %Y-%m-%d %H:%M} UTC, season {season}: "
+               f"{'runs' if g.run else 'skipped'}: {g.reason}")  # fmt: skip
+    wh = s.path("warehouse")
+    if not wh.exists():
+        typer.echo("no warehouse yet: the week is planned after `twm build`")
+        return
+    p = sc.plan_week(clock, season, sc.week_windows(wh, season), s.pipeline)
+    typer.echo(p.reason + (f"; {p.attempt_text(clock)}" if p.week is not None else ""))
+    typer.echo("nightly cron: " + sc.nightly_cron(s.pipeline) + "; retry crons: "
+               + ", ".join(sc.retry_crons(s.pipeline)))  # fmt: skip
 
 
 # --------------------------------------------------------------------------------------
@@ -1358,11 +1643,29 @@ def publish(
         help="The committed evaluation CSV (published as the track record).",
     ),
     now: str | None = typer.Option(None, "--now", hidden=True, help="Pretend clock (tests)."),
+    allow_shrink: bool = typer.Option(
+        False,
+        "--allow-shrink",
+        help="Publish even when a replaced table would lose more than publish.max_shrink_share "
+        "(settings.yaml, 10%) of the rows the target holds (refused by default, exit code 5).",
+    ),
+    run_id: str | None = typer.Option(
+        None, "--run-id", hidden=True, help="The pipeline_runs id (the scheduled pipeline's)."
+    ),
+    notes_file: Path | None = typer.Option(
+        None, "--notes-file", hidden=True, help="JSON added to the pipeline_runs notes."
+    ),
+    result_json: Path | None = typer.Option(
+        None, "--result-json", hidden=True, help="Write a machine-readable summary here."
+    ),
 ) -> None:
     """Publish the Waiver Radar lists, outcomes, track record, player pages and glossary to
     Postgres, in one transaction (docs/deploy.md). Live lists already published are never
-    changed (frozen); everything else is replaced. Exit codes: 0 done, 1 refused or failed
-    (nothing changed), 4 done but some live lists were skipped as incomplete (retry later)."""
+    changed (frozen); everything else is replaced, except a table whose content is unchanged
+    (not rewritten). Exit codes: 0 done, 1 refused or failed (nothing changed), 4 done but some
+    live lists were skipped as incomplete (retry later), 5 refused because a replaced table
+    would shrink too much (the local inputs look missing; --allow-shrink)."""
+    import json
     import uuid
 
     from twm.config import settings
@@ -1378,7 +1681,21 @@ def publish(
         raise typer.Exit(code=1) from None
     typer.echo(f"target: {tgt.describe()}")
     clock = _clock(now)
-    run_id, started = uuid.uuid4().hex, _clock(None)
+    run_id, started = run_id or uuid.uuid4().hex, _clock(None)
+    extra: dict = {}
+    if notes_file is not None:
+        try:
+            extra = json.loads(_project_path(notes_file).read_text())
+        except (OSError, ValueError) as e:
+            typer.echo(f"not published: --notes-file: {e}", err=True)
+            raise typer.Exit(code=1) from None
+
+    def write_result(payload: dict) -> None:
+        if result_json is not None:
+            path = _project_path(result_json)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, indent=2, default=str) + "\n")
+
     s = settings()
     inputs = col.Inputs(
         warehouse=_project_path(db) if db is not None else s.path("warehouse"),
@@ -1392,9 +1709,10 @@ def publish(
     def fail(message: str, step: str) -> None:
         text = tg.redact(message, tgt.url)
         typer.echo(f"not published: {text}", err=True)
+        write_result({"status": "failed", "run_id": run_id, "step": step, "error": text})
         if not dry_run:
             ok = wr.record_failure_at(
-                tgt, run_id=run_id, started=started, error=text, notes={"step": step}
+                tgt, run_id=run_id, started=started, error=text, notes={"step": step, **extra}
             )
             typer.echo(
                 "the failed run was recorded in pipeline_runs"
@@ -1414,10 +1732,12 @@ def publish(
     try:
         result = wr.publish(
             tgt, data, dry_run=dry_run, allow_incomplete=allow_incomplete, replace_live=weeks,
-            run_id=run_id, started=started,
+            run_id=run_id, started=started, allow_shrink=allow_shrink, notes=extra,
         )  # fmt: skip
     except wr.PublishError as e:
         typer.echo(f"not published (rolled back): {e}", err=True)
+        write_result({"status": "refused" if e.shrink else "failed", "run_id": run_id,
+                      "error": str(e), "recorded": e.recorded})  # fmt: skip
         if not dry_run:
             typer.echo(
                 "the failed run was recorded in pipeline_runs"
@@ -1425,7 +1745,8 @@ def publish(
                 else "(the failure could not be recorded in pipeline_runs)",
                 err=True,
             )
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(code=wr.EXIT_SHRINK_REFUSED if e.shrink else 1) from None
+    write_result(wr.result_json(result, tgt))
     for line in wr.summary_lines(result, tgt)[1:]:
         typer.echo(line)
     if result.skipped:

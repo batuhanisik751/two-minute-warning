@@ -33,11 +33,14 @@ from typing import Any
 import polars as pl
 
 from twm.publish.collect import PublishData
-from twm.publish.tables import REPLACED, TABLES, Table
+from twm.publish.tables import KEEP_ON_CONFLICT, REPLACED, TABLES, Table
 from twm.publish.target import Target, redact
 
 STAGE = "publish"
 EXIT_SKIPPED_INCOMPLETE = 4  # published, but some live lists were incomplete: retry later
+EXIT_SHRINK_REFUSED = 5  # refused: a replaced table would lose too many rows (--allow-shrink)
+HASH_PREFIX = "hash:"  # site_meta keys holding each replaced table's content hash
+HASH_VERSION = "v1"
 # pg_advisory_xact_lock key: any fixed 64-bit number shared by every twm publisher
 LOCK_KEY = 7_274_871_120_260_928
 CONNECT_TIMEOUT_S = 20
@@ -45,11 +48,23 @@ LIVE_KEY = ("season", "week", "position")
 
 
 class PublishError(RuntimeError):
-    """The publish failed; the target was rolled back (see ``recorded``)."""
+    """The publish failed; the target was rolled back (see ``recorded``). ``shrink``: refused
+    by the empty-replacement guard (:class:`ShrinkError`)."""
 
-    def __init__(self, message: str, *, recorded: bool = False) -> None:
+    def __init__(self, message: str, *, recorded: bool = False, shrink: bool = False) -> None:
         super().__init__(message)
         self.recorded = recorded
+        self.shrink = shrink
+
+
+class ShrinkError(PublishError):
+    """A replaced table would lose more than ``max_shrink_share`` of the rows the target holds:
+    the local inputs are probably missing or broken (nothing is written)."""
+
+    step = "shrink_guard"
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, shrink=True)
 
 
 @dataclass
@@ -76,6 +91,7 @@ class PublishResult:
     database_bytes: int
     live: list[LiveDecision]
     warnings: list[str] = field(default_factory=list)
+    unchanged: list[str] = field(default_factory=list)  # replaced tables skipped (same hash)
 
     @property
     def total_bytes(self) -> int:
@@ -141,13 +157,15 @@ def _copy(conn, table: Table, rows: Sequence[tuple]) -> int:
 
 
 def _upsert(conn, table: Table, rows: Sequence[tuple]) -> int:
-    """INSERT ... ON CONFLICT (key) DO UPDATE, only where something changed."""
+    """INSERT ... ON CONFLICT (key) DO UPDATE, only where something changed; returns the rows
+    inserted or changed."""
     from psycopg import sql
 
     if not rows:
         return 0
     cols = [sql.Identifier(c) for c in table.names]
-    rest = [c for c in table.names if c not in table.key]
+    keep = KEEP_ON_CONFLICT.get(table.name, ())
+    rest = [c for c in table.names if c not in table.key and c not in keep]
     stmt = sql.SQL(
         "INSERT INTO {t} ({cols}) VALUES ({vals}) ON CONFLICT ({key}) DO UPDATE SET {sets} "
         "WHERE ({old}) IS DISTINCT FROM ({new})"
@@ -167,7 +185,8 @@ def _upsert(conn, table: Table, rows: Sequence[tuple]) -> int:
     )
     with conn.cursor() as cur:
         cur.executemany(stmt, rows)
-    return len(rows)
+        # rows inserted or changed (psycopg sums executemany's counts); unchanged rows: 0
+        return max(int(cur.rowcount), 0)
 
 
 def _replace(conn, table: Table, rows: Sequence[tuple]) -> int:
@@ -325,13 +344,23 @@ def publish(
     started: datetime | None = None,
     connect: Callable[[Target], Any] = _connect,
     fail_after: str | None = None,
+    allow_shrink: bool = False,
+    max_shrink_share: float | None = None,
+    notes: dict[str, Any] | None = None,
 ) -> PublishResult:
-    """Write ``data`` to ``target`` (module docstring). ``fail_after`` (tests only) raises
-    right after the named step, to prove the rollback."""
+    """Write ``data`` to ``target`` (module docstring). ``allow_shrink`` turns the
+    empty-replacement guard off (``max_shrink_share``: default settings
+    ``publish.max_shrink_share``); ``notes`` are added to the run's pipeline_runs row.
+    ``fail_after`` (tests only) raises right after the named step, to prove the rollback."""
     import psycopg
 
     run_id = run_id or uuid.uuid4().hex
     started = started or _now()
+    if max_shrink_share is None:
+        from twm.config import settings
+
+        max_shrink_share = settings().publish.max_shrink_share
+    extra = dict(notes or {})
     try:
         conn = connect(target)
     except psycopg.Error as e:
@@ -342,16 +371,21 @@ def publish(
         try:
             result = _publish(conn, target, data, dry_run=dry_run,
                               allow_incomplete=allow_incomplete, replace_live=replace_live,
-                              run_id=run_id, started=started, fail_after=fail_after)  # fmt: skip
+                              run_id=run_id, started=started, fail_after=fail_after,
+                              allow_shrink=allow_shrink, max_shrink_share=max_shrink_share,
+                              notes=extra)  # fmt: skip
         except Exception as e:
             message = redact(f"{type(e).__name__}: {e}", target.url)
             recorded = False
             if not dry_run:
                 recorded = record_failure(
                     conn, run_id=run_id, started=started, target=target.name, error=message,
-                    data_as_of=data.data_as_of, notes={"step": getattr(e, "step", None)},
+                    data_as_of=data.data_as_of,
+                    notes={"step": getattr(e, "step", None), **extra},
                 )  # fmt: skip
-            raise PublishError(message, recorded=recorded) from None
+            raise PublishError(
+                message, recorded=recorded, shrink=isinstance(e, ShrinkError)
+            ) from None
     finally:
         conn.close()
     return result
@@ -361,6 +395,69 @@ class _StepError(RuntimeError):
     def __init__(self, step: str) -> None:
         super().__init__(f"forced failure after {step} (test)")
         self.step = step
+
+
+# --------------------------------------------------------------------------------------
+# The empty-replacement guard and the unchanged-table skip (reviewer's rules after E2)
+# --------------------------------------------------------------------------------------
+
+# The replaced tables, as the guard and the hashes see them: the backtest part of the lists
+# (live lists are frozen, never replaced) and every "replace" table except site_meta.
+GUARDED = ("radar_list", "radar_pick", "radar_outcome", "track_record", "tier_stats",
+           "player_week_summary", "glossary")  # fmt: skip
+BACKTEST_ONLY = {"radar_list", "radar_pick"}
+# hash units: the backtest lists and picks are written (or skipped) together
+UNITS = ("backtest_lists", "radar_outcome", "track_record", "tier_stats", "player_week_summary",
+         "glossary")  # fmt: skip
+
+
+def _jsonable(v: Any) -> Any:
+    if isinstance(v, datetime):
+        return v.isoformat()
+    return str(v)
+
+
+def content_hash(*frames: pl.DataFrame) -> str:
+    """A version-tagged sha256 of the frames' columns and rows (in order), from each row's
+    canonical JSON: the same rows give the same hash, whatever the library versions."""
+    import hashlib
+
+    h = hashlib.sha256()
+    for df in frames:
+        h.update(json.dumps(list(df.columns)).encode())
+        for row in df.iter_rows():
+            h.update(json.dumps(row, default=_jsonable, separators=(",", ":")).encode())
+            h.update(b"\n")
+    return f"{HASH_VERSION}:{h.hexdigest()}"
+
+
+def target_counts(conn) -> dict[str, int]:
+    """Rows the target holds now in each guarded table (lists and picks: backtest only)."""
+    out = {}
+    for name in GUARDED:
+        where = " WHERE kind = 'backtest'" if name in BACKTEST_ONLY else ""
+        out[name] = int(conn.execute(f'SELECT count(*) FROM "{name}"{where}').fetchone()[0])
+    return out
+
+
+def shrink_problems(current: dict[str, int], new: dict[str, int], share: float) -> list[str]:
+    """Tables that would lose more than ``share`` of the rows the target holds."""
+    problems = []
+    for name in GUARDED:
+        cur, nxt = current.get(name, 0), new.get(name, 0)
+        if cur > 0 and nxt < cur * (1 - share):
+            what = f"{name} (backtest rows)" if name in BACKTEST_ONLY else name
+            problems.append(
+                f"{what} would go from {cur:,} to {nxt:,} rows ({(nxt - cur) / cur:+.1%})"
+            )
+    return problems
+
+
+def stored_hashes(conn) -> dict[str, str]:
+    rows = conn.execute(
+        "SELECT key, value FROM site_meta WHERE key LIKE %s", [HASH_PREFIX + "%"]
+    ).fetchall()
+    return {str(k)[len(HASH_PREFIX) :]: str(v) for k, v in rows}
 
 
 def _publish(
@@ -374,6 +471,9 @@ def _publish(
     run_id: str,
     started: datetime,
     fail_after: str | None,
+    allow_shrink: bool = False,
+    max_shrink_share: float = 0.10,
+    notes: dict[str, Any] | None = None,
 ) -> PublishResult:
     import psycopg
 
@@ -383,30 +483,81 @@ def _publish(
 
     written: dict[str, int] = {}
     warnings = list(data.warnings)
+    unchanged: list[str] = []
     result: PublishResult | None = None
+    weeks = sorted(set(replace_live))
+    t = data.tables
+    key = list(LIVE_KEY)
+    okey = ["season", "week", "gsis_id"]
     # one transaction: any exception rolls it back
     with conn.transaction():
         conn.execute("SELECT pg_advisory_xact_lock(%s)", [LOCK_KEY])
         check_schema(conn)
         published = target_live(conn)
         decisions, live_keys = plan_live(
-            data, published, allow_incomplete=allow_incomplete, replace_live=replace_live
+            data, published, allow_incomplete=allow_incomplete, replace_live=weeks
         )
         step("plan")
-        t = data.tables
+        # what the replaced tables will hold (computed before anything is written)
+        back = data.lists.filter(pl.col("kind") == "backtest")
+        back_picks = data.picks.filter(pl.col("kind") == "backtest")
+        kept_live = pl.DataFrame(
+            conn.execute(
+                "SELECT DISTINCT season, week, gsis_id FROM radar_pick WHERE kind = 'live'"
+            ).fetchall(),
+            schema={"season": pl.Int32, "week": pl.Int32, "gsis_id": pl.String}, orient="row",
+        )  # fmt: skip
+        if weeks:  # the live weeks being replaced keep only the local picks
+            gone = pl.DataFrame(weeks, schema={"season": pl.Int32, "week": pl.Int32},
+                                orient="row")  # fmt: skip
+            kept_live = kept_live.join(gone, on=["season", "week"], how="anti")
+        keys = pl.concat([data.outcome_keys.select(okey), kept_live]).unique()
+        outcomes = data.outcome_source.join(keys, on=okey).sort(okey)
+        frames = {"radar_outcome": outcomes, **{n: t[n] for n in REPLACED if n in t}}
+        new_counts = {"radar_list": back.height, "radar_pick": back_picks.height,
+                      **{n: frames[n].height for n in GUARDED if n in frames}}  # fmt: skip
+        # 1. the empty-replacement guard
+        current = target_counts(conn)
+        problems = shrink_problems(current, new_counts, max_shrink_share)
+        if problems and not allow_shrink:
+            raise ShrinkError(
+                "refused: " + "; ".join(problems) + f". A replaced table may lose at most "
+                f"{max_shrink_share:.0%} of its rows (settings publish.max_shrink_share): the "
+                "local inputs look missing or incomplete. Nothing was written; if the drop is "
+                "intended, publish again with --allow-shrink."
+            )
+        if problems:
+            warnings += [f"--allow-shrink: {p}" for p in problems]
+        step("guard")
+        # 2. content hashes: an unchanged table is not rewritten
+        hashes = {
+            "backtest_lists": content_hash(
+                back.drop("generated_at"), back_picks.select(TABLES["radar_pick"].names)
+            ),
+            **{n: content_hash(frames[n].select(TABLES[n].names)) for n in UNITS[1:]},
+        }  # fmt: skip
+        before = stored_hashes(conn)
+
+        def same(unit: str, *tables: str) -> bool:
+            return before.get(unit) == hashes[unit] and all(
+                current[n] == new_counts[n] for n in tables
+            )
+
         for name in ("model_versions", "dim_team", "dim_player"):
             written[name] = _upsert(conn, TABLES[name], rows_of(t[name], TABLES[name]))
         step("upsert")
-        # backtest lists: replaced
-        conn.execute("DELETE FROM radar_pick WHERE kind = 'backtest'")
-        conn.execute("DELETE FROM radar_list WHERE kind = 'backtest'")
-        back = data.lists.filter(pl.col("kind") == "backtest")
-        back_picks = data.picks.filter(pl.col("kind") == "backtest")
-        n_lists = _copy(conn, TABLES["radar_list"], rows_of(back, TABLES["radar_list"]))
-        n_picks = _copy(conn, TABLES["radar_pick"], rows_of(back_picks, TABLES["radar_pick"]))
+        # backtest lists: replaced (unless unchanged)
+        n_lists = n_picks = 0
+        if same("backtest_lists", "radar_list", "radar_pick"):
+            unchanged.append("backtest_lists")
+        else:
+            conn.execute("DELETE FROM radar_pick WHERE kind = 'backtest'")
+            conn.execute("DELETE FROM radar_list WHERE kind = 'backtest'")
+            n_lists = _copy(conn, TABLES["radar_list"], rows_of(back, TABLES["radar_list"]))
+            n_picks = _copy(conn, TABLES["radar_pick"], rows_of(back_picks, TABLES["radar_pick"]))
         step("backtest_lists")
         # live lists: frozen; only new ones (and named replacements) are written
-        for s, w in sorted(set(replace_live)):
+        for s, w in weeks:
             conn.execute(
                 "DELETE FROM radar_pick WHERE kind = 'live' AND season = %s AND week = %s",
                 [s, w],
@@ -415,22 +566,19 @@ def _publish(
                 "DELETE FROM radar_list WHERE kind = 'live' AND season = %s AND week = %s",
                 [s, w],
             )
-        key = list(LIVE_KEY)
         live = data.lists.filter(pl.col("kind") == "live").join(live_keys, on=key)
         live_picks = data.picks.filter(pl.col("kind") == "live").join(live_keys, on=key)
         n_lists += _copy(conn, TABLES["radar_list"], rows_of(live, TABLES["radar_list"]))
         n_picks += _copy(conn, TABLES["radar_pick"], rows_of(live_picks, TABLES["radar_pick"]))
         written["radar_list"], written["radar_pick"] = n_lists, n_picks
         step("live_lists")
-        # outcomes: every pick in the target (frozen live lists included) + the local keys
+        # outcomes (every pick in the target, frozen live lists included) and the other tables
         target_keys = pl.DataFrame(
             conn.execute("SELECT DISTINCT season, week, gsis_id FROM radar_pick").fetchall(),
             schema={"season": pl.Int32, "week": pl.Int32, "gsis_id": pl.String},
             orient="row",
         )
-        keys = pl.concat([data.outcome_keys, target_keys]).unique()
-        outcomes = data.outcome_source.join(keys, on=["season", "week", "gsis_id"])
-        no_outcome = target_keys.join(outcomes, on=["season", "week", "gsis_id"], how="anti")
+        no_outcome = target_keys.join(outcomes, on=okey, how="anti")
         if no_outcome.height:
             r = no_outcome.row(0, named=True)
             warnings.append(
@@ -438,19 +586,17 @@ def _publish(
                 f"(e.g. {r['gsis_id']} in {r['season']} week {r['week']}); the site shows "
                 "them without an outcome"
             )
-        written["radar_outcome"] = _replace(
-            conn, TABLES["radar_outcome"],
-            rows_of(outcomes.sort("season", "week", "gsis_id"), TABLES["radar_outcome"]),
-        )  # fmt: skip
-        for name in REPLACED:
-            if name in ("radar_outcome", "site_meta"):
+        for name in UNITS[1:]:
+            if same(name, name):
+                unchanged.append(name)
+                written[name] = 0
                 continue
-            written[name] = _replace(conn, TABLES[name], rows_of(t[name], TABLES[name]))
+            written[name] = _replace(conn, TABLES[name], rows_of(frames[name], TABLES[name]))
         step("replace")
         meta = dict(data.meta)
         meta.update(_latest_lists(conn))
-        meta_rows = sorted(meta.items())
-        written["site_meta"] = _replace(conn, TABLES["site_meta"], meta_rows)
+        meta.update({HASH_PREFIX + u: h for u, h in hashes.items()})
+        written["site_meta"] = _replace(conn, TABLES["site_meta"], sorted(meta.items()))
         counts = {
             name: int(conn.execute(f'SELECT count(*) FROM "{name}"').fetchone()[0])
             for name in TABLES
@@ -461,14 +607,14 @@ def _publish(
         result = PublishResult(
             run_id=run_id, target=target.name, dry_run=dry_run, written=written,
             counts=counts, sizes=sizes, database_bytes=db_bytes, live=decisions,
-            warnings=warnings,
+            warnings=warnings, unchanged=unchanged,
         )  # fmt: skip
         step("before_commit")
         if dry_run:
             raise psycopg.Rollback()
         _insert_run(
             conn, run_id=run_id, started=started, status="success", target=target.name,
-            data_as_of=data.data_as_of, notes=_run_notes(result),
+            data_as_of=data.data_as_of, notes={**_run_notes(result), **(notes or {})},
         )  # fmt: skip
         written["pipeline_runs"] = 1
     assert result is not None
@@ -512,6 +658,7 @@ def _run_notes(result: PublishResult) -> dict[str, Any]:
         "written": result.written,
         "live": by,
         "warnings": result.warnings,
+        "unchanged": result.unchanged,
     }
 
 
@@ -524,6 +671,7 @@ def _insert_run(
     target: str,
     data_as_of: datetime | None,
     notes: dict[str, Any],
+    stage: str = STAGE,
 ) -> None:
     from psycopg.types.json import Jsonb
 
@@ -534,7 +682,7 @@ def _insert_run(
     conn.execute(
         "INSERT INTO pipeline_runs (run_id, started_at, finished_at, status, stage, git_sha, "
         "data_as_of, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-        [run_id, started, _now(), status, STAGE, sha, data_as_of,
+        [run_id, started, _now(), status, stage, sha, data_as_of,
          Jsonb({"target": target, **notes})],
     )  # fmt: skip
 
@@ -548,9 +696,11 @@ def record_failure(
     error: str,
     data_as_of: datetime | None = None,
     notes: dict[str, Any] | None = None,
+    stage: str = STAGE,
 ) -> bool:
-    """Append a 'failed' pipeline_runs row in its own transaction; False when that is not
-    possible either (e.g. the tables do not exist yet)."""
+    """Append a 'failed' pipeline_runs row in its own transaction (``stage``: the stage that
+    failed, e.g. 'ingest' for the scheduled pipeline); False when that is not possible either
+    (e.g. the tables do not exist yet)."""
     import psycopg
 
     try:
@@ -559,6 +709,7 @@ def record_failure(
                 conn, run_id=run_id, started=started, status="failed", target=target,
                 data_as_of=data_as_of,
                 notes={"error": error[:2000], **{k: v for k, v in (notes or {}).items() if v}},
+                stage=stage,
             )  # fmt: skip
         return True
     except psycopg.Error:
@@ -604,10 +755,12 @@ def summary_lines(result: PublishResult, target: Target) -> list[str]:
             lines += [f"  {d.label}: {d.detail}" for d in these if d.detail]
     width = max(len(n) for n in TABLES)
     lines.append(f"{'table':<{width}}  {'rows now':>10}  {'written':>9}  {'size':>9}")
+    notes = table_notes(result)
     for name in TABLES:
         lines.append(
             f"{name:<{width}}  {result.counts.get(name, 0):>10,}  "
             f"{result.written.get(name, 0):>9,}  {_mb(result.sizes.get(name, 0)):>9}"
+            + (f"  {notes[name]}" if notes.get(name) else "")
         )
     lines.append(
         f"total size of these tables: {_mb(result.total_bytes)} (whole database "
@@ -617,6 +770,34 @@ def summary_lines(result: PublishResult, target: Target) -> list[str]:
     if not result.dry_run:
         lines.append(f"pipeline run {result.run_id}: success")
     return lines
+
+
+def table_notes(result: PublishResult) -> dict[str, str]:
+    """Per table: 'unchanged (not rewritten)' where the content hash matched."""
+    out = {}
+    for unit in result.unchanged:
+        names = ("radar_list", "radar_pick") if unit == "backtest_lists" else (unit,)
+        for n in names:
+            out[n] = "backtest rows unchanged (not rewritten)" if unit == "backtest_lists" \
+                else "unchanged (not rewritten)"  # fmt: skip
+    return out
+
+
+def result_json(result: PublishResult, target: Target) -> dict[str, Any]:
+    """The machine-readable summary (``twm publish --result-json``; the pipeline's job summary
+    reads it). No connection string: the target is described by host and database only."""
+    by: dict[str, list[str]] = {}
+    for d in result.live:
+        by.setdefault(d.action, []).append(d.label)
+    notes = table_notes(result)
+    return {
+        "status": "dry_run" if result.dry_run else "success", "run_id": result.run_id,
+        "target": target.describe(), "live": by, "warnings": result.warnings,
+        "unchanged": result.unchanged, "database_bytes": result.database_bytes,
+        "tables": {n: {"rows": result.counts.get(n, 0), "written": result.written.get(n, 0),
+                       "bytes": result.sizes.get(n, 0), "note": notes.get(n, "")}
+                   for n in TABLES},
+    }  # fmt: skip
 
 
 def _mb(n: int) -> str:

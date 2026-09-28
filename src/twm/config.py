@@ -309,6 +309,80 @@ class AsOfConfig(BaseModel):
         return v
 
 
+def _weekday_time(name: str, v: str) -> tuple[str, str]:
+    """'tuesday 15:17' -> ('tuesday', '15:17'), validated."""
+    parts = str(v).strip().lower().split()
+    if len(parts) != 2 or parts[0] not in WEEKDAY_KEYS:
+        raise ValueError(f"{name} {v!r} is not '<weekday> HH:MM' (e.g. 'tuesday 15:17')")
+    return parts[0], _check_hhmm(name, parts[1])
+
+
+class SeasonWindow(BaseModel):
+    """``pipeline.season_window``: the job runs every night from ``days_before_first_game`` days
+    before the current season's first regular-season game day to ``days_after_last_game`` days
+    after its last one (the dates come from the schedule, never typed here)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    days_before_first_game: int = 7
+    days_after_last_game: int = 10
+
+
+class PipelineConfig(BaseModel):
+    """``pipeline:`` in settings.yaml: the scheduled job (step E4, `twm pipeline run`,
+    .github/workflows/pipeline.yml; docs/deploy.md 'The scheduled pipeline'). The workflow's
+    cron lines must match ``nightly`` and ``retry_attempts`` (tests/test_workflows.py)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    season_window: SeasonWindow = SeasonWindow()
+    offseason_weekday: str = "tuesday"
+    nightly: str = "10:47"
+    retry_attempts: list[str] = ["tuesday 15:17", "tuesday 18:47", "tuesday 21:17",
+                                 "wednesday 03:17"]  # fmt: skip
+    build_start: int = 2012
+
+    @field_validator("offseason_weekday")
+    @classmethod
+    def _offseason_weekday(cls, v: str) -> str:
+        if v.strip().lower() not in WEEKDAY_KEYS:
+            raise ValueError(f"pipeline.offseason_weekday {v!r} is not a weekday name")
+        return v.strip().lower()
+
+    @field_validator("nightly")
+    @classmethod
+    def _nightly(cls, v: str) -> str:
+        return _check_hhmm("pipeline.nightly", v)
+
+    @field_validator("retry_attempts")
+    @classmethod
+    def _attempts(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("pipeline.retry_attempts needs at least one attempt")
+        return [" ".join(_weekday_time("pipeline.retry_attempts", a)) for a in v]
+
+    def attempts(self) -> list[tuple[str, str]]:
+        """The retry attempts as (weekday, 'HH:MM')."""
+        return [_weekday_time("pipeline.retry_attempts", a) for a in self.retry_attempts]
+
+
+class PublishConfig(BaseModel):
+    """``publish:`` in settings.yaml (`twm publish`, docs/deploy.md)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # A replaced table may lose at most this share of the rows the target holds; a bigger drop
+    # means the local inputs are missing or broken, and the publish is refused (--allow-shrink).
+    max_shrink_share: float = 0.10
+
+    @field_validator("max_shrink_share")
+    @classmethod
+    def _share(cls, v: float) -> float:
+        if not 0 <= v < 1:
+            raise ValueError(f"publish.max_shrink_share must be in [0, 1), not {v}")
+        return v
+
+
 class Settings(BaseModel):
     project_name: str
     current_season: int
@@ -319,6 +393,8 @@ class Settings(BaseModel):
     neutral: NeutralConfig
     paths: Paths
     availability: AvailabilityConfig
+    pipeline: PipelineConfig = PipelineConfig()
+    publish: PublishConfig = PublishConfig()
 
     def path(self, key: str) -> Path:
         return ROOT / getattr(self.paths, key)

@@ -1,0 +1,10 @@
+# The owner-approved production models (step E4; src/twm/pins.py, docs/deploy.md
+# "The approved model"). The scheduled job scores ONLY with the file named here, after checking
+# its sha256 and the version inside. Written by `uv run twm model pin` (or copied from the
+# retrain workflow's artifact after review); change it only by committing a reviewed model.
+waiver_radar:
+  season: 2026
+  model_version: logit-5828a082c9e09093
+  file: artifacts/production_models/waiver_radar/logit-5828a082c9e09093.joblib
+  sha256: d00cc925b07b9ede248a0671ab7394b0fbbd1268a092d1a9a5346fd3a862ecce
+  approved: '2026-09-28'

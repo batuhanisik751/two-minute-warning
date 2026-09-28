@@ -1,0 +1,72 @@
+# Retrain the Waiver Radar production model for review (step E4; PROJECT_SPEC 9: retraining
+# is a manual workflow with a review step). docs/deploy.md "The approved model".
+#
+# Manual only. It trains a candidate on fresh data and uploads, as an artifact: the model file
+# and its pin laid out like the repository (artifacts/production_models/...,
+# config/production_models.yaml) and retrain_report.md comparing it with the approved model.
+# It NEVER commits (permissions: contents: read) and never publishes: the scheduled pipeline
+# keeps using the approved model until the owner reviews the candidate and commits it.
+name: Retrain (manual, for review)
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season the model will score (empty: current_season in settings.yaml)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retrain
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # every `uv run` uses the locked runtime dependencies only (no dev tools)
+    env:
+      UV_NO_DEV: "1"
+      UV_LOCKED: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync
+
+      # Read-only use of the pipeline's nflverse cache (this workflow never saves it).
+      - name: Cache key
+        id: key
+        run: echo "raw=nflverse-raw-v1-$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        with:
+          path: data/raw
+          key: ${{ steps.key.outputs.raw }}
+          restore-keys: nflverse-raw-v1-
+
+      - name: Train the candidate
+        env:
+          SEASON_INPUT: ${{ inputs.season }}
+        run: |
+          season="${SEASON_INPUT:-$(uv run python -c 'from twm.config import settings; print(settings().current_season)')}"
+          start="$(uv run python -c 'from twm.config import settings; print(settings().pipeline.build_start)')"
+          uv run twm ingest
+          uv run twm ingest --start "$season" --force
+          uv run twm build --start "$start" --end "$season"
+          uv run twm radar dataset --end "$season"
+          uv run twm model candidate waiver_radar --season "$season" --out "$RUNNER_TEMP/candidate"
+          cat "$RUNNER_TEMP/candidate/retrain_report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the candidate for review
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: retrain-candidate-${{ github.run_id }}
+          path: ${{ runner.temp }}/candidate
+          retention-days: 90
+          if-no-files-found: warn

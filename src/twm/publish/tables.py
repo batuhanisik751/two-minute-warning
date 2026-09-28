@@ -51,6 +51,10 @@ def _t(name: str, key: tuple[str, ...], mode: Mode, *cols: tuple[str, str]) -> T
 
 
 TS = "timestamptz"
+# Upserted columns that keep their first-published value when the row already exists: the
+# scheduled job rebuilds the backtest every run, which stamps each model version with a new
+# created_at; the version (its key) is the same model, so it was created when first published.
+KEEP_ON_CONFLICT: dict[str, tuple[str, ...]] = {"model_versions": ("created_at",)}
 TABLES: dict[str, Table] = {
     t.name: t
     for t in (

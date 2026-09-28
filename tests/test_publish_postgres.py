@@ -11,6 +11,7 @@ where they fail.
 from __future__ import annotations
 
 import csv
+import json
 import os
 import uuid
 from collections.abc import Iterator
@@ -451,4 +452,153 @@ def test_generated_at_is_the_clock(db: tg.Target, tmp_path: Path) -> None:
     publish(db, syn.inputs)
     meta = dict(rows(db, "SELECT key, value FROM site_meta"))
     assert meta["generated_at"].startswith("2026-10-06T15:00") and meta["current_week"] == "3"
+    assert meta["current_as_of"] == "2026-09-29T14:00:00+00:00"  # week 3's Tuesday as-of
     assert pl.DataFrame(rows(db, "SELECT kind FROM radar_list"), orient="row").height == 28
+
+
+# --------------------------------------------------------------------------------------
+# The empty-replacement guard and unchanged tables (reviewer's rules after E2)
+# --------------------------------------------------------------------------------------
+
+
+def _xmins(target: tg.Target, table: str) -> set:
+    """The row versions of a table: a rewritten row gets a new xmin."""
+    return {r[0] for r in rows(target, f'SELECT xmin::text FROM "{table}"')}
+
+
+def _truncate_csv(path: Path, keep: int) -> None:
+    lines = path.read_text().splitlines()
+    path.write_text("\n".join(lines[: 1 + keep]) + "\n")
+
+
+def test_an_empty_or_much_smaller_replacement_is_refused(db: tg.Target, tmp_path: Path) -> None:
+    syn = ps.build(tmp_path, live_weeks=(1,))
+    publish(db, syn.inputs)
+    before = dump(db)
+    # an empty replacement (e.g. a run whose inputs went missing) never wipes the target
+    data = col.collect(syn.inputs)
+    data.tables["player_week_summary"] = data.tables["player_week_summary"].head(0)
+    with pytest.raises(wr.PublishError, match="player_week_summary would go from 64 to 0") as e:
+        wr.publish(db, data, run_id="shrink-1")
+    assert e.value.shrink and e.value.recorded
+    assert dump(db) == before
+    failed = rows(db, "SELECT status, notes FROM pipeline_runs WHERE run_id = 'shrink-1'")
+    assert failed[0][0] == "failed" and failed[0][1]["step"] == "shrink_guard"
+    # a drop above the share (5 of 6 track_record rows: -83%) is refused too; at or below it
+    # (max_shrink_share) it goes through
+    _truncate_csv(syn.inputs.evaluation_csv, 1)
+    with pytest.raises(wr.PublishError, match=r"track_record would go from 6 to 1 rows"):
+        publish(db, syn.inputs)
+    assert dump(db) == before
+    res = publish(db, syn.inputs, max_shrink_share=0.9)
+    assert res.counts["track_record"] == 1
+    # --allow-shrink: the owner's explicit override, reported as a warning
+    res = publish(db, syn.inputs, allow_shrink=True)
+    assert res.counts["track_record"] == 1
+
+
+def test_the_shrink_guard_exit_code(db: tg.Target, tmp_path: Path, monkeypatch) -> None:
+    from typer.testing import CliRunner
+
+    from twm.cli import app
+
+    monkeypatch.setattr(tg, "default_env_file", lambda: NO_ENV_FILE)
+    monkeypatch.setenv(tg.LOCAL_ENV, db.url)
+    syn = ps.build(tmp_path, live_weeks=(1,))
+    i = syn.inputs
+    args = ["publish", "--target", "local", "--db", str(i.warehouse), "--store", str(i.store),
+            "--dataset", str(i.dataset), "--evaluation", str(i.evaluation_csv),
+            "--now", "2026-09-28T20:00:00", "--result-json", str(tmp_path / "r.json")]  # fmt: skip
+    runner = CliRunner()
+    assert runner.invoke(app, args).exit_code == 0
+    _truncate_csv(i.evaluation_csv, 2)
+    res = runner.invoke(app, args)
+    assert res.exit_code == wr.EXIT_SHRINK_REFUSED, res.output
+    assert "--allow-shrink" in res.output
+    assert json.loads((tmp_path / "r.json").read_text())["status"] == "refused"
+    res = runner.invoke(app, [*args, "--allow-shrink"])
+    assert res.exit_code == 0, res.output
+    assert json.loads((tmp_path / "r.json").read_text())["tables"]["track_record"]["rows"] == 2
+
+
+def test_unchanged_tables_are_not_rewritten(db: tg.Target, tmp_path: Path) -> None:
+    syn = ps.build(tmp_path, live_weeks=(1,))
+    first = publish(db, syn.inputs)
+    assert first.unchanged == []  # an empty target: everything is written
+    meta = dict(rows(db, "SELECT key, value FROM site_meta"))
+    units = ("backtest_lists", "radar_outcome", "track_record", "tier_stats",
+             "player_week_summary", "glossary")  # fmt: skip
+    assert all(meta[f"hash:{u}"].startswith("v1:") for u in units)
+    names = ("radar_pick", "radar_outcome", "track_record", "glossary", "player_week_summary")
+    versions = {n: _xmins(db, n) for n in names}
+    content = dump(db)
+    # 1. the same inputs again: nothing replaced is rewritten
+    res = publish(db, syn.inputs)
+    assert res.unchanged == list(units)
+    assert all(res.written[u] == 0 for u in units[1:]) and res.written["radar_pick"] == 0
+    # the upserts count only rows inserted or changed: none
+    assert [res.written[n] for n in ("model_versions", "dim_team", "dim_player")] == [0, 0, 0]
+    assert first.written["dim_team"] == 4
+    assert {n: _xmins(db, n) for n in names} == versions
+    assert dump(db) == content
+    assert any("unchanged (not rewritten)" in line for line in wr.summary_lines(res, db))
+    # 2. one input changes: only its table is rewritten
+    _truncate_csv(syn.inputs.evaluation_csv, 6)  # same rows...
+    with syn.inputs.evaluation_csv.open() as f:
+        text = f.read().replace("0.478279", "0.478280")  # ...one value differs
+    syn.inputs.evaluation_csv.write_text(text)
+    res = publish(db, syn.inputs)
+    assert "track_record" not in res.unchanged and res.written["track_record"] == 6
+    assert _xmins(db, "track_record") != versions["track_record"]
+    assert _xmins(db, "glossary") == versions["glossary"]
+    # 3. a table changed behind the publisher's back (rows deleted) is rewritten, hash or not
+    with psycopg.connect(db.url, autocommit=True) as conn:
+        conn.execute("DELETE FROM glossary WHERE name IN (SELECT name FROM glossary LIMIT 3)")
+    res = publish(db, syn.inputs)
+    assert "glossary" not in res.unchanged
+    assert rows(db, "SELECT count(*) FROM glossary")[0][0] == len(col.glossary())
+
+
+def test_a_pipeline_stage_failure_is_recorded_with_its_stage(db: tg.Target) -> None:
+    from datetime import UTC
+
+    ok = wr.record_failure_at(
+        db, run_id="gh-1-1", started=datetime(2026, 9, 29, 15, 17, tzinfo=UTC),
+        error="ingest failed: downloads failed twice", notes={"step": "ingest"}, stage="ingest",
+    )  # fmt: skip
+    assert ok
+    got = rows(db, "SELECT run_id, status, stage, notes FROM pipeline_runs")
+    assert got[0][:3] == ("gh-1-1", "failed", "ingest") and got[0][3]["step"] == "ingest"
+
+
+def test_publish_notes_and_run_id_reach_the_run_log(db: tg.Target, tmp_path: Path) -> None:
+    syn = ps.build(tmp_path, live_weeks=(1,))
+    publish(db, syn.inputs, run_id="gh-7-1", notes={"pipeline": {"week": 3, "score": "late"}})
+    got = rows(db, "SELECT run_id, status, notes FROM pipeline_runs")
+    assert got[0][:2] == ("gh-7-1", "success")
+    assert got[0][2]["pipeline"] == {"week": 3, "score": "late"} and "unchanged" in got[0][2]
+
+
+def test_a_model_version_keeps_its_first_created_at(db: tg.Target) -> None:
+    """The scheduled job rebuilds the backtest every run (a new created_at for the same model
+    version): the upsert keeps the first-published created_at and counts nothing changed."""
+    from datetime import UTC
+
+    from psycopg.types.json import Jsonb
+
+    table = TABLES["model_versions"]
+
+    def row(created: datetime, params: dict) -> tuple:
+        return ("logit-test", "waiver_radar", "logit", "y_hit", [2014, 2015], 2016,
+                ["a", "b"], Jsonb(params), created)  # fmt: skip
+
+    first = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
+    later = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
+    with psycopg.connect(db.url) as conn:
+        assert wr._upsert(conn, table, [row(first, {"C": 1})]) == 1
+        assert wr._upsert(conn, table, [row(later, {"C": 1})]) == 0  # only created_at differs
+        assert wr._upsert(conn, table, [row(later, {"C": 2})]) == 1  # a real change
+        got = conn.execute(
+            "SELECT created_at, params FROM model_versions WHERE model_version = 'logit-test'"
+        ).fetchone()
+    assert got[0] == first and got[1] == {"C": 2}

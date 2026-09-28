@@ -4,11 +4,13 @@ Sources (all opened read-only):
 
 - the **predictions store** (``data/predictions.duckdb``): the Waiver Radar lists. For the
   winner (``logit`` for ``y_hit``, :mod:`twm.modules.waiver_radar.production`): the walk-forward
-  backtest lists of the evaluation seasons (2014-2025; no chance, no reasons: the backtest never
-  made them) and every list of the current season (C6: live or reconstructed, with the chance,
-  its range, the priority and the reasons). Of each list the top 25 are published, plus the
-  pool size. The priority table (``tier_stats``) is rebuilt from the same backtest exactly as
-  the weekly report builds it (:func:`twm.modules.waiver_radar.confidence.from_store`);
+  backtest lists of the evaluation seasons (2014-2025; their chance, range and priority computed
+  walk-forward from the seasons before each list's own, :func:`backtest_chances`; no reasons: the
+  backtest never made them) and every list of the current season (C6: live or reconstructed,
+  with the chance, its range, the priority and the reasons). Of each list the top 25 are
+  published, plus the pool size. The priority table (``tier_stats``) is rebuilt from the same
+  backtest exactly as the weekly report builds it
+  (:func:`twm.modules.waiver_radar.confidence.from_store`);
 - the **dataset** (``data/waiver_radar/dataset.parquet``): each pick's team (the team at the
   as-of, as in the weekly report) and the outcomes (labels and the weekly finishes in the
   window). Outcomes are published for every pick and for every dataset row of the current
@@ -280,6 +282,50 @@ def radar_lists(
     )
 
 
+def backtest_chances(store: Path, picks: pl.DataFrame) -> pl.DataFrame:
+    """The chance, its range and the priority of every published 'backtest' pick that has
+    none, computed the point-in-time way (E1 decision: the site shows the chance): for a list
+    of season S, from the backtest predictions of the seasons before S only, with the same
+    code the weekly list uses (:func:`twm.modules.waiver_radar.confidence.from_store` with
+    :func:`~twm.modules.waiver_radar.confidence.seasons_before`, then ``band`` and
+    ``tier_of``), so no list's chance rests on its own or later outcomes. Lists of the first
+    backtest season (2014) have no earlier season and keep NULL; reasons stay empty (the
+    backtest never made them)."""
+    from twm.modules.waiver_radar import confidence as cf
+    from twm.modules.waiver_radar.production import LABEL, MODEL
+
+    todo = picks.filter((pl.col("kind") == "backtest") & pl.col("chance").is_null())
+    if todo.height == 0:
+        return picks
+    parts = []
+    for season in sorted({int(x) for x in todo.get_column("season").unique().to_list()}):
+        try:
+            conf = cf.from_store(store, model=MODEL, label=LABEL, seasons=cf.seasons_before(season))
+        except ValueError:  # no earlier backtest season (or none stored): stays NULL
+            continue
+        sub = todo.filter(pl.col("season") == season)
+        bands = [_band(cf.band_json(r)) for r in conf.band(sub.get_column("model_prob").to_numpy())
+                 .iter_rows(named=True)]  # fmt: skip
+        parts.append(
+            sub.select("season", "week", "position", "kind", "rank").with_columns(
+                pl.Series("_chance", [b[0] for b in bands], dtype=pl.Float64),
+                pl.Series("_low", [b[1] for b in bands], dtype=pl.Float64),
+                pl.Series("_high", [b[2] for b in bands], dtype=pl.Float64),
+                pl.Series("_tier", [cf.tier_of(b[0]) for b in bands], dtype=pl.String),
+            )
+        )
+    if not parts:
+        return picks
+    key = ["season", "week", "position", "kind", "rank"]
+    filled = picks.join(pl.concat(parts), on=key, how="left")
+    return filled.with_columns(
+        pl.coalesce("chance", "_chance").alias("chance"),
+        pl.coalesce("chance_low", "_low").alias("chance_low"),
+        pl.coalesce("chance_high", "_high").alias("chance_high"),
+        pl.coalesce("tier", "_tier").alias("tier"),
+    ).select(list(PICK_SCHEMA))
+
+
 def position_notes(csv_path: Path, seasons: Sequence[int]) -> dict[int, dict[str, str]]:
     """The weekly report's position notes (e.g. the QB caveat) per season: only for seasons
     the evaluation does not cover (the same rule as the report: a list never quotes outcomes
@@ -456,8 +502,9 @@ def dim_player(con, ids: Sequence[str], fallback_names: pl.DataFrame) -> pl.Data
 
 def data_freshness(con, season: int, now: datetime) -> tuple[datetime | None, dict[str, str]]:
     """(data_as_of, meta): the estimated public time of the newest final score in the
-    warehouse, the season/week it belongs to, when the warehouse was built, and the current
-    week (the latest regular-season week of ``season`` whose Tuesday as-of has passed)."""
+    warehouse, the season/week it belongs to, when the warehouse was built, the current week
+    (the latest regular-season week of ``season`` whose Tuesday as-of has passed) and its
+    official as-of (``current_as_of``)."""
     meta: dict[str, str] = {}
     row = con.execute(
         "SELECT available_at, season, week FROM fact_game WHERE result IS NOT NULL "
@@ -478,6 +525,13 @@ def data_freshness(con, season: int, now: datetime) -> tuple[datetime | None, di
         [season, now.astimezone(UTC).replace(tzinfo=None)],
     ).fetchone()
     meta["current_week"] = "" if week is None or week[0] is None else str(week[0])
+    # the official Tuesday as-of of (season, current week), as twm.asof.weekly_as_of gives it
+    # (ISO 8601 UTC; empty before the season's first as-of)
+    meta["current_as_of"] = ""
+    if meta["current_week"]:
+        from twm.asof import weekly_as_of
+
+        meta["current_as_of"] = weekly_as_of(con, season, int(meta["current_week"])).isoformat()
     return data_as_of, meta
 
 
@@ -630,6 +684,7 @@ def collect(inputs: Inputs) -> PublishData:
     rows = choose_lists(store_list_rows(inputs.store, season))
     notes = position_notes(inputs.evaluation_csv, rows.get_column("season").unique().to_list())
     lists, picks = radar_lists(rows, dataset.select("season", "week", "gsis_id", "team"), notes)
+    picks = backtest_chances(inputs.store, picks)
     outcomes = outcome_rows(dataset)
     warnings = check_store_outcomes(inputs.store, picks, outcomes)
     if warnings:

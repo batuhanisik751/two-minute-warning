@@ -129,3 +129,32 @@ paths:
   manual: data/manual          # committed: player_id_overrides.csv (B3), coach_departures.csv (H2)
   predictions: data/predictions.duckdb   # predictions, outcomes, model versions (C4, gitignored)
   models: models                         # production models, <module>/<version>.joblib (C6, gitignored)
+
+# The scheduled pipeline (step E4): `twm pipeline run`, run by .github/workflows/pipeline.yml
+# (docs/deploy.md "The scheduled pipeline"). Times are UTC. The workflow's cron lines must
+# equal `nightly` and `retry_attempts` (tests/test_workflows.py checks it).
+pipeline:
+  # In season the job runs every night; the window comes from the current season's schedule
+  # (its first and last regular-season game days), never from typed-in dates. Outside it the
+  # job runs once a week, on offseason_weekday.
+  season_window: {days_before_first_game: 7, days_after_last_game: 10}
+  offseason_weekday: tuesday
+  # After nflverse's overnight updates (checked 2026-09-28 in their workflow files: play-by-play
+  # and player stats daily 09:03 UTC, rosters and injuries 07:07 UTC, snap counts 00/06/12/18
+  # UTC; docs/deploy.md has the links). Not on the hour: GitHub delays scheduled runs most at
+  # the start of every hour.
+  nightly: "10:47"
+  # Tuesday retries after the 14:00 UTC as-of: snap counts can lag (their scraper runs at 12:00
+  # and 18:00 UTC). A week whose data has not arrived is a warning before the LAST attempt and
+  # a failure from the last attempt on (GitHub then emails the owner).
+  retry_attempts: ["tuesday 15:17", "tuesday 18:47", "tuesday 21:17", "wednesday 03:17"]
+  # First season the job's warehouse needs: the dataset starts with snap counts (2013) and the
+  # 2013 candidate pool uses the prior season's points per game. Building 2012-2026 gives the
+  # same dataset and the same published rows as 1999-2026 (measured 2026-09-28), in half the time.
+  build_start: 2012
+
+# `twm publish` (docs/deploy.md "What a publish does").
+publish:
+  # A replaced table may lose at most this share of the rows the target holds; a bigger drop
+  # means the local inputs are missing or broken, so the publish is refused (--allow-shrink).
+  max_shrink_share: 0.10

@@ -520,6 +520,62 @@ def _entries() -> list[Entry]:
             source="fact_ranking.player_owned_avg, fact_ranking.player_owned_espn",
             step="C1",
         ),
+        # ---- the experts' view (C4 expert baseline; metrics, never features) ------------
+        Entry(
+            name="ecr_pos_rank",
+            title="Expert rank at the as-of",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="rank (1 = best)",
+            formula="fact_ranking.pos_rank of the player on his roster position's page: the "
+            "season's latest rest-of-season page public at the as-of if it lists him, else "
+            "the latest weekly page listing him among those scraped up to "
+            "twm.modules.waiver_radar.expert_ranks.WEEKLY_MAX_AGE_DAYS days before the "
+            "latest weekly page; NULL when neither lists him (2020 on)",
+            explanation="How the FantasyPros experts ranked the player at his position at the "
+            "time. Used only as a baseline to beat (the 'experts' ranking); no model learns "
+            "from it. Their pages were saved on Fridays, so on Tuesday they had not seen the "
+            "last weekend's games yet.",
+            source="fact_ranking (page_kind ros, weekly), twm.modules.waiver_radar.expert_ranks",
+            step="C4",
+        ),
+        Entry(
+            name="ecr_page_kind",
+            title="Expert rank source",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="'ros' or 'weekly'",
+            formula="which page ecr_pos_rank comes from: 'ros' (rest of season) or 'weekly'; "
+            "NULL when the player is unranked",
+            explanation="Whether the expert rank is a rest-of-season rank or this week's rank.",
+            source="twm.modules.waiver_radar.expert_ranks",
+            step="C4",
+        ),
+        Entry(
+            name="ecr_scrape_date",
+            title="Expert rank date",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="date",
+            formula="scrape_date of the page ecr_pos_rank comes from (public the next day at "
+            "00:00 UTC, fact_ranking.available_at)",
+            explanation="The day the experts' page was saved.",
+            source="fact_ranking.scrape_date",
+            step="C4",
+        ),
+        Entry(
+            name="ecr_available",
+            title="Expert ranks available",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="boolean",
+            formula="a rest-of-season or weekly FantasyPros page of the player's roster position "
+            "of this season is public at the as-of (the archive starts in December 2019)",
+            explanation="Whether the experts' ranking existed at that moment; the expert "
+            "baseline is only graded where it did.",
+            source="fact_ranking",
+            step="C4",
+        ),
         # ---- opportunity (what a player is given) ---------------------------------------
         Entry(
             name="offense_snap_share",

@@ -50,6 +50,11 @@ fi
 (cd "$ROOT" && uv sync --quiet --all-extras --locked)
 
 relocate data/raw dir
+relocate data/waiver_radar dir   # the Waiver Radar dataset (C3)
+# The predictions store (C4) is opened in place by DuckDB, so a symlinked file works.
+if [ -e "$ROOT/data/predictions.duckdb" ] || [ -L "$ROOT/data/predictions.duckdb" ]; then
+  relocate data/predictions.duckdb file
+fi
 # The warehouse is a file; twm build follows the link and rebuilds the target in place.
 if [ -e "$ROOT/data/warehouse.duckdb" ] || [ -L "$ROOT/data/warehouse.duckdb" ]; then
   relocate data/warehouse.duckdb file

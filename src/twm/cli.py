@@ -680,6 +680,106 @@ def radar_features_report(
     typer.echo(f"wrote {csv_path}")
 
 
+@radar_app.command("backtest")
+def radar_backtest(
+    dataset: Path = typer.Option(
+        Path("data/waiver_radar/dataset.parquet"),
+        "--dataset",
+        help="The dataset from `twm radar dataset` (relative paths are under the project root).",
+    ),
+    start: int | None = typer.Option(
+        None, "--start", help="First test season (default: settings waiver_radar_eval, 2014)."
+    ),
+    end: int | None = typer.Option(None, "--end", help="Last test season (default: 2025)."),
+    models: list[str] | None = typer.Option(
+        None,
+        "--models",
+        "--model",
+        help="Models to run (repeatable; default: all): baseline_last_points, "
+        "baseline_snap_delta, baseline_ecr, logit, lgbm.",
+    ),
+    labels: list[str] | None = typer.Option(
+        None, "--label", help="Label(s) to predict (repeatable; default y_hit): y_hit, y_sustained."
+    ),
+    store: Path | None = typer.Option(
+        None,
+        "--store",
+        help="Predictions store to write (default: settings paths.predictions, "
+        "data/predictions.duckdb).",
+    ),
+    out: Path = typer.Option(
+        Path("reports/waiver_radar/backtest.md"),
+        "--out",
+        help="Markdown report to write (relative paths are under the project root); a CSV with "
+        "the same name is written next to it.",
+    ),
+) -> None:
+    """Walk-forward backtest of the Waiver Radar: baselines, logistic regression and LightGBM
+    trained on earlier seasons only; stores every prediction and writes the report."""
+    import time
+
+    import polars as pl
+
+    from twm import predictions as pr
+    from twm.backtest.walkforward import WalkForwardError
+    from twm.config import ROOT
+    from twm.modules.waiver_radar import backtest as bt
+    from twm.modules.waiver_radar.models import ALL_MODELS
+    from twm.registry import FeatureCheckError
+
+    source = dataset if dataset.is_absolute() else ROOT / dataset
+    if not source.exists():
+        typer.echo(f"dataset not found: {source}; run `twm radar dataset` first", err=True)
+        raise typer.Exit(code=1)
+    first, last = bt.eval_seasons()
+    first = start if start is not None else first
+    last = end if end is not None else last
+    if first > last:
+        raise typer.BadParameter(f"--start {first} is after --end {last}")
+    t0 = time.perf_counter()
+    try:
+        run = bt.run_backtest(
+            pl.read_parquet(source),
+            models=models or ALL_MODELS,
+            labels=labels or ["y_hit"],
+            test_seasons=range(first, last + 1),
+            progress=lambda msg: typer.echo(f"  {msg} ({time.perf_counter() - t0:.0f} s)"),
+        )
+    except (WalkForwardError, FeatureCheckError, ValueError, KeyError) as e:
+        typer.echo(f"cannot run the backtest: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    created = pr.now_utc()
+    preds, versions, outcomes = bt.store_frames(run, created_at=created)
+    store_path = store if store is not None else pr.default_path()
+    store_path = store_path if store_path.is_absolute() else ROOT / store_path
+    counts = pr.write_predictions(
+        store_path, predictions=preds, versions=versions, outcomes=outcomes
+    )
+    secs = time.perf_counter() - t0
+    args = ["uv run twm radar backtest"]
+    if start is not None or end is not None:
+        args.append(f"--start {first} --end {last}")
+    args += [f"--model {m}" for m in models or []]
+    args += [f"--label {lb}" for lb in labels or []]
+    report = bt.build_backtest_report(
+        run,
+        created=f"Created {created:%Y-%m-%d %H:%M} UTC in {secs:.0f} s.",
+        command=" ".join(args),
+        dataset_name=str(dataset),
+    )
+    target = out if out.is_absolute() else ROOT / out
+    csv_path = bt.write_backtest_report(report, target)
+    for line in report.summary:
+        typer.echo(line)
+    typer.echo(
+        f"stored {counts['predictions']:,} predictions, {counts['model_versions']} model "
+        f"versions, {counts['outcomes']:,} outcomes in {store_path}"
+    )
+    typer.echo(f"wrote {target}")
+    typer.echo(f"wrote {csv_path}")
+    typer.echo(f"{time.perf_counter() - t0:.0f} s")
+
+
 @app.command()
 def glossary(
     name: str | None = typer.Argument(None, help="One term, e.g. `twm glossary wopr`."),

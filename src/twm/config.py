@@ -20,6 +20,7 @@ class Paths(BaseModel):
     warehouse: str
     league_db: str
     manual: str = "data/manual"  # committed, hand-curated files (player_id_overrides.csv ...)
+    predictions: str = "data/predictions.duckdb"  # the predictions store (twm.predictions)
 
 
 # Datasets whose rows are stamped "game end + lag" (twm.warehouse.available).

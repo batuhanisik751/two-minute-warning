@@ -1,4 +1,4 @@
-# Waiver Radar: the candidate pool (C1), its labels (C2) and its features (C3)
+# Waiver Radar: the candidate pool (C1), its labels (C2), its features (C3) and its models (C4)
 
 The Waiver Radar ranks players who are **probably still on waivers** (not on any team in a
 typical 12-team fantasy league) by how likely they are to become weekly starters soon. Before it
@@ -6,17 +6,26 @@ can rank anyone it needs that list of available players, the *candidate pool*, f
 Tuesday of every season we backtest (2013 on). This page explains how the pool is built, why
 it is built that way, and how well it matches reality where reality was recorded. The second
 half ([Labels](#labels-did-a-pool-player-become-a-starter-step-c2)) explains the right answers
-the models learn from: did a pool player really become a starter in the next weeks? The last
+the models learn from: did a pool player really become a starter in the next weeks? The next
 part ([Features](#features-what-the-radar-knows-at-the-as-of-step-c3)) explains what the models
-learn FROM: each player's situation as it looked on that Tuesday.
+learn FROM: each player's situation as it looked on that Tuesday. The last part
+([Models and backtest](#models-and-backtest-step-c4)) explains how the models are trained and
+graded, and how well they did.
 
 Code: `src/twm/modules/waiver_radar/pool.py` (the pool), `report.py` (the pool report),
 `labels.py` (the labels), `label_report.py` (the label report), `features.py` (the features),
-`dataset.py` (pool + features + labels), `feature_report.py` (the feature report). Tables:
+`dataset.py` (pool + features + labels), `feature_report.py` (the feature report),
+`expert_ranks.py` (the experts' ranks for the expert baseline), `models.py` (baselines and
+models), `backtest.py` (the backtest and its report); `src/twm/backtest/walkforward.py` (the
+walk-forward harness), `src/twm/backtest/metrics.py`, `src/twm/predictions.py` (the predictions
+store). Tables:
 `fact_roster_week`, `fact_ranking` and `fact_opportunity_week` (docs/warehouse.md). Tests:
 `tests/test_waiver_radar_pool.py`, `tests/test_waiver_radar_labels.py`,
-`tests/test_waiver_radar_features.py`. Reports: `reports/waiver_radar/pool_sizes.md`,
-`reports/waiver_radar/labels.md`, `reports/waiver_radar/features.md` (each with a `.csv`).
+`tests/test_waiver_radar_features.py`, `tests/test_waiver_radar_expert_ranks.py`,
+`tests/test_waiver_radar_models.py`, `tests/test_walkforward.py`, `tests/test_backtest_metrics.py`,
+`tests/test_predictions_store.py`. Reports: `reports/waiver_radar/pool_sizes.md`,
+`reports/waiver_radar/labels.md`, `reports/waiver_radar/features.md`,
+`reports/waiver_radar/backtest.md` (each with a `.csv`).
 
 ## Why a stand-in, and which one
 
@@ -599,10 +608,13 @@ week 9, 2020 week 12 a split week, 2023 week 6, 2025 week 10 with daily charts).
 ## The dataset and the feature report
 
 `uv run twm radar dataset` writes `data/waiver_radar/dataset.parquet` (gitignored): every
-labelled pool row of 2013-2026 (C1 pool columns, then the features, `teammates_out`, then the C2
-labels), one row per (season, week, player), sorted. On the 2026-09-28 warehouse: 128,643 rows
-(99,181 in the pool), 82 columns, 9.1 MB, built in about 35 s; two builds give byte-identical
-files.
+labelled pool row of 2013-2026 (C1 pool columns, then the features, `teammates_out`, the
+experts' ranks of C4, then the C2 labels), one row per (season, week, player), sorted. On the
+2026-09-28 warehouse (rebuilt in C4): 134,113 rows (103,826 in the pool), 86 columns, 9.5 MB,
+built in about 35 s; two builds give byte-identical files. The four expert columns
+(`ecr_available`, `ecr_pos_rank`, `ecr_page_kind`, `ecr_scrape_date`, see
+[the experts' baseline](#the-baselines-what-the-models-must-beat)) are registered as metrics,
+so no model can use them; every other column is unchanged by C4.
 
 `uv run twm radar features-report` reads it and writes `reports/waiver_radar/features.md` (and a
 CSV): for the rows a model will learn from (in the pool, final label, train-eligible,
@@ -650,3 +662,214 @@ a message; rebuild it once with `uv run twm build --start 1999` (about a minute)
 - **Live runs** must ingest play-by-play, snaps and ffopportunity before scoring a week: a game
   whose ffopportunity rows are missing would count 0 xFP (docs/progress.md "live runs must
   check data freshness").
+
+# Models and backtest (step C4)
+
+The Radar now has everything it needs to learn: the pool (who to rank), the features (what it
+knows on Tuesday) and the labels (what happened next). Step C4 trains models on that, and, more
+importantly, measures honestly how good they are. Code: `src/twm/backtest/walkforward.py` (the
+harness, shared by every later module), `src/twm/backtest/metrics.py`,
+`src/twm/modules/waiver_radar/models.py`, `src/twm/modules/waiver_radar/backtest.py`,
+`src/twm/predictions.py`. Report: `reports/waiver_radar/backtest.md` (+ CSV).
+
+## Walk-forward: grading a model the honest way
+
+A model that is graded on games it learned from looks brilliant and is useless. So every
+prediction in the backtest is made the way it would have been made live:
+
+- To grade season S (every season from 2014 to 2025), the model learns **only from the seasons
+  before S**. For 2020 it learns from 2013-2019, then ranks the pool every Tuesday of 2020, and
+  those rankings are compared with what happened. Then the same for 2021 (learning from
+  2013-2020), and so on. Twelve seasons of predictions, none of which the model had seen.
+- Models have settings ("hyperparameters", e.g. how strongly the logistic regression is held
+  back from over-fitting) that must be chosen too. They are chosen on the **last season before
+  S** (the validation season): a model trained on the seasons before it is tried with each
+  setting and graded on that season. The winning setting is then refit on every season before S.
+- The first test season, 2014, has only 2013 to learn from, so there is nothing to validate on:
+  it uses default settings (a "thin" fold; the report shows 2015-2025 separately too).
+- Everything that is learned from data, including how missing values are filled and how numbers
+  are scaled, is learned from the training rows only (a scikit-learn `Pipeline`).
+- The harness **refuses** to train, tune or calibrate on any row of the test season or later: it
+  raises `TestSeasonInTrainingError` instead (tested, including a check that the test fails if
+  the guard is switched off). It also refuses any column that is not a registered feature:
+  player ids, team codes, labels and the metric columns (`twm.registry.check_features`).
+- No refit during a season: the model trained before 2020 ranks every week of 2020.
+
+A test goes further than the guard: it scrambles the features and flips the labels of half of a
+test season's rows and checks that the predictions of the other half do not change by a single
+bit, for both models, in the thin fold and a tuned fold. Nothing about the test season can reach
+the model.
+
+## Precision@10: what it means for you
+
+Every Tuesday the Radar gives one list per position (QB, RB, WR, TE), best first. **Precision@10**
+is the share of the top 10 of a list who became a fantasy starter (`y_hit`: at least one week in
+the top 12 QB/TE or top 24 RB/WR) within their next 3 games. If you had picked up the Radar's top
+10 at a position that week, it is the share that would have given you a starter week. The pooled
+number is the average over every list of the season(s): 732 lists in 2014-2025 (about 15
+Tuesdays x 4 positions per season). A list with fewer than 10 players divides by its size (none in
+the real data). For `y_sustained` (at least two starter weeks) everything is the same.
+
+About 1 pool player in 9 hits (10.6% in 2014-2025): that is the precision of a random pick, the
+floor every method must clear.
+
+## The baselines: what the models must beat
+
+- **Last week's points** (`baseline_last_points`): rank by fantasy points in his team's last game.
+  What most people do.
+- **Snap-share change** (`baseline_snap_delta`): rank by the jump in his share of the offensive
+  snaps (last game vs the 3 before). At a week-1 as-of nobody has a change yet, so those lists are
+  in id order (a coin flip); that costs this baseline about a point.
+- **The experts** (`baseline_ecr`): rank by FantasyPros' positional rank that was public on the
+  Tuesday: the latest rest-of-season page, else the latest weekly page (a weekly page leaves out
+  teams on their bye, so a page up to 8 days older counts for them). The archive starts in
+  December 2019, so this baseline exists for 2020-2025 only, on the 356 of 380 lists where a page
+  existed (2024's first pages came in week 4). Two thirds of the pool rows carry an expert rank,
+  and 98% of the hits do; an unranked player goes to the bottom. The pages were saved on Fridays,
+  so on Tuesday the experts had not seen the weekend's games yet: a real handicap of this
+  baseline, since the Radar has. These columns (`ecr_pos_rank` ...) are metrics in the registry;
+  no model may use them.
+
+A player without a value (no game yet, no expert rank) is ranked below everyone with one; ties go
+to the smaller player id. Every method ranks exactly the same rows, with the same rules (tested).
+
+The report adds one line of **context**, not a baseline: the same lists ranked by `xfp_avg3`
+(expected fantasy points over his last 3 games) alone, the strongest single feature of the C3
+feature report. It shows how much the models add over the best single number.
+
+## The two models
+
+- **Logistic regression** (`logit`): a weighted sum of the features turned into a probability.
+  Missing values are filled with the training median (plus a yes/no "was missing" column), every
+  column is standardized (so weights are comparable), position becomes four yes/no columns. The
+  weights are held back ("regularized") so it does not chase noise; how strongly (C) and how
+  (L1 = drop weak features entirely, L2 = shrink all of them) are chosen on the validation season.
+- **LightGBM** (`lgbm`): hundreds of small decision trees, each correcting the previous ones. It
+  can learn interactions (a snap-share jump matters more when the starter ahead of him is out)
+  and handles missing values itself. Settings tried on the validation season: tree size
+  (15 or 31 leaves), minimum players per leaf (50 or 200), share of features per tree (70% or
+  all); the number of trees stops when the validation season stops improving.
+
+Both are deterministic: fixed seeds, LightGBM's deterministic mode with a fixed thread count; two
+runs give identical predictions (tested, and checked on the full backtest).
+
+## Why calibrate
+
+A model's raw score ranks players but is not an honest probability: "0.30" might really mean
+20%. The Radar will show probabilities, so after training, an **isotonic calibration** is fit on
+the validation season: it maps each raw score to the hit rate that similar scores really had
+there (only ever upward with the score, so the ranking stays the model's). It is then applied to
+the refit model's scores (a common compromise: the refit model saw one more season than the
+calibrator). In the thin 2014 fold the calibration uses 4-fold cross-fitting inside 2013: the
+weeks are split into four groups and each group is scored by a model that did not see it.
+Calibration can put nearby scores on the same probability; the list order then follows the raw
+score, so it never changes the ranking. The Brier score (the mean squared error of the
+probability) grades the calibrated probabilities.
+
+## Players real leagues had rostered
+
+The pool is a stand-in for "on waivers" (C1). Where FantasyPros saved rostership (2020 on), a few
+pool players were owned in at least 50% of real leagues; they hit about half the time (C2), so a
+model finds them easily and looks better than it is for someone scanning a real waiver wire. Every
+precision number is therefore also shown **without** them: they are removed and the lists
+re-ranked. 2014-2019 have no rostership figures, so nothing is removed there.
+
+## Results (2026-09-28, `uv run twm radar backtest --label y_hit --label y_sustained`)
+
+`y_hit`, pooled precision@10 (base rate 10.6%, 732 lists, 9,726 hits in 91,638 rows):
+
+| method | 2014-2025 | without rostered | 2015-2025 | without rostered |
+|---|---|---|---|---|
+| last week's points | 40.4% | 38.9% | 40.7% | 39.2% |
+| snap-share change | 24.6% | 23.8% | 24.6% | 23.6% |
+| logistic regression | **47.8%** | **45.5%** | **48.0%** | **45.5%** |
+| LightGBM | 47.6% | 45.2% | 47.8% | 45.2% |
+| (context) xFP last 3 games alone | 45.1% | 43.0% | 45.0% | 42.7% |
+
+- **Acceptance (spec P1): PASS.** The better model beats both naive baselines, by 7.4 points over
+  last week's points and 23 points over the snap-share change, in every one of the 12 seasons.
+- **Winner: the logistic regression**, by 0.2 points over LightGBM. That gap is noise (the
+  logistic regression is ahead in 7 of the 12 seasons); by the rule "higher pooled precision@10, ties to the simpler model"
+  the logistic regression is the Radar's model. It is also the better calibrated one (Brier
+  0.0736 vs 0.0744; always predicting the training hit rate scores 0.0950) with the higher PR-AUC
+  (0.433 vs 0.418).
+- **Per position** (logistic regression vs last week's points): RB 54.2% vs 46.3%, WR 50.8% vs
+  40.4%, TE 42.8% vs 31.7%, but QB 43.4% vs 43.1%: at quarterback the model adds nothing over
+  last week's points (a pool QB who scored well last week is usually a new starter).
+- **By rank:** the top 5 of a list hit 56.4% of the time, ranks 6-10 39.3%, ranks 11-25 24.0%.
+- **The experts** (2020-2025, the 356 lists with a page): FantasyPros 46.9%, the logistic
+  regression 48.4%, LightGBM 48.5%; without rostered players 42.0% vs 43.7% and 43.5%. The
+  models edge the experts by about 1.5 points, not more, and lose to them in 2024 (48.1% vs
+  44.7%), even with the experts' Friday handicap.
+- **Calibration** of the winner: in each tenth of the predictions (lowest to highest) the mean
+  probability is within about a point of the observed hit rate (top tenth: 48.3% predicted,
+  47.3% observed).
+- **y_sustained** (two starter weeks, base rate 2.5%): logistic regression 16.0%, LightGBM 15.4%,
+  last week's points 12.6%, snap-share change 7.3%; PASS as well. Experts on their lists: 15.7%
+  vs the logistic regression's 16.6%.
+- **Runtime:** about 2 minutes for `y_hit` with all five methods, 4 minutes for both labels.
+
+## The importance check (spec 6.2 rule 6)
+
+After every fold the report lists each model's most important features and flags any feature
+holding more than 40% of the total, the classic sign of a leak.
+
+- **Logistic regression:** importance = how much a feature moves the log-odds across the training
+  rows (the spread of its term). No feature is above 24% in any fold; the leaders are snap share
+  in the last game, points per game and its rank, age (younger players break out more often),
+  position (which shifts a whole position's list alike and cannot change a ranking within it) and
+  `team_games_remaining`, which is public schedule knowledge: in weeks 1-2 (15-16 games left) only
+  5-7% of pool rows hit (the lists are full of camp bodies), with 2 games left the window is
+  shorter (9.2%), in between about 11%.
+- **LightGBM** puts 32-52% of its gain on `xfp_avg3` (expected fantasy points over the last 3
+  games) from 2015 on, above 40% in 8 of the 12 folds, so it is flagged. Investigated: `xfp_avg3` is read point-in-time like
+  every feature (C3 tests), and on its own it already ranks lists at 45.1%. It is the single best
+  summary of recent opportunity (targets, carries and where they came), and a tree model leans on
+  its best split. Removing all three ffopportunity columns (`xfp_last`, `xfp_avg3`, `fpoe_avg3`)
+  costs LightGBM 0.1 point (47.5%) and the logistic regression nothing (48.0%): the model moves its
+  weight to recent fantasy points and snap share. So it is not a leak, and the ffopportunity
+  model columns (spec 6.3, trained on many seasons) do not drive the results.
+- A missing age is informative (0.2% of such rows hit): the as-of view only knows a player's
+  birth date once he was drafted or appeared in a game, depth chart or injury report, so a
+  missing age means "undrafted and never seen on the field yet". That is known on Tuesday, not
+  a leak (it is also rarer in 2025, whose daily depth charts list practice-squad players).
+
+## The predictions store (the time machine's memory)
+
+Every backtest prediction is saved in `data/predictions.duckdb` (gitignored; `paths.predictions`
+in config/settings.yaml): table `predictions` (player, season, week, as-of, horizon 3, the
+probability, the raw score, the rank in its position list, `kind` 'backtest'), `outcomes` (the
+labels) and `model_versions` (model, label, features, settings, training seasons, the dataset's
+content hash, code version). A `model_version` is a fingerprint of the trained model: the model,
+label, features, settings (fixed ones included), training and test seasons and the content of
+the rows it learned from, never the time it was made. The same trained model keeps its version
+whatever weeks it scores (the live season will need that); the content of the rows it scored
+is noted beside it. Re-running the backtest replaces the rows of the same versions (833,382
+predictions for both labels and five methods). `band` and
+`reasons_json` stay empty until step C6.
+
+## Commands
+
+```bash
+uv run twm radar backtest                     # all methods, y_hit, 2014-2025 (about 2 minutes)
+uv run twm radar backtest --label y_hit --label y_sustained
+uv run twm radar backtest --start 2016 --end 2017 --model logit --model baseline_last_points
+```
+
+Options: `--dataset` (default `data/waiver_radar/dataset.parquet`; rebuild it with
+`uv run twm radar dataset` after any upstream change), `--store`, `--out`.
+
+## Known limits
+
+- **Precision is flattered by the proxy pool** in two ways the report makes visible: rostered
+  players (2020 on; the "without rostered" columns) and, before 2020, a pool built from last
+  season's points (C1) whose own recall is a little lower.
+- **The two models are tied.** The winner is picked by a fixed rule; a different random season
+  split could flip it. Both beat the naive baselines by a wide margin, which is what the
+  acceptance test asks.
+- **The experts' baseline is handicapped** by the Friday scrapes (before the weekend's games) and
+  covers 2020-2025 only; it is close to the models, so "better than the experts" is not a claim
+  the Radar can make.
+- **Quarterbacks:** the model adds nothing over last week's points.
+- **Calibration** is fit on one season; the lowest probabilities round to 0%.
+- **One setting for the whole season:** no refit during a season (spec default).

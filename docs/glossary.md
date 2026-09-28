@@ -23,6 +23,38 @@ How much a single play helped or hurt the offense's scoring chances. A 30-yard c
 - **Formula:** nflfastR's expected points after the play minus before it, for the offense
 - **Source:** fact_play.epa
 
+### Expert rank at the as-of
+
+How the FantasyPros experts ranked the player at his position at the time. Used only as a baseline to beat (the 'experts' ranking); no model learns from it. Their pages were saved on Fridays, so on Tuesday they had not seen the last weekend's games yet.
+
+- **Name:** `ecr_pos_rank`; **unit:** rank (1 = best); **used by:** waiver_radar
+- **Formula:** fact_ranking.pos_rank of the player on his roster position's page: the season's latest rest-of-season page public at the as-of if it lists him, else the latest weekly page listing him among those scraped up to twm.modules.waiver_radar.expert_ranks.WEEKLY_MAX_AGE_DAYS days before the latest weekly page; NULL when neither lists him (2020 on)
+- **Source:** fact_ranking (page_kind ros, weekly), twm.modules.waiver_radar.expert_ranks
+
+### Expert rank date
+
+The day the experts' page was saved.
+
+- **Name:** `ecr_scrape_date`; **unit:** date; **used by:** waiver_radar
+- **Formula:** scrape_date of the page ecr_pos_rank comes from (public the next day at 00:00 UTC, fact_ranking.available_at)
+- **Source:** fact_ranking.scrape_date
+
+### Expert rank source
+
+Whether the expert rank is a rest-of-season rank or this week's rank.
+
+- **Name:** `ecr_page_kind`; **unit:** 'ros' or 'weekly'; **used by:** waiver_radar
+- **Formula:** which page ecr_pos_rank comes from: 'ros' (rest of season) or 'weekly'; NULL when the player is unranked
+- **Source:** twm.modules.waiver_radar.expert_ranks
+
+### Expert ranks available
+
+Whether the experts' ranking existed at that moment; the expert baseline is only graded where it did.
+
+- **Name:** `ecr_available`; **unit:** boolean; **used by:** waiver_radar
+- **Formula:** a rest-of-season or weekly FantasyPros page of the player's roster position of this season is public at the as-of (the archive starts in December 2019)
+- **Source:** fact_ranking
+
 ### FLEX-worthy finish
 
 The running back or receiver scored well enough to fill a FLEX slot that week. Informative only; it is not a label.

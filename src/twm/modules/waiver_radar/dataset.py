@@ -2,10 +2,12 @@
 player (``twm radar dataset``).
 
 Every labelled universe row of the candidate pool (C1, ``in_pool`` true or false; weeks 1 to
-the season's last regular-season week minus 1) with the features (:mod:`features`, batch path)
-and the labels (C2). Deterministic: sorted by (season, week, gsis_id), fixed column order,
-floats rounded in the feature code, written with fixed Parquet settings, so two builds from the
-same warehouse give byte-identical files. The file lives under ``data/`` (gitignored).
+the season's last regular-season week minus 1) with the features (:mod:`features`, batch path),
+the experts' ranks at the as-of (:mod:`expert_ranks`, C4: metric columns for the expert
+baseline, never model features) and the labels (C2). Deterministic: sorted by (season, week,
+gsis_id), fixed column order, floats rounded in the feature code, written with fixed Parquet
+settings, so two builds from the same warehouse give byte-identical files. The file lives
+under ``data/`` (gitignored).
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from pathlib import Path
 
 import polars as pl
 
+from twm.modules.waiver_radar.expert_ranks import EXPERT_COLUMNS, expert_ranks_history
 from twm.modules.waiver_radar.features import (
     FEATURE_COLUMNS,
     INFO_COLUMNS,
@@ -33,9 +36,9 @@ PARQUET_ROW_GROUP_SIZE = 64_000
 
 
 def dataset_columns() -> list[str]:
-    """Column order: pool columns, the features not already there, info, labels."""
+    """Column order: pool columns, the features not already there, info, expert ranks, labels."""
     extra = [c for c in FEATURE_COLUMNS if c not in POOL_FEATURES]
-    return [*POOL_COLUMNS, *extra, *INFO_COLUMNS, *LABEL_COLUMNS]
+    return [*POOL_COLUMNS, *extra, *INFO_COLUMNS, *EXPERT_COLUMNS, *LABEL_COLUMNS]
 
 
 def build_dataset(
@@ -46,13 +49,17 @@ def build_dataset(
     label_rules: LabelRules | None = None,
     rules: FeatureRules | None = None,
 ) -> pl.DataFrame:
-    """Pool rows (method 'auto') + features + labels for every labelled as-of of ``seasons``."""
+    """Pool rows (method 'auto') + features + expert ranks + labels for every labelled as-of
+    of ``seasons``."""
     check_features(FEATURE_COLUMNS, "waiver_radar")  # every column is a registered feature
     hist = pool_history(db, seasons, rules=pool_rules)
     labelled = label_rows(db, hist, rules=label_rules)
     feats = features_history(db, labelled.select(POOL_COLUMNS), rules=rules)
     feats = feats.drop([c for c in POOL_FEATURES if c in feats.columns])
-    out = labelled.join(feats, on=list(KEY_COLUMNS), how="left", maintain_order="left")
+    experts = expert_ranks_history(db, labelled.select(POOL_COLUMNS))
+    out = labelled.join(feats, on=list(KEY_COLUMNS), how="left", maintain_order="left").join(
+        experts, on=list(KEY_COLUMNS), how="left", maintain_order="left"
+    )
     if out.height != labelled.height:  # pragma: no cover - the key is unique per pool row
         raise RuntimeError("features did not join one-to-one onto the labelled pool rows")
     return out.select(dataset_columns()).sort(list(KEY_COLUMNS))

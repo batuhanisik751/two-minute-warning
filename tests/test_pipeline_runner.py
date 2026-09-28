@@ -104,6 +104,9 @@ def test_a_full_run_in_season(tmp_path: Path) -> None:
     assert fake.stages() == ["ingest", "build", "dataset", "backtest", "score", "publish"]
     assert fake.args("ingest") == [["ingest", "--start", "2026", "--force"]]
     assert fake.args("build") == [["build", "--start", "2012", "--end", "2026"]]
+    # the approved backtest is restored, never retrained
+    assert fake.args("backtest") == [["model", "restore-backtest", "waiver_radar", "--season",
+                                      "2026"]]  # fmt: skip
     score = fake.args("score")[0]
     assert score[:5] == ["radar", "score", "--season", "2026", "--week"] and score[5] == "3"
     assert "--pinned" in score and score[score.index("--now") + 1].startswith("2026-09-29T15:20")

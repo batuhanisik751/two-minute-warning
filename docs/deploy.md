@@ -241,7 +241,7 @@ it; the run's log shows every one):
 | build | `twm build --start 2012 --end <season>` (`pipeline.build_start`) |
 | plan | which week's list is due: the clock is between its Tuesday as-of and the next week's first kickoff |
 | dataset | `twm radar dataset` |
-| backtest | `twm radar backtest --model logit --label y_hit` (the bands, priorities and the time-machine lists) |
+| backtest | `twm model restore-backtest waiver_radar`: the approved backtest restored from its committed snapshot (sha256 and rows checked first, then checked against the committed evaluation); no fold is trained. The bands, priorities and the time-machine lists come from it |
 | score | only when a list is due: `twm radar score --pinned` with the approved model; exit 3 = not ready |
 | export | the list as CSV and Parquet for the artifact |
 | publish | `twm publish --target remote` when the `DATABASE_URL` secret exists, otherwise skipped with a warning (so the pipeline can be rehearsed before Neon exists); it also runs after a not-ready score, so outcomes and player pages stay fresh |
@@ -263,7 +263,7 @@ reconstructed outside its window).
 rows per table, warnings) and an artifact `pipeline-<run id>-<attempt>` kept 90 days (the
 maximum for a public repository): `summary.md`, `result.json`, `logs/` (one file per command,
 scrubbed of the connection string), `reports/<season>-Wnn.md` (the weekly report),
-`lists/<season>-Wnn.csv` and `.parquet` (the top 25 per position), `backtest/`, `publish.json`.
+`lists/<season>-Wnn.csv` and `.parquet` (the top 25 per position), `publish.json`.
 The `pipeline_runs` table gets one row per run that reaches the database: the publish's row
 (its notes carry the stages, the week and the list's status), or a failed row naming the stage
 that failed. Offseason days stopped by the gate, runs without the secret and dry runs write
@@ -274,11 +274,12 @@ week (`nflverse-raw-v1-<year>-W<week>`); a miss restores the newest older week a
 tops it up; a runner without any cache downloads everything. It is saved only after a
 successful ingest. GitHub keeps up to 10 GB per repository and removes entries not used for 7
 days ([dependency caching](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching)).
-The warehouse, the dataset and the backtest are rebuilt on every run: rebuilding the logit
-backtest takes about a minute and reproduces the owner's predictions store exactly (same 12
-model versions), while a cache keyed by code and data would need a key computed in the middle
-of the run and could serve a stale store; the `hash:backtest_lists` check keeps an unchanged
-rebuild from rewriting anything in Neon. The warehouse starts in 2012 because the dataset
+The warehouse and the dataset are rebuilt on every run. The backtest is not: it is restored
+from the snapshot approved with the model (see "The approved model and its backtest"), because a rebuild on
+the Linux runner is not bit-identical to the Mac's (the reviewer's two GitHub rehearsals: a few
+2022-2023 top-10 orderings swapped, pooled precision@10 3,498 instead of 3,501 hits, the
+must-add cutoff 52.5% instead of 53.0%), and the site would then contradict its own track
+record. The warehouse starts in 2012 because the dataset
 starts with snap counts (2013) and the 2013 candidate pool uses the prior season's points per
 game: building 2012-2026 gives the same dataset and the same published rows as 1999-2026
 (checked 2026-09-28), in half the time, while starting in 2013 changes the 2013 pool.
@@ -289,22 +290,25 @@ each stage's real time):
 
 | stage | cold (no cache: what a first run does) | warm (cache restored, nothing else) |
 |---|---:|---:|
-| ingest | 85 s (full history, 421 files) | 7 s (current season + one-file datasets) |
-| build (2012-2026) | 35 s | 33 s |
-| dataset | 39 s | 39 s |
-| backtest (logit) | 53 s | 52 s |
+| ingest | 77 s (full history, 421 files) | 7 s (current season + one-file datasets) |
+| build (2012-2026) | 32 s | 32 s |
+| dataset | 38 s | 39 s |
+| backtest (restore the snapshot) | 2 s | 2 s |
 | score | 3 s | 3 s |
 | publish | 6 s (everything written) | 4 s (every replaced table unchanged, 0 rows rewritten) |
-| **all stages** | **3 min 40 s** | **2 min 17 s** |
+| **all stages** | **2 min 38 s** | **87 s** |
+
+(Before the snapshot, the backtest stage rebuilt the folds: 53 s; the warm run took 2 min 17 s.)
 
 The first run in a fresh virtualenv took about 40 s longer than its stages (most likely Python
 compiling the libraries on first import; the next run: 2 s). Sizes: the nflverse cache is
 501 MB on disk (442 Parquet files) and 502 MB as a compressed tar, since Parquet does not
 shrink further, so each weekly cache entry is about 0.5 GB; the 2012-2026 warehouse is 240 MB
 (1999-2026: 400 MB, 68 s), the dataset 9 MB, the predictions store 3 MB (neither is cached),
-a run's artifact about 200 KB, the approved model 15 KB. A retrain candidate
-(`twm model candidate`) takes 14 s after the data stages; trained on today's data it
-reproduces `logit-5828a082c9e09093` exactly.
+a run's artifact about 120 KB, the approved model 15 KB, its backtest snapshot 0.89 MB
+(predictions 830 KB, outcomes 53 KB, model versions 5 KB; zstd level 19). A retrain candidate
+takes the logit backtest (50 s) plus `twm model candidate` (15 s) after the data stages; on
+this Mac it reproduces `logit-5828a082c9e09093` and the approved backtest's numbers exactly.
 
 **Running it yourself.** `uv run twm pipeline plan` shows what a run would do now (changes
 nothing). `uv run twm pipeline run --publish skip` runs every stage on your Mac with your
@@ -312,40 +316,73 @@ cache and store (it refreshes the current season like your Tuesday routine);
 `--publish local` publishes to the Docker database; `--publish remote` to Neon (reads
 `.env`). Without `--publish`, only a `DATABASE_URL` in the environment (the GitHub secret)
 makes it publish. Its files go to `data/pipeline/<run id>/`. Your own `twm score` keeps using
-your store's production model; `twm score --pinned` uses the approved one, like the job.
+your store's production model; `twm score --pinned` uses the approved one, like the job. On
+your Mac the backtest stage finds the approved backtest already in your store and writes
+nothing; if you have rebuilt the backtest since, it refuses (pin again, see below).
 
-## The approved model (step E4)
+## The approved model and its backtest (step E4)
 
 The scheduled job must score with the model you approved, never one it trained itself
-(spec 9: retraining is a manual workflow with a review step). A fresh runner has no `models/`
-folder (gitignored), so the approved model is committed:
+(spec 9: retraining is a manual workflow with a review step), and the lists' chance, band and
+priority, the priority table and the time-machine lists must come from the same backtest as
+the published track record (`reports/waiver_radar/evaluation.csv`). A fresh runner has no
+`models/` folder and no predictions store (both gitignored), so all of it is committed:
 
-- `config/production_models.yaml` (the **pin**): the season it scores, its `model_version`, the
-  file and the file's sha256;
-- the file, `artifacts/production_models/waiver_radar/<version>.joblib` (about 15 KB; not
-  under a folder named `models`, which `.gitignore` ignores anywhere).
+- `config/production_models.yaml` (the **pin**): the season it scores, its `model_version`,
+  the model file and its sha256, and the backtest snapshot's three files with their sha256
+  and row counts;
+- the model, `artifacts/production_models/waiver_radar/<version>.joblib` (about 15 KB; not
+  under a folder named `models`, which `.gitignore` ignores anywhere);
+- the **backtest snapshot**, `artifacts/production_models/waiver_radar/backtest-<version>/`:
+  `predictions.parquet`, `outcomes.parquet`, `model_versions.parquet` (zstd): the logit y_hit
+  walk-forward backtest of the evaluation seasons before the pinned season (2014-2025 for
+  2026: 12 fold versions, 91,638 predictions and their outcomes), exported read-only from
+  the store the evaluation was made from. Only the production model and label: the whole
+  store (every method, both labels) would be 4.0 MB, over the repository's 2 MB large-file
+  hook, and nothing on the scheduled path reads the other methods (the track record is the
+  committed CSV).
 
-`twm radar score --pinned` (what the job runs) loads only that file: the sha256 is checked
-before the file is opened (a pickle is only ever opened when it is the approved bytes), then
-the version inside must equal the pin and the season must match; anything else refuses the
-run (`twm model check` shows the same check). If today's training data differs from the data
-the approved model was trained on, the run warns and still uses the approved model.
+What checks them:
 
-Today's pin is `logit-5828a082c9e09093` (trained 2013-2025, the C6 production model). It was
-written with `uv run twm model pin waiver_radar --version logit-5828a082c9e09093`, which re-saves
-the local model with the production code (the bytes differ from `models/`, the scores are
-bit-identical on all 103,826 pool rows).
+- `twm radar score --pinned` (the job) opens the model file only when its sha256 equals the
+  pin's (a pickle is only ever opened when it is the approved bytes), then the version inside
+  must equal the pin and the season must match. If today's training data differs from the
+  data the approved model was trained on, the run warns and still uses the approved model.
+- `twm model restore-backtest` (the job's backtest stage) reads each snapshot file only after
+  its sha256 matched, checks the row counts, writes it into the fresh store (refused when the
+  store already holds a different backtest), then checks it against the committed evaluation:
+  every logit y_hit row the store alone determines (precision@10 pooled, by season and by
+  position with intervals and counts, rank buckets, PR-AUC, Brier, calibration: 120 rows)
+  must match, counts exactly and values to the CSV's 6 decimals. Anything else fails the run.
+- `uv run twm model check` runs all of it without changing anything; run it after any change to
+  the pin, the snapshot or the evaluation. A test restores the committed snapshot and compares
+  it with the committed CSV on every CI run; with your dataset (`uv run pytest -m realdata`) all
+  214 logit y_hit rows that do not compare with another method match, breakouts and the
+  without-rostered subset included.
+
+Today's pin is `logit-5828a082c9e09093` (trained 2013-2025, the C6 production model) with the
+backtest of your store (the one behind the committed evaluation). It was written with
+`uv run twm model pin waiver_radar --version logit-5828a082c9e09093`: the command re-saves a
+new model with the production code (an existing file of the same version is kept byte for
+byte), exports the store's backtest (`--store`, default your `data/predictions.duckdb`, opened
+read-only) and refuses when that backtest does not reproduce the committed evaluation. So the
+order after a new backtest is: `twm radar backtest`, `twm radar evaluate`, then `twm model pin`.
 
 **Retraining** (e.g. before a new season, or when the job warns that the training data
 changed): run the manual workflow `gh workflow run retrain.yml` (input `season`, default
-`current_season`). It trains a candidate on fresh data and uploads `retrain-candidate-<run id>`:
-the file and the pin laid out like the repository plus `retrain_report.md` (the candidate
-against the approved model: training data, how much the probabilities and the weekly top 10s
-change). It never commits and never publishes. If the report says "identical to the approved
-model", there is nothing to do (the file's bytes differ, the model does not). To approve a new
-one: `gh run download <run id>`, copy
-`artifacts/production_models/` and `config/production_models.yaml` into the checkout,
-`uv run twm model check`, review `git diff`, commit. The next run uses it.
+`current_season`). It runs the logit backtest and trains a candidate on fresh data, then
+uploads `retrain-candidate-<run id>`: the model, its backtest snapshot and the pin laid out
+like the repository plus `retrain_report.md` (the candidate against the approved model:
+training data, how much the probabilities and the weekly top 10s change; the candidate
+backtest against the approved one: precision@10, the must-add cutoff, each tier's hit rate;
+and whether it reproduces the committed evaluation). It never commits and never publishes.
+"Nothing to approve" means the model and the lists' numbers equal the approved ones. A
+candidate made on the runner will usually NOT reproduce the committed evaluation (Linux float
+noise, see "Caches"): approving it as it is would make the site contradict its track record.
+To keep them consistent, approve on your Mac: `uv run twm radar backtest`, `uv run twm radar
+evaluate`, `uv run twm model pin waiver_radar --version <version>` (after `uv run twm train
+waiver_radar` for a new model), then `uv run twm model check`, review `git diff`, commit the
+pin, the model, the snapshot and the reports together. The next run uses them.
 
 ## The owner's steps for E4
 
@@ -398,4 +435,5 @@ re-checked here where possible.
   `runner.py` the stages and exit codes, `report.py` the job summary and the run's files): the
   scheduled pipeline (`twm pipeline run|plan`).
 - `.github/workflows/retrain.yml`, `src/twm/pins.py`, `config/production_models.yaml`,
-  `artifacts/production_models/`: the approved model (`twm model check|pin|candidate`).
+  `artifacts/production_models/`: the approved model and its backtest snapshot
+  (`twm model check|pin|restore-backtest|candidate`).

@@ -73,7 +73,8 @@ uv run twm publish --target remote --dry-run   # the public database (DATABASE_U
 # The scheduled pipeline (GitHub Actions, .github/workflows/pipeline.yml; docs/deploy.md)
 uv run twm pipeline plan          # what a run would do now: the gate, the week due, last attempt?
 uv run twm pipeline run --skip-publish   # every stage in order, as the scheduled job runs them
-uv run twm model check            # the approved model (config/production_models.yaml) loads
+uv run twm model check            # the approved model and its frozen backtest (config/production_models.yaml)
+                                  # load, their sha256 match, and the backtest reproduces evaluation.csv
 uv run pytest                 # offline tests (the default), golden tests included;
                               # `uv run pytest -m network` runs the live drift check,
                               # `uv run pytest -m realdata` the tests on the real cache,

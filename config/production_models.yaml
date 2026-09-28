@@ -1,10 +1,26 @@
 # The owner-approved production models (step E4; src/twm/pins.py, docs/deploy.md
-# "The approved model"). The scheduled job scores ONLY with the file named here, after checking
-# its sha256 and the version inside. Written by `uv run twm model pin` (or copied from the
-# retrain workflow's artifact after review); change it only by committing a reviewed model.
+# "The approved model and its backtest"). The scheduled job scores ONLY with the model file
+# named here and reads the bands, priorities and time-machine lists ONLY from the backtest
+# snapshot named here, after checking every file's sha256. Written by `uv run twm model pin`
+# (or copied from the retrain workflow's artifact after review); change it only by committing
+# a reviewed model.
 waiver_radar:
   season: 2026
   model_version: logit-5828a082c9e09093
   file: artifacts/production_models/waiver_radar/logit-5828a082c9e09093.joblib
   sha256: d00cc925b07b9ede248a0671ab7394b0fbbd1268a092d1a9a5346fd3a862ecce
   approved: '2026-09-28'
+  backtest:
+    seasons: 2014-2025
+    predictions:
+      file: artifacts/production_models/waiver_radar/backtest-logit-5828a082c9e09093/predictions.parquet
+      sha256: 4033364e98e6fcc23af10c6809750e7a75a90333ac16b870df365e778b1666ea
+      rows: 91638
+    outcomes:
+      file: artifacts/production_models/waiver_radar/backtest-logit-5828a082c9e09093/outcomes.parquet
+      sha256: edb2fd7a5fe0dab1a877d730a1479bc7a7c33938fe86c2a8ed39dc7528804881
+      rows: 91638
+    model_versions:
+      file: artifacts/production_models/waiver_radar/backtest-logit-5828a082c9e09093/model_versions.parquet
+      sha256: 7e1fad3da47c825fcab3bafecbb32b825a8f6907b4b393cf6890ca7f9232e4eb
+      rows: 12

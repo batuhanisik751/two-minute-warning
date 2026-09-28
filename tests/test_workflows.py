@@ -98,4 +98,16 @@ def test_the_retrain_workflow_is_manual_and_only_uploads() -> None:
     text = (WORKFLOWS / "retrain.yml").read_text()
     assert "secrets." not in text  # it never needs the database
     assert "twm model candidate" in text and "twm publish" not in text
+    # the candidate's backtest is made first, so it is frozen with the candidate model
+    assert text.index("twm radar backtest --model logit") < text.index("twm model candidate")
     assert not any(s.get("uses", "").startswith("actions/cache/save@") for s in steps(wf))
+
+
+def test_the_scheduled_path_never_retrains() -> None:
+    """The pipeline restores the approved backtest and scores with the approved model: no
+    `twm radar backtest`, `twm train` or `--retrain` anywhere in its code or workflow."""
+    text = (WORKFLOWS / "pipeline.yml").read_text()
+    code = (ROOT / "src" / "twm" / "pipeline" / "runner.py").read_text()
+    for needle in ('"radar", "backtest"', '"train"', "--retrain", "radar backtest"):
+        assert needle not in text and needle not in code, needle
+    assert '"restore-backtest"' in code and '"--pinned"' in code

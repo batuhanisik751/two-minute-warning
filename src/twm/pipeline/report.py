@@ -200,10 +200,60 @@ def _compare(new: Any, old: Any, dataset: pl.DataFrame) -> list[str]:
     ]
 
 
+def backtest_summary(store: Path, season: int) -> dict[str, Any]:
+    """The production model's backtest in a store, as the weekly lists read it: pooled
+    precision@10 (all pool rows, the evaluation seasons before ``season``) and the priority
+    tiers (the must-add cutoff and each tier's hit rate)."""
+    from twm.backtest.metrics import pooled_precision, precision_at_k
+    from twm.modules.waiver_radar import confidence as cf
+    from twm.modules.waiver_radar import evaluation as ev
+    from twm.modules.waiver_radar.production import LABEL, MODEL
+
+    span = cf.seasons_before(season)
+    rows = ev.load_predictions(store, LABEL, seasons=span).filter(pl.col("model") == MODEL)
+    groups = precision_at_k(ev.ranked_subset(rows, "all"), group=ev.LIST_GROUP, label="y",
+                            k=ev.K)  # fmt: skip
+    pp = pooled_precision(groups)
+    conf = cf.from_store(store, model=MODEL, label=LABEL, seasons=span)
+    tiers = {r["tier"]: (r["rate"], r["hits"], r["rows"]) for r in conf.tiers.iter_rows(named=True)}
+    return {"seasons": f"{conf.seasons[0]}-{conf.seasons[1]}", "p_at_10": pp.value,
+            "hits": pp.hits_top, "n_top": int(groups.get_column("n_top").sum()),
+            "cutoffs": conf.cutoffs, "tiers": tiers}  # fmt: skip
+
+
+def _backtest_lines(new: dict[str, Any], old: dict[str, Any] | None) -> list[str]:
+    def one(b: dict[str, Any]) -> str:
+        t = b["tiers"]
+        cut = b["cutoffs"].get("must-add")
+        tiers = ", ".join(
+            f"{k} {100 * (t[k][0] or 0):.1f}% ({t[k][1]:,} of {t[k][2]:,})" for k in t
+        )
+        cut_text = "-" if cut is None else f"{100 * cut:.1f}%"
+        return (f"precision@10 {100 * (b['p_at_10'] or 0):.2f}% ({b['hits']:,} of "
+                f"{b['n_top']:,}); must-add from model probability {cut_text}; top-25 hit "
+                f"rates: {tiers}")  # fmt: skip
+
+    lines = [f"- candidate backtest ({new['seasons']}): {one(new)}"]
+    if old is not None:
+        lines.append(f"- approved backtest ({old['seasons']}): {one(old)}")
+        if (new["hits"], new["cutoffs"], new["tiers"]) == (old["hits"], old["cutoffs"],
+                                                           old["tiers"]):  # fmt: skip
+            lines.append("- the two backtests give the same lists' numbers")
+    return lines
+
+
 def candidate_report(
-    pm: Any, pin: Any, dataset: pl.DataFrame, *, old: Any = None, old_note: str = ""
+    pm: Any,
+    pin: Any,
+    dataset: pl.DataFrame,
+    *,
+    old: Any = None,
+    old_note: str = "",
+    store: Path | None = None,
+    old_pin: Any = None,
+    evaluation_problems: list[str] | None = None,
 ) -> str:
-    """Markdown for the owner's review of a retrained candidate."""
+    """Markdown for the owner's review of a retrained candidate and its backtest snapshot."""
     row = pm.version_row
     lines = [
         f"# Retrain candidate: waiver_radar {pm.season}", "",
@@ -211,15 +261,17 @@ def candidate_report(
         f"- **file:** `{pin.file}` (sha256 `{pin.sha256}`)",
         f"- **training data hash:** `{row.get('dataset_hash')}`",
         f"- **settings:** `{json.dumps(pm.params, sort_keys=True, default=str)}`",
-        f"- **calibration:** {pm.calibration or '-'}", "",
-        "## Compared with the approved model", "",
+        f"- **calibration:** {pm.calibration or '-'}",
     ]  # fmt: skip
+    for t, b in pin.backtest.items():
+        lines.append(f"- **backtest {t}:** `{b.file}` ({b.rows:,} rows, sha256 `{b.sha256}`)")
+    lines += ["", "## The model, compared with the approved one", ""]
     if old is None:
         lines.append(f"- no approved model to compare with: {old_note}")
     elif old.model_version == pm.model_version:
         lines.append(
             f"- identical to the approved model {old.model_version} (same training data, "
-            "features and settings): nothing to approve"
+            "features and settings)"
         )
     else:
         orow = old.version_row
@@ -229,13 +281,52 @@ def candidate_report(
             f"`{row.get('dataset_hash')}`",
             *_compare(pm, old, dataset),
         ]
+    lines += ["", "## The backtest (the lists' chance, band and priority come from it)", ""]
+    same_backtest = False
+    if store is not None:
+        new_bt, old_bt = backtest_summary(store, pm.season), _approved_summary(old_pin, pm.season)
+        lines += _backtest_lines(new_bt, old_bt)
+        same_backtest = old_bt is not None and all(new_bt[k] == old_bt[k] for k in (
+            "seasons", "hits", "n_top", "cutoffs", "tiers"))  # fmt: skip
+    problems = evaluation_problems or []
+    if problems:
+        lines += [
+            f"- it does NOT reproduce the committed `reports/waiver_radar/evaluation.csv` "
+            f"({len(problems)} rows differ, e.g. {problems[0]}): approving it also needs a new "
+            "evaluation made from the same backtest (`uv run twm radar backtest` and `uv run "
+            "twm radar evaluate` on your Mac, then `uv run twm model pin` from that store), or "
+            "the site's track record and its lists disagree",
+        ]
+    elif store is not None:
+        lines.append("- it reproduces the committed `reports/waiver_radar/evaluation.csv`")
+    if old is not None and old.model_version == pm.model_version and same_backtest:
+        lines += ["", "**Nothing to approve:** the model and the lists' numbers equal the approved "
+                  "ones (the files' bytes differ only by when they were written)."]  # fmt: skip
     lines += [
         "", "## To approve it", "",
         "1. Download this artifact and copy `artifacts/production_models/` and "
         "`config/production_models.yaml` from it into the checkout (same paths).",
-        "2. `uv run twm model check` must print the candidate's version.",
-        "3. Review `git diff config/production_models.yaml`, then commit both files yourself. "
-        "The scheduled job uses the new model from the next run on.",
+        "2. `uv run twm model check` must print the candidate's version and pass.",
+        "3. Review `git diff config/production_models.yaml`, then commit the files yourself. "
+        "The scheduled job uses the new model and backtest from the next run on.",
         "", "Nothing was committed by the workflow; the approved model stays in use until then.",
     ]  # fmt: skip
     return "\n".join(lines) + "\n"
+
+
+def _approved_summary(old_pin: Any, season: int) -> dict[str, Any] | None:
+    """:func:`backtest_summary` of the approved snapshot (restored into a temporary store),
+    or None without one."""
+    import tempfile
+
+    from twm import pins
+
+    if old_pin is None or not old_pin.backtest:
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Path(tmp) / "approved.duckdb"
+        try:
+            pins.restore_backtest(old_pin, store)
+        except pins.PinError:
+            return None
+        return backtest_summary(store, season)

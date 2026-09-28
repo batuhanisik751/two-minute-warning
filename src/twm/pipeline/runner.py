@@ -13,9 +13,12 @@ same exit codes and the same files as when the owner types it):
 4. **build**: ``twm build --start <build_start> --end <season>``.
 5. **plan** (here, :func:`twm.pipeline.schedule.plan_week`): which week's list is due.
 6. **dataset**: ``twm radar dataset``.
-7. **backtest**: ``twm radar backtest --model logit --label y_hit``, rebuilt on every run (about a
-   minute; it reproduces the owner's store exactly). The weekly list's chance, band and priority
-   and the published time-machine lists come from it.
+7. **backtest**: ``twm model restore-backtest waiver_radar``: the backtest the model was
+   approved with, restored from the committed snapshot (sha256 and row counts checked first,
+   then checked against the committed evaluation); no fold is trained. The weekly list's chance,
+   band and priority, the priority table and the published time-machine lists come from it, so
+   they agree with the published track record on every machine (a Linux rebuild of the folds
+   differed by a few top-10 orderings).
 8. **score** (only when a list is due): ``twm radar score --pinned`` (exit code 3 = not ready).
 9. **export** (here): the scored list as CSV and Parquet for the run's files.
 10. **publish**: ``twm publish`` (remote when ``DATABASE_URL`` is set, else skipped with a
@@ -265,7 +268,10 @@ def default_hooks() -> Hooks:
 
     def check_model(season: int) -> str:
         pm, pin = pins.load_pinned(MODULE, season)
-        return f"approved model {pm.model_version} ({pin.file}, sha256 {pin.sha256[:12]}...)"
+        frames = pins.load_backtest(pin)  # sha256 and rows of the snapshot, before any work
+        n = frames["predictions"].height
+        return (f"approved model {pm.model_version} ({pin.file}, sha256 {pin.sha256[:12]}...) "
+                f"and its backtest {pin.backtest_seasons} ({n:,} predictions)")  # fmt: skip
 
     return Hooks(
         check_model=check_model,
@@ -611,9 +617,9 @@ def _stages(r: _Run) -> None:
     ok = ok and r.command("dataset", ["radar", "dataset", "--end", str(season)])
     ok = ok and r.command(
         "backtest",
-        ["radar", "backtest", "--model", "logit", "--label", "y_hit",
-         "--out", str(r.out / "backtest" / "backtest.md")],
-        "logit walk-forward backtest (the bands, priorities and time-machine lists)",
+        ["model", "restore-backtest", "waiver_radar", "--season", str(season)],
+        "the approved backtest restored from its snapshot (the bands, priorities and "
+        "time-machine lists)",
     )  # fmt: skip
     if ok and p is not None:
         ok = r.score(p)

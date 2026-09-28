@@ -1,9 +1,11 @@
 # Retrain the Waiver Radar production model for review (step E4; PROJECT_SPEC 9: retraining
-# is a manual workflow with a review step). docs/deploy.md "The approved model".
+# is a manual workflow with a review step). docs/deploy.md "The approved model and its backtest".
 #
-# Manual only. It trains a candidate on fresh data and uploads, as an artifact: the model file
-# and its pin laid out like the repository (artifacts/production_models/...,
-# config/production_models.yaml) and retrain_report.md comparing it with the approved model.
+# Manual only. It trains a candidate on fresh data, runs the logit walk-forward backtest the
+# lists' chance, band and priority come from, and uploads, as an artifact: the model file, the
+# backtest snapshot and the pin laid out like the repository (artifacts/production_models/...,
+# config/production_models.yaml) and retrain_report.md comparing both with the approved ones
+# (and saying whether the candidate backtest reproduces the committed evaluation).
 # It NEVER commits (permissions: contents: read) and never publishes: the scheduled pipeline
 # keeps using the approved model until the owner reviews the candidate and commits it.
 name: Retrain (manual, for review)
@@ -59,6 +61,7 @@ jobs:
           uv run twm ingest --start "$season" --force
           uv run twm build --start "$start" --end "$season"
           uv run twm radar dataset --end "$season"
+          uv run twm radar backtest --model logit --label y_hit --out "$RUNNER_TEMP/candidate/backtest/backtest.md"
           uv run twm model candidate waiver_radar --season "$season" --out "$RUNNER_TEMP/candidate"
           cat "$RUNNER_TEMP/candidate/retrain_report.md" >> "$GITHUB_STEP_SUMMARY"
 

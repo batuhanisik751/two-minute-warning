@@ -241,6 +241,50 @@ def load(store: Path | str, dataset: pl.DataFrame, label: str) -> EvalData:
     return prepare(load_predictions(store, label), dataset, label)
 
 
+# The CSV rows of one method that the predictions store alone determines (subset 'all'): no
+# dataset needed. The without-rostered subset needs ownership, the breakouts the rostered
+# universe and the base-rate Brier the training rows; the differences need the other methods.
+STORE_ONLY_SCOPES = ("pooled", "season", "position", "spread", "bucket", "prob", "prob_position",
+                     "calibration_equal", "calibration_fixed")  # fmt: skip
+_UNIVERSE_SCHEMA: dict[str, pl.DataType] = {
+    "season": pl.Int32(), "week": pl.Int32(), ID: pl.String(), "name": pl.String(),
+    "team": pl.String(), "position": pl.String(), "in_pool": pl.Boolean(),
+    "train_eligible": pl.Boolean(), "label_status": pl.String(), "owned_avg": pl.Float64(),
+    "ecr_available": pl.Boolean(), "preseason_pos_rank": pl.Int32(),
+    "window_weeks": pl.List(pl.Int32()), "window_ranks": pl.List(pl.Int32()),
+    "window_points": pl.List(pl.Float64()), "y_hit": pl.Boolean(), "y_sustained": pl.Boolean(),
+}  # fmt: skip
+
+
+def store_only_results(predictions: pl.DataFrame, label: str) -> list[dict[str, object]]:
+    """The evaluation's CSV rows of :data:`STORE_ONLY_SCOPES` (subset 'all', every method in
+    ``predictions`` (:func:`load_predictions` rows), formatted as the CSV writes them),
+    computed by :func:`evaluate_label` itself from the store alone. Used to check that a
+    predictions store (e.g. the approved backtest snapshot, step E4) is the one behind
+    ``reports/waiver_radar/evaluation.csv``."""
+    rows = predictions.with_columns(
+        pl.lit(None, dtype=pl.String).alias("name"), pl.lit(None, dtype=pl.String).alias("team"),
+        pl.lit(None, dtype=pl.Float64).alias("owned_avg"),
+        pl.lit(None, dtype=pl.Boolean).alias("ecr_available"),
+    )  # fmt: skip
+    seasons = tuple(sorted(int(s) for s in rows.get_column("season").unique().to_list()))
+    versions = (
+        predictions.group_by("model")
+        .agg(pl.col("model_version").n_unique().alias("versions"), pl.len().alias("rows"))
+        .sort("model")
+    )
+    data = EvalData(
+        label, rows, pl.DataFrame(schema=_UNIVERSE_SCHEMA),
+        pl.DataFrame(schema={"season": pl.Int32, "y": pl.Boolean}), versions, seasons,
+    )  # fmt: skip
+    methods = set(predictions.get_column("model").unique().to_list())
+    out = []
+    for r in evaluate_label(data).results:
+        if r["subset"] == "all" and r["scope"] in STORE_ONLY_SCOPES and r["model"] in methods:
+            out.append({k: _fmt(r[k]) for k in CSV_COLUMNS})
+    return out
+
+
 # --------------------------------------------------------------------------------------
 # Ranked lists
 # --------------------------------------------------------------------------------------

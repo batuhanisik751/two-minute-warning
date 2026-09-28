@@ -1362,13 +1362,36 @@ model_app = typer.Typer(
 app.add_typer(model_app, name="model")
 
 
+def _snapshot_text(pin) -> str:
+    from twm.pins import BACKTEST_TABLES
+
+    rows = ", ".join(f"{pin.backtest[t].rows:,} {t}" for t in BACKTEST_TABLES)
+    return f"backtest snapshot {pin.backtest_seasons}: {rows}"
+
+
+def _check_against_evaluation(store: Path, evaluation_csv: Path) -> list[str]:
+    from twm import pins
+
+    return pins.evaluation_mismatches(store, _project_path(evaluation_csv))
+
+
 @model_app.command("check")
 def model_check(
     module: str = typer.Argument("waiver_radar", help="Module: waiver_radar."),
     season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+    evaluation_csv: Path = typer.Option(
+        Path("reports/waiver_radar/evaluation.csv"),
+        "--evaluation",
+        help="The committed evaluation (the published track record) the backtest must match.",
+    ),
 ) -> None:
-    """Check that the approved model loads: pin present, file present, sha256 and version
-    match (exit 1 otherwise). The scheduled job runs this first."""
+    """Check the approved model and its backtest snapshot (exit 1 on any problem): pin
+    present; model file present, sha256 and version as pinned; every backtest file present
+    with its sha256 and row count; and the snapshot reproduces the committed evaluation's rows
+    of the production model (precision@10 pooled, by season and position, buckets, PR-AUC,
+    Brier, calibration). Changes nothing."""
+    import tempfile
+
     from twm import pins
     from twm.config import settings
 
@@ -1376,12 +1399,72 @@ def model_check(
     chosen = season if season is not None else settings().current_season
     try:
         pm, pin = pins.load_pinned(key, chosen)
+        typer.echo(f"{key} {chosen}: approved model {pm.model_version} ({pin.file}, sha256 "
+                   f"{pin.sha256[:12]}..., approved {pin.approved or '?'})")  # fmt: skip
+        typer.echo(f"  {pm.describe()}")
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp) / "predictions.duckdb"
+            pins.restore_backtest(pin, store)
+            typer.echo(f"  {_snapshot_text(pin)} (sha256 and rows checked)")
+            problems = _check_against_evaluation(store, evaluation_csv)
     except pins.PinError as e:
         typer.echo(f"not usable: {e}", err=True)
         raise typer.Exit(code=1) from None
-    typer.echo(f"{key} {chosen}: approved model {pm.model_version} ({pin.file}, sha256 "
-               f"{pin.sha256[:12]}..., approved {pin.approved or '?'})")  # fmt: skip
-    typer.echo(f"  {pm.describe()}")
+    if problems:
+        typer.echo(
+            f"not usable: the approved backtest disagrees with {evaluation_csv} in "
+            f"{len(problems)} places (the site would contradict its own track record), e.g. "
+            + "; ".join(problems[:3]),
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    typer.echo(f"  matches {evaluation_csv} (the production model's rows the store determines)")
+
+
+@model_app.command("restore-backtest")
+def model_restore_backtest(
+    module: str = typer.Argument("waiver_radar", help="Module: waiver_radar."),
+    season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+    store: Path | None = typer.Option(
+        None,
+        "--store",
+        help="Predictions store to restore into (default: settings "
+        "paths.predictions; created if missing).",
+    ),
+    evaluation_csv: Path = typer.Option(
+        Path("reports/waiver_radar/evaluation.csv"),
+        "--evaluation",
+        help="The committed evaluation the restored backtest must match.",
+    ),
+) -> None:
+    """Restore the approved backtest snapshot into a predictions store (the scheduled job's
+    backtest stage; no model is trained): sha256 and row counts checked first, refused when
+    the store holds a different backtest, then checked against the committed evaluation
+    (exit 1 on any problem)."""
+    from twm import pins
+    from twm import predictions as pr
+    from twm.config import ROOT, settings
+
+    key = _module_or_exit(module)
+    chosen = season if season is not None else settings().current_season
+    target = _project_path(store) if store is not None else pr.default_path()
+    try:
+        _, pin = pins.load_pinned(key, chosen)
+        done = pins.restore_backtest(pin, target)
+    except pins.PinError as e:
+        typer.echo(f"not restored: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"{done['status']}: {_snapshot_text(pin)} of {pin.model_version} -> "
+               f"{_display_path(target, ROOT)}")  # fmt: skip
+    problems = _check_against_evaluation(target, evaluation_csv)
+    if problems:
+        typer.echo(
+            f"the approved backtest disagrees with {evaluation_csv} in {len(problems)} places, "
+            "e.g. " + "; ".join(problems[:3]),
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    typer.echo(f"checked: it reproduces {evaluation_csv} (the production model's rows)")
 
 
 @model_app.command("pin")
@@ -1397,11 +1480,29 @@ def model_pin(
         "workflow's artifact), instead of --version.",
     ),
     season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+    store: Path | None = typer.Option(
+        None,
+        "--store",
+        help="The predictions store whose backtest is approved with the model "
+        "(default: settings paths.predictions; opened read-only).",
+    ),
+    evaluation_csv: Path = typer.Option(
+        Path("reports/waiver_radar/evaluation.csv"),
+        "--evaluation",
+        help="The committed evaluation the backtest must match (run `twm radar evaluate` "
+        "first after a new backtest).",
+    ),
 ) -> None:
-    """Approve a production model: write it to artifacts/production_models/<module>/ and pin
-    it in config/production_models.yaml (with its sha256). Review both files, then commit
-    them: the scheduled job uses only the committed pin."""
+    """Approve a production model together with its backtest: write the model to
+    artifacts/production_models/<module>/, export the store's backtest of the production
+    model (the seasons before --season) next to it as zstd Parquet, and pin all of it in
+    config/production_models.yaml with sha256s and row counts. Refused when that backtest
+    does not reproduce the committed evaluation. Review, then commit the files: the scheduled
+    job uses only the committed pin."""
+    import tempfile
+
     from twm import pins
+    from twm import predictions as pr
     from twm.config import ROOT, settings
     from twm.modules.waiver_radar import production as prod
 
@@ -1410,6 +1511,7 @@ def model_pin(
         raise typer.BadParameter("give exactly one of --version and --file")
     chosen = season if season is not None else settings().current_season
     source = _project_path(file) if file is not None else prod.model_path(str(version))
+    store_path = _project_path(store) if store is not None else pr.default_path()
     try:
         pm = prod.load_model(source)
     except prod.ProductionModelError as e:
@@ -1425,11 +1527,30 @@ def model_pin(
             err=True,
         )
         raise typer.Exit(code=1)
-    pin = pins.approve(pm)
+    problems = _check_against_evaluation(store_path, evaluation_csv)
+    if problems:
+        typer.echo(
+            f"not pinned: the backtest in {_display_path(store_path, ROOT)} disagrees with "
+            f"{evaluation_csv} in {len(problems)} places (e.g. {problems[0]}); run `uv run twm "
+            "radar evaluate` on this store first, so the track record and the lists agree",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    try:
+        pin = pins.approve(pm, store=store_path)
+        with tempfile.TemporaryDirectory() as tmp:  # the written snapshot restores cleanly
+            pins.restore_backtest(pin, Path(tmp) / "check.duckdb")
+    except pins.PinError as e:
+        typer.echo(f"not pinned: {e}", err=True)
+        raise typer.Exit(code=1) from None
     typer.echo(f"pinned {key} {chosen}: {pin.model_version}")
-    typer.echo(f"  wrote {pin.file} (sha256 {pin.sha256[:12]}...)")
+    typer.echo(f"  model {pin.file} (sha256 {pin.sha256[:12]}...)")
+    for t in pins.BACKTEST_TABLES:
+        b = pin.backtest[t]
+        size = b.path().stat().st_size / 1e6
+        typer.echo(f"  {t}: {b.file} ({b.rows:,} rows, {size:.2f} MB, sha256 {b.sha256[:12]}...)")
     typer.echo(f"  wrote {_display_path(pins.default_pin_path(), ROOT)}")
-    typer.echo("  review both files, then commit them (the scheduled job uses only the "
+    typer.echo("  review the files, then commit them (the scheduled job uses only the "
                "committed pin)")  # fmt: skip
 
 
@@ -1441,15 +1562,28 @@ def model_candidate(
     dataset: Path = typer.Option(
         Path("data/waiver_radar/dataset.parquet"), "--dataset", help="The training dataset."
     ),
+    store: Path | None = typer.Option(
+        None,
+        "--store",
+        help="The store with the candidate's backtest (`twm radar backtest "
+        "--model logit --label y_hit` just before; default: settings paths.predictions).",
+    ),
+    evaluation_csv: Path = typer.Option(
+        Path("reports/waiver_radar/evaluation.csv"),
+        "--evaluation",
+        help="The committed evaluation, to say whether approving needs a new one.",
+    ),
 ) -> None:
-    """Train a candidate production model for review (the retrain workflow): writes, under
-    --out, the model file and the pin laid out like the repository
-    (artifacts/production_models/..., config/production_models.yaml) plus retrain_report.md
-    comparing it with the approved model. Nothing in the repository changes; to approve it,
-    copy the two files into the checkout, review `git diff`, commit."""
+    """Train a candidate production model for review (the retrain workflow) and freeze the
+    store's backtest with it: writes, under --out, the model file, the backtest snapshot and
+    the pin laid out like the repository (artifacts/production_models/...,
+    config/production_models.yaml) plus retrain_report.md comparing both with the approved
+    ones. Nothing in the repository changes; to approve, copy those files into the checkout,
+    run `twm model check`, review `git diff`, commit."""
     import polars as pl
 
     from twm import pins
+    from twm import predictions as pr
     from twm.backtest.walkforward import WalkForwardError
     from twm.config import settings
     from twm.modules.waiver_radar import production as prod
@@ -1461,6 +1595,7 @@ def model_candidate(
     if not source.exists():
         typer.echo(f"dataset not found: {source}; run `twm radar dataset` first", err=True)
         raise typer.Exit(code=1)
+    store_path = _project_path(store) if store is not None else pr.default_path()
     frame = pl.read_parquet(source)
     try:
         pm = prod.train_production(frame, chosen)
@@ -1472,17 +1607,27 @@ def model_candidate(
     current = pins.read_pins()
     if current:
         pins.write_pins(current, pin_path)
-    pin = pins.approve(pm, root=base, path=pin_path)
     try:
-        old, _ = pins.load_pinned(prod.MODULE, chosen)
+        pin = pins.approve(pm, store=store_path, root=base, path=pin_path)
     except pins.PinError as e:
-        old, old_note = None, str(e)
+        typer.echo(f"cannot freeze the candidate's backtest: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    try:
+        old, old_pin = pins.load_pinned(prod.MODULE, chosen)
+    except pins.PinError as e:
+        old, old_pin, old_note = None, None, str(e)
     else:
         old_note = ""
-    text = candidate_report(pm, pin, frame, old=old, old_note=old_note)
+    problems = _check_against_evaluation(store_path, evaluation_csv)
+    text = candidate_report(
+        pm, pin, frame, old=old, old_note=old_note, store=store_path, old_pin=old_pin,
+        evaluation_problems=problems,
+    )  # fmt: skip
     (base / "retrain_report.md").write_text(text)
     typer.echo(f"candidate {pm.model_version} for {chosen}: {pm.describe()}")
-    typer.echo(f"wrote {base / pin.file}, {pin_path} and {base / 'retrain_report.md'}")
+    typer.echo(f"  {_snapshot_text(pin)}")
+    typer.echo(f"wrote {base / pin.file}, {base / pins.backtest_dir(pin.model_version, Path('.'))}"
+               f", {pin_path} and {base / 'retrain_report.md'}")  # fmt: skip
 
 
 # --------------------------------------------------------------------------------------

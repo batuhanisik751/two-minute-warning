@@ -1,9 +1,10 @@
 import "server-only";
-import { and, asc, count, desc, eq, isNotNull, lt, lte, max, min, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, lt, max, min, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { dimPlayer, dimTeam, modelVersions, radarList, radarOutcome, radarPick } from "@/db/schema";
 import { cached } from "@/lib/cache";
-import type { Position } from "@/lib/method";
+import { FLEX_POSITIONS } from "@/lib/positions";
+import { flexRankCounts, type FlexHistoryRow } from "@/lib/flex";
 import type { ListKey } from "@/lib/params";
 import type { RankCount } from "@/lib/buckets";
 
@@ -50,14 +51,21 @@ export type PickOutcome = {
 };
 
 export type Pick = {
+  /** the position of the list he is on */
+  position: string;
   rank: number;
   gsisId: string;
   name: string;
   team: string;
   teamName: string;
+  /** dim_team.color / color2 (drawn only where they contrast with the theme: lib/team-colors.ts) */
+  teamColor: string | null;
+  teamColor2: string | null;
   chance: number | null;
   chanceLow: number | null;
   chanceHigh: number | null;
+  /** the model's calibrated probability: the FLEX tie-break, never shown on a page */
+  modelProb: number;
   tier: string | null;
   reasons: string[];
   outcome: PickOutcome | null;
@@ -85,9 +93,12 @@ const pickColumns = {
   name: dimPlayer.displayName,
   team: radarPick.team,
   teamName: dimTeam.teamName,
+  teamColor: dimTeam.color,
+  teamColor2: dimTeam.color2,
   chance: radarPick.chance,
   chanceLow: radarPick.chanceLow,
   chanceHigh: radarPick.chanceHigh,
+  modelProb: radarPick.modelProb,
   tier: radarPick.tier,
   reasons: radarPick.reasons,
   position: radarPick.position,
@@ -105,9 +116,12 @@ type PickRow = {
   name: string;
   team: string;
   teamName: string;
+  teamColor: string | null;
+  teamColor2: string | null;
   chance: number | null;
   chanceLow: number | null;
   chanceHigh: number | null;
+  modelProb: number;
   tier: string | null;
   reasons: unknown;
   position: string;
@@ -121,14 +135,18 @@ type PickRow = {
 
 function toPick(r: PickRow): Pick {
   return {
+    position: r.position,
     rank: r.rank,
     gsisId: r.gsisId,
     name: r.name,
     team: r.team,
     teamName: r.teamName,
+    teamColor: r.teamColor,
+    teamColor2: r.teamColor2,
     chance: r.chance,
     chanceLow: r.chanceLow,
     chanceHigh: r.chanceHigh,
+    modelProb: r.modelProb,
     tier: r.tier,
     reasons: reasonTexts(r.reasons),
     outcome:
@@ -203,7 +221,7 @@ function toHeader(h: {
 async function getListRaw(
   season: number,
   week: number,
-  position: Position,
+  position: string,
   kind: "live" | "backtest",
 ): Promise<{ header: ListHeader; picks: Pick[] } | null> {
   const key = and(
@@ -234,8 +252,9 @@ export const getList = cached("radar.getList", getListRaw);
 
 export type TopList = { header: ListHeader; picks: Pick[] };
 
-/** The newest live week's lists, each cut to its top `n` (for the home page). */
-async function getLatestLiveTopRaw(n: number): Promise<{ week: { season: number; week: number }; lists: TopList[] } | null> {
+/** The newest live week's lists, every pick (the home page shows each list's top 5 and the
+ *  FLEX merge of the whole RB, WR and TE lists). */
+async function getLatestLiveRaw(): Promise<{ week: { season: number; week: number }; lists: TopList[] } | null> {
   const newest = await db()
     .select({ season: radarList.season, week: radarList.week })
     .from(radarList)
@@ -250,14 +269,7 @@ async function getLatestLiveTopRaw(n: number): Promise<{ week: { season: number;
     .innerJoin(modelVersions, eq(modelVersions.modelVersion, radarList.modelVersion))
     .where(and(eq(radarList.season, wk.season), eq(radarList.week, wk.week), eq(radarList.kind, "live")));
   const rows = await picksQuery()
-    .where(
-      and(
-        eq(radarPick.season, wk.season),
-        eq(radarPick.week, wk.week),
-        eq(radarPick.kind, "live"),
-        lte(radarPick.rank, n),
-      ),
-    )
+    .where(and(eq(radarPick.season, wk.season), eq(radarPick.week, wk.week), eq(radarPick.kind, "live")))
     .orderBy(asc(radarPick.position), asc(radarPick.rank));
   const lists = headers.map((h) => ({
     header: toHeader(h),
@@ -265,7 +277,14 @@ async function getLatestLiveTopRaw(n: number): Promise<{ week: { season: number;
   }));
   return { week: wk, lists };
 }
-export const getLatestLiveTop = cached("radar.getLatestLiveTop", getLatestLiveTopRaw);
+export const getLatestLive = cached("radar.getLatestLive", getLatestLiveRaw);
+
+/** The positions that have at least one published list (the tabs and cards come from these). */
+async function getPositionsRaw(): Promise<string[]> {
+  const rows = await db().selectDistinct({ position: radarList.position }).from(radarList);
+  return rows.map((r) => r.position);
+}
+export const getPositions = cached("radar.getPositions", getPositionsRaw);
 
 export type BucketCounts = {
   counts: RankCount[];
@@ -276,7 +295,7 @@ export type BucketCounts = {
 
 /** Picks and hits per rank in the reconstructed lists of `position` from seasons before
  *  `beforeSeason`, counting only final outcomes (a pending window is not a miss). */
-async function getBucketCountsRaw(position: Position, beforeSeason: number): Promise<BucketCounts> {
+async function getBucketCountsRaw(position: string, beforeSeason: number): Promise<BucketCounts> {
   const where = and(
     eq(radarPick.kind, "backtest"),
     eq(radarPick.position, position),
@@ -317,6 +336,43 @@ async function getBucketCountsRaw(position: Position, beforeSeason: number): Pro
   };
 }
 export const getBucketCounts = cached("radar.getBucketCounts", getBucketCountsRaw);
+
+/** The same badges for FLEX: every reconstructed week before `beforeSeason` is merged again
+ *  from its RB, WR and TE picks (lib/flex.ts, the same order the page shows) and the picks and
+ *  hits per FLEX rank are counted where the outcome is final. Reads every such pick (a pick
+ *  without a final outcome still takes its FLEX rank); the result is small and cached. */
+async function getFlexBucketCountsRaw(beforeSeason: number): Promise<BucketCounts> {
+  const rows = await db()
+    .select({
+      season: radarPick.season,
+      week: radarPick.week,
+      position: radarPick.position,
+      rank: radarPick.rank,
+      gsisId: radarPick.gsisId,
+      chance: radarPick.chance,
+      modelProb: radarPick.modelProb,
+      yHit: radarOutcome.yHit,
+      status: radarOutcome.labelStatus,
+    })
+    .from(radarPick)
+    .leftJoin(
+      radarOutcome,
+      and(
+        eq(radarOutcome.season, radarPick.season),
+        eq(radarOutcome.week, radarPick.week),
+        eq(radarOutcome.gsisId, radarPick.gsisId),
+      ),
+    )
+    .where(
+      and(
+        eq(radarPick.kind, "backtest"),
+        inArray(radarPick.position, [...FLEX_POSITIONS]),
+        lt(radarPick.season, beforeSeason),
+      ),
+    );
+  return flexRankCounts(rows satisfies FlexHistoryRow[]);
+}
+export const getFlexBucketCounts = cached("radar.getFlexBucketCounts", getFlexBucketCountsRaw);
 
 export type HistoryRow = {
   season: number;

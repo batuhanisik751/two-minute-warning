@@ -1,14 +1,16 @@
 // Reading /waivers and /player query strings. Anything unexpected falls back to a default
 // (never an error page): these are links people share and edit by hand.
-import { POSITIONS, type Position } from "./method";
+import { POSITIONS } from "./method";
 
 type Raw = string | string[] | undefined;
 
 const first = (v: Raw): string | undefined => (Array.isArray(v) ? v[0] : v);
 
-export function parsePosition(v: Raw, fallback: Position = POSITIONS[0]): Position {
+/** A position among `allowed` (the page passes the tabs it shows: the published positions
+ *  plus FLEX), case-insensitive; anything else is the first allowed one. */
+export function parsePosition(v: Raw, allowed: readonly string[] = POSITIONS, fallback: string = allowed[0] ?? POSITIONS[0]): string {
   const s = first(v)?.toUpperCase();
-  return (POSITIONS as readonly string[]).includes(s ?? "") ? (s as Position) : fallback;
+  return s !== undefined && allowed.includes(s) ? s : fallback;
 }
 
 /** A positive integer below 10,000 (seasons, weeks), else null. */

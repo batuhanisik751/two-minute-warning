@@ -40,11 +40,18 @@ export function badges(counts: RankCount[], buckets: Bucket[] = BUCKETS): Badge[
   });
 }
 
+/** A badge's three parts: "Ranks 1–5:", "56% hit", "(2,064 of 3,660)" (or "no earlier
+ *  lists" and no detail). badgeText joins them with spaces. */
+export function badgeParts(b: Badge): { head: string; value: string; detail: string | null } {
+  const head = `Ranks ${b.bucket.label.replace("-", "–")}:`;
+  if (b.rate === null) return { head, value: "no earlier lists", detail: null };
+  return { head, value: `${pct(b.rate)} hit`, detail: `(${fmtInt(b.hits)} of ${fmtInt(b.picks)})` };
+}
+
 /** "Ranks 1-5: 56% hit (2,064 of 3,660)" or "Ranks 11-25: no earlier lists". */
 export function badgeText(b: Badge): string {
-  const head = `Ranks ${b.bucket.label.replace("-", "–")}`;
-  if (b.rate === null) return `${head}: no earlier lists`;
-  return `${head}: ${pct(b.rate)} hit (${fmtInt(b.hits)} of ${fmtInt(b.picks)})`;
+  const p = badgeParts(b);
+  return [p.head, p.value, p.detail].filter(Boolean).join(" ");
 }
 
 /** "2014-2025" / "2014" / null (the seasons the badges count). */

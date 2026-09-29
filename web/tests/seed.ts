@@ -25,6 +25,10 @@ export const SEED = {
   /** the player with weekly rows and Radar history (a running back) */
   featured: "00-9000013",
   featuredName: "Rowan Fielding",
+  /** a very long name (the second wide receiver) for the layout check: it must wrap cleanly */
+  longName: { gsisId: "00-9000026", name: "Bartholomew-Maximilian Wrenfield-Castellanos III" },
+  /** the fictional league shape the glossary's starter_threshold states (read by the FLEX note) */
+  league: { teams: 10, starters: { QB: 10, RB: 20, WR: 30, TE: 8 } },
   positions: ["QB", "RB", "WR", "TE"] as const,
   /** picks per list */
   sizes: { live: 8, recon: 6, backtest: 12 },
@@ -69,16 +73,23 @@ export function players() {
   f.draftYear = 2023;
   f.draftRound = 3;
   f.draftPick = 79;
+  out.find((p) => p.gsisId === SEED.longName.gsisId)!.displayName = SEED.longName.name;
   return out;
 }
 
+const L = SEED.league;
 const glossaryRow = (name: string, i: number): typeof s.glossary.$inferInsert => ({
   name,
   title: `Seed term ${name}`,
   kind: name === "gsis_id" ? "identifier" : name.startsWith("y_") || name === "label_status" ? "label" : i % 2 ? "feature" : "concept",
   unit: "seed unit",
-  formula: `seed formula for ${name}`,
-  explanation: `Seed explanation of ${name}.`,
+  // starter_threshold states the (fictional) league shape the way the real registry does
+  formula:
+    name === "starter_threshold"
+      ? `seed formula: QB top ${L.starters.QB}, RB top ${L.starters.RB}, WR top ${L.starters.WR}, TE top ${L.starters.TE} by fantasy points that week; FLEX-worthy: RB/WR top 45`
+      : `seed formula for ${name}`,
+  explanation:
+    name === "starter_threshold" ? `Seed explanation of ${name}: a typical ${L.teams}-team league.` : `Seed explanation of ${name}.`,
   verified: i % 4 === 0 ? `seed check ${name}` : null,
   modules: ["waiver_radar"],
   modelOutput: name === "xfp" || name === "fpoe",

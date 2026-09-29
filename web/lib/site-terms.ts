@@ -75,6 +75,15 @@ export const SITE_TERMS: Record<string, TermEntry> = {
       "Grading a model the honest way: every season is predicted by a model trained only on " +
       "the seasons before it, using only data that was public at each Tuesday's as-of time.",
   },
+  flex: {
+    name: "flex",
+    title: "FLEX",
+    explanation:
+      "A week's running back, wide receiver and tight end lists merged into one and ordered by " +
+      "chance. Each chance is the chance of a starter finish at the player's own position, so " +
+      "FLEX compares three slightly different targets: it is a way to browse the three lists " +
+      "together, not a separate model.",
+  },
   listed_position: {
     name: "listed_position",
     title: "Listed position",

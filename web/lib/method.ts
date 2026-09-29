@@ -2,7 +2,8 @@
 // data. Each one is copied from the Python code named beside it, and
 // tests/unit/method.test.ts reads those files and fails when they disagree.
 
-/** The positions the Radar ranks (web/db/schema.ts radar_list_position_check). */
+/** The positions the Radar ranks today (web/db/schema.ts radar_list_position_check). The pages
+ *  do not use this list for their tabs or cards: those come from the data (lib/positions.ts). */
 export const POSITIONS = ["QB", "RB", "WR", "TE"] as const;
 export type Position = (typeof POSITIONS)[number];
 
@@ -41,19 +42,6 @@ export const LABEL_NAMES: Record<string, string> = {
   y_hit: "Hit (at least one starter week)",
   y_sustained: "Sustained hit (at least two starter weeks)",
 };
-
-export const POSITION_NAMES: Record<string, string> = {
-  QB: "Quarterbacks",
-  RB: "Running backs",
-  WR: "Wide receivers",
-  TE: "Tight ends",
-};
-
-/** Sort key: QB, RB, WR, TE. */
-export function positionOrder(p: string): number {
-  const i = (POSITIONS as readonly string[]).indexOf(p);
-  return i === -1 ? POSITIONS.length : i;
-}
 
 /** The weekly as-of: Tuesday 14:00 UTC (config/settings.yaml as_of.weekly). */
 export const AS_OF_WEEKDAY = "Tuesday";

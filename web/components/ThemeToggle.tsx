@@ -46,12 +46,13 @@ export default function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line bg-surface px-3 text-sm font-medium text-fg hover:border-accent"
+      className="strip-button inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md px-2.5 text-sm font-medium sm:px-3"
     >
       <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" />
       </svg>
-      Light / dark
+      {/* the name stays for screen readers on phones, where only the icon shows */}
+      <span className="sr-only sm:not-sr-only">Light / dark</span>
     </button>
   );
 }

@@ -25,7 +25,7 @@ export default function ChartFigure({
 }) {
   return (
     <figure aria-labelledby={`${id}-caption`} className="rounded-lg border border-line bg-surface p-3" data-testid="chart">
-      <figcaption id={`${id}-caption`} className="mb-2 text-sm font-semibold">
+      <figcaption id={`${id}-caption`} className="mb-2 font-display text-lg font-bold tracking-wide uppercase">
         {caption}
       </figcaption>
       <WeeklyChart data={data} series={series} title={caption} desc={`${caption}. The same numbers are in the table below.`} percent={percent} />

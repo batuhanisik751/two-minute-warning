@@ -1,24 +1,30 @@
 @import "tailwindcss";
 
-/* Theme tokens. Light by default; dark follows the system unless the reader chose a theme
-   with the toggle (data-theme on <html>, set by the inline script in app/layout.tsx before
-   the first paint). tests/unit/contrast.test.ts checks every text/background pair below in
-   both themes against WCAG AA. Keep the two dark blocks identical. */
+/* Game-day theme tokens. Light ("day game": chalk field, navy ink) by default; dark ("night
+   game": deep navy, floodlit turf) follows the system unless the reader chose a theme with the
+   toggle (data-theme on <html>, set by the inline script in app/layout.tsx before the first
+   paint). The scoreboard strip and the field banner are dark in both themes, with their own
+   tokens. tests/unit/contrast.test.ts checks every text/background pair below in both themes
+   against WCAG AA; only #rrggbb values here. Keep the two dark blocks identical. */
 :root {
   color-scheme: light;
-  --bg: #f6f6f3;
+  --bg: #f3f4ef;
   --surface: #ffffff;
-  --raised: #eceee9;
-  --fg: #16191e;
-  --muted: #545b66;
-  --border: #cfd3d8;
-  --accent: #0a6446;
-  --accent-soft: #e2f0e9;
+  --raised: #e8ebe3;
+  --fg: #0c1a2e;
+  --muted: #475569;
+  --border: #cdd3d9;
+  --border-strong: #7b8794;
+  --accent: #0b6b3d;
+  --accent-soft: #dff0e5;
   --on-accent: #ffffff;
-  --live: #0a6446;
+  --hot: #f2b705;
+  --on-hot: #0c1a2e;
+  --hot-ink: #8a5a00;
+  --live: #0b6b3d;
   --recon: #5b4a9e;
-  --hit: #0a6446;
-  --miss: #545b66;
+  --hit: #0b6b3d;
+  --miss: #475569;
   --pending: #7a5200;
   --warn-bg: #fff4dc;
   --warn-fg: #5c3d00;
@@ -27,58 +33,141 @@
   --chart-b: #c2410c;
   --chart-c: #0a6446;
   --chart-grid: #d9dce0;
+  --meter-track: #e3e7df;
+  --meter-fill: #0b6b3d;
+  --meter-hot: #b45309;
+  --meter-range: #9fd0b2;
+  --jersey-shadow: #bcdcc8;
+  --team-fallback: #7b8794;
+  --strip-bg: #0a1830;
+  --strip-raised: #12294a;
+  --strip-fg: #f3f4ef;
+  --strip-muted: #aab8cc;
+  --strip-line: #274268;
+  --strip-hot: #f2b705;
+  --field-a: #0e3d25;
+  --field-b: #11472b;
+  --field-fg: #f3f4ef;
+  --field-muted: #c9d6cc;
+  --field-line: #4d8a66;
+  --pos-qb: #a4262c;
+  --pos-rb: #1d6b35;
+  --pos-wr: #1d5fb4;
+  --pos-te: #7a3fb3;
+  --pos-flex: #b44d0c;
+  --pos-k: #4b5a6b;
+  --pos-dst: #6b4f1d;
+  --on-pos: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #0f1216;
-    --surface: #171b21;
-    --raised: #1f242c;
-    --fg: #e9ebef;
-    --muted: #a3aab5;
-    --border: #343b46;
-    --accent: #58c795;
-    --accent-soft: #15302a;
-    --on-accent: #07140e;
-    --live: #58c795;
+    --bg: #07101f;
+    --surface: #0d1a2e;
+    --raised: #13233b;
+    --fg: #eef2f6;
+    --muted: #9fb0c3;
+    --border: #243650;
+    --border-strong: #5d7391;
+    --accent: #4cc38a;
+    --accent-soft: #10301f;
+    --on-accent: #07101f;
+    --hot: #ffc53d;
+    --on-hot: #07101f;
+    --hot-ink: #ffc53d;
+    --live: #4cc38a;
     --recon: #b3a6f0;
-    --hit: #58c795;
-    --miss: #a3aab5;
+    --hit: #4cc38a;
+    --miss: #9fb0c3;
     --pending: #e5b85a;
     --warn-bg: #33270d;
     --warn-fg: #f3d9a1;
     --focus: #8ab4ff;
     --chart-a: #7fb2ee;
     --chart-b: #f29a61;
-    --chart-c: #58c795;
-    --chart-grid: #2c323b;
+    --chart-c: #4cc38a;
+    --chart-grid: #22324a;
+    --meter-track: #1b2d47;
+    --meter-fill: #4cc38a;
+    --meter-hot: #ffc53d;
+    --meter-range: #2f6b4f;
+    --jersey-shadow: #1f5a3c;
+    --team-fallback: #5d7391;
+    --strip-bg: #030a16;
+    --strip-raised: #0e1d33;
+    --strip-fg: #eef2f6;
+    --strip-muted: #9fb0c3;
+    --strip-line: #1d3150;
+    --strip-hot: #ffc53d;
+    --field-a: #082a19;
+    --field-b: #0b331f;
+    --field-fg: #eef2f6;
+    --field-muted: #bccbbf;
+    --field-line: #3a7454;
+    --pos-qb: #ff8a8f;
+    --pos-rb: #6fd699;
+    --pos-wr: #7fb6ff;
+    --pos-te: #c7a2ff;
+    --pos-flex: #ffaa66;
+    --pos-k: #b8c4d1;
+    --pos-dst: #d9b77a;
+    --on-pos: #07101f;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0f1216;
-  --surface: #171b21;
-  --raised: #1f242c;
-  --fg: #e9ebef;
-  --muted: #a3aab5;
-  --border: #343b46;
-  --accent: #58c795;
-  --accent-soft: #15302a;
-  --on-accent: #07140e;
-  --live: #58c795;
+  --bg: #07101f;
+  --surface: #0d1a2e;
+  --raised: #13233b;
+  --fg: #eef2f6;
+  --muted: #9fb0c3;
+  --border: #243650;
+  --border-strong: #5d7391;
+  --accent: #4cc38a;
+  --accent-soft: #10301f;
+  --on-accent: #07101f;
+  --hot: #ffc53d;
+  --on-hot: #07101f;
+  --hot-ink: #ffc53d;
+  --live: #4cc38a;
   --recon: #b3a6f0;
-  --hit: #58c795;
-  --miss: #a3aab5;
+  --hit: #4cc38a;
+  --miss: #9fb0c3;
   --pending: #e5b85a;
   --warn-bg: #33270d;
   --warn-fg: #f3d9a1;
   --focus: #8ab4ff;
   --chart-a: #7fb2ee;
   --chart-b: #f29a61;
-  --chart-c: #58c795;
-  --chart-grid: #2c323b;
+  --chart-c: #4cc38a;
+  --chart-grid: #22324a;
+  --meter-track: #1b2d47;
+  --meter-fill: #4cc38a;
+  --meter-hot: #ffc53d;
+  --meter-range: #2f6b4f;
+  --jersey-shadow: #1f5a3c;
+  --team-fallback: #5d7391;
+  --strip-bg: #030a16;
+  --strip-raised: #0e1d33;
+  --strip-fg: #eef2f6;
+  --strip-muted: #9fb0c3;
+  --strip-line: #1d3150;
+  --strip-hot: #ffc53d;
+  --field-a: #082a19;
+  --field-b: #0b331f;
+  --field-fg: #eef2f6;
+  --field-muted: #bccbbf;
+  --field-line: #3a7454;
+  --pos-qb: #ff8a8f;
+  --pos-rb: #6fd699;
+  --pos-wr: #7fb6ff;
+  --pos-te: #c7a2ff;
+  --pos-flex: #ffaa66;
+  --pos-k: #b8c4d1;
+  --pos-dst: #d9b77a;
+  --on-pos: #07101f;
 }
 
 @theme inline {
@@ -88,9 +177,13 @@
   --color-fg: var(--fg);
   --color-muted: var(--muted);
   --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
   --color-on-accent: var(--on-accent);
+  --color-hot: var(--hot);
+  --color-on-hot: var(--on-hot);
+  --color-hot-ink: var(--hot-ink);
   --color-live: var(--live);
   --color-recon: var(--recon);
   --color-hit: var(--hit);
@@ -98,13 +191,24 @@
   --color-pending: var(--pending);
   --color-warn-bg: var(--warn-bg);
   --color-warn-fg: var(--warn-fg);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+  --color-strip: var(--strip-bg);
+  --color-strip-raised: var(--strip-raised);
+  --color-strip-fg: var(--strip-fg);
+  --color-strip-muted: var(--strip-muted);
+  --color-strip-line: var(--strip-line);
+  --color-strip-hot: var(--strip-hot);
+  --color-field-fg: var(--field-fg);
+  --color-field-muted: var(--field-muted);
+  /* next/font (app/layout.tsx) self-hosts both faces at build time */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
     Arial, sans-serif;
+  --font-display: var(--font-barlow-condensed), "Arial Narrow", "Roboto Condensed", ui-sans-serif, system-ui,
+    sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /* Base styles live in the base layer: unlayered CSS would beat every Tailwind utility
-   (a { color } would override text-on-accent on the active navigation link). */
+   (a { color } would override a utility's text colour on a link). */
 @layer base {
   html {
     background-color: var(--bg);
@@ -150,6 +254,444 @@
 .tnum {
   font-variant-numeric: tabular-nums;
 }
+
+/* ----------------------------------------------------------------------------------------
+   Type: the condensed athletic face for headings, numbers and ranks
+   ---------------------------------------------------------------------------------------- */
+.display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+}
+
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* a short gold down-marker before the kicker (decoration) */
+.kicker::before {
+  content: "";
+  width: 1.25rem;
+  height: 0.25rem;
+  border-radius: 1px;
+  background: var(--hot);
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.625rem;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* ----------------------------------------------------------------------------------------
+   Field motifs (decoration only; nothing here carries information)
+   ---------------------------------------------------------------------------------------- */
+
+/* The scoreboard strip: night navy with faint yard lines, and hash marks along its bottom
+   edge above a turf line. */
+.site-strip {
+  position: relative;
+  background-color: var(--strip-bg);
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0 95px,
+    color-mix(in srgb, var(--strip-line) 70%, transparent) 95px 96px
+  );
+  color: var(--strip-fg);
+}
+
+.hash-edge {
+  height: 7px;
+  background-image:
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--strip-fg) 45%, transparent) 0 2px, transparent 2px 24px),
+    linear-gradient(var(--live), var(--live));
+  background-size:
+    100% 4px,
+    100% 3px;
+  background-position:
+    12px 0,
+    0 100%;
+  background-repeat: repeat-x, no-repeat;
+}
+
+/* (the field's terms only: their explanation panels are ordinary light/dark surfaces) */
+.strip-bar :focus-visible,
+.field .term-button:focus-visible {
+  outline-color: var(--strip-hot);
+  box-shadow: none;
+}
+
+/* The game clock of the wordmark. */
+.clock {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--strip-line);
+  border-radius: 0.25rem;
+  background: var(--strip-raised);
+  color: var(--strip-hot);
+  padding: 0.05rem 0.4rem;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.125rem;
+  line-height: 1.3;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(1.1875rem, 4.5vw, 1.5rem);
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--strip-fg);
+}
+
+.nav-link {
+  color: var(--strip-fg);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+@media (min-width: 40rem) {
+  .nav-link {
+    font-size: 1.0625rem;
+    letter-spacing: 0.06em;
+  }
+}
+
+.nav-link:hover {
+  background: var(--strip-raised);
+}
+
+/* the current page: a gold first-down marker under it */
+.nav-link[aria-current="page"] {
+  box-shadow: inset 0 -3px 0 var(--strip-hot);
+}
+
+.strip-button {
+  border: 1px solid var(--strip-line);
+  background: var(--strip-raised);
+  color: var(--strip-fg);
+}
+
+.strip-button:hover {
+  border-color: var(--strip-hot);
+}
+
+/* The chyron under the strip (data-as-of line). */
+.chyron {
+  border-bottom: 1px solid var(--border);
+  background: var(--raised);
+  color: var(--fg);
+}
+
+/* The field: mowed turf stripes with chalk yard lines (the home page's banner). */
+.field {
+  position: relative;
+  color: var(--field-fg);
+  background-color: var(--field-a);
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 calc(10% - 1px),
+      color-mix(in srgb, var(--field-line) 55%, transparent) calc(10% - 1px) 10%
+    ),
+    repeating-linear-gradient(90deg, var(--field-a) 0 5%, var(--field-b) 5% 10%);
+}
+
+.field .kicker {
+  color: var(--strip-hot);
+}
+
+/* The scoreboard box on the field banner. */
+.scoreboard {
+  border: 1px solid var(--strip-line);
+  background: var(--strip-bg);
+  color: var(--strip-fg);
+}
+
+.field .term-button:hover,
+.field .term-button[aria-expanded="true"] {
+  color: var(--strip-hot);
+}
+
+/* A faint yard-line rule under page headings. */
+.yard-rule {
+  height: 10px;
+  background-image:
+    repeating-linear-gradient(90deg, var(--border-strong) 0 2px, transparent 2px 18px),
+    linear-gradient(var(--border), var(--border));
+  background-size:
+    100% 6px,
+    100% 1px;
+  background-position:
+    0 0,
+    0 100%;
+  background-repeat: repeat-x, no-repeat;
+  opacity: 0.8;
+}
+
+/* ----------------------------------------------------------------------------------------
+   Badges and pills
+   ---------------------------------------------------------------------------------------- */
+
+/* Position badges: one colour per position; K and D/ST are reserved for a later step. */
+.pos-badge {
+  --pos: var(--pos-k);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  border-radius: 0.25rem;
+  background: var(--pos);
+  color: var(--on-pos);
+  padding: 0.05rem 0.4rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  letter-spacing: 0.06em;
+}
+
+/* Position tabs of /waivers: a colour bar under each, filled when current. */
+.pos-tab {
+  --pos: var(--pos-k);
+  border: 1px solid var(--border);
+  border-bottom: 4px solid var(--pos);
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.125rem;
+  letter-spacing: 0.06em;
+}
+
+.pos-tab:hover {
+  background: var(--raised);
+}
+
+.pos-tab[aria-current="page"] {
+  border-color: var(--pos);
+  background: var(--pos);
+  color: var(--on-pos);
+}
+
+/* A card's top edge in its position's colour (home page). */
+.pos-edge {
+  --pos: var(--pos-k);
+  border-top: 4px solid var(--pos);
+}
+
+[data-pos="QB"] {
+  --pos: var(--pos-qb);
+}
+[data-pos="RB"] {
+  --pos: var(--pos-rb);
+}
+[data-pos="WR"] {
+  --pos: var(--pos-wr);
+}
+[data-pos="TE"] {
+  --pos: var(--pos-te);
+}
+[data-pos="FLEX"] {
+  --pos: var(--pos-flex);
+}
+[data-pos="K"] {
+  --pos: var(--pos-k);
+}
+[data-pos="DST"],
+[data-pos="D/ST"],
+[data-pos="DEF"] {
+  --pos: var(--pos-dst);
+}
+
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  background: var(--hot);
+  color: var(--on-hot);
+  padding: 0.1rem 0.65rem;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.recon-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1.5px dashed var(--recon);
+  color: var(--recon);
+  padding: 0.05rem 0.6rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tier {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0.25rem;
+  border: 1.5px solid var(--border-strong);
+  color: var(--muted);
+  padding: 0 0.45rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tier[data-tier="must-add"] {
+  border-color: var(--hot);
+  background: var(--hot);
+  color: var(--on-hot);
+}
+
+.tier[data-tier="speculative"] {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+/* ----------------------------------------------------------------------------------------
+   Pick rows
+   ---------------------------------------------------------------------------------------- */
+
+/* Team colours: .team-mark gets --team-l / --team-d inline (lib/team-colors.ts picks colours
+   that contrast with each theme's surface), and --team is the one for the current theme. */
+.team-mark {
+  --team: var(--team-l, var(--team-fallback));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .team-mark {
+    --team: var(--team-d, var(--team-fallback));
+  }
+}
+
+:root[data-theme="dark"] .team-mark {
+  --team: var(--team-d, var(--team-fallback));
+}
+
+.team-stripe {
+  box-shadow: inset 4px 0 0 var(--team);
+}
+
+.team-swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: none;
+  border-radius: 2px;
+  background: var(--team);
+  vertical-align: -0.05em;
+}
+
+/* Jersey-number ranks: a heavy condensed numeral with a twill-like offset layer. */
+.jersey {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2.125rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  text-shadow: 2px 2px 0 var(--jersey-shadow);
+}
+
+/* line-height 1.2: the condensed face's glyph box is 1.2em tall, so a big number never
+   reaches into the line above or below it (the layout check measures those boxes) */
+.big-number {
+  font-family: var(--font-display);
+  font-weight: 800;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* The chance meter, like a win-probability bar: solid up to the chance, pale up to the top of
+   its range. Hidden from screen readers: the number beside it is the source of truth. */
+.meter {
+  position: relative;
+  height: 0.4375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--meter-track);
+}
+
+.meter > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.meter-range {
+  background: var(--meter-range);
+}
+
+.meter-fill {
+  border-radius: 999px;
+  background: var(--meter-fill);
+}
+
+[data-tier="must-add"] .meter-fill {
+  background: var(--meter-hot);
+}
+
+.meter-fill.meter-neutral {
+  background: var(--border-strong);
+}
+
+/* Motion only on hover or focus, and none for readers who ask for less motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .lift {
+    transition:
+      transform 150ms ease,
+      box-shadow 150ms ease;
+  }
+
+  .lift:hover,
+  .lift:focus-within {
+    transform: translateY(-3px);
+  }
+}
+
+.lift:hover,
+.lift:focus-within {
+  box-shadow: 0 0 0 2px var(--hot);
+}
+
+/* ----------------------------------------------------------------------------------------
+   Terms, skip link, tables, frames
+   ---------------------------------------------------------------------------------------- */
 
 /* A term with an explanation: the word itself is the button (dotted underline). */
 .term-button {
@@ -210,21 +752,30 @@
 .data-table th,
 .data-table td {
   border-bottom: 1px solid var(--border);
-  padding: 0.4rem 0.6rem;
+  padding: 0.45rem 0.65rem;
   text-align: left;
   vertical-align: top;
 }
 
-.data-table th {
-  font-weight: 600;
+.data-table thead th {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--muted);
   background-color: var(--raised);
+  border-bottom: 2px solid var(--border-strong);
 }
 
 .data-table tbody th {
   background-color: transparent;
   color: var(--fg);
-  font-weight: 500;
+  font-weight: 600;
+}
+
+.data-table tbody tr:hover > * {
+  background-color: color-mix(in srgb, var(--raised) 55%, transparent);
 }
 
 .data-table td.num,
@@ -239,10 +790,11 @@
   padding: 0.25rem 0 0.5rem;
 }
 
-/* Reconstructed lists get a dashed frame, live lists a solid one: the text label says which,
-   the frame only repeats it. */
+/* Reconstructed lists get a dashed frame, live lists a solid one with a gold top edge: the
+   text label says which, the frame only repeats it. */
 .frame-live {
   border: 2px solid var(--live);
+  box-shadow: inset 0 4px 0 var(--hot);
 }
 
 .frame-recon {

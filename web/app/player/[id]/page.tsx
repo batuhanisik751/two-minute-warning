@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import ChartFigure, { type Column } from "@/components/charts/ChartFigure";
 import type { Series } from "@/components/charts/WeeklyChart";
 import Term from "@/components/Term";
-import { EmptyState, KindBadge, OutcomeBadge, PageHeader, TierBadge } from "@/components/ui";
+import { EmptyState, KindBadge, OutcomeBadge, PageHeader, PosBadge, TierBadge } from "@/components/ui";
 import { fmtPoints, fmtShare, outcomeOf, pct, pctRange, windowSummary } from "@/lib/format";
 import { isGsisId, parseInt4, waiversHref } from "@/lib/params";
 import { getPlayer, getPlayerSeasons, getPlayerWeeks, type WeekRow } from "@/lib/queries/player";
@@ -70,7 +70,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
 
   return (
     <>
-      <PageHeader title={player.name}>
+      <PageHeader title={player.name} kicker="Player">
         <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-fg" data-testid="player-header">
           <div>
             <dt className="inline text-muted">
@@ -104,15 +104,15 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
       ) : (
         <>
           <nav aria-label="Season" className="mb-6">
-            <p className="mb-2 text-sm font-medium">Season</p>
+            <p className="mb-2 font-display text-sm font-bold tracking-wider text-muted uppercase">Season</p>
             <ul className="flex flex-wrap gap-2">
               {seasons.map((s) => (
                 <li key={s}>
                   <Link
                     href={`/player/${id}?season=${s}`}
                     aria-current={s === season ? "page" : undefined}
-                    className={`inline-flex min-h-11 items-center rounded-md border px-3 text-sm font-semibold no-underline ${
-                      s === season ? "border-accent bg-accent text-on-accent" : "border-line bg-surface text-fg hover:border-accent"
+                    className={`inline-flex min-h-11 items-center rounded-md border px-3 font-display text-lg font-bold tracking-wide no-underline ${
+                      s === season ? "border-strip bg-strip text-strip-fg" : "border-line bg-surface text-fg hover:border-accent"
                     }`}
                   >
                     {s}
@@ -123,7 +123,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
           </nav>
 
           <section aria-labelledby="weekly-heading" className="mb-10">
-            <h2 id="weekly-heading" className="mb-1 text-xl font-semibold">
+            <h2 id="weekly-heading" className="section-title mb-1">
               {season} week by week
             </h2>
             {weeks.length ? (
@@ -179,7 +179,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
           </section>
 
           <section aria-labelledby="history-heading">
-            <h2 id="history-heading" className="mb-1 text-xl font-semibold">
+            <h2 id="history-heading" className="section-title mb-1">
               Waiver Radar history, {season}
             </h2>
             {seasonHistory.length ? (
@@ -219,9 +219,13 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
                             </Link>
                           </th>
                           <td>
-                            {h.position} <KindBadge kind={h.kind} />
+                            <span className="inline-flex flex-wrap items-center gap-1.5">
+                              <PosBadge pos={h.position} /> <KindBadge kind={h.kind} />
+                            </span>
                           </td>
-                          <td className="num">{h.rank}</td>
+                          <td className="num">
+                            <span className="big-number text-xl">{h.rank}</span>
+                          </td>
                           <td className="tnum">
                             {h.chance !== null ? (
                               <>

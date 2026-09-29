@@ -14,11 +14,12 @@
 import Link from "next/link";
 import { DISCLAIMER } from "@/lib/site";
 
-
 export default function SiteFooter() {
   return (
-    <footer className="mt-16 border-t border-line bg-surface">
-      <div className="mx-auto max-w-5xl space-y-3 px-4 py-6 text-sm text-muted">
+    <footer className="mt-16 border-t border-line bg-raised">
+      <div className="yard-rule" aria-hidden="true" />
+      <div className="mx-auto max-w-6xl space-y-3 px-4 py-6 text-sm text-muted">
+        <p className="display text-lg uppercase tracking-wider text-fg">Two-Minute Warning</p>
         <p data-testid="disclaimer" className="font-medium text-fg">
           {DISCLAIMER}
         </p>

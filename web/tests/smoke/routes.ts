@@ -4,7 +4,10 @@ import { POSITIONS } from "../../lib/method";
 import { SEED } from "../seed";
 import { DATA, fetchPage } from "./dom";
 
-export type Route = { path: string; kind: "home" | "waivers-live" | "waivers-backtest" | "waivers" | "player" | "regression" | "methodology" };
+export type Route = {
+  path: string;
+  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers" | "player" | "regression" | "methodology";
+};
 
 export type RouteSet = {
   routes: Route[];
@@ -32,6 +35,11 @@ function seedRoutes(): RouteSet {
       ...POSITIONS.map((p) => ({ path: `/waivers?season=${live.season}&week=${live.week}&pos=${p}&kind=live`, kind: "waivers-live" as const })),
       ...POSITIONS.map((p) => ({ path: `/waivers?season=${bt.season}&week=${bt.week}&pos=${p}`, kind: "waivers-backtest" as const })),
       { path: `/waivers?season=${SEED.reconWeek.season}&week=${SEED.reconWeek.week}&pos=RB&kind=backtest`, kind: "waivers-backtest" },
+      // FLEX: the live week (chances), a walk-forward week (no chances: model order), the
+      // reconstructed 2026 week
+      { path: `/waivers?season=${live.season}&week=${live.week}&pos=FLEX&kind=live`, kind: "waivers-flex" },
+      { path: `/waivers?season=${bt.season}&week=${bt.week}&pos=FLEX`, kind: "waivers-flex" },
+      { path: `/waivers?season=${SEED.reconWeek.season}&week=${SEED.reconWeek.week}&pos=FLEX&kind=backtest`, kind: "waivers-flex" },
       { path: `/player/${SEED.featured}`, kind: "player" },
       { path: `/player/${SEED.featured}?season=2025`, kind: "player" },
       { path: "/regression", kind: "regression" },
@@ -56,6 +64,7 @@ async function realRoutes(): Promise<RouteSet> {
   const liveWeek = weekOpts.find((o) => /live/.test(o.textContent ?? ""));
   if (liveWeek && chosenSeason) {
     for (const p of POSITIONS) routes.push({ path: `/waivers?season=${chosenSeason}&week=${liveWeek.value}&pos=${p}&kind=live`, kind: "waivers-live" });
+    routes.push({ path: `/waivers?season=${chosenSeason}&week=${liveWeek.value}&pos=FLEX&kind=live`, kind: "waivers-flex" });
   } else {
     notes.push(`no live list in the newest season (${chosenSeason ?? "none"}): the live-week pages were not checked`);
   }
@@ -66,6 +75,7 @@ async function realRoutes(): Promise<RouteSet> {
   const oldest = seasons[seasons.length - 1];
   if (oldest && oldest !== chosenSeason) {
     for (const p of POSITIONS) routes.push({ path: `/waivers?season=${oldest}&pos=${p}`, kind: "waivers-backtest" });
+    routes.push({ path: `/waivers?season=${oldest}&pos=FLEX`, kind: "waivers-flex" });
   }
   const player = doc.querySelector<HTMLAnchorElement>("a[href^='/player/']")?.getAttribute("href");
   if (player) routes.push({ path: player, kind: "player" });

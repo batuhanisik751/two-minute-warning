@@ -95,7 +95,8 @@ describe("/ (this week)", () => {
     assert.match(text(m), /Regression Watch arrives in a later phase/);
     const lists = m.querySelectorAll("[data-testid=pick-list]");
     if (seedOnly) {
-      assert.equal(lists.length, 4);
+      // QB, RB, WR, TE and the FLEX card
+      assert.equal(lists.length, 5);
       for (const l of Array.from(lists)) assert.equal(l.querySelectorAll("[data-testid=pick]").length, 5);
       assert.equal(
         prose(m.querySelector("[data-testid=track-headline]")!),
@@ -108,6 +109,43 @@ describe("/ (this week)", () => {
       t.diagnostic("no live list: the empty state is shown");
     }
     if (!seedOnly) assert.ok(m.querySelector("[data-testid=track-headline]"), "no track-record headline");
+  });
+
+  test("the FLEX card, the top-of-the-board row and the scoreboard", (t) => {
+    if (!up) return t.skip(`no server at ${BASE}`);
+    const m = main(pages.get("/")!);
+    const flex = m.querySelector("[data-testid=flex-card]");
+    if (!m.querySelector("[data-testid=pick-list]")) {
+      assert.equal(flex, null, "a FLEX card without live lists");
+      return t.skip("no live list");
+    }
+    assert.ok(flex, "no FLEX card");
+    const rows = Array.from(flex.querySelectorAll("[data-testid=pick]"));
+    assert.ok(rows.length > 0 && rows.length <= 5, `${rows.length} FLEX rows`);
+    for (const r of rows) assert.match(r.querySelector("[data-pos]")?.textContent ?? "", /^(RB|WR|TE)$/, "a FLEX row without its position");
+    const note = prose(flex.querySelector("[data-testid=flex-note]")!);
+    assert.match(note, /not a separate model/);
+    assert.match(note, /own position/);
+    const board = Array.from(m.querySelectorAll("[data-testid=top-board] > li")).map((li) => li.getAttribute("data-pos"));
+    assert.ok(board.length >= 1, "no top-of-the-board cards");
+    assert.ok(m.querySelector("[data-testid=scoreboard]"), "no scoreboard");
+    if (seedOnly) {
+      // ties in chance and probability: rank, then RB, WR, TE
+      assert.deepEqual(
+        rows.map((r) => normalise(r.querySelector("[data-pos]")!.textContent ?? "")),
+        ["RB", "WR", "TE", "RB", "WR"],
+      );
+      assert.match(text(rows[0]), new RegExp(SEED.featuredName));
+      assert.match(text(rows[0]), /No\. 1 at RB/);
+      assert.match(text(rows[4]), new RegExp(SEED.longName.name));
+      // the league shape is the seed glossary's (fictional) one, never a typed-in number
+      const L = SEED.league;
+      assert.match(note, new RegExp(`a top-${L.starters.RB} RB, top-${L.starters.WR} WR or top-${L.starters.TE} TE week in a ${L.teams}-team league`));
+      assert.deepEqual(board, ["QB", "RB", "WR", "TE"]);
+      assert.match(prose(m.querySelector("[data-testid=scoreboard]")!), /^Season 2026 Week 3 .*Live as of Tue 29 Sep 2026, 14:00 UTC$/);
+    } else {
+      assert.match(note, /top-\d+ RB, top-\d+ WR or top-\d+ TE week/);
+    }
   });
 });
 
@@ -183,7 +221,8 @@ describe("/waivers", () => {
     if (!up) return t.skip(`no server at ${BASE}`);
     const p = pages.get("/waivers")!;
     const tabs = Array.from(p.doc.querySelectorAll<HTMLAnchorElement>("nav[aria-label=Position] a"));
-    assert.deepEqual(tabs.map((a) => a.textContent), ["QB", "RB", "WR", "TE"]);
+    // from the data: the published positions, FLEX after TE (K and D/ST once published)
+    assert.deepEqual(tabs.map((a) => a.textContent), ["QB", "RB", "WR", "TE", "FLEX"]);
     assert.equal(tabs.filter((a) => a.getAttribute("aria-current") === "page").length, 1);
     const form = p.doc.querySelector("form[action='/waivers']");
     assert.equal(form?.getAttribute("method"), "get");
@@ -194,6 +233,80 @@ describe("/waivers", () => {
       assert.deepEqual(seasons, ["2026", "2025", "2024"]);
       // the default list is the newest week, live first
       assert.equal(main(p).querySelector("[data-testid=radar-list]")?.getAttribute("data-kind"), "live");
+    }
+  });
+});
+
+describe("/waivers?pos=FLEX", () => {
+  test("merged RB, WR and TE rows with position badges, ordered by chance, explained once", (t) => {
+    if (!up) return t.skip(`no server at ${BASE}`);
+    const flex = set.routes.filter((r) => r.kind === "waivers-flex");
+    if (!flex.length) return t.skip("no FLEX page in this database");
+    for (const r of flex) {
+      const m = main(pages.get(r.path)!);
+      const list = m.querySelector("[data-testid=radar-list]");
+      assert.equal(list?.getAttribute("data-position"), "FLEX", r.path);
+      assert.equal(m.querySelector("nav[aria-label=Position] a[aria-current=page]")?.textContent, "FLEX", r.path);
+      const rows = Array.from(m.querySelectorAll("[data-testid=pick]"));
+      assert.ok(rows.length > 0 && rows.length <= 25, `${r.path}: ${rows.length} rows`);
+      const positions = rows.map((row) => normalise(row.querySelector("[data-cell=player] [data-pos]")?.textContent ?? ""));
+      for (const p of positions) assert.match(p, /^(RB|WR|TE)$/, `${r.path}: a row without its position badge`);
+      // the FLEX ranks run 1..n
+      assert.deepEqual(
+        rows.map((row) => normalise(row.querySelector("[data-cell=rank] .jersey")?.textContent ?? "")),
+        rows.map((_, i) => String(i + 1)),
+        r.path,
+      );
+      // chances never go up down the list (rows without a chance come last)
+      const chances = rows.map((row) => {
+        const v = row.querySelector("[data-cell=chance] .big-number")?.textContent;
+        return v ? Number(v.replace("%", "")) : null;
+      });
+      const withChance = chances.filter((c): c is number => c !== null);
+      assert.deepEqual(withChance, [...withChance].sort((a, b) => b - a), `${r.path}: not ordered by chance`);
+      assert.ok(chances.indexOf(null) === -1 || chances.slice(chances.indexOf(null)).every((c) => c === null), r.path);
+      const note = prose(m.querySelector("[data-testid=flex-note]")!);
+      assert.match(note, /FLEX is a way to browse, not a separate model/, r.path);
+      assert.equal(m.querySelectorAll("[data-testid=flex-note]").length, 1, `${r.path}: explained more than once`);
+      if (withChance.length === 0) assert.match(note, /These lists have no chances, so FLEX orders them by the model's probability/, r.path);
+      assert.ok(m.querySelector("[data-testid=bucket-badges]"), `${r.path}: no rank badges`);
+      assert.ok(!/model_prob|probability \d/i.test(prose(m)), `${r.path}: the model's probability is shown`);
+    }
+    if (seedOnly) {
+      const live = main(pages.get(`/waivers?season=2026&week=3&pos=FLEX&kind=live`)!);
+      const rows = Array.from(live.querySelectorAll("[data-testid=pick]"));
+      assert.equal(rows.length, 3 * SEED.sizes.live, "every RB, WR and TE pick of the live week");
+      assert.deepEqual(
+        rows.slice(0, 6).map((row) => normalise(row.querySelector("[data-cell=player] [data-pos]")!.textContent ?? "")),
+        ["RB", "WR", "TE", "RB", "WR", "TE"],
+      );
+      assert.match(text(rows[0]), /Rowan Fielding/);
+      assert.match(text(rows[0]), /58% similar players hit 55–61%/);
+      assert.match(text(rows[0]), /Seed reason A/);
+      assert.match(prose(live.querySelector("[data-testid=flex-order]")!), /Equal chances are ordered by the model's probability/);
+      // the FLEX badges: every reconstructed week before 2026 merged again and counted by FLEX rank
+      const badges = Array.from(live.querySelectorAll("[data-bucket]")).map((b) => normalise(b.textContent ?? ""));
+      assert.deepEqual(badges, [
+        "Ranks 1–5: 60% hit (6 of 10)",
+        "Ranks 6–10: 40% hit (4 of 10)",
+        "Ranks 11–25: 30% hit (9 of 30)",
+      ]);
+      assert.match(
+        text(live.querySelector("[data-testid=bucket-badges]")!),
+        /FLEX lists rebuilt from the reconstructed RB, WR and TE lists of 2024–2025 \(2 weekly lists/,
+      );
+      assert.match(text(live), /Merged from the RB, WR and TE lists \(101 RB, 102 WR, 103 TE players in their pools\); the top 24 are shown/);
+      // a walk-forward week without chances: model order, said so; 25 of 36 candidates
+      const bt = main(pages.get(`/waivers?season=2025&week=6&pos=FLEX`)!);
+      assert.equal(bt.querySelectorAll("[data-testid=pick]").length, 25);
+      assert.match(text(bt), /Chance and priority: not available for this list/);
+      const btBadges = Array.from(bt.querySelectorAll("[data-bucket]")).map((b) => normalise(b.textContent ?? ""));
+      assert.deepEqual(btBadges, [
+        "Ranks 1–5: 60% hit (3 of 5)",
+        "Ranks 6–10: 20% hit (1 of 5)",
+        "Ranks 11–25: 33% hit (5 of 15)",
+      ]);
+      assert.match(text(bt), /W7 (RB|WR|TE)7, W8 did not play, W9 (RB|WR|TE)33/);
     }
   });
 });

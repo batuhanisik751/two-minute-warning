@@ -9,13 +9,13 @@ export const metadata = { title: "Regression Watch" };
 export default function RegressionPage() {
   return (
     <>
-      <PageHeader title="Regression Watch">
+      <PageHeader title="Regression Watch" kicker="Coming later">
         Coming in a later phase. Nothing on this page is data yet: the module has not been built.
       </PageHeader>
 
       <div className="max-w-3xl space-y-6">
-        <section aria-labelledby="what">
-          <h2 id="what" className="text-xl font-semibold">
+        <section aria-labelledby="what" className="rounded-xl border border-line bg-surface p-4 sm:p-5">
+          <h2 id="what" className="section-title">
             What it will do
           </h2>
           <p className="mt-2">
@@ -30,22 +30,32 @@ export default function RegressionPage() {
             of each player&apos;s efficiency is likely to last and tag the players whose scoring is out of line with
             their chances:
           </p>
-          <ul className="mt-2 list-disc space-y-1 pl-6">
-            <li>
-              <strong>Sell-high</strong>: scoring well above what his opportunity supports, and likely to cool off.
+          <ul className="mt-3 grid gap-3 sm:grid-cols-3">
+            <li className="rounded-lg border border-line bg-raised p-3">
+              <span className="tier" data-tier="must-add">
+                Sell-high
+              </span>
+              <p className="mt-2 text-sm">Scoring well above what his opportunity supports, and likely to cool off.</p>
             </li>
-            <li>
-              <strong>Buy-low</strong>: the mirror image, scoring below what his opportunity supports, and likely to
-              rise.
+            <li className="rounded-lg border border-line bg-raised p-3">
+              <span className="tier" data-tier="speculative">
+                Buy-low
+              </span>
+              <p className="mt-2 text-sm">
+                The mirror image: scoring below what his opportunity supports, and likely to rise.
+              </p>
             </li>
-            <li>
-              <strong>Legit</strong>: a high scorer whose points are backed by his opportunity.
+            <li className="rounded-lg border border-line bg-raised p-3">
+              <span className="tier" data-tier="watch">
+                Legit
+              </span>
+              <p className="mt-2 text-sm">A high scorer whose points are backed by his opportunity.</p>
             </li>
           </ul>
         </section>
 
-        <section aria-labelledby="how">
-          <h2 id="how" className="text-xl font-semibold">
+        <section aria-labelledby="how" className="rounded-xl border-2 border-dashed border-line bg-surface p-4 sm:p-5">
+          <h2 id="how" className="section-title">
             How it will be checked
           </h2>
           <p className="mt-2">

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Term from "@/components/Term";
 import { DISCLAIMER } from "@/lib/site";
-import { EmptyState, PageHeader } from "@/components/ui";
+import { EmptyState, PageHeader, PosBadge } from "@/components/ui";
 import { fmtInt, pct, pctRange, points, pointsRange, tierLabel } from "@/lib/format";
 import {
   AS_OF_TIME_UTC,
@@ -217,7 +217,9 @@ function PositionTable({ rows, model }: { rows: TrackRow[]; model: string }) {
             if (!a && !b) return null;
             return (
               <tr key={p}>
-                <th scope="row">{p}</th>
+                <th scope="row">
+                  <PosBadge pos={p} />
+                </th>
                 <td className="num">{withInterval(a)}</td>
                 <td className="num">{withInterval(b)}</td>
                 <td className="num">{diffCell(d)}</td>
@@ -330,7 +332,7 @@ function GlossaryList({ rows }: { rows: GlossaryRow[] }) {
     <>
       {kinds.map((k) => (
         <section key={k} aria-labelledby={`gloss-${k}`} className="mt-6">
-          <h3 id={`gloss-${k}`} className="text-lg font-semibold">
+          <h3 id={`gloss-${k}`} className="display text-xl uppercase">
             {KIND_TITLES[k] ?? k}
           </h3>
           <dl className="mt-2 divide-y divide-line rounded-lg border border-line bg-surface">
@@ -377,13 +379,14 @@ export default async function MethodologyPage() {
 
   return (
     <>
-      <PageHeader title="Methodology (draft)">
+      <PageHeader title="Methodology (draft)" kicker="How it works">
         How the Waiver Radar works, what data it uses, how it was tested and what the tests found. Every result on this
         page is read from the published track record, the priority table and the glossary; none is typed in by hand.
       </PageHeader>
 
-      <nav aria-label="On this page" className="mb-8 rounded-lg border border-line bg-surface p-4 text-sm">
-        <ul className="grid gap-1 sm:grid-cols-2">
+      <nav aria-label="On this page" className="mb-10 rounded-lg border border-line bg-surface p-4 text-sm">
+        <p className="mb-2 font-display text-sm font-bold tracking-wider text-muted uppercase">On this page</p>
+        <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2 lg:grid-cols-4">
           <li>
             <a href="#sources">Data sources and credits</a>
           </li>
@@ -410,7 +413,7 @@ export default async function MethodologyPage() {
 
       <div className="max-w-4xl space-y-12">
         <section aria-labelledby="sources">
-          <h2 id="sources" className="scroll-mt-24 text-2xl font-semibold">
+          <h2 id="sources" className="section-title scroll-mt-24">
             Data sources and credits
           </h2>
           <ul className="mt-3 list-disc space-y-2 pl-6">
@@ -442,7 +445,7 @@ export default async function MethodologyPage() {
         </section>
 
         <section aria-labelledby="point-in-time">
-          <h2 id="point-in-time" className="scroll-mt-24 text-2xl font-semibold">
+          <h2 id="point-in-time" className="section-title scroll-mt-24">
             The point-in-time rule
           </h2>
           <p className="mt-3">
@@ -461,7 +464,7 @@ export default async function MethodologyPage() {
         </section>
 
         <section aria-labelledby="leakage">
-          <h2 id="leakage" className="scroll-mt-24 text-2xl font-semibold">
+          <h2 id="leakage" className="section-title scroll-mt-24">
             Leakage safeguards
           </h2>
           <ul className="mt-3 list-disc space-y-2 pl-6">
@@ -507,16 +510,16 @@ export default async function MethodologyPage() {
         </section>
 
         <section aria-labelledby="radar">
-          <h2 id="radar" className="scroll-mt-24 text-2xl font-semibold">
+          <h2 id="radar" className="section-title scroll-mt-24">
             How the Waiver Radar works
           </h2>
-          <h3 className="mt-4 text-lg font-semibold">Who it ranks: the candidate pool</h3>
+          <h3 className="display mt-5 text-xl uppercase">Who it ranks: the candidate pool</h3>
           <p className="mt-2">{gloss.find((g) => g.name === "candidate_pool")?.explanation}</p>
           <p className="mt-2 text-sm text-muted">
             The rule: {gloss.find((g) => g.name === "candidate_pool")?.formula}
           </p>
 
-          <h3 className="mt-6 text-lg font-semibold">What counts as a hit</h3>
+          <h3 className="display mt-7 text-xl uppercase">What counts as a hit</h3>
           <dl className="mt-2 space-y-2">
             {["y_hit", "y_sustained", "starter_threshold"].map((n) => {
               const g = gloss.find((x) => x.name === n);
@@ -535,7 +538,7 @@ export default async function MethodologyPage() {
             outcome is never counted as a miss.
           </p>
 
-          <h3 className="mt-6 text-lg font-semibold">Chance, not the model&apos;s probability</h3>
+          <h3 className="display mt-7 text-xl uppercase">Chance, not the model&apos;s probability</h3>
           <p className="mt-2">
             The model (a regularized logistic regression, calibrated on the season before the one it predicts) gives
             each player a probability. The site shows his <Term name="chance">chance</Term> instead: how often players
@@ -545,7 +548,7 @@ export default async function MethodologyPage() {
             only, never the raw probability in its place.
           </p>
 
-          <h3 className="mt-6 text-lg font-semibold">Suggested priority</h3>
+          <h3 className="display mt-7 text-xl uppercase">Suggested priority</h3>
           {myTiers.length ? (
             <div className="table-scroll mt-2">
               <table className="data-table" data-testid="tier-table">
@@ -587,7 +590,7 @@ export default async function MethodologyPage() {
             <p className="mt-2 text-muted">No priority table has been published.</p>
           )}
 
-          <h3 className="mt-6 text-lg font-semibold">Live and reconstructed lists</h3>
+          <h3 className="display mt-7 text-xl uppercase">Live and reconstructed lists</h3>
           <p className="mt-2">
             A <strong>live</strong> list is made in real time, between the as-of time and the next week&apos;s first
             kickoff, and is never changed afterwards. Every other list is <strong>reconstructed</strong> (a backtest):
@@ -598,7 +601,7 @@ export default async function MethodologyPage() {
         </section>
 
         <section aria-labelledby="results">
-          <h2 id="results" className="scroll-mt-24 text-2xl font-semibold">
+          <h2 id="results" className="section-title scroll-mt-24">
             Results
           </h2>
           {head && head.radar.value !== null && head.baseline.value !== null ? (
@@ -630,7 +633,7 @@ export default async function MethodologyPage() {
         </section>
 
         <section aria-labelledby="glossary">
-          <h2 id="glossary" className="scroll-mt-24 text-2xl font-semibold">
+          <h2 id="glossary" className="section-title scroll-mt-24">
             Glossary
           </h2>
           <p className="mt-3">
@@ -640,7 +643,7 @@ export default async function MethodologyPage() {
           {gloss.length ? <GlossaryList rows={gloss} /> : <EmptyState title="The glossary has not been published" />}
           {siteTerms.length ? (
             <section aria-labelledby="gloss-site" className="mt-6">
-              <h3 id="gloss-site" className="text-lg font-semibold">
+              <h3 id="gloss-site" className="display text-xl uppercase">
                 Terms this site uses
               </h3>
               <dl className="mt-2 divide-y divide-line rounded-lg border border-line bg-surface">
@@ -656,7 +659,7 @@ export default async function MethodologyPage() {
         </section>
 
         <section aria-labelledby="disclaimers">
-          <h2 id="disclaimers" className="scroll-mt-24 text-2xl font-semibold">
+          <h2 id="disclaimers" className="section-title scroll-mt-24">
             Disclaimers
           </h2>
           <p className="mt-3">{DISCLAIMER}</p>

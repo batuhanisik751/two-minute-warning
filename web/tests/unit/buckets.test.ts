@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BUCKETS, badgeText, badges, bucketOf, seasonsText } from "../../lib/buckets";
+import { BUCKETS, badgeParts, badgeText, badges, bucketOf, seasonsText } from "../../lib/buckets";
 
 test("the buckets are 1-5, 6-10, 11-25", () => {
   assert.deepEqual(BUCKETS.map((b) => b.label), ["1-5", "6-10", "11-25"]);
@@ -38,6 +38,9 @@ test("a bucket without picks has no rate (never 0%)", () => {
   assert.equal(b[1].rate, null);
   assert.equal(badgeText(b[1]), "Ranks 6–10: no earlier lists");
   assert.equal(badgeText(b[0]), "Ranks 1–5: 25% hit (1 of 4)");
+  // the page draws the three parts separately; joined they are the same text
+  assert.deepEqual(badgeParts(b[0]), { head: "Ranks 1–5:", value: "25% hit", detail: "(1 of 4)" });
+  assert.deepEqual(badgeParts(b[1]), { head: "Ranks 6–10:", value: "no earlier lists", detail: null });
 });
 
 test("the real track record's pooled logit buckets are reproduced from per-rank counts", () => {

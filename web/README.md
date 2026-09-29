@@ -7,8 +7,8 @@ computed from anything but that database.
 
 | route | what it shows |
 |---|---|
-| `/` | this week: the newest live Waiver Radar list's top 5 per position, the track-record headline, the Regression Watch card; an empty state until the first live list exists |
-| `/waivers` | one list: position tabs, season/week picker (the time machine), live or reconstructed label, chance with its range, priority, reasons, outcomes, hit-rate badges per rank bucket |
+| `/` | this week: the scoreboard banner, each position's No. 1 ("top of the board"), the track-record headline, the newest live Waiver Radar list's top 5 per position plus a FLEX card, the Regression Watch card; an empty state until the first live list exists |
+| `/waivers` | one list: position tabs (from the data, plus FLEX), season/week picker (the time machine), live or reconstructed label, chance with its range and meter, priority, reasons, outcomes, hit-rate badges per rank bucket |
 | `/regression` | what Regression Watch will do (phase D is not built: no data, no numbers) |
 | `/player/[id]` | a player (nflverse `gsis_id`): header, weekly charts with data tables, Radar history; 404 for an unknown id |
 | `/methodology` | data sources, the point-in-time rule, leakage safeguards, how the Radar works, the results, the full glossary, disclaimers |
@@ -53,8 +53,8 @@ Queries per page:
 | page | queries (lib/queries) |
 |---|---|
 | every page | `meta.getSiteMeta` (site_meta; the as-of of the current week's radar_list rows), `glossary.getGlossary` (tooltips) |
-| `/` | `radar.getLatestLiveTop(5)`, `radar.getListIndex`, `radar.getRadarModel`, `track.getTrackRows(pooled, diff)` |
-| `/waivers` | `radar.getListIndex`, `radar.getList(season, week, position, kind)`, `radar.getBucketCounts(position, season)` |
+| `/` | `radar.getLatestLive`, `radar.getListIndex`, `radar.getRadarModel`, `track.getTrackRows(pooled, diff)`, `glossary.getGlossary` (the FLEX note's league shape) |
+| `/waivers` | `radar.getListIndex`, `radar.getPositions` (the tabs), `radar.getList(season, week, position, kind)`, `radar.getBucketCounts(position, season)`; FLEX: `radar.getList` for RB, WR and TE, `radar.getFlexBucketCounts(season)`, `glossary.getGlossary` |
 | `/player/[id]` | `player.getPlayer`, `player.getPlayerSeasons`, `player.getPlayerWeeks(season)`, `radar.getPlayerHistory` |
 | `/methodology` | `track.getTrackRows(...)`, `track.getTierStats`, `radar.getRadarModel`, `glossary.getGlossary` |
 
@@ -63,16 +63,31 @@ in the reconstructed lists of **seasons before the list's own** with final outco
 past week's badge never uses what came after it). Summed over the four positions for 2026
 they equal the track record's `bucket` rows exactly.
 
+**FLEX** (`lib/flex.ts`, unit-tested) merges one week's RB, WR and TE lists (same season, week
+and kind): highest chance first, then the model's probability (a tie-break only, never shown),
+then the rank in his own list, then RB, WR, TE and the player id; each player once; top 25.
+Lists without chances (the 2014 reconstructed lists) are therefore ordered by the model's
+probability, and the page says so. The page explains once that each chance is about a starter
+finish at the player's own position, quoting the league shape from the published glossary
+(`starter_threshold`, `lib/league.ts`; nothing typed in here). Its hit-rate badges rebuild the
+FLEX list of every reconstructed week before the list's season and count per FLEX rank, the
+same point-in-time rule as a position's badges.
+
+**Positions** (`lib/positions.ts`): the tabs and the home page's cards are the positions present
+in `radar_list`, plus FLEX after TE. A position published later (K, D/ST) gets its tab, card and
+badge colour by itself, in the order QB, RB, WR, TE, FLEX, K, D/ST; none is shown before it has
+a list. (The schema's `radar_list_position_check` still allows QB, RB, WR and TE only.)
+
 ## Tests
 
 | tier | command | needs |
 |---|---|---|
 | types | `npm run typecheck` | nothing (`next typegen` + `tsc`) |
 | lint | `npm run lint` | nothing |
-| unit | `npm test` | nothing: formatting, rank buckets and badges, query-string parsing, track-record selection, database-URL guard rails, method constants vs the Python code, theme contrast (WCAG AA, both themes) |
+| unit | `npm test` | nothing: formatting, rank buckets and badges, query-string parsing, track-record selection, database-URL guard rails, method constants vs the Python code, theme contrast (WCAG AA, both themes, incl. the strip, field and position colours), FLEX merge order and counts, the league shape, position tabs, team colours |
 | migrations | `npm run db:check` | nothing (never connects) |
 | build | `npm run build` | nothing (no database at build time) |
-| smoke + accessibility | `npm run test:smoke:run` | a build and the local Postgres server |
+| smoke + accessibility + layout | `npm run test:smoke:run` | a build, the local Postgres server and Google Chrome (or `CHROME_PATH`) |
 
 `npm run test:smoke:run` (`tests/run-smoke.ts`) creates and seeds two throwaway databases on
 the local server (`twm_web_test`, `twm_web_test_empty`; `tests/setup-db.ts` applies
@@ -92,10 +107,35 @@ page (zero serious or critical violations; contrast is checked by the unit tier 
 The setup refuses any database server that is not on this computer and any database name
 that does not start with `twm_web_test`.
 
+The **overlap check** (`tests/smoke/layout.test.ts`) loads every list page (home, each
+position, FLEX, reconstructed lists without chances) in headless Chrome at 320, 360, 390, 414,
+600, 768, 800, 1024, 1280, 1440 and 1920 px. In every list row (`[data-row]`: pick rows, the
+column header row, the top-of-the-board cards) it measures each line of text
+(`Range.getClientRects`, clipped by any ancestor that hides overflow) and fails when two text
+boxes intersect, when text sticks out of its row, or when the page scrolls sideways; a canary
+proves it catches a broken row. Chrome is driven over the DevTools protocol with Node's
+built-in WebSocket (`tests/smoke/chrome.ts`): no new dependency, no browser download. Without
+Chrome it skips loudly; with `SMOKE_REQUIRE=1` it fails.
+
 CI (`.github/workflows/ci.yml`, job `web`) runs every tier, the smoke tier against a
 `postgres:16` service.
 
 ## Notes
+
+- **Design**: a game-day broadcast. Barlow Condensed (headings, numbers, ranks) and Inter (body),
+  both through `next/font/google`, downloaded at build time and served by the site. Tokens in
+  `app/globals.css`: chalk/navy/turf with one hot accent (gold) for must-add and LIVE, a
+  scoreboard strip and a field banner that are dark in both themes, one colour per position
+  (QB, RB, WR, TE, FLEX; K and D/ST reserved). Motifs are CSS only: yard lines, hash marks,
+  mowed-turf stripes, a game clock in the wordmark, jersey-number ranks, a chance meter like a
+  win-probability bar (hidden from screen readers: the number is the source of truth). Nothing
+  moves on its own; cards lift on hover or focus only, and not with reduced motion.
+- **Lists lay out by their container** (Tailwind 4 container queries in `components/PickList.tsx`):
+  narrow, medium and wide rows, whatever the window, so a half-width card never gets the
+  full-width row.
+- **Team colours** (`lib/team-colors.ts`): a stripe and a swatch from `dim_team.color`/`color2`,
+  each only where it reaches 3:1 against that theme's card surface (else the second colour, else
+  a neutral token). The team's name is always written beside it. No logos.
 
 - **Light and dark**: follows the system; the toggle stores a choice in `localStorage`
   (`twm-theme`) and an inline script in `<head>` applies it before the first paint, so it never

@@ -101,7 +101,8 @@ before(
     // row), the position lists, FLEX, and reconstructed lists without chances
     paths = set.routes.filter((r) => ["home", "waivers", "waivers-live", "waivers-flex", "waivers-backtest"].includes(r.kind)).map((r) => r.path);
   },
-  { timeout: 120_000 },
+  // two Chrome start attempts of up to 60 s each, plus the connection
+  { timeout: 200_000 },
 );
 
 after(async () => {

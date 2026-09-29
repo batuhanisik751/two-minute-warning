@@ -139,7 +139,23 @@ export class Chrome {
     private profile: string,
   ) {}
 
-  static async launch(executable: string): Promise<Chrome> {
+  /** Start headless Chrome. A slow start on a busy CI runner gets one more try; a failed start
+   *  always kills the Chrome it spawned (a leftover Chrome kept the whole smoke run alive until
+   *  the CI job timed out, 2026-09-29). */
+  static async launch(executable: string, attempts = 2, startTimeoutMs = 60_000): Promise<Chrome> {
+    let last: unknown;
+    for (let i = 1; i <= attempts; i++) {
+      try {
+        return await Chrome.launchOnce(executable, startTimeoutMs);
+      } catch (err) {
+        last = err;
+        console.warn(`  Chrome start attempt ${i}/${attempts} failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    throw last instanceof Error ? last : new Error(String(last));
+  }
+
+  private static async launchOnce(executable: string, startTimeoutMs: number): Promise<Chrome> {
     const profile = mkdtempSync(join(tmpdir(), "twm-chrome-"));
     const args = [
       "--headless=new",
@@ -159,28 +175,48 @@ export class Chrome {
       "about:blank",
     ];
     const child = spawn(executable, args, { stdio: ["ignore", "ignore", "pipe"] });
-    const endpoint = await new Promise<string>((resolve, reject) => {
-      let buf = "";
-      const timer = setTimeout(() => reject(new Error("Chrome did not start within 30 s")), 30_000);
-      child.stderr!.on("data", (d) => {
-        buf += String(d);
-        const m = buf.match(/DevTools listening on (ws:\/\/\S+)/);
-        if (m) {
+    const giveUp = () => {
+      child.stderr?.removeAllListeners("data");
+      child.stderr?.destroy();
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      child.unref();
+      try {
+        rmSync(profile, { recursive: true, force: true });
+      } catch {
+        /* best effort */
+      }
+    };
+    try {
+      const endpoint = await new Promise<string>((resolve, reject) => {
+        let buf = "";
+        const timer = setTimeout(
+          () => reject(new Error(`Chrome did not start within ${startTimeoutMs / 1000} s`)),
+          startTimeoutMs,
+        );
+        child.stderr!.on("data", (d) => {
+          buf += String(d);
+          const m = buf.match(/DevTools listening on (ws:\/\/\S+)/);
+          if (m) {
+            clearTimeout(timer);
+            resolve(m[1]);
+          }
+        });
+        child.once("exit", (code) => {
           clearTimeout(timer);
-          resolve(m[1]);
-        }
+          reject(new Error(`Chrome exited with code ${code}: ${buf.slice(-500)}`));
+        });
       });
-      child.once("exit", (code) => {
-        clearTimeout(timer);
-        reject(new Error(`Chrome exited with code ${code}: ${buf.slice(-500)}`));
+      const ws = new WebSocket(endpoint);
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("could not connect to Chrome within 15 s")), 15_000);
+        ws.addEventListener("open", () => (clearTimeout(timer), resolve()), { once: true });
+        ws.addEventListener("error", () => (clearTimeout(timer), reject(new Error("could not connect to Chrome"))), { once: true });
       });
-    });
-    const ws = new WebSocket(endpoint);
-    await new Promise<void>((resolve, reject) => {
-      ws.addEventListener("open", () => resolve(), { once: true });
-      ws.addEventListener("error", () => reject(new Error("could not connect to Chrome")), { once: true });
-    });
-    return new Chrome(child, new Connection(ws), ws, profile);
+      return new Chrome(child, new Connection(ws), ws, profile);
+    } catch (err) {
+      giveUp();
+      throw err;
+    }
   }
 
   async newTab(): Promise<Tab> {

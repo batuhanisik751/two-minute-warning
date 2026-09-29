@@ -542,6 +542,56 @@ def _build_fact_opportunity_week(
     return _materialize(con, table, sql, stats, arules)
 
 
+# The player column of each per-play expected-values table, compared with fact_play's.
+_OPPORTUNITY_PLAY_PLAYERS = {
+    "fact_opportunity_pass": ("passer_player_id", "receiver_player_id"),
+    "fact_opportunity_rush": ("rusher_player_id",),
+}
+
+
+def _build_fact_opportunity_play(
+    con: duckdb.DuckDBPyConnection,
+    name: str,
+    src: SourceFiles,
+    stats: TableStats,
+    arules: av.AvailabilityRules,
+) -> TableStats:
+    """ffopportunity's per-play expected values (D1, ``fact_opportunity_pass`` /
+    ``fact_opportunity_rush``). ``season_type`` comes from the game's fact_game row and
+    ``is_garbage_time`` from the same play in fact_play (built before). The manifest notes how
+    many rows have no fact_play play (``n_not_in_fact_play``) and how often the player ids
+    differ from fact_play's for the same play (``n_<column>_differs_from_fact_play``)."""
+    table = sc.tables()[name]
+    if not src.paths[table.source]:  # every requested season predates 2006
+        out = _materialize(con, table, _empty_select(table), stats, arules)
+    else:
+        _, inner = _source_select(con, _without_computed(table), src, stats)
+        computed = {
+            "season_type": "g.season_type AS season_type",
+            "is_garbage_time": "f.is_garbage_time AS is_garbage_time",
+        }
+        cols = ", ".join(
+            computed[c.name] if c.computed else f"s.{sc.q(c.name)}" for c in table.columns
+        )
+        sql = (
+            f"SELECT {cols} FROM ({inner}) s LEFT JOIN fact_game g ON g.game_id = s.game_id "
+            "LEFT JOIN fact_play f ON f.game_id = s.game_id AND f.play_id = s.play_id"
+        )
+        out = _materialize(con, table, sql, stats, arules)
+    diff = ", ".join(
+        f"count(*) FILTER (WHERE f.play_id IS NOT NULL AND o.{c} IS DISTINCT FROM f.{c})"
+        for c in _OPPORTUNITY_PLAY_PLAYERS[name]
+    )
+    row = con.execute(
+        f"SELECT count(*) FILTER (WHERE f.play_id IS NULL), {diff} FROM {sc.q(name)} o "
+        "LEFT JOIN fact_play f ON f.game_id = o.game_id AND f.play_id = o.play_id"
+    ).fetchone()
+    stats.notes["n_not_in_fact_play"] = int(row[0])
+    for c, n in zip(_OPPORTUNITY_PLAY_PLAYERS[name], row[1:], strict=True):
+        stats.notes[f"n_{c}_differs_from_fact_play"] = int(n)
+    return out
+
+
 def _build_fact_schedule(
     con: duckdb.DuckDBPyConnection, stats: TableStats, arules: av.AvailabilityRules
 ) -> TableStats:
@@ -1193,6 +1243,9 @@ def build_warehouse(
                 for name in ("fact_play", "fact_player_week", "fact_team_week"):
                     _build_from_source(con, specs[name], src, stats[name], arules)
                 _build_fact_opportunity_week(con, src, stats["fact_opportunity_week"], arules)
+                # D1: per-play expected values, after fact_play (they copy its garbage flag)
+                for name in ("fact_opportunity_pass", "fact_opportunity_rush"):
+                    _build_fact_opportunity_play(con, name, src, stats[name], arules)
                 # B3: the id bridge first, then the tables that map ids through it
                 _stage_player_ids(con, src, stats["bridge_player_id"])
                 _build_fact_snaps(con, src, stats["fact_snaps"], arules)

@@ -89,6 +89,10 @@ GAME_DATA_TABLES = {
     # asset was updated 16 minutes after play_by_play_2026, GitHub releases API, 2026-09-28),
     # so it uses the play-by-play lag (docs/assumptions.md section 9)
     "fact_opportunity_week": "pbp",
+    # ffopportunity's per-play files come from the same run as its weekly file (the weekly one
+    # is their per-player sum, verified in D1), so they get the same rule
+    "fact_opportunity_pass": "pbp",
+    "fact_opportunity_rush": "pbp",
 }
 
 # fact_schedule columns that can still change after the spring release (flexed or moved games,
@@ -296,6 +300,11 @@ TODAYS_POSITION = (
     "(fact_depth_chart.position) instead"
 )
 
+OPPORTUNITY_POSITION = (
+    "ffopportunity's position for the player; when it was recorded is not documented (it may "
+    "be today's), so it is not used point-in-time"
+)
+
 # Ids are identifiers, not features: visible so a point-in-time reader can join other sources
 # (spec 6.2 rule 5, "no identifiers as model features", is enforced by the feature registry).
 DIM_PLAYER_VISIBLE = (
@@ -411,6 +420,29 @@ TABLE_AVAILABILITY: dict[str, Availability] = {
                 "position": "ffopportunity's position for the player; when it was recorded is "
                 "not documented (it may be today's), so it is not used point-in-time",
             },
+            week_key=_SW,
+        ),
+        Availability(
+            "fact_opportunity_pass",
+            "event",
+            "Expected values per pass play (ffopportunity pbp_pass) are built in the same run "
+            "as its weekly file, right after nflverse's play-by-play: game end + "
+            "game_data_lag_hours.pbp (6 h), joined on game_id, exactly like fact_play (so a "
+            "play and its expected values always become public together). Model outputs "
+            "(spec 6.3). passer_position and receiver_position are left out of the as-of view.",
+            hindsight_columns={
+                "passer_position": OPPORTUNITY_POSITION,
+                "receiver_position": OPPORTUNITY_POSITION,
+            },
+            week_key=_SW,
+        ),
+        Availability(
+            "fact_opportunity_rush",
+            "event",
+            "Expected values per rushing play (ffopportunity pbp_rush): game end + "
+            "game_data_lag_hours.pbp (6 h), joined on game_id, exactly like fact_play. Model "
+            "outputs (spec 6.3). position is left out of the as-of view.",
+            hindsight_columns={"position": OPPORTUNITY_POSITION},
             week_key=_SW,
         ),
         Availability(

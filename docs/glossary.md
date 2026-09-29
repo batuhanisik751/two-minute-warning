@@ -15,6 +15,22 @@ Whether a quarterback completes more passes than an average passer would have on
 - **Source:** fact_play.cpoe
 - **Verified:** equals 100 x (complete_pass - cp) on all 52,174 passes with a CPOE in 2006, 2015 and 2025 (raw play-by-play)
 
+### Carries
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `carries`; **unit:** carries; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.rush_attempt (two-point tries excluded), from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Completions
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `completions`; **unit:** passes; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.pass_completions, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
 ### EPA (expected points added) \*
 
 How much a single play helped or hurt the offense's scoring chances. A 30-yard catch on 3rd and 10 adds a lot; a sack on 1st down costs points.
@@ -22,6 +38,86 @@ How much a single play helped or hurt the offense's scoring chances. A 30-yard c
 - **Name:** `epa`; **unit:** points per play; **used by:** shared, decisions, hot_seat
 - **Formula:** nflfastR's expected points after the play minus before it, for the offense
 - **Source:** fact_play.epa
+
+### Expected completions \*
+
+What an average player would have produced from the same chances; compare with the actual number to see efficiency.
+
+- **Name:** `completions_exp`; **unit:** passes; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.pass_completions_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Expected interceptions \*
+
+What an average player would have produced from the same chances; compare with the actual number to see efficiency.
+
+- **Name:** `interceptions_exp`; **unit:** interceptions; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.pass_interception_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Expected passing touchdowns \*
+
+What an average player would have produced from the same chances; compare with the actual number to see efficiency.
+
+- **Name:** `passing_tds_exp`; **unit:** touchdowns; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.pass_touchdown_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Expected passing yards \*
+
+What an average player would have produced from the same chances; compare with the actual number to see efficiency.
+
+- **Name:** `passing_yards_exp`; **unit:** yards; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.pass_yards_gained_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Expected receiving touchdowns \*
+
+What an average player would have produced from the same chances; compare with the actual number to see efficiency.
+
+- **Name:** `receiving_tds_exp`; **unit:** touchdowns; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.rec_touchdown_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Expected receiving yards \*
+
+What an average player would have produced from the same chances; compare with the actual number to see efficiency.
+
+- **Name:** `receiving_yards_exp`; **unit:** yards; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.rec_yards_gained_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Expected receptions \*
+
+What an average player would have produced from the same chances; compare with the actual number to see efficiency.
+
+- **Name:** `receptions_exp`; **unit:** catches; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.receptions_exp: the sum of the completion chances of his targets, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Expected rushing touchdowns \*
+
+What an average player would have produced from the same chances; compare with the actual number to see efficiency.
+
+- **Name:** `rushing_tds_exp`; **unit:** touchdowns; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.rush_touchdown_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Expected rushing yards \*
+
+What an average player would have produced from the same chances; compare with the actual number to see efficiency.
+
+- **Name:** `rushing_yards_exp`; **unit:** yards; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.rush_yards_gained_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Expected yards after the catch \*
+
+Yards after the catch an average receiver would have gained on the same catches; yac - yac_exp is 'YAC over expected'.
+
+- **Name:** `yac_exp`; **unit:** yards; **used by:** regression_watch
+- **Formula:** yards_after_catch_exp over his caught targets (two-point tries excluded)
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_pass)
 
 ### Expert rank at the as-of
 
@@ -63,6 +159,14 @@ The running back or receiver scored well enough to fill a FLEX slot that week. I
 - **Formula:** a RB or WR with weekly_pos_rank <= his position's FLEX-worthy rank (RB/WR top 36); always false for QB and TE
 - **Source:** twm.modules.waiver_radar.labels.weekly_finishes
 
+### FPOE without garbage time \*
+
+Points over expected, counting only plays while the game was in doubt.
+
+- **Name:** `fpoe_ng`; **unit:** points; **used by:** regression_watch
+- **Formula:** points_ng - xfp_ng
+- **Source:** twm.modules.regression_watch.player_week
+
 ### Fantasy points
 
 The score a player earns for your fantasy team in one game, computed from his yards, touchdowns, catches and mistakes with your league's settings.
@@ -72,6 +176,30 @@ The score a player earns for your fantasy team in one game, computed from his ya
 - **Source:** twm.scoring.score / score_sql on fact_player_week
 - **Verified:** the nflverse_ppr preset reproduces nflverse's fantasy_points_ppr exactly on all 150,691 QB/RB/WR/TE player-weeks 1999-2026 (tests/test_scoring.py)
 - **Waiver Radar reason:** "{player} scored {value:.1f} fantasy points"
+
+### Fantasy points added up play by play
+
+The same points as the weekly stat line, credited play by play so a game can be split into parts; equal to fantasy_points for 99.9% of player-games.
+
+- **Name:** `play_points`; **unit:** points; **used by:** regression_watch
+- **Formula:** the sum over his plays of each play's stats scored with config/scoring.yaml (twm.scoring.score_sql): passer = passing yards, passing touchdown, interception; target = reception, receiving yards; rusher = rushing yards; lateral receiver or rusher = the lateral's yards; td_player_id = the touchdown (rushing, receiving, return or fumble-recovery); two-point conversions to the passer, target or rusher of the try; a lost fumble to the player who lost it
+- **Source:** twm.modules.regression_watch.player_week
+
+### Fantasy points in garbage time \*
+
+Points he scored after the game was effectively decided.
+
+- **Name:** `points_garbage`; **unit:** points; **used by:** regression_watch
+- **Formula:** the fantasy points of his garbage-time plays (fact_play.is_garbage_time), credited play by play as in play_points
+- **Source:** twm.modules.regression_watch.player_week
+
+### Fantasy points without garbage time \*
+
+The points he scored while the game was still in doubt. Late points in a blowout come against soft defenses and say little about next week.
+
+- **Name:** `points_ng`; **unit:** points; **used by:** regression_watch
+- **Formula:** fantasy_points - points_garbage: the weekly stat line's points minus those scored on his garbage-time plays (fact_play.is_garbage_time)
+- **Source:** twm.modules.regression_watch.player_week
 
 ### Garbage time \*
 
@@ -90,6 +218,14 @@ How many points the betting market expected a team to score, from the spread and
 - **Source:** fact_game.home_implied_total, fact_game.away_implied_total
 - **Verified:** spread_line sign checked in A3 (docs/assumptions.md section 7)
 
+### Interceptions thrown
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `interceptions`; **unit:** interceptions; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.pass_interception, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
 ### Neutral situation \*
 
 Plays where the game is still in the balance and neither team is forced to pass or run; the fairest view of how a team really plays.
@@ -97,6 +233,70 @@ Plays where the game is still in the balance and neither team is forced to pass 
 - **Name:** `is_neutral`; **unit:** boolean; **used by:** shared
 - **Formula:** win probability from 0.2 to 0.8 and more than 120 seconds left in the half
 - **Source:** fact_play.is_neutral (twm.situations)
+
+### Opportunities
+
+How many chances he had in the game.
+
+- **Name:** `n_opportunities`; **unit:** plays; **used by:** regression_watch
+- **Formula:** targets + carries + pass attempts (two-point tries included, sacks not) with an ffopportunity per-play row
+- **Source:** twm.modules.regression_watch.player_week
+
+### Opportunities in garbage time \*
+
+How many of his chances came after the game was decided.
+
+- **Name:** `n_opportunities_garbage`; **unit:** plays; **used by:** regression_watch
+- **Formula:** n_opportunities on garbage-time plays (fact_play.is_garbage_time)
+- **Source:** twm.modules.regression_watch.player_week
+
+### Pass attempts
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `pass_attempts`; **unit:** passes; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.pass_attempt (sacks and two-point tries excluded), from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Passing touchdowns
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `passing_tds`; **unit:** touchdowns; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.pass_touchdown, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Passing yards
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `passing_yards`; **unit:** yards; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.pass_yards_gained, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Receiving touchdowns
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `receiving_tds`; **unit:** touchdowns; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.rec_touchdown, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Receiving yards
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `receiving_yards`; **unit:** yards; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.rec_yards_gained, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Receptions
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `receptions`; **unit:** catches; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.receptions, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
 
 ### Rostership (percent of leagues)
 
@@ -106,6 +306,22 @@ How many real leagues have the player on a roster. It checks the candidate pool 
 - **Formula:** FantasyPros' average share of leagues rostering the player across sites (fact_ranking.player_owned_avg) from the season's latest weekly ranking public at the as-of (the Friday before that week's games); owned_espn = ESPN's share (fact_ranking.player_owned_espn). 2020 partly, 2021 on
 - **Source:** fact_ranking.player_owned_avg, fact_ranking.player_owned_espn
 
+### Rushing touchdowns
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `rushing_tds`; **unit:** touchdowns; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.rush_touchdown, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Rushing yards
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `rushing_yards`; **unit:** yards; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.rush_yards_gained, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
 ### Starter finish
 
 The player scored like a weekly starter in a 12-team league that week.
@@ -113,6 +329,14 @@ The player scored like a weekly starter in a 12-team league that week.
 - **Name:** `is_starter_finish`; **unit:** boolean; **used by:** waiver_radar
 - **Formula:** weekly_pos_rank <= the position's starter threshold (QB top 12, RB top 24, WR top 24, TE top 12)
 - **Source:** twm.modules.waiver_radar.labels.weekly_finishes
+
+### Targets
+
+The actual number in the game, counted by ffopportunity over the same plays as its expected value.
+
+- **Name:** `targets`; **unit:** targets; **used by:** regression_watch
+- **Formula:** fact_opportunity_week.rec_attempt: passes thrown to him (two-point tries excluded), from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
 
 ### WPA (win probability added) \*
 
@@ -137,6 +361,38 @@ The chance the offense wins from this moment, given score, time, field position 
 - **Name:** `wp`; **unit:** probability (0-1); **used by:** shared, decisions
 - **Formula:** nflfastR's estimated probability that the team with the ball wins, before the snap
 - **Source:** fact_play.wp
+
+### Yards after the catch
+
+Yards he gained with the ball after catching it.
+
+- **Name:** `yac`; **unit:** yards; **used by:** regression_watch
+- **Formula:** receiving_yards - air_yards over his caught targets (two-point tries excluded), from fact_opportunity_pass
+- **Source:** twm.modules.regression_watch.player_week (fact_opportunity_pass)
+
+### xFP added up play by play \*
+
+The same expected points as the weekly xFP, counted play by play (equal within rounding).
+
+- **Name:** `play_xfp`; **unit:** points; **used by:** regression_watch
+- **Formula:** the sum over his plays of ffopportunity's per-play expected stats scored like xfp: a pass is worth pass_completion_exp catches (completions for the passer) and pass_completion_exp x (air_yards + yards_after_catch_exp) yards plus pass_touchdown_exp (and, for the passer, pass_interception_exp); a run rush_yards_exp and rush_touchdown_exp; a two-point try only two_point_conv_exp
+- **Source:** twm.modules.regression_watch.player_week
+
+### xFP in garbage time \*
+
+What his chances after the game was decided were worth.
+
+- **Name:** `xfp_garbage`; **unit:** points; **used by:** regression_watch
+- **Formula:** the expected points of his garbage-time plays (fact_play.is_garbage_time), counted play by play as in play_xfp (NULL without an ffopportunity row)
+- **Source:** twm.modules.regression_watch.player_week
+
+### xFP without garbage time \*
+
+What his chances were worth while the game was still in doubt.
+
+- **Name:** `xfp_ng`; **unit:** points; **used by:** regression_watch
+- **Formula:** xfp - xfp_garbage: the weekly xFP minus the expected points of his garbage-time targets, carries and passes
+- **Source:** twm.modules.regression_watch.player_week
 
 ## Features
 

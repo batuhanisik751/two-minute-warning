@@ -17,6 +17,9 @@ purpose (then refresh the expected outputs too):
 
     uv run python tests/golden/make_inputs.py
     uv run python tests/golden/update.py
+
+``--plays-only`` writes only the two per-play ffopportunity inputs (D1), which are derived from
+the committed pbp and player_stats inputs by fixed formulas; the other inputs stay as they are.
 """
 
 from __future__ import annotations
@@ -611,7 +614,71 @@ class World:
             )
 
 
+def opportunity_plays(pbp: list[dict], stats: list[dict]) -> dict[str, list[dict]]:
+    """ffopportunity's per-play files for the golden plays (D1), derived from the pbp and
+    player_stats rows by fixed formulas (no random numbers): every pass play gets the team's
+    passer of that game (the QB with pass attempts) and made-up expected values that depend on
+    the play id and the yard line; every run its rusher. Deterministic, so these two inputs can
+    be regenerated alone without touching the others (``--plays-only``)."""
+    passers = {
+        (r["game_id"], r["team"]): r["player_id"]
+        for r in stats
+        if r.get("position") == "QB" and (r.get("attempts") or 0) > 0
+    }
+    out: dict[str, list[dict]] = {"ff_opportunity_pass": [], "ff_opportunity_rush": []}
+    for r in pbp:
+        pid = int(r["play_id"])
+        yl = float(r["yardline_100"])
+        base = {
+            "game_id": r["game_id"], "play_id": float(pid), "posteam": r["posteam"],
+            "two_point_attempt": 0.0, "season": int(r["season"]), "week": int(r["week"]),
+        }  # fmt: skip
+        if r["play_type"] == "pass":
+            passer = passers.get((r["game_id"], r["posteam"]))
+            if passer is None:
+                continue
+            caught = pid % 3 != 0 and r["receiver_player_id"] is not None
+            air = float(r["air_yards"] or 0.0)
+            out["ff_opportunity_pass"].append({
+                **base, "passer_player_id": passer,
+                "receiver_player_id": r["receiver_player_id"],
+                "receiver_position": None if r["receiver_player_id"] is None else "WR",
+                "pass_attempt": 1.0, "receiving_yards": air + 4.0 if caught else None,
+                "complete_pass": "1" if caught else "0", "pass_touchdown": "0",
+                "interception": "0", "air_yards": air,
+                "pass_completion_exp": round(0.55 + 0.01 * ((pid * 7) % 30), 6),
+                "yards_after_catch_exp": round(3.0 + 0.1 * ((pid * 3) % 20), 6),
+                "pass_touchdown_exp": 0.3 if yl <= 10 else 0.12 if yl <= 20 else 0.02,
+                "pass_interception_exp": 0.025, "two_point_conv_exp": 0.0,
+            })  # fmt: skip
+        elif r["play_type"] == "run" and r["rusher_player_id"] is not None:
+            out["ff_opportunity_rush"].append({
+                **base, "rusher_player_id": r["rusher_player_id"], "rush_attempt": 1.0,
+                "rushing_yards": float(r["yards_gained"]), "rush_touchdown": "0",
+                "rush_yards_exp": round(3.5 + 0.1 * ((pid * 5) % 15), 6),
+                "rush_touchdown_exp": 0.25 if yl <= 5 else 0.08 if yl <= 20 else 0.01,
+                "two_point_conv_exp": 0.0,
+            })  # fmt: skip
+    return out
+
+
+def plays_only() -> None:
+    """Write only the two per-play inputs, from the committed pbp and player_stats inputs."""
+    from tests.golden.world import read_input
+
+    total = 0
+    for season in SEASONS:
+        pbp = read_input("pbp", season).to_dicts()
+        stats = read_input("player_stats", season).to_dicts()
+        for name, rows in opportunity_plays(pbp, stats).items():
+            total += write_input(name, season, rows)
+    print(f"wrote the per-play inputs, {total / 1024:.0f} KB (tests/golden/inputs/)")
+
+
 def main() -> None:
+    if "--plays-only" in sys.argv[1:]:
+        plays_only()
+        return
     world = World()
     everyone: dict[int, Player] = {}
     for season in SEASONS:
@@ -623,6 +690,8 @@ def main() -> None:
     for p in world.players:
         everyone[p.n] = p
     world.globals_(list(everyone.values()))
+    for name, rows in opportunity_plays(world.rows["pbp"], world.rows["player_stats"]).items():
+        world.rows[name] = rows
     total = 0
     for name in INPUTS:
         rows = world.rows[name]

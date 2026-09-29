@@ -379,6 +379,42 @@ spread_line total_line roof surface temp wind stadium weather div_game location 
 time_of_day home_score away_score total result
 """.split()  # noqa: SIM905
 
+# D1 (Regression Watch): who gets a play's yards, touchdowns and lost fumbles, so fantasy points
+# can be computed per play (twm.modules.regression_watch.plays). Appended after the columns
+# above so the older columns keep their positions. Checked against data/schemas/pbp.json at
+# import like the rest; every yard column is integral in 1999-2026 (checked on the cache).
+FACT_PLAY_ATTRIBUTION_DOCS: dict[str, str] = {
+    "pass_attempt": "1 on a pass attempt (sacks and two-point passes included)",
+    "rush_attempt": "1 on a rush attempt (kneels and scrambles included)",
+    "passing_yards": "yards credited to the passer on a completion (NULL otherwise); includes "
+    "yards gained after a lateral by the receiver",
+    "receiving_yards": "yards credited to the receiver (NULL on an incompletion); a lateral's "
+    "yards after it go to lateral_receiving_yards",
+    "rushing_yards": "yards credited to the rusher (kneels included); a lateral's yards after it "
+    "go to lateral_rushing_yards",
+    "lateral_reception": "1 when the receiver lateralled the ball after the catch",
+    "lateral_rush": "1 when the rusher lateralled the ball",
+    "lateral_receiver_player_id": "player who received a lateral after a catch (gsis_id)",
+    "lateral_receiving_yards": "receiving yards credited to lateral_receiver_player_id",
+    "lateral_rusher_player_id": "player who received a lateral on a run (gsis_id)",
+    "lateral_rushing_yards": "rushing yards credited to lateral_rusher_player_id",
+    "td_team": "team that scored a touchdown on the play (current abbreviation)",
+    "td_player_id": "player who scored the play's touchdown (gsis_id)",
+    "fumbled_1_team": "team of the first player who fumbled (current abbreviation)",
+    "fumbled_1_player_id": "first player who fumbled (gsis_id)",
+    "fumbled_2_team": "team of the second player who fumbled on the same play",
+    "fumbled_2_player_id": "second player who fumbled on the same play (gsis_id)",
+    "fumble_recovery_1_team": "team that recovered the first fumble",
+    "fumble_recovery_1_player_id": "player who recovered the first fumble (gsis_id)",
+    "fumble_recovery_2_team": "team that recovered the second fumble",
+    "fumble_recovery_2_player_id": "player who recovered the second fumble (gsis_id)",
+    "kickoff_returner_player_id": "kickoff returner (gsis_id)",
+    "punt_returner_player_id": "punt returner (gsis_id)",
+    "lateral_kickoff_returner_player_id": "player who received a lateral on a kickoff return",
+    "lateral_punt_returner_player_id": "player who received a lateral on a punt return",
+}
+FACT_PLAY_COLUMNS += list(FACT_PLAY_ATTRIBUTION_DOCS)
+
 # Columns that are counts, yard lines, seconds or 0/1 flags but arrive as DOUBLE in some seasons.
 FACT_PLAY_INTEGER: set[str] = set(
     """
@@ -392,10 +428,13 @@ aborted_play play_deleted timeout two_point_attempt extra_point_attempt field_go
 kick_distance punt_attempt kickoff_attempt fourth_down_converted fourth_down_failed
 third_down_converted third_down_failed xyac_median_yardage success temp wind div_game home_score
 away_score total result
+pass_attempt rush_attempt passing_yards receiving_yards rushing_yards lateral_reception
+lateral_rush lateral_receiving_yards lateral_rushing_yards
 """.split()  # noqa: SIM905
 )
 FACT_PLAY_TEAM_COLUMNS = (
-    "posteam", "defteam", "home_team", "away_team", "penalty_team", "timeout_team"
+    "posteam", "defteam", "home_team", "away_team", "penalty_team", "timeout_team", "td_team",
+    "fumbled_1_team", "fumbled_2_team", "fumble_recovery_1_team", "fumble_recovery_2_team",
 )  # fmt: skip
 
 
@@ -411,7 +450,8 @@ def fact_play_spec() -> Table:
         else:
             typ = duckdb_type_of(snap[name])
         transform = normalize_team_sql if name in FACT_PLAY_TEAM_COLUMNS else None
-        cols.append(Column(name, typ, transform=transform))
+        doc = FACT_PLAY_ATTRIBUTION_DOCS.get(name, "")
+        cols.append(Column(name, typ, transform=transform, doc=doc))
     rules = situations.SituationRules.from_config()
     cols += [
         Column(
@@ -909,6 +949,182 @@ def fact_opportunity_week_spec() -> Table:
     )
 
 
+# ---- expected values per play (D1, ffopportunity pbp_pass / pbp_rush) --------------------
+
+# The build copies the play's garbage-time flag from fact_play (same game_id, play_id), so
+# every consumer can split expected points into garbage time and the rest without a join.
+OPPORTUNITY_PLAY_GARBAGE = Column(
+    "is_garbage_time",
+    "BOOLEAN",
+    computed=True,
+    doc="fact_play.is_garbage_time of the same play (game_id, play_id); NULL when the play is "
+    "not in fact_play (3 pass plays of 2011-2018 on the 2026-09-29 cache; "
+    "build_manifest.notes.n_not_in_fact_play)",
+)
+_EXP_DOC = "expected value from ffopportunity's model for this play (6 decimals upstream)"
+_FLAG_DOC = "0/1 (a categorical '0'/'1' upstream)"
+
+
+def _opportunity_play_head(season_type_from: str) -> list[Column]:
+    return [
+        Column("season", "INTEGER", doc="NFL season"),
+        Column("week", "INTEGER", doc="game week"),
+        Column("season_type", "VARCHAR", computed=True, doc=season_type_from),
+        Column("game_id", "VARCHAR"),
+        Column(
+            "play_id",
+            "INTEGER",
+            doc="the play's id in the game (a float upstream; integral, "
+            "checked); joins fact_play on (game_id, play_id)",
+        ),
+        Column(
+            "posteam",
+            "VARCHAR",
+            transform=normalize_team_sql,
+            doc="team with the ball (current abbreviation; upstream already uses it)",
+        ),
+    ]
+
+
+def fact_opportunity_pass_spec() -> Table:
+    cols = _opportunity_play_head("REG or POST, from the game's fact_game row")
+    cols += [
+        Column("passer_player_id", "VARCHAR", doc="the passer's gsis_id"),
+        Column("passer_full_name", "VARCHAR", doc="passer name as ffopportunity writes it"),
+        Column(
+            "passer_position",
+            "VARCHAR",
+            doc="ffopportunity's position for the passer (hidden point-in-time: when it was "
+            "recorded is not documented)",
+        ),
+        Column(
+            "receiver_player_id",
+            "VARCHAR",
+            doc="the targeted player's gsis_id (NULL when the pass had no identified target)",
+        ),
+        Column("receiver_full_name", "VARCHAR", doc="receiver name as ffopportunity writes it"),
+        Column(
+            "receiver_position",
+            "VARCHAR",
+            doc="ffopportunity's position for the receiver (hidden point-in-time); only used to "
+            "pick a row when a play repeats",
+        ),
+        Column("two_point_attempt", "INTEGER", doc="1 on a two-point try"),
+        Column("two_point_converted", "INTEGER", doc="1 when the two-point try succeeded"),
+        Column("pass_attempt", "INTEGER", doc="1 (every row is a pass attempt)"),
+        Column("complete_pass", "INTEGER", doc=f"completed pass, {_FLAG_DOC}"),
+        Column("pass_touchdown", "INTEGER", doc=f"passing touchdown, {_FLAG_DOC}"),
+        Column("interception", "INTEGER", doc=f"interception, {_FLAG_DOC}"),
+        Column("fumble_lost", "INTEGER", doc="1 when a fumble on the play was lost"),
+        Column("air_yards", "INTEGER", doc="yards the ball travelled past the line of scrimmage"),
+        Column("receiving_yards", "INTEGER", doc="receiving yards on a completion (else NULL)"),
+        Column(
+            "pass_completion_exp",
+            "DOUBLE",
+            doc=f"chance the pass is completed: {_EXP_DOC}; an expected reception for the "
+            "receiver and an expected completion for the passer (two-point tries excluded)",
+        ),
+        Column(
+            "yards_after_catch_exp",
+            "DOUBLE",
+            doc=f"expected yards after the catch if it is caught: {_EXP_DOC}. Expected "
+            "passing/receiving yards of the play = pass_completion_exp x (air_yards + "
+            "yards_after_catch_exp) (verified: sums reproduce fact_opportunity_week)",
+        ),
+        Column("pass_touchdown_exp", "DOUBLE", doc=f"chance of a touchdown: {_EXP_DOC}"),
+        Column(
+            "pass_interception_exp",
+            "DOUBLE",
+            doc=f"chance of an interception: {_EXP_DOC}; "
+            "ffopportunity's weekly totals leave out two-point tries",
+        ),
+        Column(
+            "two_point_conv_exp",
+            "DOUBLE",
+            doc=f"chance a two-point try succeeds: {_EXP_DOC} (0 on other plays)",
+        ),
+        OPPORTUNITY_PLAY_GARBAGE,
+    ]
+    _check_names("ff_opportunity_pass", [c.name for c in cols if not c.computed])
+    return Table(
+        name="fact_opportunity_pass",
+        source="ff_opportunity_pass",
+        primary_key=("game_id", "play_id"),
+        columns=tuple(cols),
+        # upstream repeats two 2013 pass plays: the same target listed a second time under an
+        # outside linebacker's name (like fact_opportunity_week); the QB/RB/WR/TE row wins
+        dedupe_order=(
+            "CASE WHEN receiver_position IN ('QB', 'RB', 'WR', 'TE') THEN 0 ELSE 1 END",
+            "receiver_full_name NULLS LAST",
+        ),
+        doc=(
+            "One row per pass play (2006+, regular season and playoffs, two-point tries "
+            "included) from nflverse's ffopportunity per-play file (pbp_pass): the passer, the "
+            "target, what happened and the EXPECTED values of ffopportunity's models "
+            "(completion, yards after catch, touchdown, interception, two-point conversion; "
+            "spec 6.3 caveat), plus the play's garbage-time flag from fact_play. Summed per "
+            "player-game they reproduce fact_opportunity_week's expected passing and receiving "
+            "components (twm.modules.regression_watch.plays). A play listed twice upstream "
+            "keeps the row whose receiver is at a QB/RB/WR/TE position."
+        ),
+    )
+
+
+def fact_opportunity_rush_spec() -> Table:
+    cols = _opportunity_play_head("REG or POST, from the game's fact_game row")
+    cols += [
+        Column("rusher_player_id", "VARCHAR", doc="the rusher's gsis_id"),
+        Column("full_name", "VARCHAR", doc="rusher name as ffopportunity writes it"),
+        Column(
+            "position",
+            "VARCHAR",
+            doc="ffopportunity's position for the rusher (hidden point-in-time: when it was "
+            "recorded is not documented)",
+        ),
+        Column("two_point_attempt", "INTEGER", doc="1 on a two-point try"),
+        Column("two_point_converted", "INTEGER", doc="1 when the two-point try succeeded"),
+        Column("rush_attempt", "INTEGER", doc="1 (every row is a rush attempt, kneels included)"),
+        Column("rush_touchdown", "INTEGER", doc=f"rushing touchdown, {_FLAG_DOC}"),
+        Column("fumble_lost", "INTEGER", doc="1 when a fumble on the play was lost"),
+        Column("rushing_yards", "INTEGER", doc="rushing yards on the play"),
+        Column(
+            "rush_yards_exp",
+            "DOUBLE",
+            doc=f"expected rushing yards: {_EXP_DOC}. ffopportunity sets a kneel to -1 and an "
+            "aborted snap to 0 here (its raw model value, rushing_yards_exp upstream, is not "
+            "kept); two-point tries are left out of its weekly yards",
+        ),
+        Column(
+            "rush_touchdown_exp",
+            "DOUBLE",
+            doc=f"chance of a rushing touchdown: {_EXP_DOC} (0 on kneels and two-point tries; "
+            "the raw model value rushing_td_exp is not kept)",
+        ),
+        Column(
+            "two_point_conv_exp",
+            "DOUBLE",
+            doc=f"chance a two-point try succeeds: {_EXP_DOC} (0 on other plays)",
+        ),
+        OPPORTUNITY_PLAY_GARBAGE,
+    ]
+    _check_names("ff_opportunity_rush", [c.name for c in cols if not c.computed])
+    return Table(
+        name="fact_opportunity_rush",
+        source="ff_opportunity_rush",
+        primary_key=("game_id", "play_id"),
+        columns=tuple(cols),
+        doc=(
+            "One row per rushing play (2006+, regular season and playoffs, kneels and "
+            "two-point tries included) from nflverse's ffopportunity per-play file (pbp_rush): "
+            "the rusher, what happened and the EXPECTED rushing yards, touchdown and two-point "
+            "conversion of ffopportunity's models (spec 6.3 caveat), plus the play's "
+            "garbage-time flag from fact_play. Summed per player-game they reproduce "
+            "fact_opportunity_week's expected rushing components "
+            "(twm.modules.regression_watch.plays)."
+        ),
+    )
+
+
 # ---- dimensions --------------------------------------------------------------------------
 
 
@@ -1251,6 +1467,8 @@ def tables() -> dict[str, Table]:
         fact_player_week_spec(),
         fact_team_week_spec(),
         fact_opportunity_week_spec(),
+        fact_opportunity_pass_spec(),
+        fact_opportunity_rush_spec(),
         fact_snaps_spec(),
         fact_injury_report_spec(),
         fact_depth_chart_spec(),
@@ -1271,6 +1489,8 @@ SOURCE_DATASETS = (
     "player_stats",
     "team_stats",
     "ff_opportunity",
+    "ff_opportunity_pass",
+    "ff_opportunity_rush",
     "snap_counts",
     "injuries",
     "depth_charts",

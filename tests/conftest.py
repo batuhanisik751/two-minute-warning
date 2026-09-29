@@ -193,6 +193,55 @@ OPPORTUNITY_DTYPES: dict[str, pl.DataType] = {
 
 OPPORTUNITY_FIRST_SEASON = 2006
 
+# ffopportunity per play (fact_opportunity_pass / _rush, D1): upstream dtypes (data/schemas),
+# the 0/1 outcome flags are categoricals upstream. Empty files unless a test passes rows.
+OPPORTUNITY_PASS_DTYPES: dict[str, pl.DataType] = {
+    "game_id": pl.String(),
+    "play_id": pl.Float64(),
+    "passer_player_id": pl.String(),
+    "passer_full_name": pl.String(),
+    "passer_position": pl.String(),
+    "receiver_player_id": pl.String(),
+    "receiver_full_name": pl.String(),
+    "receiver_position": pl.String(),
+    "posteam": pl.String(),
+    "two_point_attempt": pl.Float64(),
+    "two_point_converted": pl.Float64(),
+    "pass_attempt": pl.Float64(),
+    "receiving_yards": pl.Float64(),
+    "fumble_lost": pl.Float64(),
+    "season": pl.Int32(),
+    "week": pl.Int32(),
+    "complete_pass": pl.Categorical(),
+    "pass_touchdown": pl.Categorical(),
+    "interception": pl.Categorical(),
+    "air_yards": pl.Float64(),
+    "pass_completion_exp": pl.Float64(),
+    "yards_after_catch_exp": pl.Float64(),
+    "pass_touchdown_exp": pl.Float64(),
+    "pass_interception_exp": pl.Float64(),
+    "two_point_conv_exp": pl.Float64(),
+}
+OPPORTUNITY_RUSH_DTYPES: dict[str, pl.DataType] = {
+    "game_id": pl.String(),
+    "play_id": pl.Float64(),
+    "rusher_player_id": pl.String(),
+    "full_name": pl.String(),
+    "posteam": pl.String(),
+    "two_point_attempt": pl.Float64(),
+    "two_point_converted": pl.Float64(),
+    "rush_attempt": pl.Float64(),
+    "fumble_lost": pl.Float64(),
+    "season": pl.Int32(),
+    "week": pl.Int32(),
+    "rushing_yards": pl.Float64(),
+    "rush_touchdown": pl.Categorical(),
+    "position": pl.String(),
+    "rush_yards_exp": pl.Float64(),
+    "rush_touchdown_exp": pl.Float64(),
+    "two_point_conv_exp": pl.Float64(),
+}
+
 
 # ff_playerids (DynastyProcess) and weekly rosters: the id sources of the B3 bridge. Every id in
 # the fixtures is synthetic (9xxxxx, 8xxxxx ... numbers, "OneAl00"-style PFR slugs).
@@ -465,6 +514,8 @@ class RawCache:
         depth_charts: pl.DataFrame | None = None,
         rosters: pl.DataFrame | list[dict[str, Any]] | None = None,
         opportunity: list[dict[str, Any]] | None = None,
+        opportunity_pass: list[dict[str, Any]] | None = None,
+        opportunity_rush: list[dict[str, Any]] | None = None,
     ) -> None:
         """Write every per-season dataset a build needs, with sensible tiny defaults."""
         self.write("schedules", season, frame(games, SCHEDULE_DTYPES))
@@ -523,6 +574,34 @@ class RawCache:
                     for g in games
                 ]  # fmt: skip
             self.write("ff_opportunity", season, frame(opportunity, OPPORTUNITY_DTYPES))
+            if opportunity_pass is None:  # the pass of the default plays (play 2)
+                opportunity_pass = [
+                    {"game_id": g["game_id"], "play_id": 2.0, "season": g["season"],
+                     "week": g["week"], "posteam": g["away_team"],
+                     "passer_player_id": "00-0000001", "receiver_player_id": "00-0000002",
+                     "receiver_position": "WR", "two_point_attempt": 0.0, "pass_attempt": 1.0,
+                     "complete_pass": "1", "pass_touchdown": "0", "interception": "0",
+                     "air_yards": 7.0, "receiving_yards": 9.0, "pass_completion_exp": 0.6,
+                     "yards_after_catch_exp": 3.0, "pass_touchdown_exp": 0.02,
+                     "pass_interception_exp": 0.02, "two_point_conv_exp": 0.0}
+                    for g in games
+                ]  # fmt: skip
+            if opportunity_rush is None:  # the run of the default plays (play 1)
+                opportunity_rush = [
+                    {"game_id": g["game_id"], "play_id": 1.0, "season": g["season"],
+                     "week": g["week"], "posteam": g["home_team"],
+                     "rusher_player_id": "00-0000001", "two_point_attempt": 0.0,
+                     "rush_attempt": 1.0, "rushing_yards": 4.0, "rush_touchdown": "0",
+                     "rush_yards_exp": 4.2, "rush_touchdown_exp": 0.01,
+                     "two_point_conv_exp": 0.0}
+                    for g in games
+                ]  # fmt: skip
+            self.write(
+                "ff_opportunity_pass", season, frame(opportunity_pass, OPPORTUNITY_PASS_DTYPES)
+            )
+            self.write(
+                "ff_opportunity_rush", season, frame(opportunity_rush, OPPORTUNITY_RUSH_DTYPES)
+            )
         if season >= 2002:  # weekly rosters start in 2002
             if rosters is None:
                 rosters = default_rosters(season, min(g["week"] for g in games))

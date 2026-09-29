@@ -1163,6 +1163,176 @@ def radar_week(
 
 
 # --------------------------------------------------------------------------------------
+# Regression Watch (phase D): `twm regression player`, `twm regression xfp-report`
+# --------------------------------------------------------------------------------------
+
+regression_app = typer.Typer(
+    help="Regression Watch: fantasy points vs expected points (xFP) and points over expected "
+    "(FPOE), with and without garbage time (docs/regression_watch.md)."
+)
+app.add_typer(regression_app, name="regression")
+
+
+def _regression_as_of(path: Path, as_of: str | None):
+    """``--as-of`` (a season-week: its official Tuesday as-of; or a zoned timestamp) or now,
+    as (aware UTC moment, the season it points at)."""
+    from datetime import UTC, datetime
+
+    from twm.asof import AsOfParseError, parse_as_of, weekly_as_of
+    from twm.config import settings
+
+    if as_of is None:
+        return datetime.now(UTC), settings().current_season
+    try:
+        target = parse_as_of(as_of)
+    except AsOfParseError as e:
+        raise typer.BadParameter(str(e)) from e
+    if isinstance(target, tuple):
+        season, week = target
+        try:
+            return weekly_as_of(path, season, week), season
+        except LookupError as e:
+            raise typer.BadParameter(str(e)) from e
+    # a timestamp: the NFL season it falls in (seasons start in September)
+    return target, target.year if target.month >= 3 else target.year - 1
+
+
+def _find_player(view, text: str, season: int) -> tuple[str, str]:
+    """(gsis_id, name) of a gsis id or a name (exact, then contained; case-insensitive) among
+    the players who exist at the view's as-of; several matches prefer those with a game in
+    ``season``. typer.Exit(1) with the candidates when it stays ambiguous."""
+    import re
+
+    if re.fullmatch(r"\d{2}-\d{7}", text.strip()):
+        row = view.sql(
+            "SELECT gsis_id, display_name FROM dim_player WHERE gsis_id = ?", [text.strip()]
+        )
+        if row.height:
+            return row.item(0, 0), row.item(0, 1) or text.strip()
+        return text.strip(), text.strip()
+    for cond in ("lower(display_name) = lower(?)", "contains(lower(display_name), lower(?))"):
+        found = view.sql(
+            f"SELECT p.gsis_id, p.display_name, count(w.player_id) AS games "
+            f"FROM dim_player p LEFT JOIN fact_player_week w ON w.player_id = p.gsis_id "
+            f"AND w.season = ? AND w.season_type = 'REG' WHERE {cond} "
+            f"GROUP BY 1, 2 ORDER BY games DESC, p.gsis_id",
+            [season, text.strip()],
+        )
+        if found.height == 1 or (found.height > 1 and found.item(1, 2) == 0 < found.item(0, 2)):
+            return found.item(0, 0), found.item(0, 1)
+        if found.height > 1:
+            typer.echo(f"{text!r} matches {found.height} players; use a gsis_id:", err=True)
+            for gid, name, games in found.head(10).iter_rows():
+                typer.echo(f"  {gid}  {name}  ({games} games in {season})", err=True)
+            raise typer.Exit(code=1)
+    typer.echo(f"no player named {text!r} (try a gsis_id such as 00-0036358)", err=True)
+    raise typer.Exit(code=1)
+
+
+@regression_app.command("player")
+def regression_player(
+    player: str = typer.Argument(..., help="A name (e.g. 'CeeDee Lamb') or a gsis_id."),
+    season: int | None = typer.Option(None, "--season", help="Season (default: the as-of's)."),
+    as_of: str | None = typer.Option(
+        None,
+        "--as-of",
+        help="2026-W3 (that week's Tuesday as-of) or a zoned timestamp (default: now): only "
+        "games public then are shown.",
+    ),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+) -> None:
+    """A player's weekly fantasy points, xFP and FPOE, with and without garbage time."""
+    import duckdb
+    import polars as pl
+
+    from twm.asof import AsOfView, WarehouseTooOldError
+    from twm.modules.regression_watch.player_week import FIRST_SEASON, player_games_for
+
+    path = _warehouse_or_exit(db)
+    when, as_of_season = _regression_as_of(path, as_of)
+    season = season if season is not None else as_of_season
+    if season < FIRST_SEASON:
+        raise typer.BadParameter(f"--season: expected points start in {FIRST_SEASON}")
+    try:
+        with AsOfView(path, when) as view:
+            gsis_id, name = _find_player(view, player, season)
+            frame = player_games_for(view, season)
+    except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot build the player's weeks: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    rows = frame.filter(pl.col("gsis_id") == gsis_id).sort("week")
+    typer.echo(f"{name} ({gsis_id}), {season} regular season, as of {when:%Y-%m-%d %H:%M} UTC")
+    if rows.height == 0:
+        typer.echo("no game public at that time (a QB/RB/WR/TE game of that season)")
+        return
+    shown = rows.select(
+        "week", "team", "position",
+        pl.col("fantasy_points").alias("points"), "xfp", "fpoe",
+        pl.col("points_ng").alias("points_ng"), "xfp_ng", "fpoe_ng",
+        pl.col("points_garbage").alias("garbage_pts"),
+        pl.col("n_opportunities").alias("opps"),
+        pl.col("n_opportunities_garbage").alias("opps_garbage"),
+    )  # fmt: skip
+    cfg = dict(tbl_rows=-1, tbl_cols=-1, tbl_width_chars=200, float_precision=1,
+               tbl_hide_dataframe_shape=True, tbl_hide_column_data_types=True)  # fmt: skip
+    with pl.Config(**cfg):
+        typer.echo(str(shown))
+    games = rows.height
+
+    def per_game(col: str) -> str:
+        values = rows.get_column(col).drop_nulls()
+        return "-" if values.len() == 0 else f"{values.sum() / values.len():.1f}"
+
+    typer.echo(
+        f"per game ({games} games): points {per_game('fantasy_points')}, xFP {per_game('xfp')}, "
+        f"FPOE {per_game('fpoe')}; without garbage time: points {per_game('points_ng')}, "
+        f"xFP {per_game('xfp_ng')}, FPOE {per_game('fpoe_ng')}"
+    )
+    typer.echo(
+        "garbage time = the game was decided (win probability under 5% or over 95%, except a "
+        "one-score game's last two minutes of a half); `twm glossary fpoe_ng` explains the "
+        "columns"
+    )
+
+
+@regression_app.command("xfp-report")
+def regression_xfp_report(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    out: Path = typer.Option(
+        Path("reports/regression_watch/xfp.md"),
+        "--out",
+        help="Markdown file to write (relative paths are under the project root); a CSV with "
+        "the same name is written next to it.",
+    ),
+    start: int = typer.Option(2006, "--start", help="First season (ffopportunity starts 2006)."),
+    end: int | None = typer.Option(None, "--end", help="Last season (default: current)."),
+) -> None:
+    """Write the xFP report: the per-play tables' joins, the points and xFP reconciliations,
+    garbage-time shares by position and coverage by season (markdown + CSV)."""
+    import duckdb
+
+    from twm.asof import WarehouseTooOldError
+    from twm.config import ROOT, settings
+    from twm.modules.regression_watch.report import build_xfp_report, write_xfp_report
+
+    path = _warehouse_or_exit(db)
+    last = end if end is not None else settings().current_season
+    if start > last:
+        raise typer.BadParameter(f"--start {start} is after --end {last}")
+    try:
+        report = build_xfp_report(path, list(range(start, last + 1)))
+    except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot build the report: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    target = out if out.is_absolute() else ROOT / out
+    csv_path = write_xfp_report(report, target)
+    for line in report.summary:
+        typer.echo(line)
+    typer.echo(f"wrote {target}")
+    typer.echo(f"wrote {csv_path}")
+
+
+# --------------------------------------------------------------------------------------
 # The spec's generic entry points (PROJECT_SPEC 9): `twm train|backtest <module>`, `twm score`
 # --------------------------------------------------------------------------------------
 

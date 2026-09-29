@@ -9,8 +9,11 @@ by ``make_inputs.py``; never real data) by the real pipeline, in a temporary fol
    real B1-C1 build) for 2022-2024;
 3. :func:`outputs` runs the Waiver Radar on it (pool, labels, features, the dataset, a tiny
    walk-forward backtest of last week's points and the logistic regression, the production
-   model, the weekly list with reasons) and renders each result as text (CSV, JSON, markdown)
-   with fixed rounding.
+   model, the weekly list with reasons) and the Regression Watch frame (D1: points, xFP and
+   their garbage-time parts per player-game) and renders each result as text (CSV, JSON,
+   markdown) with fixed rounding. The synthetic play-by-play has no yard columns, so the
+   frame's per-play points are 0 here; its per-play xFP, positions and availability are
+   pinned.
 
 ``tests/golden/test_golden.py`` compares that text with ``expected/``; ``update.py`` rewrites
 ``expected/`` on purpose. The default config (config/*.yaml) is used, so these outputs also pin
@@ -54,6 +57,10 @@ DTYPES: dict[str, dict[str, str]] = {
     "injuries": {"season": "Int32", "game_type": "String", "team": "String", "week": "Int32", "gsis_id": "String", "position": "String", "full_name": "String", "report_status": "String", "practice_status": "String", "date_modified": "Datetime"},  # noqa: E501
     "depth_charts": {"season": "Int32", "club_code": "String", "week": "Int32", "game_type": "String", "depth_team": "String", "last_name": "String", "first_name": "String", "formation": "String", "gsis_id": "String", "position": "String", "depth_position": "String", "full_name": "String"},  # noqa: E501
     "ff_opportunity": {"season": "String", "posteam": "String", "week": "Float64", "game_id": "String", "player_id": "String", "full_name": "String", "position": "String", "rec_attempt": "Float64", "rush_attempt": "Float64", "receptions_exp": "Float64", "rec_yards_gained_exp": "Float64", "rec_touchdown_exp": "Float64", "rush_yards_gained_exp": "Float64", "rush_touchdown_exp": "Float64", "pass_yards_gained_exp": "Float64", "pass_touchdown_exp": "Float64", "pass_interception_exp": "Float64", "receptions": "Float64", "rec_yards_gained": "Float64", "total_fantasy_points": "Float64"},  # noqa: E501
+    # D1: made from the pbp and player_stats inputs by make_inputs.opportunity_plays (no RNG);
+    # the 0/1 flags are categoricals upstream, strings here (the warehouse casts both)
+    "ff_opportunity_pass": {"game_id": "String", "play_id": "Float64", "passer_player_id": "String", "receiver_player_id": "String", "receiver_position": "String", "posteam": "String", "two_point_attempt": "Float64", "pass_attempt": "Float64", "receiving_yards": "Float64", "season": "Int32", "week": "Int32", "complete_pass": "String", "pass_touchdown": "String", "interception": "String", "air_yards": "Float64", "pass_completion_exp": "Float64", "yards_after_catch_exp": "Float64", "pass_touchdown_exp": "Float64", "pass_interception_exp": "Float64", "two_point_conv_exp": "Float64"},  # noqa: E501
+    "ff_opportunity_rush": {"game_id": "String", "play_id": "Float64", "rusher_player_id": "String", "posteam": "String", "two_point_attempt": "Float64", "rush_attempt": "Float64", "season": "Int32", "week": "Int32", "rushing_yards": "Float64", "rush_touchdown": "String", "rush_yards_exp": "Float64", "rush_touchdown_exp": "Float64", "two_point_conv_exp": "Float64"},  # noqa: E501
     "rosters_weekly": {"season": "Int32", "week": "Int32", "team": "String", "position": "String", "full_name": "String", "gsis_id": "String", "pfr_id": "String", "game_type": "String", "status": "String", "entry_year": "Int32", "rookie_year": "Int32", "years_exp": "Int32"},  # noqa: E501
     "teams": {"team_abbr": "String", "team_name": "String", "team_conf": "String", "team_division": "String"},  # noqa: E501
     "players": {"gsis_id": "String", "display_name": "String", "position": "String", "position_group": "String", "birth_date": "String", "rookie_season": "Int32", "draft_year": "Int32", "draft_round": "Int32", "draft_pick": "Int32", "draft_team": "String", "pfr_id": "String", "latest_team": "String"},  # noqa: E501
@@ -224,6 +231,7 @@ def outputs(db: Path, tmp: Path) -> dict[str, str]:
                                                     if c not in keys], *INFO_COLUMNS)),
         "dataset_summary.csv": _csv(_summary(ds)),
     }  # fmt: skip
+    out.update(regression_outputs(db))
 
     run = bt.run_backtest(ds, models=BACKTEST_MODELS, labels=("y_hit",),
                           test_seasons=TEST_SEASONS)  # fmt: skip
@@ -287,6 +295,40 @@ def outputs(db: Path, tmp: Path) -> dict[str, str]:
     text = wk.build_report(weekly, generated="(golden: no time)", command="(golden)")
     out["weekly_report.md"] = text
     return out
+
+
+# Regression Watch (D1): the frame's columns pinned at the golden as-ofs (the as-of path).
+REGRESSION_COLUMNS = (
+    "season", "week", "game_id", "gsis_id", "team", "position", "position_source",
+    "fantasy_points", "xfp", "fpoe", "points_ng", "xfp_ng", "fpoe_ng", "points_garbage",
+    "xfp_garbage", "play_points", "play_xfp", "n_opportunities", "n_opportunities_garbage",
+    "targets", "receptions", "receptions_exp", "carries", "rushing_yards_exp", "yac", "yac_exp",
+    "available_at",
+)  # fmt: skip
+
+
+def regression_outputs(db: Path) -> dict[str, str]:
+    """The Regression Watch frame: every row at the golden as-ofs (season to date, read
+    through the as-of view) and a per-week summary of the whole history."""
+    from twm.modules.regression_watch import player_week as rw
+
+    pinned = pl.concat([rw.player_games_asof(db, s, w) for s, w in GOLDEN_ASOFS])
+    hist = rw.player_games_history(db, list(SEASONS))
+    summary = (
+        hist.group_by("season", "week")
+        .agg(
+            pl.len().alias("rows"),
+            *[pl.col(c).sum().round(4) for c in ("fantasy_points", "xfp", "points_garbage",
+                                                 "xfp_garbage", "play_xfp")],
+            pl.col("n_opportunities_garbage").sum(),
+            pl.col("position_source").eq("roster").sum().alias("n_position_roster"),
+        )
+        .sort("season", "week")
+    )  # fmt: skip
+    return {
+        "regression_player_games.csv": _csv(pinned.select(REGRESSION_COLUMNS)),
+        "regression_summary.csv": _csv(summary),
+    }
 
 
 def _fold_rows(run) -> list[dict]:

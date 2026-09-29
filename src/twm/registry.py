@@ -506,6 +506,153 @@ def _feature_entries() -> list[Entry]:
     ]
 
 
+def _regression_entries() -> list[Entry]:
+    """The Regression Watch frame's metrics (D1: twm.modules.regression_watch.player_week).
+    Metrics, not features: no model reads them yet (D2/D3 will register the features they use).
+    """
+    frame = "twm.modules.regression_watch.player_week"
+    gt = "garbage-time plays (fact_play.is_garbage_time)"
+    same_row = "the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    rows = [
+        ("points_ng", "Fantasy points without garbage time", "points",
+         f"fantasy_points - points_garbage: the weekly stat line's points minus those scored on "
+         f"his {gt}",
+         "The points he scored while the game was still in doubt. Late points in a blowout "
+         "come against soft defenses and say little about next week.", True),
+        ("xfp_ng", "xFP without garbage time", "points",
+         "xfp - xfp_garbage: the weekly xFP minus the expected points of his garbage-time "
+         "targets, carries and passes",
+         "What his chances were worth while the game was still in doubt.", True),
+        ("fpoe_ng", "FPOE without garbage time", "points",
+         "points_ng - xfp_ng",
+         "Points over expected, counting only plays while the game was in doubt.", True),
+        ("points_garbage", "Fantasy points in garbage time", "points",
+         f"the fantasy points of his {gt}, credited play by play as in play_points",
+         "Points he scored after the game was effectively decided.", True),
+        ("xfp_garbage", "xFP in garbage time", "points",
+         f"the expected points of his {gt}, counted play by play as in play_xfp (NULL "
+         "without an ffopportunity row)",
+         "What his chances after the game was decided were worth.", True),
+        ("play_points", "Fantasy points added up play by play", "points",
+         "the sum over his plays of each play's stats scored with config/scoring.yaml "
+         "(twm.scoring.score_sql): passer = passing yards, passing touchdown, interception; "
+         "target = reception, receiving yards; rusher = rushing yards; lateral receiver or "
+         "rusher = the lateral's yards; td_player_id = the touchdown (rushing, receiving, return "
+         "or fumble-recovery); two-point conversions to the passer, target or rusher of the "
+         "try; a lost fumble to the player who lost it",
+         "The same points as the weekly stat line, credited play by play so a game can be "
+         "split into parts; equal to fantasy_points for 99.9% of player-games.", False),
+        ("play_xfp", "xFP added up play by play", "points",
+         "the sum over his plays of ffopportunity's per-play expected stats scored like xfp: a "
+         "pass is worth pass_completion_exp catches (completions for the passer) and "
+         "pass_completion_exp x (air_yards + yards_after_catch_exp) yards plus "
+         "pass_touchdown_exp (and, for the passer, pass_interception_exp); a run "
+         "rush_yards_exp and rush_touchdown_exp; a two-point try only two_point_conv_exp",
+         "The same expected points as the weekly xFP, counted play by play (equal within "
+         "rounding).", True),
+        ("n_opportunities", "Opportunities", "plays",
+         "targets + carries + pass attempts (two-point tries included, sacks not) with an "
+         "ffopportunity per-play row",
+         "How many chances he had in the game.", False),
+        ("n_opportunities_garbage", "Opportunities in garbage time", "plays",
+         f"n_opportunities on {gt}", "How many of his chances came after the game was "
+         "decided.", True),
+    ]  # fmt: skip
+    comps = [
+        ("targets", "Targets", "targets", "rec_attempt: passes thrown to him (two-point tries "
+         "excluded)"),
+        ("receptions", "Receptions", "catches", "receptions"),
+        ("receptions_exp", "Expected receptions", "catches", "receptions_exp: the sum of the "
+         "completion chances of his targets"),
+        ("receiving_yards", "Receiving yards", "yards", "rec_yards_gained"),
+        ("receiving_yards_exp", "Expected receiving yards", "yards", "rec_yards_gained_exp"),
+        ("receiving_tds", "Receiving touchdowns", "touchdowns", "rec_touchdown"),
+        ("receiving_tds_exp", "Expected receiving touchdowns", "touchdowns",
+         "rec_touchdown_exp"),
+        ("carries", "Carries", "carries", "rush_attempt (two-point tries excluded)"),
+        ("rushing_yards", "Rushing yards", "yards", "rush_yards_gained"),
+        ("rushing_yards_exp", "Expected rushing yards", "yards", "rush_yards_gained_exp"),
+        ("rushing_tds", "Rushing touchdowns", "touchdowns", "rush_touchdown"),
+        ("rushing_tds_exp", "Expected rushing touchdowns", "touchdowns", "rush_touchdown_exp"),
+        ("pass_attempts", "Pass attempts", "passes", "pass_attempt (sacks and two-point tries "
+         "excluded)"),
+        ("completions", "Completions", "passes", "pass_completions"),
+        ("completions_exp", "Expected completions", "passes", "pass_completions_exp"),
+        ("passing_yards", "Passing yards", "yards", "pass_yards_gained"),
+        ("passing_yards_exp", "Expected passing yards", "yards", "pass_yards_gained_exp"),
+        ("passing_tds", "Passing touchdowns", "touchdowns", "pass_touchdown"),
+        ("passing_tds_exp", "Expected passing touchdowns", "touchdowns", "pass_touchdown_exp"),
+        ("interceptions", "Interceptions thrown", "interceptions", "pass_interception"),
+        ("interceptions_exp", "Expected interceptions", "interceptions",
+         "pass_interception_exp"),
+    ]  # fmt: skip
+    out = [
+        Entry(
+            name=name,
+            title=title,
+            kind="metric",
+            modules=("regression_watch",),
+            unit=unit,
+            formula=formula,
+            explanation=explanation,
+            source=frame,
+            step="D1",
+            model_output=model,
+        )
+        for name, title, unit, formula, explanation, model in rows
+    ]
+    for name, title, unit, column in comps:
+        expected = name.endswith("_exp")
+        out.append(
+            Entry(
+                name=name,
+                title=title,
+                kind="metric",
+                modules=("regression_watch",),
+                unit=unit,
+                formula=f"fact_opportunity_week.{column}, from {same_row}",
+                explanation=(
+                    "What an average player would have produced from the same chances; "
+                    "compare with the actual number to see efficiency."
+                    if expected
+                    else "The actual number in the game, counted by ffopportunity over the "
+                    "same plays as its expected value."
+                ),
+                source=f"{frame} (fact_opportunity_week)",
+                step="D1",
+                model_output=expected,
+            )
+        )
+    out += [
+        Entry(
+            name="yac",
+            title="Yards after the catch",
+            kind="metric",
+            modules=("regression_watch",),
+            unit="yards",
+            formula="receiving_yards - air_yards over his caught targets (two-point tries "
+            "excluded), from fact_opportunity_pass",
+            explanation="Yards he gained with the ball after catching it.",
+            source=f"{frame} (fact_opportunity_pass)",
+            step="D1",
+        ),
+        Entry(
+            name="yac_exp",
+            title="Expected yards after the catch",
+            kind="metric",
+            modules=("regression_watch",),
+            unit="yards",
+            formula="yards_after_catch_exp over his caught targets (two-point tries excluded)",
+            explanation="Yards after the catch an average receiver would have gained on the "
+            "same catches; yac - yac_exp is 'YAC over expected'.",
+            source=f"{frame} (fact_opportunity_pass)",
+            step="D1",
+            model_output=True,
+        ),
+    ]
+    return out
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
     pool = _pool_texts()
@@ -896,6 +1043,7 @@ def _entries() -> list[Entry]:
             "one who scores far below usually rises. Opportunity is 'stickier' than efficiency.",
         ),
         *_feature_entries(),
+        *_regression_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
             name="weekly_pos_rank",

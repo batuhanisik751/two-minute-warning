@@ -312,6 +312,46 @@ in step F2.
   `rush_fantasy_points_exp` but not to `rush_yards_gained_exp`. Adding those yards back leaves 0
   player-games outside the bound (largest difference 0.079). Our xFP leaves them out, like real
   scoring.
+- **Per-play files (D1, verified 2026-09-29 on the 2006-2026 cache with DuckDB sums per
+  player-game against `fact_opportunity_week`).** `ff_opportunity_pass` (374,313 rows) and
+  `ff_opportunity_rush` (295,636) have one row per pass (sacks excluded, two-point tries
+  included) or run (kneels included), keyed by `game_id` + `play_id` (a float, always integral);
+  the same columns and dtypes in every season (no drift); the 0/1 outcome columns
+  (`complete_pass`, `pass_touchdown`, `interception`, `rush_touchdown`, ...) are categoricals
+  ('0'/'1'). Two pass plays repeat (the 2013 target listed a second time under a linebacker's
+  name, as in the weekly file). How the weekly file is made from them, found by summing and
+  comparing (all within the 0.005 rounding of the weekly 2-decimal columns, apart from those two
+  plays): `receptions_exp` = sum of `pass_completion_exp`, `rec_yards_gained_exp` = sum of
+  `pass_completion_exp x (air_yards + yards_after_catch_exp)`, `rec_touchdown_exp` = sum of
+  `pass_touchdown_exp`, all over non-two-point targets (85,844 player-games, 4 off: the
+  duplicates); the passer's `pass_completions_exp`, `pass_yards_gained_exp`,
+  `pass_touchdown_exp` and `pass_interception_exp` are the same sums over all his non-two-point
+  passes, targets or not (13,228 passer-games, 2 off); `*_two_point_conv_exp` = sum of
+  `two_point_conv_exp` over two-point tries (`pass_interception_exp` of a two-point try is NOT
+  counted: 1,258 passer-games would be off); `rush_yards_gained_exp` / `rush_touchdown_exp` =
+  sums of `rush_yards_exp` / `rush_touchdown_exp` over non-two-point runs (44,197 rusher-games,
+  0 off). `rush_yards_exp` is the value ffopportunity scores: it equals the raw model output
+  `rushing_yards_exp` except on 10,504 plays, kneels (-1) and aborted snaps (0);
+  `rush_touchdown_exp` is 0 on kneels and two-point tries (`rushing_td_exp` there holds the raw
+  model value or the two-point chance). A passer or rusher whose only play was a two-point try
+  (44 and 58 player-games) has a weekly row with 0 attempts and only the two-point
+  expectation. The upstream per-play `yards_after_catch` is the
+  play's yards after the catch only from 2023 (before, it holds other values); the warehouse
+  leaves it out and computes yards after the catch as `receiving_yards - air_yards`.
+- **Joins to the play-by-play (D1, full build 2026-09-29).** 374,311 pass rows (after the 2
+  duplicates) and 295,636 rush rows: 3 and 4 have no `fact_play` play (99.999%); from the other
+  side, 357,891 of 357,944 regular-season non-sack pass attempts 2006-2026 and 283,223 of
+  283,244 runs have a row. For the same play the passer differs from `fact_play` twice, the
+  rusher 27 times and the receiver 1,120 times, 1,104 of them in 2006-2008 and 1,106 where
+  today's play-by-play names no target (ffopportunity was built on an older play-by-play
+  release; build_manifest notes).
+- **Unnamed targets 2006-2008 (D1, same check).** Share of incomplete passes (two-point tries
+  excluded) whose target is named in `ff_opportunity_pass`: 1.1% (2006), 7.6% (2007), 9.0%
+  (2008), 96.5% (2009), 86-97% in 2009-2026; today's play-by-play is the same (it names 9,855 /
+  10,474 / 10,155 receivers on 16,422 / 17,084 / 16,588 passes in 2006-2008, about 95-99% of passes from 2009), and
+  `player_stats.targets` is empty for 2006-2008 (67, 14 and 17 player-weeks with a target). So
+  receivers' expected points of 2006-2008 count little more than their catches (WR xFP = 60% of
+  WR points, 101% from 2009): Regression Watch flags these seasons (docs/regression_watch.md).
 - Section 6.3 caveat applies (model trained across seasons).
 
 ## 10. Other observations
@@ -442,6 +482,7 @@ moment the whole row was public, and every estimate errs late.
 | `fact_roster_week` (C1) | game-day seasons (2016 on): week N's `asof_weekly_utc`; post-game seasons (2002-2015): week N+1's as-of (the last week: its own as-of + 7 days). The regime is measured per season by the build (`availability.roster_postgame_share_threshold`, 1%) | Among players who played in week N (snap or stat row), the share whose week-N roster status is not ACT: 6.6%-9.8% every season 2002-2015, 0%-0.18% every season 2016-2026 (see §15). A post-game roster can contain moves made after the Tuesday as-of, so it waits a week (the A3 proposal, "like legacy depth charts", would have leaked those moves) |
 | `fact_ranking` (C1) | the day after `scrape_date`, 00:00 UTC | The scrape's time of day is unknown (A3 proposed 12:00 UTC the same day; the end of the day errs later). The Tuesday as-of therefore sees the previous Friday's weekly ranking |
 | `fact_opportunity_week` (C3, ffopportunity weekly) | the row's game end + `game_data_lag_hours.pbp` (6 h), joined on `game_id`, like play-by-play (the A3 proposal was a per-week constant; per game is what the other game-data tables do, so a split-week game waits for its own end) | The 2026 asset is rebuilt 16 minutes after `play_by_play_2026` (GitHub releases API, 2026-09-28, section 9). Every row's `game_id` is in the schedule; 113 rows (split-week games) are public only after their own week's as-of. |
+| `fact_opportunity_pass`, `fact_opportunity_rush` (D1, ffopportunity per play) | the row's game end + `game_data_lag_hours.pbp` (6 h), joined on `game_id`: the same moment as its `fact_play` play | They come from the same ffopportunity run as the weekly file (which is their per-player sum, section 9), rebuilt right after play-by-play. Checked on a build: every row's `available_at` equals its play's. 395 pass and 332 rush rows (split-week games) are public only after their week's as-of. |
 | draft, combine, participation (not in the warehouse yet) | A3 proposals, to implement when those tables are added: draft/combine the draft day / March; participation Feb 15 of the next year (never in-season) | |
 
 Verified on a full 1999-2026 build (2026-09-27, rebuilt after the B2 review): no event row has

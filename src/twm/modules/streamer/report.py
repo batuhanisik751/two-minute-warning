@@ -1,0 +1,211 @@
+"""reports/streamer/pool_labels.md (+ .csv): the streamer's pool sizes and label base rates per
+position and season (S1b). Deterministic: the same warehouse gives the same files."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from pathlib import Path
+
+import polars as pl
+
+from twm.modules.streamer.labels import label_rows
+from twm.modules.streamer.pool import StreamerRules, pool_history
+
+# Seasons the GitHub pipeline builds and that have a full season to label.
+DEFAULT_SEASONS = tuple(range(2012, 2026))
+# Diagnostics only: FantasyPros rostership below this share (percent) counts as "on waivers".
+OWNED_AVAILABLE_BELOW = 50.0
+
+CSV_COLUMNS = (
+    "position", "season", "method", "n_asofs", "universe_avg", "pool_avg", "pool_min",
+    "pool_max", "n_pool_rows", "n_final", "n_bye", "n_pending", "n_season_end", "n_start",
+    "start_rate", "start_rate_outside_pool", "starts_per_week", "team_kicker_pool_avg",
+    "start_rate_team_kicker", "n_owned_known",
+    "share_owned_below_50",
+)  # fmt: skip
+
+
+def labelled_history(
+    db: Path | str, seasons: Sequence[int], rules: StreamerRules | None = None
+) -> pl.DataFrame:
+    """Pool rows (method 'auto') of every as-of of ``seasons``, labelled."""
+    rules = rules or StreamerRules.from_config()
+    return label_rows(db, pool_history(db, seasons, rules=rules), rules)
+
+
+def summarize(df: pl.DataFrame) -> pl.DataFrame:
+    """One row per (position, season): ``CSV_COLUMNS``."""
+    final = pl.col("label_status") == "final"
+    pool = pl.col("in_pool")
+    per_asof = df.group_by("position", "season", "week").agg(
+        pl.len().alias("universe"),
+        pool.sum().alias("pool"),
+        (pool & pl.col("is_team_kicker")).sum().alias("tk"),
+    )
+    sizes = per_asof.group_by("position", "season").agg(
+        pl.len().alias("n_asofs"),
+        pl.col("universe").mean().alias("universe_avg"),
+        pl.col("pool").mean().alias("pool_avg"),
+        pl.col("pool").min().alias("pool_min"),
+        pl.col("pool").max().alias("pool_max"),
+        pl.col("tk").mean().alias("team_kicker_pool_avg"),
+    )
+    starts = (
+        df.filter(final & pl.col("y_start"))
+        .group_by("position", "season", "label_week")
+        .agg(pl.len().alias("n"))
+        .group_by("position", "season")
+        .agg(pl.col("n").mean().alias("starts_per_week"))
+    )
+    rates = df.group_by("position", "season").agg(
+        pl.col("method").unique().sort().str.join("/").alias("method"),
+        pool.sum().alias("n_pool_rows"),
+        (pool & final).sum().alias("n_final"),
+        (pool & (pl.col("label_status") == "bye")).sum().alias("n_bye"),
+        (pool & (pl.col("label_status") == "pending")).sum().alias("n_pending"),
+        (pool & (pl.col("label_status") == "season_end")).sum().alias("n_season_end"),
+        (pool & final & pl.col("y_start")).sum().alias("n_start"),
+        pl.col("y_start").filter(pool & final).mean().alias("start_rate"),
+        pl.col("y_start").filter(~pool & final).mean().alias("start_rate_outside_pool"),
+        pl.col("y_start")
+        .filter(pool & final & pl.col("is_team_kicker").fill_null(False))
+        .mean()
+        .alias("start_rate_team_kicker"),
+        pl.col("owned_avg").filter(pool).is_not_null().sum().alias("n_owned_known"),
+        (pl.col("owned_avg").filter(pool) < OWNED_AVAILABLE_BELOW)
+        .mean()
+        .alias("share_owned_below_50"),
+    )
+    out = rates.join(sizes, on=["position", "season"]).join(
+        starts, on=["position", "season"], how="left"
+    )
+    return (
+        out.with_columns(pl.when(pl.col("n_owned_known") > 0).then(pl.col("share_owned_below_50")))
+        .select(list(CSV_COLUMNS))
+        .sort("position", "season", descending=[True, False])
+    )
+
+
+def _pct(x: float | None) -> str:
+    return "" if x is None else f"{100 * x:.1f}%"
+
+
+def _num(x: float | None, digits: int = 1) -> str:
+    return "" if x is None else f"{x:.{digits}f}"
+
+
+def _totals(df: pl.DataFrame) -> dict[str, dict[str, float | None]]:
+    """Per position over every season: pool rows, final rows, start rates."""
+    final = pl.col("label_status") == "final"
+    t = df.group_by("position").agg(
+        pl.col("in_pool").sum().alias("pool_rows"),
+        (pl.col("in_pool") & final).sum().alias("final"),
+        pl.col("y_start").filter(pl.col("in_pool") & final).mean().alias("rate"),
+        pl.col("y_start").filter(~pl.col("in_pool") & final).mean().alias("rate_out"),
+        pl.col("y_start").filter(final).mean().alias("rate_all"),
+    )
+    return {r["position"]: r for r in t.iter_rows(named=True)}
+
+
+def render_markdown(
+    summary: pl.DataFrame, df: pl.DataFrame, rules: StreamerRules, seasons: Sequence[int]
+) -> str:
+    lo, hi = min(seasons), max(seasons)
+    cut, thr = rules.cutoffs, rules.start_thresholds
+    lines = [
+        "# K and D/ST streamer: pool sizes and label base rates",
+        "",
+        "Generated by `uv run twm streamer pool-labels-report` from the warehouse, seasons "
+        f"{lo}-{hi} (the GitHub build range with complete seasons), every regular-season "
+        "Tuesday as-of. League "
+        f"(config/league.yaml): {rules.teams} teams, lineup slots K {rules.slots['K']}, DST "
+        f"{rules.slots['DST']}, candidate_pool_multiplier {rules.multiplier:g}.",
+        "",
+        f"- **Pool** (src/twm/modules/streamer/pool.py): outside the top N = teams x slots x "
+        f"multiplier (K {cut['K']}, DST {cut['DST']}) by BOTH a preseason rank (FantasyPros K / "
+        "DST cheat sheet from 2020, `ecr`; last season's points per game before, `prior_ppg`) "
+        "and points per game so far this season. K universe: roster kickers (the Radar's roster "
+        "rule); DST universe: the season's teams.",
+        f"- **Label** `y_start` (src/twm/modules/streamer/labels.py): a finish in the top "
+        f"teams x slots (K {thr['K']}, DST {thr['DST']}) of the position in week N+1 (ties at "
+        "the cutoff all count). NULL when the entity's team is on a bye that week (`bye`), after "
+        "the last regular-season week (`season_end`) or while the week is not final "
+        "(`pending`). A kicker without a kick in week N+1 is a miss (False).",
+        "- K only: `team kickers` = pool kickers who kicked in their team's latest game with a "
+        "kick attempt (a diagnostic, `is_team_kicker`: practice-squad and camp kickers stay in "
+        "the universe, as in the Radar); their y_start rate is the one that matters for a "
+        "streamer.",
+        "- Rates are over pool rows with a final label; `outside` is the same rate for "
+        "entities kept out of the pool (rostered); `starts/wk`: starts per label week among the "
+        "universe's entities (ties at the cutoff can push it above the threshold; a kicker "
+        "signed after the as-of is not in that as-of's universe).",
+        f"- `owned<{OWNED_AVAILABLE_BELOW:g}%`: share of pool rows with FantasyPros rostership "
+        "(weekly K/DST pages, late 2020 on) under 50%, a check of the stand-in (diagnostic only).",
+        "",
+        "## All seasons",
+        "",
+        "| position | pool rows | labelled | y_start rate (pool) | outside pool | all |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    tot = _totals(df)
+    for pos in ("K", "DST"):
+        if pos in tot:
+            t = tot[pos]
+            lines.append(
+                f"| {pos} | {t['pool_rows']} | {t['final']} | {_pct(t['rate'])} | "
+                f"{_pct(t['rate_out'])} | {_pct(t['rate_all'])} |"
+            )
+    for pos in ("K", "DST"):
+        part = summary.filter(pl.col("position") == pos)
+        if part.height == 0:
+            continue
+        k_head = " team kickers in pool | y_start rate (team kickers) |" if pos == "K" else ""
+        lines += [
+            "",
+            f"## {pos} by season",
+            "",
+            "| season | method | as-ofs | universe | pool avg (min-max) | labelled | bye | "
+            "season end | pending | y_start rate | outside pool | starts/wk |"
+            + k_head
+            + f" owned<{OWNED_AVAILABLE_BELOW:g}% (n) |",
+            "|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|"
+            + ("---:|---:|" if pos == "K" else "")
+            + "---|",
+        ]
+        for r in part.iter_rows(named=True):
+            owned = (
+                f"{_pct(r['share_owned_below_50'])} ({r['n_owned_known']})"
+                if r["n_owned_known"]
+                else ""
+            )
+            lines.append(
+                f"| {r['season']} | {r['method']} | {r['n_asofs']} | {_num(r['universe_avg'])} | "
+                f"{_num(r['pool_avg'])} ({r['pool_min']}-{r['pool_max']}) | {r['n_final']} | "
+                f"{r['n_bye']} | {r['n_season_end']} | {r['n_pending']} | "
+                f"{_pct(r['start_rate'])} | {_pct(r['start_rate_outside_pool'])} | "
+                f"{_num(r['starts_per_week'])} |"
+                + (
+                    f" {_num(r['team_kicker_pool_avg'])} | {_pct(r['start_rate_team_kicker'])} |"
+                    if pos == "K"
+                    else ""
+                )
+                + f" {owned} |"
+            )
+    return "\n".join(lines) + "\n"
+
+
+def write_report(
+    db: Path | str,
+    out_dir: Path,
+    seasons: Sequence[int] = DEFAULT_SEASONS,
+    rules: StreamerRules | None = None,
+) -> tuple[Path, Path, pl.DataFrame]:
+    """Write pool_labels.md and pool_labels.csv into ``out_dir``; returns (md, csv, summary)."""
+    rules = rules or StreamerRules.from_config()
+    df = labelled_history(db, seasons, rules)
+    summary = summarize(df)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    md, csv = out_dir / "pool_labels.md", out_dir / "pool_labels.csv"
+    md.write_text(render_markdown(summary, df, rules, seasons), encoding="utf-8")
+    summary.with_columns(pl.col(pl.Float64).round(4)).write_csv(csv)
+    return md, csv, summary

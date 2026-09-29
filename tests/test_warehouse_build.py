@@ -95,10 +95,11 @@ def test_every_table_builds_from_fixtures(raw, db_path):
     assert set(m["fact_game"]) == set(sc.BUILD_MANIFEST_COLUMNS)
     # every default fixture id matches, so the unmatched-id report is empty; the default player
     # stats have no field-goal or extra-point attempt, so fact_kicker_week is empty too (S1:
-    # tests/test_kdst_warehouse.py builds it from kicking rows)
+    # tests/test_kdst_warehouse.py builds it from kicking rows), and the default rankings have
+    # no K or DST page, so fact_ranking_kdst is empty (S1b: tests/test_streamer_pool.py)
     assert all(len(r["content_hash"]) == 32 for r in manifest if r["n_rows"])
     empty = [r["table_name"] for r in manifest if not r["n_rows"]]
-    assert empty == ["fact_kicker_week", "report_id_unmatched"]
+    assert empty == ["fact_kicker_week", "fact_ranking_kdst", "report_id_unmatched"]
     assert m["report_id_unmatched"]["content_hash"] == "empty"
     notes = json.loads(m["fact_game"]["notes"])
     assert notes["n_kickoff_estimated"] == 0 and "location" in notes["null_columns"]

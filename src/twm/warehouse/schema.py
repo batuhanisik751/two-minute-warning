@@ -957,6 +957,54 @@ def fact_ranking_spec() -> Table:
     )
 
 
+# FantasyPros' own team code (LAR and OAK are in TEAM_ALIASES); 'FA' (free agent) -> NULL.
+RANKING_TEAM_ALIASES: dict[str, str] = {"JAC": "JAX"}
+_KDST_RANKING_DOCS: dict[str, str] = {
+    "page_kind": "preseason (the K or DST redraft cheat sheet), ros (rest of season) or weekly "
+    "(that week's K or DST ranking); dynasty-labelled pages are not kept",
+    "page_pos": "the position of the page: K or DST",
+    "gsis_id": "kickers: the player's gsis_id through bridge_player_id (id_type "
+    "'fantasypros'); NULL for a DST row and for a kicker id that maps to no player",
+    "pos": "FantasyPros' position for the row (K or DST; the 2019-12 to 2020-10 short-form "
+    "pages' PK is written K)",
+    "pos_rank": "the row's rank on the page among the page position's rows, by ecr: 1 + the "
+    "number of page_pos rows with a strictly lower ecr (ties share the best rank). NULL when "
+    "ecr is NULL",
+}
+
+
+def fact_ranking_kdst_spec() -> Table:
+    """S1b: the K and DST pages of the FantasyPros archive (fact_ranking keeps QB/RB/WR/TE)."""
+    base = fact_ranking_spec()
+    cols: list[Column] = []
+    for c in base.columns:
+        doc = _KDST_RANKING_DOCS.get(c.name, c.doc)
+        cols.append(Column(c.name, c.type, computed=c.computed, doc=doc))
+        if c.name == "team":
+            cols.append(
+                Column(
+                    "nfl_team",
+                    "VARCHAR",
+                    computed=True,
+                    doc="team as the rest of the warehouse spells it (JAC -> JAX, LAR -> LA, "
+                    "OAK -> LV; 'FA' -> NULL): a DST row's team is the streamer's entity",
+                )
+            )
+    return Table(
+        name="fact_ranking_kdst",
+        source="ff_rankings_all",
+        primary_key=base.primary_key,
+        columns=tuple(cols),
+        doc=(
+            "S1b: one row per kicker or team defense per FantasyPros K or DST ranking page per "
+            "scrape day (redraft cheat sheets, rest-of-season and weekly pages; 2019-12 on, "
+            "preseason cheat sheets every season from 2020), built exactly like fact_ranking "
+            "(which keeps QB/RB/WR/TE only): ranks, rostership, gsis_id for kickers and the "
+            "normalized team for defenses. The seasons of the build only."
+        ),
+    )
+
+
 # ---- expected fantasy points (C3, ffopportunity weekly) -----------------------------------
 
 # The actual and expected (``_exp``) stat components xFP is re-scored from (twm.scoring.xfp),
@@ -1574,6 +1622,7 @@ def tables() -> dict[str, Table]:
         fact_depth_chart_spec(),
         fact_roster_week_spec(),
         fact_ranking_spec(),
+        fact_ranking_kdst_spec(),
         dim_player_spec(),
         BRIDGE_PLAYER_ID,
         REPORT_ID_COVERAGE,

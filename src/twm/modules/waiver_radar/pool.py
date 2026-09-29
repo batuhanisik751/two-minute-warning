@@ -125,20 +125,12 @@ def statuses_are_weekly(rosters: pl.DataFrame) -> bool:
     return changed.height > 0
 
 
-def _base_sql(season: int, rules: PoolRules, *, apply_status: bool = True) -> str:
-    """One row per universe player with every input of both methods (see module docstring).
-
-    Read through the as-of view: each table name below is its point-in-time view."""
+def roster_ctes_sql(season: int, positions: Iterable[str]) -> str:
+    """SQL: the CTEs ``latest``, ``team_latest`` and ``roster`` (to follow a WITH): the
+    universe of the pool, every player of ``positions`` on an NFL roster (module docstring).
+    Shared with the K and D/ST streamer's kicker pool (twm.modules.streamer.pool)."""
     s = int(season)
-    pts = score_sql(rules.scoring)
-    positions = _sql_list(FANTASY_POSITIONS)
-    statuses = _sql_list(rules.roster_statuses)
-    # Statuses are trusted only when the season's rosters carry a status OF THAT WEEK; the
-    # 2002-2015 rosters stamp the season-final status on every week (a player who ended the
-    # season on IR is RES even in weeks he played), so filtering on it would leak the future.
-    where = f"WHERE r.status IN ({statuses})" if apply_status else ""
-    return f"""
-    WITH latest AS (
+    return f"""latest AS (
         -- each player's latest public roster row of the season (a team on its bye week is
         -- missing from that week's game-day roster, so the latest row can be a week older)
         SELECT gsis_id, week AS roster_week, team, position, status, full_name, entry_year
@@ -155,8 +147,23 @@ def _base_sql(season: int, rules: PoolRules, *, apply_status: bool = True) -> st
         -- summer camp bodies), so an older row of his is not "on a roster" any more
         SELECT l.* FROM latest l
         JOIN team_latest t ON t.team = l.team AND t.team_week = l.roster_week
-        WHERE l.position IN ({positions})
-    ),
+        WHERE l.position IN ({_sql_list(positions)})
+    )"""
+
+
+def _base_sql(season: int, rules: PoolRules, *, apply_status: bool = True) -> str:
+    """One row per universe player with every input of both methods (see module docstring).
+
+    Read through the as-of view: each table name below is its point-in-time view."""
+    s = int(season)
+    pts = score_sql(rules.scoring)
+    statuses = _sql_list(rules.roster_statuses)
+    # Statuses are trusted only when the season's rosters carry a status OF THAT WEEK; the
+    # 2002-2015 rosters stamp the season-final status on every week (a player who ended the
+    # season on IR is RES even in weeks he played), so filtering on it would leak the future.
+    where = f"WHERE r.status IN ({statuses})" if apply_status else ""
+    return f"""
+    WITH {roster_ctes_sql(s, FANTASY_POSITIONS)},
     games AS (
         -- PPG rounded to 6 decimals: a float sum's last bits can depend on the order DuckDB
         -- adds the rows in, and equal PPGs must tie (points are multiples of 0.01)

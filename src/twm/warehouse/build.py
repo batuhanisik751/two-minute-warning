@@ -54,7 +54,7 @@ import polars as pl
 
 from twm import __version__
 from twm import ids as pid
-from twm.config import FANTASY_POSITIONS, league, settings
+from twm.config import FANTASY_POSITIONS, STREAMER_POSITIONS, league, settings
 from twm.sources import nflverse as nv
 from twm.warehouse import available as av
 from twm.warehouse import schema as sc
@@ -937,19 +937,27 @@ def _build_fact_ranking(
     seasons: list[int],
     stats: TableStats,
     arules: av.AvailabilityRules,
+    *,
+    kdst: bool = False,
 ) -> TableStats:
     """FantasyPros positional rankings (redraft cheat sheets, rest of season, weekly) of the
     built seasons, QB/RB/WR/TE only, with gsis_id through ``_bridge`` and pos_rank.
+    ``kdst=True`` builds fact_ranking_kdst the same way from the K and DST pages (S1b), plus
+    ``nfl_team`` (the team normalized like every warehouse team column).
 
     The page classification is :func:`twm.ids.ranking_page_kind_sql` (shared with the id
     report). Exact duplicates on a page (the archive repeats some rows) keep the lowest ecr,
     then the page name, then every other column; pos_rank is computed after that."""
-    table = sc.tables()["fact_ranking"]
+    table = sc.tables()["fact_ranking_kdst" if kdst else "fact_ranking"]
     types = _source_view(con, "ff_rankings_all", src.paths["ff_rankings_all"])
     date = "CAST(NULLIF(trim(CAST(scrape_date AS VARCHAR)), '') AS DATE)"
-    positions = ", ".join(f"'{p}'" for p in FANTASY_POSITIONS)
+    positions = ", ".join(f"'{p}'" for p in (STREAMER_POSITIONS if kdst else FANTASY_POSITIONS))
+    what = "k_dst" if kdst else "qb_rb_wr_te"
     in_seasons = ", ".join(str(int(x)) for x in seasons) or "NULL"
-    kind = pid.ranking_page_kind_sql("ecr_type", "fp_page", "page_type")
+    kind = pid.ranking_page_kind_sql("ecr_type", "fp_page", "page_type", kdst=kdst)
+    pos = "CAST(pos AS VARCHAR)"
+    if kdst:  # the 2019-12 to 2020-10 short-form K pages call a kicker 'PK'
+        pos = f"(CASE WHEN {pos} = 'PK' THEN 'K' ELSE {pos} END)"
 
     def col(name: str, target: str) -> str:  # a column the file lacks is NULL (like Column.sql)
         return (
@@ -966,11 +974,11 @@ def _build_fact_ranking(
                          ELSE year({date}) - 1 END AS INTEGER) AS season,
                CAST(ecr_type AS VARCHAR) AS ecr_type,
                {kind} AS page_kind,
-               {pid.ranking_page_pos_sql("fp_page")} AS page_pos,
+               {pid.ranking_page_pos_sql("fp_page", kdst=kdst)} AS page_pos,
                CAST(fp_page AS VARCHAR) AS fp_page,
                CAST(page_type AS VARCHAR) AS page_type,
                {pid.canonical_id_sql("id", types["id"])} AS fantasypros_id,
-               {col("player", "VARCHAR")} AS player, CAST(pos AS VARCHAR) AS pos,
+               {col("player", "VARCHAR")} AS player, {pos} AS pos,
                {col("team", "VARCHAR")} AS team,
                {", ".join(f"{e} AS {sc.q(c)}" for c, e in num.items())}
         FROM src_ff_rankings_all
@@ -978,8 +986,8 @@ def _build_fact_ranking(
     reasons = dict(
         con.execute(f"""
         SELECT CASE WHEN season NOT IN ({in_seasons}) OR season IS NULL THEN 'season_not_built'
-                    WHEN page_kind IS NULL THEN 'not_a_qb_rb_wr_te_page'
-                    WHEN pos IS NULL OR pos NOT IN ({positions}) THEN 'not_qb_rb_wr_te_player'
+                    WHEN page_kind IS NULL THEN 'not_a_{what}_page'
+                    WHEN pos IS NULL OR pos NOT IN ({positions}) THEN 'not_{what}_player'
                     WHEN fantasypros_id IS NULL THEN 'no_id'
                     ELSE 'kept' END AS reason, count(*)
         FROM _rank_src GROUP BY 1 ORDER BY 1""").fetchall()
@@ -997,6 +1005,9 @@ def _build_fact_ranking(
             "gsis_id": "b.gsis_id AS gsis_id",
             "pos_rank": "CAST(CASE WHEN r.ecr IS NOT NULL THEN r._own_le - r._own_eq + 1 END "
             "AS INTEGER) AS pos_rank",
+            "nfl_team": "NULLIF("
+            + sc.normalize_team_sql("r.team", sc.RANKING_TEAM_ALIASES)
+            + ", 'FA') AS nfl_team",
         }.get(c.name, f"r.{sc.q(c.name)}")
         for c in table.columns
     )
@@ -1033,14 +1044,23 @@ def _build_fact_ranking(
         "OR ecr_type IS NULL"
     ).fetchone()[0]
     out.notes["n_rows_by_page_kind"] = dict(
-        con.execute("SELECT page_kind, count(*) FROM fact_ranking GROUP BY 1 ORDER BY 1").fetchall()
+        con.execute(
+            f"SELECT page_kind, count(*) FROM {table.name} GROUP BY 1 ORDER BY 1"
+        ).fetchall()
     )
     out.notes["n_rows_without_gsis_id"] = con.execute(
-        "SELECT count(*) FROM fact_ranking WHERE gsis_id IS NULL"
+        f"SELECT count(*) FROM {table.name} WHERE gsis_id IS NULL"
     ).fetchone()[0]
     out.notes["n_rows_listed_on_another_positions_page"] = con.execute(
-        "SELECT count(*) FROM fact_ranking WHERE pos <> page_pos"
+        f"SELECT count(*) FROM {table.name} WHERE pos <> page_pos"
     ).fetchone()[0]
+    if kdst:
+        out.notes["n_rows_without_nfl_team_by_pos"] = dict(
+            con.execute(
+                f"SELECT pos, count(*) FILTER (WHERE nfl_team IS NULL) FROM {table.name} "
+                "GROUP BY 1 ORDER BY 1"
+            ).fetchall()
+        )
     return out
 
 
@@ -1334,6 +1354,10 @@ def build_warehouse(
                 # rankings the id bridge
                 _build_fact_roster_week(con, src, stats["fact_roster_week"], arules)
                 _build_fact_ranking(con, src, seasons, stats["fact_ranking"], arules)
+                # S1b: the K and DST pages, the same way
+                _build_fact_ranking(
+                    con, src, seasons, stats["fact_ranking_kdst"], arules, kdst=True
+                )
                 # after every event table: an undrafted player exists from his first row
                 _build_dim_player(con, src, stats["dim_player"], arules)
                 _build_id_reports(con, seasons, stats, arules)

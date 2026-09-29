@@ -976,31 +976,47 @@ WEEKLY_PAGE_RE = "(^|/)(ppr-)?(qb|rb|wr|te)([.]php)?$"
 # group 1: the page's position, for any of the three kinds of page
 PAGE_POS_RE = "(qb|rb|wr|te)(-cheatsheets)?([.]php)?$"
 PAGE_KINDS = ("preseason", "ros", "weekly")
+# The same three kinds of page for kickers and team defenses (S1b, fact_ranking_kdst):
+# 'k-cheatsheets' / '/nfl/rankings/dst-cheatsheets.php', 'ros-k', 'dst' / '/nfl/rankings/k.php'
+# (no ppr- variants).
+KDST_PRESEASON_PAGE_RE = "(^|/)(k|dst)-cheatsheets([.]php)?$"
+KDST_ROS_PAGE_RE = "(^|/)ros-(k|dst)([.]php)?$"
+KDST_WEEKLY_PAGE_RE = "(^|/)(k|dst)([.]php)?$"
+KDST_PAGE_POS_RE = "(k|dst)(-cheatsheets)?([.]php)?$"
 # Preseason cheat sheets count only when scraped in these months (the draft season) and before
 # the season's first game day (week 1's dim_week.first_gameday); the last such scrape wins.
 PRESEASON_MONTHS = (8, 9)
 
 
-def ranking_page_kind_sql(ecr_type: str, fp_page: str, page_type: str) -> str:
-    """SQL: 'preseason' | 'ros' | 'weekly' for a QB/RB/WR/TE positional page, else NULL.
+def ranking_page_kind_sql(
+    ecr_type: str, fp_page: str, page_type: str, *, kdst: bool = False
+) -> str:
+    """SQL: 'preseason' | 'ros' | 'weekly' for a QB/RB/WR/TE positional page, else NULL
+    (``kdst=True``: for a kicker or team-defense page instead, S1b).
 
     ``preseason``: a redraft positional (``rp``) cheat sheet; ``ros``: an ``rp`` rest-of-season
     page; ``weekly``: a weekly positional (``wp``) page. Arguments are SQL expressions."""
+    pre, ros, weekly = (
+        (KDST_PRESEASON_PAGE_RE, KDST_ROS_PAGE_RE, KDST_WEEKLY_PAGE_RE)
+        if kdst
+        else (PRESEASON_PAGE_RE, ROS_PAGE_RE, WEEKLY_PAGE_RE)
+    )
     page = f"COALESCE({fp_page}, '')"
     return (
         f"(CASE WHEN COALESCE({page_type}, '') LIKE 'dynasty%' THEN NULL "
-        f"WHEN {ecr_type} = 'rp' AND regexp_matches({page}, '{PRESEASON_PAGE_RE}') "
+        f"WHEN {ecr_type} = 'rp' AND regexp_matches({page}, '{pre}') "
         "THEN 'preseason' "
-        f"WHEN {ecr_type} = 'rp' AND regexp_matches({page}, '{ROS_PAGE_RE}') THEN 'ros' "
-        f"WHEN {ecr_type} = 'wp' AND regexp_matches({page}, '{WEEKLY_PAGE_RE}') THEN 'weekly' "
+        f"WHEN {ecr_type} = 'rp' AND regexp_matches({page}, '{ros}') THEN 'ros' "
+        f"WHEN {ecr_type} = 'wp' AND regexp_matches({page}, '{weekly}') THEN 'weekly' "
         "END)"
     )
 
 
-def ranking_page_pos_sql(fp_page: str) -> str:
-    """SQL: the page's position in upper case (QB/RB/WR/TE); only meaningful for pages that
-    :func:`ranking_page_kind_sql` classifies."""
-    return f"NULLIF(upper(regexp_extract(COALESCE({fp_page}, ''), '{PAGE_POS_RE}', 1)), '')"
+def ranking_page_pos_sql(fp_page: str, *, kdst: bool = False) -> str:
+    """SQL: the page's position in upper case (QB/RB/WR/TE; ``kdst=True``: K/DST); only
+    meaningful for pages that :func:`ranking_page_kind_sql` classifies."""
+    pos_re = KDST_PAGE_POS_RE if kdst else PAGE_POS_RE
+    return f"NULLIF(upper(regexp_extract(COALESCE({fp_page}, ''), '{pos_re}', 1)), '')"
 
 
 def preseason_scrape_sql(pages: str, weeks: str = "dim_week") -> str:

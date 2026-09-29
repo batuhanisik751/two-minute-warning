@@ -537,6 +537,12 @@ TABLE_AVAILABILITY: dict[str, Availability] = {
             "The values (ranks, ownership) are the archive's snapshot of that day.",
         ),
         Availability(
+            "fact_ranking_kdst",
+            "event",
+            "The K and DST pages of the same archive (S1b), with the same rule as fact_ranking: "
+            "public from 00:00 UTC the day after scrape_date.",
+        ),
+        Availability(
             "dim_team",
             "static",
             "Team names and abbreviations: always visible. Accepted hindsight: team_division "
@@ -1000,7 +1006,7 @@ def available_at_sql(table: str, rules: AvailabilityRules) -> AvailabilitySQL:
             ),
         )
 
-    if table == "fact_ranking":
+    if table in ("fact_ranking", "fact_ranking_kdst"):
         return AvailabilitySQL(
             expr=f"(CAST(s.scrape_date AS TIMESTAMP) + {_interval(RANKING_LAG)})"
         )

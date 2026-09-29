@@ -527,6 +527,8 @@ class Scoring(BaseModel):
 
 # Fantasy positions in scope for P1 (PROJECT_SPEC 7.1).
 FANTASY_POSITIONS = ("QB", "RB", "WR", "TE")
+# The K and D/ST streamer's positions (S1b): the lineup keys of config/league.yaml.
+STREAMER_POSITIONS = ("K", "DST")
 
 
 class PoolConfig(BaseModel):

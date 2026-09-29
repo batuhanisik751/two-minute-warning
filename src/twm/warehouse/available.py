@@ -94,6 +94,12 @@ GAME_DATA_TABLES = {
     "fact_opportunity_pass": "pbp",
     "fact_opportunity_rush": "pbp",
 }
+# S1 (K and D/ST): tables derived from game data, with every dataset they read. A row waits
+# for the LATEST of those datasets' lags (and fact_defense_week also for the final score).
+DERIVED_GAME_DATA_TABLES: dict[str, tuple[str, ...]] = {
+    "fact_kicker_week": ("player_stats",),
+    "fact_defense_week": ("team_stats", "pbp"),
+}
 
 # fact_schedule columns that can still change after the spring release (flexed or moved games,
 # Week 17/18 slots chosen late, venue moves): hidden in the as-of view until slot_available_at.
@@ -446,6 +452,22 @@ TABLE_AVAILABILITY: dict[str, Availability] = {
             week_key=_SW,
         ),
         Availability(
+            "fact_kicker_week",
+            "event",
+            "A kicker's game line is a slice of fact_player_week: game end + "
+            "game_data_lag_hours.player_stats (6 h), joined on game_id, exactly like it.",
+            week_key=_SW,
+        ),
+        Availability(
+            "fact_defense_week",
+            "event",
+            "A team-game's D/ST line combines team stats, play-by-play and the final score: "
+            "game end + the larger of game_data_lag_hours.team_stats and .pbp (6 h each), and "
+            "never before the result is public (game end + game_result_lag_hours), joined on "
+            "game_id.",
+            week_key=_SW,
+        ),
+        Availability(
             "fact_injury_report",
             "event",
             "An injury-report line is public at its observed last-modified time "
@@ -759,6 +781,13 @@ def available_at_sql(table: str, rules: AvailabilityRules) -> AvailabilitySQL:
             expr=f"(_g.availability_game_end_utc + {_interval(lag)})",
             joins="LEFT JOIN fact_game _g ON _g.game_id = s.game_id",
         )
+
+    if table in DERIVED_GAME_DATA_TABLES:
+        lag = max(rules.game_data_lag[ds] for ds in DERIVED_GAME_DATA_TABLES[table])
+        expr = f"(_g.availability_game_end_utc + {_interval(lag)})"
+        if table == "fact_defense_week":  # points allowed come from the final score
+            expr = f"GREATEST({expr}, {_result_public('_g', rules)})"
+        return AvailabilitySQL(expr=expr, joins="LEFT JOIN fact_game _g ON _g.game_id = s.game_id")
 
     if table == "fact_schedule":
         release = (

@@ -367,7 +367,7 @@ def _assert_official_snapshots_complete(con: duckdb.DuckDBPyConnection) -> None:
     Monday-night games from the official snapshots silently.
     """
     problems = []
-    for name in [*av.GAME_DATA_TABLES, "fact_game"]:
+    for name in [*av.GAME_DATA_TABLES, *av.DERIVED_GAME_DATA_TABLES, "fact_game"]:
         weekly, finale = con.execute(f"""
             SELECT
               count(*) FILTER (WHERE NOT w.is_split_week AND x.available_at > w.asof_weekly_utc),
@@ -590,6 +590,80 @@ def _build_fact_opportunity_play(
     for c, n in zip(_OPPORTUNITY_PLAY_PLAYERS[name], row[1:], strict=True):
         stats.notes[f"n_{c}_differs_from_fact_play"] = int(n)
     return out
+
+
+def _build_fact_kicker_week(
+    con: duckdb.DuckDBPyConnection, stats: TableStats, arules: av.AvailabilityRules
+) -> TableStats:
+    """S1: fact_player_week's kicking columns, one row per player-game with an attempt."""
+    table = sc.tables()["fact_kicker_week"]
+    cols = ", ".join(sc.q(c) for c in table.column_names)
+    sql = (
+        f"SELECT {cols} FROM fact_player_week WHERE COALESCE(fg_att, 0) + COALESCE(pat_att, 0) > 0"
+    )
+    return _materialize(con, table, sql, stats, arules)
+
+
+# How a touchdown play is classified for D/ST scoring (docs/warehouse.md, fact_defense_week).
+# The play_type fallbacks cover rows whose *_attempt flag is 0 (e.g. 97 kickoffs in 2001-2002).
+PLAY_KIND_SQL = """CASE
+    WHEN kickoff_attempt = 1 OR play_type = 'kickoff' THEN 'kickoff'
+    WHEN punt_attempt = 1 OR play_type = 'punt' THEN 'punt'
+    WHEN field_goal_attempt = 1 OR play_type = 'field_goal' THEN 'field_goal'
+    WHEN extra_point_attempt = 1 OR two_point_attempt = 1 OR play_type = 'extra_point'
+        THEN 'conversion'
+    ELSE 'scrimmage' END"""
+# fact_play has no punt_blocked column: nflfastR writes "BLOCKED" (upper case) in the description.
+BLOCKED_KICK_SQL = """(COALESCE(field_goal_result = 'blocked', FALSE)
+    OR (COALESCE(punt_attempt = 1 OR play_type = 'punt', FALSE)
+        AND COALESCE("desc" LIKE '%BLOCKED%', FALSE)))"""
+DST_TOUCHDOWNS_SQL = f"""
+    WITH p AS (
+        SELECT game_id, posteam, defteam, td_team, interception,
+               {PLAY_KIND_SQL} AS kind, {BLOCKED_KICK_SQL} AS blocked
+        FROM fact_play WHERE touchdown = 1 AND td_team IS NOT NULL)
+    SELECT game_id, td_team AS team,
+        count(*) FILTER (kind = 'kickoff' AND td_team = posteam
+            OR kind = 'field_goal' AND td_team = defteam AND NOT blocked) AS kickoff_return_tds,
+        count(*) FILTER (kind = 'punt' AND td_team = defteam AND NOT blocked) AS punt_return_tds,
+        count(*) FILTER (kind = 'scrimmage' AND td_team = defteam AND interception = 1)
+            AS interception_return_tds,
+        count(*) FILTER (kind = 'scrimmage' AND td_team = defteam
+                AND COALESCE(interception, 0) = 0
+            OR kind = 'kickoff' AND td_team = defteam
+            OR kind = 'punt' AND td_team = posteam) AS fumble_return_tds,
+        count(*) FILTER (kind IN ('punt', 'field_goal') AND td_team = defteam AND blocked)
+            AS blocked_kick_return_tds,
+        count(*) FILTER (kind = 'scrimmage' AND td_team = defteam) AS scrimmage_defense_tds
+    FROM p GROUP BY game_id, td_team"""
+
+
+def _build_fact_defense_week(
+    con: duckdb.DuckDBPyConnection, stats: TableStats, arules: av.AvailabilityRules
+) -> TableStats:
+    """S1: one D/ST row per fact_team_week row (see the fact_defense_week spec)."""
+    table = sc.tables()["fact_defense_week"]
+    counts = ", ".join(f"t.{sc.q(c)}" for c in sc.DEFENSE_WEEK_FROM_TEAM_STATS)
+    tds = ", ".join(f"COALESCE(d.{c}, 0) AS {c}" for c in sc.DEFENSE_WEEK_TDS)
+    against = (
+        "CASE WHEN g.home_team = t.team THEN g.away_score "
+        "WHEN g.away_team = t.team THEN g.home_score END"
+    )
+    sql = f"""
+        WITH td AS ({DST_TOUCHDOWNS_SQL})
+        SELECT t.game_id, t.season, t.week, t.season_type, t.team, t.opponent_team,
+               {counts}, {tds},
+               {against} AS points_scored_against,
+               COALESCE(o.scrimmage_defense_tds, 0) AS offense_giveaway_tds,
+               {against} - 6 * COALESCE(o.scrimmage_defense_tds, 0) AS points_allowed,
+               ot.passing_yards + ot.sack_yards_lost + ot.rushing_yards AS yards_allowed
+        FROM fact_team_week t
+        LEFT JOIN fact_game g ON g.game_id = t.game_id
+        LEFT JOIN td d ON d.game_id = t.game_id AND d.team = t.team
+        LEFT JOIN td o ON o.game_id = t.game_id AND o.team = t.opponent_team
+        LEFT JOIN fact_team_week ot ON ot.game_id = t.game_id AND ot.team = t.opponent_team"""
+    cols = ", ".join(f"CAST({sc.q(c.name)} AS {c.type}) AS {sc.q(c.name)}" for c in table.columns)
+    return _materialize(con, table, f"SELECT {cols} FROM ({sql})", stats, arules)
 
 
 def _build_fact_schedule(
@@ -1246,6 +1320,9 @@ def build_warehouse(
                 # D1: per-play expected values, after fact_play (they copy its garbage flag)
                 for name in ("fact_opportunity_pass", "fact_opportunity_rush"):
                     _build_fact_opportunity_play(con, name, src, stats[name], arules)
+                # S1: K and D/ST, from fact_player_week / fact_team_week / fact_play / fact_game
+                _build_fact_kicker_week(con, stats["fact_kicker_week"], arules)
+                _build_fact_defense_week(con, stats["fact_defense_week"], arules)
                 # B3: the id bridge first, then the tables that map ids through it
                 _stage_player_ids(con, src, stats["bridge_player_id"])
                 _build_fact_snaps(con, src, stats["fact_snaps"], arules)

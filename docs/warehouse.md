@@ -1,4 +1,4 @@
-# The warehouse (Steps B1-B3, C1, C3, D1)
+# The warehouse (Steps B1-B3, C1, C3, D1, S1)
 
 `twm build 2025 2026` (or `--start 1999`) turns the Parquet cache in `data/raw/` into one
 DuckDB file, `data/warehouse.duckdb` (gitignored). The build is written to
@@ -45,6 +45,8 @@ before it, `dim_player` stores `public_from_utc` last): see "When is a row avail
 | `fact_opportunity_week` | one player in one game (2006+, C3): nflverse's ffopportunity weekly file, the actual and **expected** (`*_exp`, from ffopportunity's models) passing, rushing and receiving yards, touchdowns, two-point conversions, interceptions and receptions, plus ffopportunity's own point totals (a cross-check only). xFP = the `_exp` components re-scored with config/scoring.yaml (`twm.scoring.xfp`, docs/waiver_radar.md). `season`/`week` arrive as a string and a float upstream and are cast; `posteam` is the player's team; `season_type` comes from the game's `fact_game` row; `position` (ffopportunity's) is hidden point-in-time | `game_id, player_id` | ff_opportunity |
 | `fact_opportunity_pass` | one pass play (2006+, D1; two-point tries included, sacks not): ffopportunity's per-play file (`pbp_pass`): passer, target (`receiver_player_id`, NULL on 28,163 passes without an identified target), what happened (`complete_pass`, `pass_touchdown`, `interception`: categorical '0'/'1' upstream, cast to integers; `air_yards`, `receiving_yards`) and the **expected** values (`pass_completion_exp`, `yards_after_catch_exp`, `pass_touchdown_exp`, `pass_interception_exp`, `two_point_conv_exp`), plus `is_garbage_time` copied from the same play in `fact_play` (NULL when the play is not there). Summed per player-game they reproduce `fact_opportunity_week` (docs/regression_watch.md). Left out: first-down expectations, `yardline_exp`, and the upstream `yards_after_catch`, whose meaning changes in 2023 (before, it is not the play's yards after the catch). `passer_position`/`receiver_position` are hidden point-in-time | `game_id, play_id` | ff_opportunity_pass |
 | `fact_opportunity_rush` | one run (2006+, D1; kneels and two-point tries included): ffopportunity's per-play file (`pbp_rush`): rusher, `rushing_yards`, `rush_touchdown` and the **expected** `rush_yards_exp`, `rush_touchdown_exp`, `two_point_conv_exp` (the values ffopportunity scores: a kneel is -1 yard, an aborted snap 0; the raw model outputs `rushing_yards_exp`/`rushing_td_exp` are left out), plus `is_garbage_time` from `fact_play`. `position` is hidden point-in-time | `game_id, play_id` | ff_opportunity_rush |
+| `fact_kicker_week` | one player in one game with a field-goal or extra-point attempt (S1, 1999+): the kicking columns of `fact_player_week` (distance buckets 0-19 ... 60+, misses, blocks, PATs, game-winners). Kicker points are scored at query time (`twm.scoring_kdst`), see "K and D/ST tables" below | `player_id, season, week, season_type` | player_stats (via `fact_player_week`) |
+| `fact_defense_week` | one team in one game (S1, 1999+; every `fact_team_week` row): D/ST event counts, return touchdowns by kind, and ESPN points allowed (the opponent's score minus touchdowns this team's offense gave up on interception and fumble returns) plus opponent net yards. See "K and D/ST tables" below | `team, season, week, season_type` | team_stats + pbp + schedules (via `fact_team_week`, `fact_play`, `fact_game`) |
 | `fact_snaps` | one player in one game with snap counts and percentages. The source names players by Pro-Football-Reference id (`pfr_player_id`); `gsis_id` (right after it) is mapped through `bridge_player_id` (NULL for 234 of 327,698 rows on the full build: ids with no link, and 6 rows whose link the usage check found implausible; all listed in the id report). `(game_id, gsis_id)` is unique among rows with a gsis_id (counted on every build, `notes.n_duplicate_game_gsis`, 0), so features can join on it | `game_id, pfr_player_id` | snap_counts |
 | `fact_injury_report` | one player on one team's injury report for one week; `date_modified` is the report row's last-modified time where the source has it (2010-2024; NULL for 2025+ and effectively 2009, see assumptions section 4) | `season, week, team, gsis_id` | injuries |
 | `fact_depth_chart` | one depth-chart slot, from either upstream format (`source_format` = `legacy` weekly charts 2001-2024, or `daily` snapshots 2025+) | see below | depth_charts |
@@ -137,6 +139,63 @@ Upstream gaps that are not build bugs: three played games have no play-by-play r
 (`1999_01_BAL_STL`, `2000_03_SD_KC`, `2000_06_BUF_MIA`); the 2013 injury file has no Super Bowl
 rows and the 2023 one only REG and WC; the 2005 legacy depth-chart file is REG only. Listed in
 `docs/assumptions.md` section 10 too.
+
+### K and D/ST tables (`fact_kicker_week`, `fact_defense_week`, S1)
+
+Built after `fact_play`, `fact_player_week`, `fact_team_week` and `fact_game`, for every season
+the build covers (1999-2026 locally, 2012-2026 in the GitHub pipeline). Neither table stores
+fantasy points: `twm.scoring_kdst.score_kicking_sql` / `score_defense_sql` score them at query
+time with `config/scoring.yaml` (`kicking:` / `defense:`, ESPN's defaults; docs/scoring.md).
+
+**`fact_kicker_week`** is `fact_player_week` restricted to rows with `fg_att + pat_att > 0`
+(punters or position players who kicked included; today's `position` is left out because it is
+hindsight). nflverse's identities hold on every row: `fg_att = fg_made + fg_missed +
+fg_blocked` (a block is NOT a miss upstream), `pat_att = pat_made + pat_missed + pat_blocked`,
+and the made-distance buckets sum to `fg_made`.
+
+**`fact_defense_week`**, one row per `fact_team_week` row:
+
+- Event counts (`def_sacks`, `def_interceptions`, `fumble_recovery_opp`, `def_safeties`,
+  `def_punt_blocks`, `def_fg_blocks`, `def_pat_blocks`) are nflverse's team tallies. Checked
+  against `fact_play` per team-game (2021-2023 | 1999-2001): sacks equal on 98.2% | 99.2%,
+  interceptions 100% | 99.7%, opponent fumble recoveries 99.5% | 99.5%, punt blocks 99.9% |
+  100%, FG blocks 100% | 99.9%, PAT blocks 100%, safeties 99.7% | 99.0%.
+- Return touchdowns are classified per play from `fact_play` (touchdown plays by `td_team`):
+  kickoff (`kickoff_attempt` or `play_type = 'kickoff'`: `posteam` is the RECEIVING team),
+  punt (`posteam` is the punting team), field goal, conversion, else scrimmage.
+  `kickoff_return_tds` = receiving team on a kickoff + a missed field goal returned (ESPN has no
+  category for it); `punt_return_tds` = receiving team on an unblocked punt;
+  `interception_return_tds` = defense on a scrimmage play with an interception;
+  `fumble_return_tds` = defense on another scrimmage play, the kicking team on a kickoff, the
+  punting team on a punt (a muff); `blocked_kick_return_tds` = a blocked punt (the description
+  says `BLOCKED`, since `fact_play` has no `punt_blocked` column) or a blocked field goal.
+  nflverse's `special_teams_tds` equals our kickoff + punt + blocked-kick return TDs on 100% of
+  2021-2023 team-games; its `def_tds` misses fumble-return TDs it files under
+  `fumble_recovery_tds` (which also holds offensive own-fumble TDs), hence the per-play source.
+- `points_allowed` (ESPN): the opponent's final score (`points_scored_against`, from
+  `fact_game`) minus 6 per `offense_giveaway_tds`, the opponent's touchdowns on scrimmage plays
+  where it was on defense (pick-sixes and fumble returns this team's offense gave up). Only the
+  touchdown's 6 points are removed: the try after it, safeties conceded by the offense and
+  special-teams return touchdowns still count (the owner's league settings may say otherwise:
+  phase F). The three played games without play-by-play (see above) get no exclusion.
+- Known upstream attribution errors are kept as nflverse has them: in 2002_05_PHI_JAX, JAX
+  punt returns are credited to PHI in `td_team` (and in nflverse's team stats), so PHI gets
+  fumble-return TDs there. Over 1999-2026, nflverse's `special_teams_tds` equals our kickoff +
+  punt + blocked-kick return TDs on 14,619 of 14,626 team-games; the other 6 are blocked-kick
+  TDs it files elsewhere or kick-return fumbles it calls special-teams TDs (6 points either way).
+- `yards_allowed`: the opponent's total net yards, `passing_yards + sack_yards_lost +
+  rushing_yards` of its row (nflverse stores `sack_yards_lost` as a negative number); within
+  5 yards of the play-by-play sum on 534 of 544 2023 team-games. Scored only when
+  `defense.yards_allowed_tiers` is set (off by default).
+
+Reconciliation (S1; tests/test_kdst_warehouse.py, `-m realdata`): no upstream kicker or D/ST
+fantasy points exist (nflverse's `fantasy_points` on every kicker row are exactly its
+non-kicking stats scored: 39 of 14,517 rows are non-zero), so kicker points are
+checked against the same rules applied to the team's own kicking columns (equal on every
+team-game), and D/ST points against four games scored by hand from the play descriptions:
+2023_01_DAL_NYG DAL 32, 2023_02_CLE_PIT CLE 7 (14 allowed after two giveaway TDs),
+2023_14_LA_BAL BAL 7 (overtime punt return TD), 2023_09_IND_CAR CAR 4 (15 allowed after two
+pick-sixes).
 
 ### `fact_depth_chart`
 
@@ -313,6 +372,7 @@ guess. "Kickoff" is game end minus 4 h (the real kickoff, or the late night-slot
 | `fact_schedule` | REG: `schedule_release_month_day` (May 20) of the season, 00:00 UTC. POST: when the previous round's last game is final (game end + 3 h; Wild Card: the last regular-season game); a playoff game with no previous week in the build uses its own kickoff. Listed schedule changes: not before their own kickoff (below) | Schedules come out in April or May; May 20 is later than every release. A playoff matchup is set when the previous round ends. Only pre-game columns are in this table. |
 | `fact_schedule.slot_available_at` (gates `gameday`, `weekday`, `gametime`, `kickoff_utc`, `kickoff_is_estimated`, `location`, `stadium`, `away_rest`, `home_rest`) | the latest of: the row's `available_at`; kickoff − `schedule_slot_lead_days` (12); for the last two regular-season weeks the previous week's as-of; for a listed change, its kickoff | Date, time and venue can still change after the release: games are flexed with 12 days' notice, and Week 17/18 slots are picked after the previous week. The as-of view shows these columns as NULL until then; who plays whom and the week number stay visible. |
 | `fact_play`, `fact_player_week`, `fact_team_week`, `fact_snaps`, `fact_opportunity_week`, `fact_opportunity_pass`, `fact_opportunity_rush` | the row's game (joined on `game_id`) end + `game_data_lag_hours` (6 h each; the three ffopportunity tables use the play-by-play lag, `pbp`, so a play and its expected values always become public together) | nflverse publishes game data in a nightly run after the game. Each row uses its own game, never a per-week constant, so a game moved to Tuesday or Wednesday (the split weeks) is not visible at its week's Tuesday as-of and is at the next. ffopportunity's weekly file is rebuilt right after play-by-play (the 2026 asset was updated 16 minutes after `play_by_play_2026`: docs/assumptions.md section 9). |
+| `fact_kicker_week`, `fact_defense_week` (S1) | the row's game end + the largest `game_data_lag_hours` of the datasets it is built from (`player_stats` for kickers; `team_stats` and `pbp` for D/ST: 6 h each), and for D/ST never before the final score is public (game end + `game_result_lag_hours`) | They are slices and combinations of game data, so they become public exactly when their inputs do. Registered in `available.DERIVED_GAME_DATA_TABLES`; the official-snapshot check covers them. |
 | `fact_injury_report` | 2021-2024 rows with `date_modified`: that stamp. 2010-2020 rows with a stamp: the stamp + `injury_legacy_stamp_offset_hours` (9 h). Otherwise (2009, the 62 null rows of 2010, 2025+): the team's kickoff that week. A team without a game that week: the week's `asof_weekly_utc`. Then never earlier than 1 s after the **previous** week's as-of | `date_modified` is the row's last change, observed. From 2021 the stamps are real UTC; the 2010-2020 ones are not (their time of day does not move with daylight saving time, see `docs/assumptions.md` section 4), so they count 9 h later. The final report is always out by kickoff. The floor enforces spec 6.1: week N+1 reports are not available at the Tuesday as-of after week N. |
 | `fact_depth_chart` | daily rows (2025+): `dt`. Legacy weekly rows (2001-2024): that week's `asof_weekly_utc` minus 6 days, the Wednesday 14:00 UTC before the week's games. REG rows whose week has no REG week (the post-finale chart) use the week with the same number (Wild Card); SBBYE rows use the Super Bowl week | Week N's chart is visible at the as-of after week N and week N+1's is not (as-ofs are at least 7 days apart). The orphan mappings are later than the charts' real dates. |
 | `fact_roster_week` | per season, from the data: **game-day** snapshots (2016 on): week N's roster at week N's `asof_weekly_utc`; **post-game** snapshots (2002-2015): at week N+1's as-of, the season's last week at its own as-of + 7 days. The build measures, among players who played in week N (a snap or stat row), the share whose week-N status is not ACT; above `availability.roster_postgame_share_threshold` (1%) the season is post-game (`notes.regime_by_season`) | A post-game roster shows moves made after the games (a player who played Sunday shows RES): 6.6%-9.8% of players who played are not ACT in 2002-2015, 0%-0.18% in 2016-2026. Such a roster can contain moves made after the Tuesday as-of, so it waits a week. Consequence: in 2002-2015 no roster is public at the week-1 as-of |

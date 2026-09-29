@@ -26,3 +26,46 @@ options:
   #             "fumbles lost"; to be checked against the ESPN league's settings in step F2)
   #   scrimmage only fumbles on sacks, runs and catches (what nflverse's fantasy_points_ppr counts)
   fumbles_lost_scope: all
+
+# ---- Kickers and team defense / special teams (S1, the K and D/ST streamer) ----------------------
+# ESPN's default scoring for standard and PPR leagues, read on 2026-09-29 from ESPN's help page
+# "Scoring Formats" (https://support.espn.com/hc/en-us/articles/360003914032-Scoring-Formats).
+# Scored by src/twm/scoring_kdst.py from fact_kicker_week / fact_defense_week (docs/scoring.md).
+kicking:
+  fg_made_0_39: 3                # FG Made (0-39 yards)
+  fg_made_40_49: 4               # FG Made (40-49)
+  fg_made_50_59: 5               # FG Made (50-59)
+  fg_made_60_plus: 6             # FG Made (60+)
+  fg_missed: -1                  # FG Missed (any distance)
+  fg_blocked: -1                 # a blocked attempt is an unmade FG: scored like a miss (ESPN has
+                                 # no separate category; nflverse counts blocks apart from misses)
+  pat_made: 1                    # Each PAT Made
+  pat_missed: 0                  # no ESPN default (an optional category)
+defense:
+  sacks: 1                       # Each Sack
+  interceptions: 2               # Each Interception
+  fumble_recoveries: 2           # Each Fumble Recovered (opponent fumbles)
+  blocked_kicks: 2               # Blocked Punt, PAT or FG
+  safeties: 2                    # Each Safety
+  kickoff_return_tds: 6          # Kickoff Return TD
+  punt_return_tds: 6             # Punt Return TD
+  interception_return_tds: 6     # Interception Return TD
+  fumble_return_tds: 6           # Fumble Return TD
+  blocked_kick_return_tds: 6     # Blocked Punt or FG return for TD
+  # Points allowed (ESPN way: the opponent's points minus touchdowns this team's offense gave
+  # up on interception and fumble returns). Tiers: [highest points allowed in the tier, points];
+  # the last tier has no upper bound (null).
+  points_allowed_tiers:
+    - [0, 5]
+    - [6, 4]
+    - [13, 3]
+    - [17, 1]
+    - [27, 0]
+    - [34, -1]
+    - [45, -3]
+    - [null, -5]
+  # Yards allowed: OFF by default. The Scoring Formats page lists "yards allowed" only as an
+  # optional category with no values, while ESPN's D/ST article
+  # (https://support.espn.com/hc/en-us/articles/115003847231) implies yards tiers in standard
+  # leagues. The owner's league settings decide (phase F); same format as points_allowed_tiers.
+  yards_allowed_tiers: []

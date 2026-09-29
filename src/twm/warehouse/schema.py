@@ -522,6 +522,104 @@ def fact_team_week_spec() -> Table:
     )
 
 
+# ---- K and D/ST (S1): derived from fact_player_week / fact_team_week / fact_play / fact_game ----
+
+KICKER_WEEK_KEYS = (
+    "player_id", "player_name", "player_display_name", "season", "week", "season_type",
+    "game_id", "team", "opponent_team",
+)  # fmt: skip
+KICKER_WEEK_STATS = (
+    "fg_made", "fg_att", "fg_missed", "fg_blocked", "fg_long",
+    "fg_made_0_19", "fg_made_20_29", "fg_made_30_39", "fg_made_40_49", "fg_made_50_59",
+    "fg_made_60_", "fg_missed_0_19", "fg_missed_20_29", "fg_missed_30_39", "fg_missed_40_49",
+    "fg_missed_50_59", "fg_missed_60_", "pat_made", "pat_att", "pat_missed", "pat_blocked",
+    "gwfg_made", "gwfg_att", "gwfg_missed", "gwfg_blocked",
+)  # fmt: skip
+_KICKER_DOCS = {
+    "fg_att": "field goals attempted = fg_made + fg_missed + fg_blocked (checked 2012, 2024)",
+    "fg_missed": "field goals missed, NOT counting blocked ones (fg_blocked)",
+    "fg_made_60_": "field goals made from 60+ yards (nflverse's buckets: 0-19 ... 50-59, 60+)",
+    "pat_att": "extra points attempted = pat_made + pat_missed + pat_blocked",
+    "gwfg_made": "game-winning field goals made (nflverse's definition)",
+}
+
+
+def fact_kicker_week_spec() -> Table:
+    src = {c.name: c for c in fact_player_week_spec().columns}
+    cols = tuple(
+        Column(n, src[n].type, doc=_KICKER_DOCS.get(n, ""))
+        for n in (*KICKER_WEEK_KEYS, *KICKER_WEEK_STATS)
+    )
+    return Table(
+        name="fact_kicker_week",
+        primary_key=("player_id", "season", "week", "season_type"),
+        columns=cols,
+        doc=(
+            "S1: one row per player per game with a field-goal or extra-point attempt "
+            "(fg_att + pat_att > 0; regular season and playoffs): nflverse's kicking columns "
+            "from fact_player_week, typed the same way. Kicker fantasy points are computed "
+            "from these at query time (twm.scoring_kdst.score_kicking_sql, config/scoring.yaml "
+            "kicking:), never stored. Punters or position players who kicked appear too; "
+            "today's position is left out on purpose (it is hindsight)."
+        ),
+    )
+
+
+# fact_defense_week counts taken as-is from fact_team_week (nflverse's team tallies; they agree
+# with fact_play on 98-100% of team-games, see docs/warehouse.md).
+DEFENSE_WEEK_FROM_TEAM_STATS: dict[str, str] = {
+    "def_sacks": "sacks by the defense (DOUBLE: nflverse sums half sacks)",
+    "def_interceptions": "interceptions by the defense",
+    "fumble_recovery_opp": "opponent fumbles this team recovered (any unit)",
+    "def_safeties": "safeties scored by this team",
+    "def_punt_blocks": "opponent punts blocked",
+    "def_fg_blocks": "opponent field goals blocked",
+    "def_pat_blocks": "opponent extra points blocked",
+}
+# Touchdowns scored by this team's defense and special teams, classified per play from fact_play.
+DEFENSE_WEEK_TDS: dict[str, str] = {
+    "kickoff_return_tds": "kickoff return TDs (the receiving team scores on a kickoff) plus "
+    "missed-field-goal return TDs (no ESPN category of their own; counted as a kick return)",
+    "punt_return_tds": "punt return TDs of an unblocked punt",
+    "interception_return_tds": "interception return TDs (scrimmage play, td_team = defteam)",
+    "fumble_return_tds": "fumble return TDs: defense on a scrimmage play without an "
+    "interception, the kicking team on a kickoff, the punting team on a punt (a muff)",
+    "blocked_kick_return_tds": "TDs on a blocked punt (desc 'BLOCKED') or blocked field goal",
+}
+DEFENSE_WEEK_ALLOWED: dict[str, str] = {
+    "points_scored_against": "the opponent's final score (fact_game home/away_score)",
+    "offense_giveaway_tds": "opponent TDs on scrimmage plays where the opponent was on "
+    "defense (pick-sixes and fumble returns this team's OFFENSE gave up)",
+    "points_allowed": "ESPN D/ST points allowed: points_scored_against - 6 x "
+    "offense_giveaway_tds (only the touchdown's 6 points are removed; the try after it, "
+    "safeties and special-teams return TDs still count)",
+    "yards_allowed": "the opponent's total net yards (its passing_yards + sack_yards_lost, "
+    "which nflverse stores as a negative number, + rushing_yards); NULL without its row",
+}
+
+
+def fact_defense_week_spec() -> Table:
+    team = {c.name: c for c in fact_team_week_spec().columns}
+    keys = ("game_id", "season", "week", "season_type", "team", "opponent_team")
+    cols = [Column(n, team[n].type) for n in keys]
+    cols += [Column(n, team[n].type, doc=d) for n, d in DEFENSE_WEEK_FROM_TEAM_STATS.items()]
+    cols += [Column(n, "INTEGER", doc=d) for n, d in DEFENSE_WEEK_TDS.items()]
+    cols += [Column(n, "INTEGER", doc=d) for n, d in DEFENSE_WEEK_ALLOWED.items()]
+    return Table(
+        name="fact_defense_week",
+        primary_key=("team", "season", "week", "season_type"),
+        columns=tuple(cols),
+        doc=(
+            "S1: one row per team per game (every fact_team_week row, regular season and "
+            "playoffs): the team's defense and special teams (D/ST) as ESPN scores them. Event "
+            "counts come from nflverse team stats, touchdowns are classified per play from "
+            "fact_play, points allowed exclude touchdowns the team's own offense gave up on "
+            "interception and fumble returns (ESPN's rule). D/ST fantasy points are computed "
+            "at query time (twm.scoring_kdst.score_defense_sql), never stored."
+        ),
+    )
+
+
 FACT_SNAPS_GSIS = Column(
     "gsis_id",
     "VARCHAR",
@@ -1469,6 +1567,8 @@ def tables() -> dict[str, Table]:
         fact_opportunity_week_spec(),
         fact_opportunity_pass_spec(),
         fact_opportunity_rush_spec(),
+        fact_kicker_week_spec(),
+        fact_defense_week_spec(),
         fact_snaps_spec(),
         fact_injury_report_spec(),
         fact_depth_chart_spec(),

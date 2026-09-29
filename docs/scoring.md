@@ -1,4 +1,4 @@
-# Fantasy scoring (Step B4)
+# Fantasy scoring (Step B4; K and D/ST: S1)
 
 A fantasy score is a weighted sum. Every stat a player produced in a game (yards, touchdowns,
 catches, ...) is multiplied by the points your league gives for one unit of it, and the results
@@ -80,8 +80,39 @@ reasons will use it ("12 of his 18 points came from two touchdowns").
   exactly on every QB/RB/WR/TE week 1999-2026, and shows our default differs from them only by
   the two documented choices.
 
+## Kickers and team defense / special teams (S1)
+
+`config/scoring.yaml` `kicking:` and `defense:` hold ESPN's default K and D/ST scoring, read from
+ESPN's help page "Scoring Formats"
+(https://support.espn.com/hc/en-us/articles/360003914032-Scoring-Formats) on 2026-09-29.
+`src/twm/scoring_kdst.py` scores them (`score_kicking` / `score_kicking_sql` on
+`fact_kicker_week`, `score_defense` / `score_defense_sql` on `fact_defense_week`; polars and SQL
+give the same numbers). The config is the only copy of the weights.
+
+- **Kicking**: FG made 0-39 yards 3 (nflverse's 0-19 + 20-29 + 30-39 buckets), 40-49 4, 50-59
+  5, 60+ 6; FG missed -1; each PAT made 1. Two choices of ours: a blocked FG scores -1 like a
+  miss (`fg_blocked`; nflverse counts blocks apart from misses, ESPN has no separate category)
+  and a missed PAT scores 0 (`pat_missed`; ESPN lists it without a default).
+- **D/ST**: each sack 1, interception 2, fumble recovered 2, blocked punt / PAT / FG 2, safety 2,
+  and 6 for every kickoff, punt, interception, fumble and blocked-kick return touchdown.
+- **Points allowed** by tier: 0 = 5, 1-6 = 4, 7-13 = 3, 14-17 = 1, 18-27 = 0, 28-34 = -1,
+  35-45 = -3, 46+ = -5 (`points_allowed_tiers`: `[highest value in the tier, points]`, the last
+  unbounded). Points allowed follow ESPN's rule that pick-sixes (and fumble returns) the team's
+  own offense gives up do not count against its D/ST: docs/warehouse.md says exactly what is
+  removed.
+- **Yards allowed** tiers are **off** (`yards_allowed_tiers: []`): the Scoring Formats page lists
+  the category without values, while ESPN's D/ST article
+  (https://support.espn.com/hc/en-us/articles/115003847231) implies yards tiers in standard
+  leagues. The owner's league settings decide (phase F); set tiers in the same format to use them.
+- Not expressible from the data: a 1-point safety on a conversion try (ESPN's D/ST article gives
+  1 point; nflverse's `def_safeties` does not separate it) and defensive two-point returns (no
+  ESPN default).
+
+Tests: `tests/test_scoring_kdst.py` (every FG bucket, miss, block, PAT, every D/ST event, every
+points-allowed tier boundary, config validation, SQL = polars) and the real-data reconciliation
+in `tests/test_kdst_warehouse.py`.
+
 ## Not supported (yet)
 
-Yardage or long-touchdown bonuses, points per first down, kickers and team defenses (a P3
-stretch in the spec), and defensive players. If an ESPN league uses any of these, step F2 will
-report them instead of silently ignoring them.
+Yardage or long-touchdown bonuses, points per first down, and individual defensive players.
+If an ESPN league uses any of these, step F2 will report them instead of silently ignoring them.

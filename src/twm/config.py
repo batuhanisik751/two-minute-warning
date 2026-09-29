@@ -415,6 +415,89 @@ class ScoringOptions(BaseModel):
     fumbles_lost_scope: Literal["all", "scrimmage"] = "all"
 
 
+# K and D/ST (S1): the stats config/scoring.yaml's kicking: and defense: sections may score
+# (src/twm/scoring_kdst.py maps each to warehouse columns). Every stat must be listed.
+KICKING_STATS: tuple[str, ...] = (
+    "fg_made_0_39", "fg_made_40_49", "fg_made_50_59", "fg_made_60_plus",
+    "fg_missed", "fg_blocked", "pat_made", "pat_missed",
+)  # fmt: skip
+DEFENSE_STATS: tuple[str, ...] = (
+    "sacks", "interceptions", "fumble_recoveries", "blocked_kicks", "safeties",
+    "kickoff_return_tds", "punt_return_tds", "interception_return_tds", "fumble_return_tds",
+    "blocked_kick_return_tds",
+)  # fmt: skip
+
+# One tier: (highest value in the tier, points); None = no upper bound (the last tier).
+Tier = tuple[int | None, float]
+
+
+def check_tiers(name: str, tiers: list[Tier], *, required: bool) -> list[Tier]:
+    """Tiers ascend strictly, start at 0 or above, and end with the unbounded tier."""
+    if not tiers:
+        if required:
+            raise ValueError(f"{name}: at least one tier is required")
+        return tiers
+    bounds = [b for b, _ in tiers]
+    if bounds[-1] is not None or any(b is None for b in bounds[:-1]):
+        raise ValueError(f"{name}: only the last tier has no upper bound (null), got {bounds}")
+    finite = [b for b in bounds[:-1] if b is not None]
+    if any(b < 0 for b in finite) or finite != sorted(set(finite)):
+        raise ValueError(f"{name}: upper bounds must be >= 0 and strictly ascending: {bounds}")
+    return tiers
+
+
+class KickingScoring(BaseModel):
+    """config/scoring.yaml ``kicking:``: points per field goal by distance bucket (yards of
+    the kick), per miss, per block and per extra point."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fg_made_0_39: float
+    fg_made_40_49: float
+    fg_made_50_59: float
+    fg_made_60_plus: float
+    fg_missed: float
+    fg_blocked: float
+    pat_made: float
+    pat_missed: float
+
+    def points(self) -> dict[str, float]:
+        return {k: float(getattr(self, k)) for k in KICKING_STATS}
+
+
+class DefenseScoring(BaseModel):
+    """config/scoring.yaml ``defense:``: points per D/ST event plus the points-allowed tiers
+    (and optional yards-allowed tiers, off when empty)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sacks: float
+    interceptions: float
+    fumble_recoveries: float
+    blocked_kicks: float
+    safeties: float
+    kickoff_return_tds: float
+    punt_return_tds: float
+    interception_return_tds: float
+    fumble_return_tds: float
+    blocked_kick_return_tds: float
+    points_allowed_tiers: list[Tier]
+    yards_allowed_tiers: list[Tier] = []
+
+    @field_validator("points_allowed_tiers")
+    @classmethod
+    def _pa_tiers(cls, v: list[Tier]) -> list[Tier]:
+        return check_tiers("defense.points_allowed_tiers", v, required=True)
+
+    @field_validator("yards_allowed_tiers")
+    @classmethod
+    def _ya_tiers(cls, v: list[Tier]) -> list[Tier]:
+        return check_tiers("defense.yards_allowed_tiers", v, required=False)
+
+    def points(self) -> dict[str, float]:
+        return {k: float(getattr(self, k)) for k in DEFENSE_STATS}
+
+
 class Scoring(BaseModel):
     """config/scoring.yaml: points per unit of each stat. Unknown sections or stat names are
     rejected, so a typo ("recieving") fails loudly instead of silently scoring zero."""
@@ -426,6 +509,10 @@ class Scoring(BaseModel):
     receiving: dict[str, float]
     misc: dict[str, float]
     options: ScoringOptions = ScoringOptions()
+    # K and D/ST (S1); optional so a config written for QB/RB/WR/TE only still loads (K and D/ST
+    # scoring then raises a clear error).
+    kicking: KickingScoring | None = None
+    defense: DefenseScoring | None = None
 
     @model_validator(mode="after")
     def _known_stats(self) -> Scoring:

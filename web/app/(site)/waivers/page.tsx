@@ -3,6 +3,7 @@ import BucketBadges from "@/components/BucketBadges";
 import FlexNote from "@/components/FlexNote";
 import PickList from "@/components/PickList";
 import PositionTabs from "@/components/PositionTabs";
+import StreamBody from "@/components/StreamBody";
 import Term from "@/components/Term";
 import WeekPicker from "@/components/WeekPicker";
 import { EmptyState, KindBadge, Note, PageHeader, PosBadge } from "@/components/ui";
@@ -11,7 +12,9 @@ import { fmtInt, fmtUtc, kindLabel, pct, seasonWeek } from "@/lib/format";
 import { leagueShape } from "@/lib/league";
 import { CHANCE_RANGE_LEVEL, POSITIONS } from "@/lib/method";
 import { chooseList, parseInt4, parseKind, parsePosition, waiversHref, type ListKey } from "@/lib/params";
-import { FLEX, FLEX_POSITIONS, positionLabel, tabPositions } from "@/lib/positions";
+import { FLEX, FLEX_POSITIONS, positionLabel, positionShort, sortPositions, tabPositions } from "@/lib/positions";
+import { getStreamIndex, getStreamPositions } from "@/lib/queries/stream";
+import { isStreamPosition } from "@/lib/streamer";
 import { getGlossary } from "@/lib/queries/glossary";
 import { getSiteMeta } from "@/lib/queries/meta";
 import {
@@ -115,9 +118,12 @@ function Legend() {
 
 export default async function WaiversPage({ searchParams }: PageProps<"/waivers">) {
   const sp = await searchParams;
-  const [index, meta, present] = await Promise.all([getListIndex(), getSiteMeta(), getPositions()]);
-  const tabs = tabPositions(present);
+  const [radarIndex, meta, present, streamPresent] = await Promise.all([getListIndex(), getSiteMeta(), getPositions(), getStreamPositions()]);
+  const tabs = tabPositions([...present, ...streamPresent]);
   const position = parsePosition(sp.pos, tabs.length ? tabs : POSITIONS);
+  const stream = isStreamPosition(position);
+  // K and D/ST have their own weeks (the streamer's lists); the time machine follows them
+  const index = stream ? await getStreamIndex(position) : radarIndex;
   const askedSeason = parseInt4(sp.season);
   const askedWeek = parseInt4(sp.week);
   const askedKind = parseKind(sp.kind);
@@ -128,6 +134,13 @@ export default async function WaiversPage({ searchParams }: PageProps<"/waivers"
       Each position&apos;s weekly list of players who are probably still on waivers (the{" "}
       <Term name="candidate_pool">candidate pool</Term>), ranked by their <Term name="chance">chance</Term> of becoming a
       fantasy starter soon. Pick a season and week to see what the Radar said then and what happened next.
+      {streamPresent.length ? (
+        <>
+          {" "}
+          The {sortPositions(streamPresent).map(positionShort).join(" and ")} tabs are different: a one-week pick for next week&apos;s game
+          (streaming).
+        </>
+      ) : null}
     </PageHeader>
   );
 
@@ -143,8 +156,8 @@ export default async function WaiversPage({ searchParams }: PageProps<"/waivers"
   }
 
   const other = index.find((r) => r.season === chosen.season && r.week === chosen.week && r.kind !== chosen.kind);
-  const k = kindLabel(chosen.kind);
-  const title = `${positionLabel(position)}${position === FLEX ? "" : ` (${position})`}, ${seasonWeek(chosen.season, chosen.week)}`;
+  const k = kindLabel(chosen.kind, stream ? "the streamer" : "the Radar");
+  const title = `${positionLabel(position)}${position === FLEX ? "" : ` (${positionShort(position)})`}, ${seasonWeek(chosen.season, chosen.week)}`;
 
   const asked =
     askedSeason !== null || askedWeek !== null || askedKind !== null
@@ -187,7 +200,9 @@ export default async function WaiversPage({ searchParams }: PageProps<"/waivers"
           <Term name="list_kind">{k.long}</Term>.
         </p>
 
-        {position === FLEX ? (
+        {stream ? (
+          <StreamBody chosen={chosen} position={position} currentSeason={meta.currentSeason} />
+        ) : position === FLEX ? (
           <FlexBody chosen={chosen} present={present} meta={meta} />
         ) : (
           <PositionBody chosen={chosen} position={position} meta={meta} />
@@ -197,7 +212,7 @@ export default async function WaiversPage({ searchParams }: PageProps<"/waivers"
           <p className="mt-4 text-sm">
             This week also has a {other.kind === "live" ? "live" : "reconstructed"} list:{" "}
             <Link href={waiversHref({ pos: position, season: chosen.season, week: chosen.week, kind: other.kind })}>
-              show the {other.kind === "live" ? "live" : "reconstructed"} {position} list
+              show the {other.kind === "live" ? "live" : "reconstructed"} {positionShort(position)} list
             </Link>
             .
           </p>

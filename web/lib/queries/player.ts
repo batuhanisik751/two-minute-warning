@@ -48,6 +48,10 @@ export type WeekRow = {
   carryShare: number | null;
   xfp: number | null;
   fpoe: number | null;
+  /** the same three without garbage-time plays (NULL where the play-by-play has no row) */
+  pointsNg: number | null;
+  xfpNg: number | null;
+  fpoeNg: number | null;
 };
 
 /** The seasons with weekly rows for a player, newest first. */
@@ -75,6 +79,9 @@ async function getPlayerWeeksRaw(gsisId: string, season: number): Promise<WeekRo
       carryShare: playerWeekSummary.carryShare,
       xfp: playerWeekSummary.xfp,
       fpoe: playerWeekSummary.fpoe,
+      pointsNg: playerWeekSummary.pointsNg,
+      xfpNg: playerWeekSummary.xfpNg,
+      fpoeNg: playerWeekSummary.fpoeNg,
     })
     .from(playerWeekSummary)
     .where(and(eq(playerWeekSummary.gsisId, gsisId), eq(playerWeekSummary.season, season)))

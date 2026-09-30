@@ -108,7 +108,7 @@ async function stopServer(child: ChildProcess): Promise<void> {
 function runTests(env: Record<string, string>): Promise<number> {
   return new Promise((resolve) => {
     // layout: the overlap check in headless Chrome (tests/smoke/layout.test.ts)
-    const files = ["pages", "a11y", "empty", "layout"].map((f) => join("tests", "smoke", `${f}.test.ts`));
+    const files = ["pages", "modules", "a11y", "empty", "layout"].map((f) => join("tests", "smoke", `${f}.test.ts`));
     const child = spawn(
       join(web, "node_modules", ".bin", "tsx"),
       ["--test", "--test-concurrency=1", "--test-reporter=spec", ...files],

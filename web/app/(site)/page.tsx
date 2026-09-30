@@ -3,6 +3,8 @@ import FlexNote from "@/components/FlexNote";
 import PickList from "@/components/PickList";
 import Term from "@/components/Term";
 import TopBoard from "@/components/TopBoard";
+import RegressionFlagsCard from "@/components/home/RegressionFlagsCard";
+import StreamersCard from "@/components/home/StreamersCard";
 import { EmptyState, KindBadge, Note, PosBadge } from "@/components/ui";
 import { flexOrderOf, mergeFlex } from "@/lib/flex";
 import { fmtUtc, pct, pctRange, seasonWeek } from "@/lib/format";
@@ -65,21 +67,6 @@ async function TrackHeadline() {
       </p>
       <p className="mt-2 text-sm">
         <Link href="/methodology#results">All results on the Methodology page</Link>
-      </p>
-    </section>
-  );
-}
-
-function RegressionCard() {
-  return (
-    <section aria-labelledby="regression-card" className="rounded-xl border-2 border-dashed border-line bg-surface p-4 sm:p-5">
-      <p className="kicker">Coming later</p>
-      <h2 id="regression-card" className="section-title mt-1">
-        Regression Watch arrives in a later phase
-      </h2>
-      <p className="mt-2 text-muted">
-        It will separate each player&apos;s scoring into opportunity and efficiency, and flag hot streaks that are
-        unlikely to last. Nothing is published for it yet. <Link href="/regression">What it will do</Link>
       </p>
     </section>
   );
@@ -257,7 +244,10 @@ export default async function HomePage() {
         </section>
       )}
 
-      <RegressionCard />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <StreamersCard />
+        <RegressionFlagsCard />
+      </div>
     </>
   );
 }

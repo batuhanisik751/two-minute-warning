@@ -17,6 +17,8 @@ import { getGlossary, type GlossaryRow } from "@/lib/queries/glossary";
 import { getRadarModel } from "@/lib/queries/radar";
 import { getTierStats, getTrackRows, type TrackRow } from "@/lib/queries/track";
 import { SITE_TERMS } from "@/lib/site-terms";
+import RegressionSection from "@/components/methodology/RegressionSection";
+import StreamerSection from "@/components/methodology/StreamerSection";
 import { headline, select, widestRange } from "@/lib/track";
 
 export const metadata = { title: "Methodology (draft)" };
@@ -380,8 +382,9 @@ export default async function MethodologyPage() {
   return (
     <>
       <PageHeader title="Methodology (draft)" kicker="How it works">
-        How the Waiver Radar works, what data it uses, how it was tested and what the tests found. Every result on this
-        page is read from the published track record, the priority table and the glossary; none is typed in by hand.
+        How the Waiver Radar, the K and D/ST streamer and Regression Watch work, what data they use, how they were tested
+        and what the tests found. Every result on this page is read from the published track records, the priority table,
+        the frozen parameters and the glossary; none is typed in by hand.
       </PageHeader>
 
       <nav aria-label="On this page" className="mb-10 rounded-lg border border-line bg-surface p-4 text-sm">
@@ -401,6 +404,12 @@ export default async function MethodologyPage() {
           </li>
           <li>
             <a href="#results">Results</a>
+          </li>
+          <li>
+            <a href="#streamer">The K and D/ST streamer</a>
+          </li>
+          <li>
+            <a href="#regression">Regression Watch</a>
           </li>
           <li>
             <a href="#glossary">Glossary</a>
@@ -631,6 +640,10 @@ export default async function MethodologyPage() {
             </div>
           )}
         </section>
+
+        <StreamerSection />
+
+        <RegressionSection />
 
         <section aria-labelledby="glossary">
           <h2 id="glossary" className="section-title scroll-mt-24">

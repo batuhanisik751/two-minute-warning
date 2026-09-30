@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { waiversHref, type ListKey } from "@/lib/params";
+import { positionShort } from "@/lib/positions";
 
 /** Position tabs as links (they work without JavaScript and can be shared). The tabs are the
  *  positions the data has (lib/positions.ts tabPositions): a position a later step publishes
@@ -26,7 +27,7 @@ export default function PositionTabs({
                 data-pos={p}
                 className="pos-tab inline-flex min-h-11 min-w-14 items-center justify-center rounded-md px-3 no-underline sm:min-w-16 sm:px-4"
               >
-                {p}
+                {positionShort(p)}
               </Link>
             </li>
           );

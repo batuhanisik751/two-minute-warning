@@ -105,10 +105,11 @@ export function outcomeLabel(o: Outcome): string {
 
 export type KindLabel = { short: string; long: string };
 
-export function kindLabel(kind: string): KindLabel {
+/** `subject`: whose list it is ("the Radar", "the streamer", "Regression Watch"). */
+export function kindLabel(kind: string, subject = "the Radar"): KindLabel {
   return kind === "live"
     ? { short: "Live", long: "Live list: made in real time on the Tuesday" }
-    : { short: "Reconstructed", long: "Reconstructed list (backtest): what the Radar would have said then" };
+    : { short: "Reconstructed", long: `Reconstructed list (backtest): what ${subject} would have said then` };
 }
 
 /** "Josh Downs" -> "josh-downs" (used only for element ids). */

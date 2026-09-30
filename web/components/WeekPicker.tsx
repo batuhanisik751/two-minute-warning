@@ -1,19 +1,28 @@
 import Link from "next/link";
 import type { ListIndexRow } from "@/lib/queries/radar";
-import { neighbors, waiversHref, type ListKey } from "@/lib/params";
+import { neighbors, waiversHref, type ListKey, type WeekRef } from "@/lib/params";
 import { seasonWeek } from "@/lib/format";
 
 /** The time machine (lite): a season and a week, as a plain GET form (works without
- *  JavaScript), plus links to the neighbouring weeks. */
+ *  JavaScript), plus links to the neighbouring weeks. /waivers by default (with the position
+ *  as a hidden field); another page passes its `action`, its hidden fields and its links. */
 export default function WeekPicker({
   index,
   chosen,
   position,
+  action = "/waivers",
+  hidden,
+  hrefFor,
 }: {
   index: ListIndexRow[];
   chosen: ListKey;
-  position: string;
+  position?: string;
+  action?: string;
+  hidden?: Record<string, string>;
+  hrefFor?: (w: WeekRef) => string;
 }) {
+  const href = hrefFor ?? ((w: WeekRef) => waiversHref({ pos: position, season: w.season, week: w.week }));
+  const fields = hidden ?? (position ? { pos: position } : {});
   const seasons = [...new Set(index.map((r) => r.season))];
   const weeks = new Map<number, Set<string>>();
   for (const r of index.filter((x) => x.season === chosen.season)) {
@@ -26,8 +35,10 @@ export default function WeekPicker({
     k.has("live") && k.has("backtest") ? "live and reconstructed" : k.has("live") ? "live" : "reconstructed";
   return (
     <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-      <form method="get" action="/waivers" className="flex flex-wrap items-end gap-3" aria-label="Choose a week">
-        <input type="hidden" name="pos" value={position} />
+      <form method="get" action={action} className="flex flex-wrap items-end gap-3" aria-label="Choose a week">
+        {Object.entries(fields).map(([k, v]) => (
+          <input key={k} type="hidden" name={k} value={v} />
+        ))}
         <label className="flex flex-col text-sm font-medium">
           Season
           <select
@@ -65,13 +76,13 @@ export default function WeekPicker({
       </form>
       <nav aria-label="Neighbouring weeks" className="flex gap-3 text-sm">
         {older ? (
-          <Link href={waiversHref({ pos: position, season: older.season, week: older.week })} className="inline-flex min-h-11 items-center">
+          <Link href={href(older)} className="inline-flex min-h-11 items-center">
             <span aria-hidden="true">&larr;&nbsp;</span>
             {seasonWeek(older.season, older.week)}
           </Link>
         ) : null}
         {newer ? (
-          <Link href={waiversHref({ pos: position, season: newer.season, week: newer.week })} className="inline-flex min-h-11 items-center">
+          <Link href={href(newer)} className="inline-flex min-h-11 items-center">
             {seasonWeek(newer.season, newer.week)}
             <span aria-hidden="true">&nbsp;&rarr;</span>
           </Link>

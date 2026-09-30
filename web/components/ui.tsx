@@ -1,6 +1,7 @@
 // Small shared pieces of UI (server components).
 import type { Outcome } from "@/lib/format";
 import { kindLabel, outcomeLabel, pct, pctRange, tierLabel } from "@/lib/format";
+import { positionShort } from "@/lib/positions";
 
 export function PageHeader({
   title,
@@ -67,7 +68,7 @@ export function KindBadge({ kind }: { kind: string }) {
 export function PosBadge({ pos, className = "" }: { pos: string; className?: string }) {
   return (
     <span data-pos={pos} className={`pos-badge ${className}`}>
-      {pos}
+      {positionShort(pos)}
     </span>
   );
 }
@@ -118,7 +119,18 @@ export function MiniLabel({ children, className = "" }: { children: React.ReactN
 /** The chance as a big number, a meter (solid to the chance, pale to the top of its range;
  *  hidden from screen readers: the text is the source of truth) and "similar players hit
  *  53-59%". A NULL chance says so in words, never 0% and never the model's probability. */
-export function ChanceCell({ chance, low, high }: { chance: number | null; low: number | null; high: number | null }) {
+export function ChanceCell({
+  chance,
+  low,
+  high,
+  rangeWords = "similar players hit",
+}: {
+  chance: number | null;
+  low: number | null;
+  high: number | null;
+  /** the words before the range ("similar players hit 53-59%") */
+  rangeWords?: string;
+}) {
   if (chance === null) {
     return <span className="block text-sm text-muted">Not available for this list</span>;
   }
@@ -131,7 +143,9 @@ export function ChanceCell({ chance, low, high }: { chance: number | null; low: 
         <span className="meter-fill" style={{ width: w(chance) }} />
       </span>
       {low !== null && high !== null ? (
-        <span className="mt-1 block text-xs text-muted">similar players hit {pctRange(low, high)}</span>
+        <span className="mt-1 block text-xs text-muted">
+          {rangeWords} {pctRange(low, high)}
+        </span>
       ) : null}
     </span>
   );

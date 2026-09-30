@@ -7,11 +7,12 @@ computed from anything but that database.
 
 | route | what it shows |
 |---|---|
-| `/` | this week: the scoreboard banner, each position's No. 1 ("top of the board"), the track-record headline, the newest live Waiver Radar list's top 5 per position plus a FLEX card, the Regression Watch card; an empty state until the first live list exists |
+| `/` | this week: the scoreboard banner, each position's No. 1 ("top of the board"), the track-record headline, the newest live Waiver Radar list's top 5 per position plus a FLEX card, the Streamers card (the newest live K and D/ST lists' top 3) and the Regression flags card (the newest live list's top 3 Sell-high and Buy-low); an empty state until the first live list exists |
 | `/waivers` | one list: position tabs (from the data, plus FLEX), season/week picker (the time machine), live or reconstructed label, chance with its range and meter, priority, reasons, outcomes, hit-rate badges per rank bucket |
-| `/regression` | what Regression Watch will do (phase D is not built: no data, no numbers) |
-| `/player/[id]` | a player (nflverse `gsis_id`): header, weekly charts with data tables, Radar history; 404 for an unknown id |
-| `/methodology` | data sources, the point-in-time rule, leakage safeguards, how the Radar works, the results, the full glossary, disclaimers |
+| `/waivers?pos=K`, `?pos=DST` | the K and D/ST streamer (tabs after FLEX once `stream_list` has lists): the same row layout, next game (home/away), chance of a top-N week with its range, priority, reasons, outcome (next week's finish and points); explained once (a one-week pick, no betting lines by design, the backtest in one sentence from `stream_track_record`); its own time machine |
+| `/regression` | Regression Watch: the week's Sell-high, Buy-low and Legit tables, a with/without garbage-time toggle (links, `gt=off`), the xFP-against-PPG scatter with its data table, the track record (MAE against season PPG and last 3; tag hit rates against base rates); time machine over the published weeks |
+| `/player/[id]` | a player (nflverse `gsis_id`): header, weekly charts with data tables (the points/xFP chart with a garbage-time toggle), Radar history, Regression Watch history; 404 for an unknown id |
+| `/methodology` | data sources, the point-in-time rule, leakage safeguards, how the Radar works, the results, the K and D/ST streamer (results from `stream_track_record`), Regression Watch (the shrinkage table from the frozen parameters, the projection in words, the backtest results, the PROJECT_SPEC 6.3 limit), the full glossary, disclaimers |
 
 Every page carries the skip link, the "Data as of" line (the Tuesday as-of of the current
 week's lists, and when the data was published), the disclaimer of PROJECT_SPEC 16 and the data
@@ -53,10 +54,12 @@ Queries per page:
 | page | queries (lib/queries) |
 |---|---|
 | every page | `meta.getSiteMeta` (site_meta; the as-of of the current week's radar_list rows), `glossary.getGlossary` (tooltips) |
-| `/` | `radar.getLatestLive`, `radar.getListIndex`, `radar.getRadarModel`, `track.getTrackRows(pooled, diff)`, `glossary.getGlossary` (the FLEX note's league shape) |
-| `/waivers` | `radar.getListIndex`, `radar.getPositions` (the tabs), `radar.getList(season, week, position, kind)`, `radar.getBucketCounts(position, season)`; FLEX: `radar.getList` for RB, WR and TE, `radar.getFlexBucketCounts(season)`, `glossary.getGlossary` |
-| `/player/[id]` | `player.getPlayer`, `player.getPlayerSeasons`, `player.getPlayerWeeks(season)`, `radar.getPlayerHistory` |
-| `/methodology` | `track.getTrackRows(...)`, `track.getTierStats`, `radar.getRadarModel`, `glossary.getGlossary` |
+| `/` | `radar.getLatestLive`, `radar.getListIndex`, `radar.getRadarModel`, `track.getTrackRows(pooled, diff)`, `glossary.getGlossary` (the FLEX note's league shape), `stream.getLatestStreamLive`, `regression.getLatestRegressionLive` |
+| `/waivers` | `radar.getListIndex`, `radar.getPositions` (the tabs), `radar.getList(season, week, position, kind)`, `radar.getBucketCounts(position, season)`; FLEX: `radar.getList` for RB, WR and TE, `radar.getFlexBucketCounts(season)`, `glossary.getGlossary`; the tabs also `stream.getStreamPositions` |
+| `/waivers?pos=K`/`DST` | `stream.getStreamIndex(position)` (the time machine), `stream.getStreamList`, `stream.getStreamTrack`, `glossary.getGlossary` (the top-N cutoff from `y_start`) |
+| `/regression` | `regression.getRegressionIndex`, `regression.getRegressionList`, `regression.getRegressionTrack` |
+| `/player/[id]` | `player.getPlayer`, `player.getPlayerSeasons`, `player.getPlayerWeeks(season)`, `radar.getPlayerHistory`, `regression.getPlayerRegressionHistory` |
+| `/methodology` | `track.getTrackRows(...)`, `track.getTierStats`, `radar.getRadarModel`, `glossary.getGlossary`, `stream.getStreamTrack`, `stream.getStreamModels`, `regression.getRegressionParams`, `regression.getRegressionTrack` |
 
 The hit-rate badges on `/waivers` count, for the list's position, the picks and hits per rank
 in the reconstructed lists of **seasons before the list's own** with final outcomes (so a
@@ -74,9 +77,20 @@ FLEX list of every reconstructed week before the list's season and count per FLE
 same point-in-time rule as a position's badges.
 
 **Positions** (`lib/positions.ts`): the tabs and the home page's cards are the positions present
-in `radar_list`, plus FLEX after TE. A position published later (K, D/ST) gets its tab, card and
-badge colour by itself, in the order QB, RB, WR, TE, FLEX, K, D/ST; none is shown before it has
-a list. (The schema's `radar_list_position_check` still allows QB, RB, WR and TE only.)
+in `radar_list`, plus FLEX after TE, plus K and D/ST once `stream_list` has lists (their code is
+`DST`, shown as "D/ST"), in the order QB, RB, WR, TE, FLEX, K, D/ST; none is shown before it has a
+list. A K or D/ST tab reads the streamer's tables and has its own weeks in the time machine.
+
+**Streamer and Regression Watch** (`lib/streamer.ts`, `lib/regression.ts`, unit-tested): the
+streamer's one honest sentence compares the published method (the list's model version: the K
+model, the D/ST rule) with the best alternative of the other kind from `stream_track_record`'s
+pooled precision@5 rows and its paired `diff` row; the top-N of "a starter week" is read from the
+glossary's `y_start` formula. Regression Watch's tables list every player with the tag (a player
+can be Buy-low and Legit), in the weekly report's order; `gt=off` switches PPG, xFP/game and
+FPOE/game to the `_ng` columns (the projection is unchanged); the shrinkage table on
+/methodology is computed from the frozen parameters (`model_versions.params.shrinkage.rows`),
+r(g) for g = the backtest lists' weeks. The stability study's split-half correlations are not
+published, so the page states that finding in words only.
 
 ## Tests
 
@@ -84,14 +98,14 @@ a list. (The schema's `radar_list_position_check` still allows QB, RB, WR and TE
 |---|---|---|
 | types | `npm run typecheck` | nothing (`next typegen` + `tsc`) |
 | lint | `npm run lint` | nothing |
-| unit | `npm test` | nothing: formatting, rank buckets and badges, query-string parsing, track-record selection, database-URL guard rails, method constants vs the Python code, theme contrast (WCAG AA, both themes, incl. the strip, field and position colours), FLEX merge order and counts, the league shape, position tabs, team colours |
+| unit | `npm test` | nothing: formatting, rank buckets and badges, query-string parsing, track-record selection, database-URL guard rails, method constants vs the Python code, theme contrast (WCAG AA, both themes, incl. the strip, field and position colours), FLEX merge order and counts, the league shape, position tabs, team colours, the streamer's comparison sentence and cutoffs (`lib/streamer.ts`), Regression Watch's tag order, toggle, verdicts and shrinkage table (`lib/regression.ts`) |
 | migrations | `npm run db:check` | nothing (never connects) |
 | build | `npm run build` | nothing (no database at build time) |
 | smoke + accessibility + layout | `npm run test:smoke:run` | a build, the local Postgres server and Google Chrome (or `CHROME_PATH`) |
 
 `npm run test:smoke:run` (`tests/run-smoke.ts`) creates and seeds two throwaway databases on
 the local server (`twm_web_test`, `twm_web_test_empty`; `tests/setup-db.ts` applies
-`web/drizzle` with Drizzle's migrator and loads the fictional seed of `tests/seed.ts`), starts
+`web/drizzle` with Drizzle's migrator and loads the fictional seed of `tests/seed.ts` and `tests/seed-modules.ts`), starts
 `next start` on each, runs `tests/smoke/*.test.ts` with `SMOKE_REQUIRE=1` and stops the
 servers. The suites fetch every page, check the key text (data-as-of line, disclaimer, credits,
 list rows, charts and their tables, 404s, empty states) and run axe-core inside jsdom on each

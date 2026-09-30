@@ -23,13 +23,13 @@ type Props = {
 //   wide (>= 48rem)    rank | player | chance | priority | outcome   (with a column header row)
 // Every cell is a grid area with a minimum width, and names wrap: nothing can overlap
 // (tests/smoke/layout.test.ts measures it in Chrome at widths from 320 to 1920 px).
-const ROW_OUTCOME =
+export const ROW_OUTCOME =
   "grid grid-cols-[2.75rem_minmax(0,1fr)] gap-x-3 gap-y-2 [grid-template-areas:'rank_player'_'rank_chance'_'rank_meta'] @md:grid-cols-[3rem_minmax(0,1fr)_minmax(7.5rem,9.5rem)] @md:[grid-template-areas:'rank_player_chance'_'rank_meta_chance'] @3xl:grid-cols-[3.25rem_minmax(0,1fr)_9.5rem_8rem_minmax(9rem,12rem)] @3xl:[grid-template-areas:'rank_player_chance_tier_outcome']";
-const ROW_PLAIN =
+export const ROW_PLAIN =
   "grid grid-cols-[2.75rem_minmax(0,1fr)] gap-x-3 gap-y-2 [grid-template-areas:'rank_player'_'rank_chance'_'rank_meta'] @md:grid-cols-[3rem_minmax(0,1fr)_minmax(7.5rem,9.5rem)] @md:[grid-template-areas:'rank_player_chance'_'rank_meta_chance'] @3xl:grid-cols-[3.25rem_minmax(0,1fr)_9.5rem_8rem] @3xl:[grid-template-areas:'rank_player_chance_tier']";
-const HEAD_OUTCOME =
+export const HEAD_OUTCOME =
   "hidden gap-x-3 @3xl:grid @3xl:grid-cols-[3.25rem_minmax(0,1fr)_9.5rem_8rem_minmax(9rem,12rem)] @3xl:[grid-template-areas:'rank_player_chance_tier_outcome']";
-const HEAD_PLAIN =
+export const HEAD_PLAIN =
   "hidden gap-x-3 @3xl:grid @3xl:grid-cols-[3.25rem_minmax(0,1fr)_9.5rem_8rem] @3xl:[grid-template-areas:'rank_player_chance_tier']";
 
 /** A ranked list of picks: an ordered list, one row per player, readable from 320 px. */

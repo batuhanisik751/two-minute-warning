@@ -92,6 +92,32 @@ export const SITE_TERMS: Record<string, TermEntry> = {
       "Radar list ranks each player at the position of his team's roster that week, which " +
       "can differ for a player who changed position.",
   },
+  stream_chance: {
+    name: "stream_chance",
+    title: "Chance (K and D/ST)",
+    explanation:
+      "How often picks the streamer rated alike scored like a starter the very next week, in " +
+      "earlier seasons' backtests: for kickers, picks with a similar model score; for team " +
+      "defenses, the rule's pick at the same rank. The range beside it is how sure that rate " +
+      "is. A track record, not a promise.",
+  },
+  stream_pool: {
+    name: "stream_pool",
+    title: "Streaming pool",
+    explanation:
+      "The kickers and team defenses who are probably still on waivers: those ranked low both " +
+      "by the experts before the season and by points per game so far. It is an estimate, " +
+      "the same kind as the Waiver Radar's candidate pool, because past waiver wires are not " +
+      "public.",
+  },
+  garbage_time_view: {
+    name: "garbage_time_view",
+    title: "With or without garbage time",
+    explanation:
+      "Points, expected points and points over expected either over every play, or only " +
+      "over the plays while the game was still in doubt. Stats piled up once a game is " +
+      "decided say little about next week. The projection itself is the same in both views.",
+  },
   current_franchise: {
     name: "current_franchise",
     title: "Team",

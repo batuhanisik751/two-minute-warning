@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { before, describe, test } from "node:test";
 import { CREDITS, DISCLAIMER } from "../../lib/site";
 import { SEED } from "../seed";
-import { BASE, DATA, fetchPage, normalise, prose, serverUp, text, visibleText, type Page } from "./dom";
+import { BASE, DATA, fetchPage, normalise, prose, serverUp, text, type Page } from "./dom";
 import { SERVER_RENDERED_404, routeSet, type RouteSet } from "./routes";
 
 let up = false;
@@ -88,11 +88,13 @@ describe("every page", () => {
 });
 
 describe("/ (this week)", () => {
-  test("the live top 5 per position, the track-record headline, the Regression Watch card", (t) => {
+  test("the live top 5 per position, the track-record headline, the Streamers and Regression flags cards", (t) => {
     if (!up) return t.skip(`no server at ${BASE}`);
     const p = pages.get("/")!;
     const m = main(p);
-    assert.match(text(m), /Regression Watch arrives in a later phase/);
+    assert.ok(m.querySelector("[data-testid=streamers-card]"), "no Streamers card");
+    assert.ok(m.querySelector("[data-testid=regression-card]"), "no Regression flags card");
+    assert.ok(!/arrives in a later phase/.test(text(m)), "the old Regression Watch placeholder");
     const lists = m.querySelectorAll("[data-testid=pick-list]");
     if (seedOnly) {
       // QB, RB, WR, TE and the FLEX card
@@ -221,8 +223,9 @@ describe("/waivers", () => {
     if (!up) return t.skip(`no server at ${BASE}`);
     const p = pages.get("/waivers")!;
     const tabs = Array.from(p.doc.querySelectorAll<HTMLAnchorElement>("nav[aria-label=Position] a"));
-    // from the data: the published positions, FLEX after TE (K and D/ST once published)
-    assert.deepEqual(tabs.map((a) => a.textContent), ["QB", "RB", "WR", "TE", "FLEX"]);
+    // from the data: the published positions, FLEX after TE, K and D/ST once the streamer has lists
+    if (seedOnly) assert.deepEqual(tabs.map((a) => a.textContent), ["QB", "RB", "WR", "TE", "FLEX", "K", "D/ST"]);
+    else assert.deepEqual(tabs.map((a) => a.textContent).slice(0, 5), ["QB", "RB", "WR", "TE", "FLEX"]);
     assert.equal(tabs.filter((a) => a.getAttribute("aria-current") === "page").length, 1);
     const form = p.doc.querySelector("form[action='/waivers']");
     assert.equal(form?.getAttribute("method"), "get");
@@ -337,7 +340,7 @@ describe("/player/[id]", () => {
       assert.deepEqual(
         figs.map((f) => normalise(f.querySelector("figcaption")?.textContent ?? "")),
         [
-          "Fantasy points and expected points (xFP) by week",
+          "Fantasy points and expected points (xFP) by week, every play",
           "Snap share by week",
           "Target share and carry share by week",
         ],
@@ -355,13 +358,25 @@ describe("/player/[id]", () => {
 });
 
 describe("/regression", () => {
-  test("a stub that describes the module and shows no numbers", (t) => {
+  test("the week's tag tables, the garbage-time toggle, the scatter with its table, the track record", (t) => {
     if (!up) return t.skip(`no server at ${BASE}`);
-    const m = main(pages.get("/regression")!);
-    assert.match(text(m), /Sell-high/);
-    assert.match(text(m), /Buy-low/);
-    assert.ok(!/\d/.test(visibleText(m)), `digits on /regression: ${visibleText(m).match(/.{0,30}\d.{0,30}/)?.[0]}`);
-    assert.equal(m.querySelectorAll("table, figure").length, 0);
+    for (const r of set.routes.filter((x) => x.kind === "regression")) {
+      const m = main(pages.get(r.path)!);
+      if (m.querySelector("[data-testid=empty-state]") && !m.querySelector("[data-testid=rw-week]")) {
+        t.diagnostic(`${r.path}: no Regression Watch list published`);
+        continue;
+      }
+      assert.ok(m.querySelector("[data-testid=rw-week]"), `${r.path}: no week`);
+      for (const tag of ["sell_high", "buy_low", "legit"]) assert.ok(m.querySelector(`[data-testid=tag-${tag}]`), `${r.path}: no ${tag} table`);
+      const toggle = Array.from(m.querySelectorAll<HTMLAnchorElement>("[data-testid=gt-toggle] a.pos-tab"));
+      assert.equal(toggle.length, 2, `${r.path}: toggle links`);
+      assert.equal(toggle.filter((a) => a.getAttribute("aria-current") === "page").length, 1);
+      assert.equal(toggle[1].getAttribute("href")?.includes("gt=off"), true);
+      const fig = m.querySelector("figure[data-testid=scatter]");
+      assert.ok(fig?.querySelector("details table tbody tr"), `${r.path}: a scatter without its data table`);
+      assert.ok(m.querySelector("[data-testid=rw-mae-table] tbody tr") && m.querySelector("[data-testid=rw-tag-table] tbody tr"), `${r.path}: track record`);
+      assert.equal(m.querySelector("form[action='/regression']")?.getAttribute("method"), "get", `${r.path}: time machine`);
+    }
   });
 });
 

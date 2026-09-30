@@ -16,7 +16,7 @@ before(
     }
     up = await serverUp(EMPTY_BASE);
     if (!up) return;
-    for (const r of ["/", "/waivers", "/methodology", "/player/00-9000013"]) pages.set(r, await fetchPage(r, EMPTY_BASE));
+    for (const r of ["/", "/waivers", "/methodology", "/player/00-9000013", "/regression", "/waivers?pos=K"]) pages.set(r, await fetchPage(r, EMPTY_BASE));
   },
   { timeout: 120_000 },
 );
@@ -31,6 +31,8 @@ describe("empty states (no list published yet)", () => {
     assert.match(text(m), /The first live list appears on a Tuesday after the as-of time \(14:00 UTC\)/);
     assert.equal(m.querySelectorAll("[data-testid=pick-list]").length, 0);
     assert.equal(m.querySelectorAll("[data-testid=track-headline]").length, 0);
+    assert.match(text(m.querySelector("[data-testid=streamers-card]")!), /No live kicker or D\/ST list yet/);
+    assert.match(text(m.querySelector("[data-testid=regression-card]")!), /No live Regression Watch list yet/);
     assert.ok(!/\b20\d\d\b/.test(prose(m)), `a year on the empty home page: ${prose(m)}`);
     assert.equal(
       prose(p.doc.querySelector("[data-testid=data-as-of]")!),
@@ -43,5 +45,17 @@ describe("empty states (no list published yet)", () => {
     assert.match(text(pages.get("/waivers")!.doc.querySelector("main")!), /No lists published yet/);
     assert.match(text(pages.get("/methodology")!.doc.querySelector("main")!), /No track record published yet/);
     assert.equal(pages.get("/player/00-9000013")!.status, 404);
+  });
+
+  test("regression and the K tab say nothing is published; no K or D/ST tab before a list", (t) => {
+    if (!up) return t.skip("no empty-database server (SMOKE_EMPTY_BASE_URL)");
+    const r = pages.get("/regression")!;
+    assert.equal(r.status, 200);
+    assert.match(text(r.doc.querySelector("main")!), /No Regression Watch list published yet/);
+    assert.ok(!/\b20\d\d\b/.test(prose(r.doc.querySelector("main")!)), "a year on the empty Regression Watch page");
+    const k = pages.get("/waivers?pos=K")!;
+    assert.match(text(k.doc.querySelector("main")!), /No lists published yet/);
+    assert.equal(k.doc.querySelectorAll("nav[aria-label=Position] a").length, 0);
+    assert.match(text(pages.get("/methodology")!.doc.querySelector("main")!), /No streamer track record published yet/);
   });
 });

@@ -9,6 +9,9 @@ import { fmtPoints, fmtShare, outcomeOf, pct, pctRange, windowSummary } from "@/
 import { isGsisId, parseInt4, waiversHref } from "@/lib/params";
 import { getPlayer, getPlayerSeasons, getPlayerWeeks, type WeekRow } from "@/lib/queries/player";
 import { getPlayerHistory } from "@/lib/queries/radar";
+import { getPlayerRegressionHistory } from "@/lib/queries/regression";
+import RegressionHistory from "@/components/RegressionHistory";
+import { parseGarbage } from "@/lib/regression";
 
 // No loading.tsx above this route on purpose: an unknown id must answer with a real 404
 // status, which needs notFound() before the response starts streaming.
@@ -33,6 +36,34 @@ function shareSeries(position: string): { series: Series[]; columns: Column[]; c
   return { series: [target], columns: [tCol], caption: "Target share by week" };
 }
 
+function playerHref(id: string, season: number, withGarbage: boolean): string {
+  return `/player/${id}?season=${season}${withGarbage ? "" : "&gt=off"}`;
+}
+
+/** With or without garbage time, as links (no JavaScript needed; the URL can be shared). */
+function GarbageToggle({ id, season, withGarbage, available }: { id: string; season: number; withGarbage: boolean; available: boolean }) {
+  if (!available) {
+    return <p className="text-sm text-muted">No garbage-time split is published for these weeks: the chart counts every play.</p>;
+  }
+  return (
+    <nav aria-label="Garbage time" className="flex flex-wrap items-center gap-2" data-testid="gt-toggle">
+      {[true, false].map((on) => (
+        <Link
+          key={String(on)}
+          href={playerHref(id, season, on)}
+          aria-current={on === withGarbage ? "page" : undefined}
+          className="pos-tab inline-flex min-h-11 items-center justify-center rounded-md px-3 no-underline"
+        >
+          {on ? "With garbage time" : "Without garbage time"}
+        </Link>
+      ))}
+      <span className="text-sm text-muted">
+        <Term name="garbage_time_view">What this changes</Term>: the points, xFP and FPOE of the first chart.
+      </span>
+    </nav>
+  );
+}
+
 export default async function PlayerPage({ params, searchParams }: PageProps<"/player/[id]">) {
   const { id } = await params;
   if (!isGsisId(id)) notFound();
@@ -40,8 +71,9 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
   if (!player) notFound();
 
   const sp = await searchParams;
-  const [weekSeasons, history] = await Promise.all([getPlayerSeasons(id), getPlayerHistory(id)]);
-  const seasons = [...new Set([...weekSeasons, ...history.map((h) => h.season)])].sort((a, b) => b - a);
+  const withGarbage = parseGarbage(sp.gt);
+  const [weekSeasons, history, rwHistory] = await Promise.all([getPlayerSeasons(id), getPlayerHistory(id), getPlayerRegressionHistory(id)]);
+  const seasons = [...new Set([...weekSeasons, ...history.map((h) => h.season), ...rwHistory.map((h) => h.season)])].sort((a, b) => b - a);
   const asked = parseInt4(sp.season);
   const season = asked !== null && seasons.includes(asked) ? asked : (seasons[0] ?? null);
   const weeks: WeekRow[] = season !== null ? await getPlayerWeeks(id, season) : [];
@@ -49,11 +81,12 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
   const otherSeasons = [...new Set(history.filter((h) => h.season !== season).map((h) => h.season))];
   const position = weeks[0]?.position ?? player.position ?? "";
 
+  const hasNg = weeks.some((w) => w.pointsNg !== null);
   const data = weeks.map((w) => ({
     week: w.week,
-    fantasyPoints: w.fantasyPoints,
-    xfp: w.xfp,
-    fpoe: w.fpoe,
+    fantasyPoints: withGarbage ? w.fantasyPoints : w.pointsNg,
+    xfp: withGarbage ? w.xfp : w.xfpNg,
+    fpoe: withGarbage ? w.fpoe : w.fpoeNg,
     snapShare: w.snapShare,
     targetShare: w.targetShare,
     carryShare: w.carryShare,
@@ -109,7 +142,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
               {seasons.map((s) => (
                 <li key={s}>
                   <Link
-                    href={`/player/${id}?season=${s}`}
+                    href={playerHref(id, s, withGarbage)}
                     aria-current={s === season ? "page" : undefined}
                     className={`inline-flex min-h-11 items-center rounded-md border px-3 font-display text-lg font-bold tracking-wide no-underline ${
                       s === season ? "border-strip bg-strip text-strip-fg" : "border-line bg-surface text-fg hover:border-accent"
@@ -139,9 +172,10 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
                   <Term name="carry_share">carry share</Term> are shares of his team&apos;s plays.
                 </p>
                 <div className="grid gap-6">
+                  <GarbageToggle id={id} season={season} withGarbage={withGarbage} available={hasNg} />
                   <ChartFigure
                     id="points"
-                    caption="Fantasy points and expected points (xFP) by week"
+                    caption={`Fantasy points and expected points (xFP) by week, ${withGarbage ? "every play" : "without garbage time"}`}
                     data={data}
                     series={[
                       { key: "fantasyPoints", name: "Fantasy points", kind: "bar", color: "var(--chart-a)" },
@@ -269,6 +303,13 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
                 .
               </p>
             ) : null}
+          </section>
+
+          <section aria-labelledby="rw-history-heading" className="mt-10">
+            <h2 id="rw-history-heading" className="section-title mb-1">
+              Regression Watch history, {season}
+            </h2>
+            <RegressionHistory rows={rwHistory.filter((h) => h.season === season)} season={season} name={player.name} withGarbage={withGarbage} />
           </section>
         </>
       )}

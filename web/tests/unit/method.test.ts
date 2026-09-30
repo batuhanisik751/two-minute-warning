@@ -45,3 +45,9 @@ test("positions and the gsis pattern match the schema and the publisher", () => 
   assert.ok(py, "GSIS_PATTERN not found");
   assert.equal(py[1], GSIS_PATTERN.source);
 });
+
+test("the streamer's chance range uses the Radar's BAND_LEVEL (the K and D/ST pages say the same level)", () => {
+  const src = read("src/twm/modules/streamer/confidence.py");
+  assert.match(src, /from twm\.modules\.waiver_radar import confidence as cf/);
+  assert.match(src, /"level": cf\.BAND_LEVEL/);
+});

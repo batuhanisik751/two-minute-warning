@@ -2,11 +2,12 @@
 // fixed; against a real publish they are discovered from the pages themselves.
 import { POSITIONS } from "../../lib/method";
 import { SEED } from "../seed";
+import { MODULES_SEED } from "../seed-modules";
 import { DATA, fetchPage } from "./dom";
 
 export type Route = {
   path: string;
-  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers" | "player" | "regression" | "methodology";
+  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology";
 };
 
 export type RouteSet = {
@@ -28,6 +29,8 @@ export const SERVER_RENDERED_404 = new Set(["/no-such-page"]);
 function seedRoutes(): RouteSet {
   const live = SEED.liveWeek;
   const bt = SEED.backtestWeeks[1];
+  const sb = MODULES_SEED.streamBacktest;
+  const rb = MODULES_SEED.rwBacktest[1];
   return {
     routes: [
       { path: "/", kind: "home" },
@@ -40,9 +43,17 @@ function seedRoutes(): RouteSet {
       { path: `/waivers?season=${live.season}&week=${live.week}&pos=FLEX&kind=live`, kind: "waivers-flex" },
       { path: `/waivers?season=${bt.season}&week=${bt.week}&pos=FLEX`, kind: "waivers-flex" },
       { path: `/waivers?season=${SEED.reconWeek.season}&week=${SEED.reconWeek.week}&pos=FLEX&kind=backtest`, kind: "waivers-flex" },
+      // K and D/ST: the live week, a reconstructed week with chances, the first season without
+      ...(["K", "DST"] as const).map((p) => ({ path: `/waivers?season=${live.season}&week=${live.week}&pos=${p}&kind=live`, kind: "waivers-stream" as const })),
+      ...(["K", "DST"] as const).map((p) => ({ path: `/waivers?season=${sb[0].season}&week=${sb[0].week}&pos=${p}`, kind: "waivers-stream" as const })),
+      { path: `/waivers?season=${sb[1].season}&week=${sb[1].week}&pos=K`, kind: "waivers-stream" },
       { path: `/player/${SEED.featured}`, kind: "player" },
       { path: `/player/${SEED.featured}?season=2025`, kind: "player" },
+      { path: `/player/${SEED.featured}?season=2025&gt=off`, kind: "player" },
       { path: "/regression", kind: "regression" },
+      { path: "/regression?gt=off", kind: "regression" },
+      { path: `/regression?season=${rb.season}&week=${rb.week}`, kind: "regression" },
+      { path: `/regression?season=${rb.season}&week=${rb.week}&gt=off`, kind: "regression" },
       { path: "/methodology", kind: "methodology" },
     ],
     missing: MISSING,
@@ -80,7 +91,24 @@ async function realRoutes(): Promise<RouteSet> {
   const player = doc.querySelector<HTMLAnchorElement>("a[href^='/player/']")?.getAttribute("href");
   if (player) routes.push({ path: player, kind: "player" });
   else notes.push("no player link on /waivers: no player page was checked");
-  routes.push({ path: "/regression", kind: "regression" }, { path: "/methodology", kind: "methodology" });
+  // K and D/ST: their tabs (from the data), the newest list and the oldest season's
+  const tabs = Array.from(doc.querySelectorAll<HTMLAnchorElement>("nav[aria-label=Position] a")).map((a) => a.textContent ?? "");
+  for (const [tab, pos] of [["K", "K"], ["D/ST", "DST"]]) {
+    if (!tabs.includes(tab)) {
+      notes.push(`no ${tab} tab: the ${tab} list was not checked`);
+      continue;
+    }
+    routes.push({ path: `/waivers?pos=${pos}`, kind: "waivers-stream" });
+    const sd = (await fetchPage(`/waivers?pos=${pos}`)).doc;
+    const ss = Array.from(sd.querySelectorAll<HTMLOptionElement>("select[name=season] option")).map((o) => o.value);
+    if (ss.length > 1) routes.push({ path: `/waivers?season=${ss[ss.length - 1]}&pos=${pos}`, kind: "waivers-stream" });
+  }
+  routes.push({ path: "/regression", kind: "regression" }, { path: "/regression?gt=off", kind: "regression" });
+  const rd = (await fetchPage("/regression")).doc;
+  const rs = Array.from(rd.querySelectorAll<HTMLOptionElement>("select[name=season] option")).map((o) => o.value);
+  if (rs.length > 1) routes.push({ path: `/regression?season=${rs[rs.length - 1]}`, kind: "regression" });
+  if (player) routes.push({ path: `${player}${player.includes("?") ? "&" : "?"}gt=off`, kind: "player" });
+  routes.push({ path: "/methodology", kind: "methodology" });
   return { routes, missing: MISSING, notes };
 }
 

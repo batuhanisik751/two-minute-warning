@@ -23,6 +23,11 @@ export const POSITION_LABELS: Record<string, string> = {
   DEF: "Defense and special teams",
 };
 
+/** The short code shown on tabs and badges: "D/ST" for the team defense (its code is DST). */
+export function positionShort(p: string): string {
+  return p === "DST" || p === "DEF" ? "D/ST" : p;
+}
+
 export function positionLabel(p: string): string {
   return POSITION_LABELS[p] ?? p;
 }

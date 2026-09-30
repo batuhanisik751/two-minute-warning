@@ -98,8 +98,9 @@ before(
     tab = await chrome.newTab();
     const set = await routeSet();
     // every page that shows a list: home (half-width cards, the FLEX card, the top-of-the-board
-    // row), the position lists, FLEX, and reconstructed lists without chances
-    paths = set.routes.filter((r) => ["home", "waivers", "waivers-live", "waivers-flex", "waivers-backtest"].includes(r.kind)).map((r) => r.path);
+    // row, the Streamers and Regression flags cards), the position lists, FLEX, reconstructed
+    // lists without chances, the K and D/ST lists and every Regression Watch table
+    paths = set.routes.filter((r) => ["home", "waivers", "waivers-live", "waivers-flex", "waivers-backtest", "waivers-stream", "regression"].includes(r.kind)).map((r) => r.path);
   },
   // two Chrome start attempts of up to 60 s each, plus the connection
   { timeout: 200_000 },

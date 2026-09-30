@@ -6,10 +6,12 @@
 // - "full": everything the pages read, incl. a live week (2026 W3), a reconstructed week with
 //   chances and reasons (2026 W2), and two walk-forward backtest weeks without them
 //   (2024 W5, 2025 W6), outcomes final / pending, a player with weekly rows.
+//   The K and D/ST streamer and Regression Watch tables come from tests/seed-modules.ts.
 // - "empty": a first-publish state: site_meta and the glossary only (no lists, no track
 //   record), for the empty states.
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as s from "../db/schema";
+import { MODULES_SEED, seedModules } from "./seed-modules";
 
 export type SeedVariant = "full" | "empty";
 
@@ -42,7 +44,7 @@ export const SEED = {
   glossaryNames: [
     "as_of", "available_at", "candidate_pool", "starter_threshold", "regression_to_the_mean",
     "y_hit", "y_sustained", "fantasy_points", "xfp", "fpoe", "offense_snap_share",
-    "target_share", "carry_share", "gsis_id", "label_status",
+    "target_share", "carry_share", "gsis_id", "label_status", "y_start",
   ],
 } as const;
 
@@ -87,7 +89,9 @@ const glossaryRow = (name: string, i: number): typeof s.glossary.$inferInsert =>
   formula:
     name === "starter_threshold"
       ? `seed formula: QB top ${L.starters.QB}, RB top ${L.starters.RB}, WR top ${L.starters.WR}, TE top ${L.starters.TE} by fantasy points that week; FLEX-worthy: RB/WR top 45`
-      : `seed formula for ${name}`,
+      : name === "y_start"
+        ? `seed formula: week N+1 rank in the top (teams x slots): top ${MODULES_SEED.streamTop.K} K and top ${MODULES_SEED.streamTop.DST} DST in this league`
+        : `seed formula for ${name}`,
   explanation:
     name === "starter_threshold" ? `Seed explanation of ${name}: a typical ${L.teams}-team league.` : `Seed explanation of ${name}.`,
   verified: i % 4 === 0 ? `seed check ${name}` : null,
@@ -285,6 +289,8 @@ export async function seed(db: Db, variant: SeedVariant): Promise<void> {
       perList: players / 100,
     })),
   );
+  // the K and D/ST streamer and Regression Watch (tests/seed-modules.ts)
+  await seedModules(db);
 }
 
 function rotateFeatured<T extends { gsisId: string }>(pool: T[], at: number): T[] {

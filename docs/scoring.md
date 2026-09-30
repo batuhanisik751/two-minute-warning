@@ -52,8 +52,11 @@ Our default differs from that in two places, both set in `config/scoring.yaml`:
 Return touchdowns (`misc.special_teams_touchdowns`, 6) are counted by both.
 
 Neither choice is verified against ESPN yet. When My League (ESPN) is connected (step F2),
-your league's real settings replace this file, and step F3 compares our points with ESPN's box
-scores for your team, which settles both choices for your league.
+`twm league settings-diff` compares your league's real settings with this file, and the weekly
+league report (`twm league report`, step F4) compares our points with ESPN's box scores for your
+team: every player-week that differs by more than 0.05 points, with the stat that explains it,
+and a plain summary per open question (fumbles lost on returns, return touchdowns, a kicker's
+blocked field goal or missed PAT, D/ST points and yards allowed). It never changes this file.
 
 ## Using it in code
 

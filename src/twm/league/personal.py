@@ -1,6 +1,7 @@
 """`twm league radar`: the week's Waiver Radar and streamer lists restricted to the league's
 real free agents, and the drop candidates on the owner's roster (PROJECT_SPEC 8.3 feature 1;
-step F3). Reads only: data/league.duckdb (the latest sync) and the predictions store.
+step F3). Reads only: data/league.duckdb (the latest sync), the predictions store and
+(for a season average) the warehouse.
 
 - **The lists** are the stored lists of the approved models (``config/production_models.yaml``:
   ``waiver_radar`` for QB/RB/WR/TE, ``streamer_k`` / ``streamer_dst`` for K and D/ST), the
@@ -11,12 +12,9 @@ step F3). Reads only: data/league.duckdb (the latest sync) and the predictions s
   agents and players on waivers), joined by gsis_id / ``DST-<team>``. A listed player who is a
   free agent keeps his list rank and chance; an ESPN free agent the list's pool does not hold
   is shown apart, "not in the pool", with no chance (never invented).
-- **Drop candidates**: at each position where the owner's roster (IR slot excluded) holds more
-  players than it needs (the league's starting slots of that position plus its share of each
-  FLEX-type slot: 1/3 of an RB/WR/TE slot, ...), the player with the lowest rest-of-season
-  projection: Regression Watch's stored projection (points per game) for QB/RB/WR/TE, the
-  streamer's chance for K and D/ST. A player in ESPN's IR slot (``lineupSlotId`` 21, 'IR') is
-  never suggested.
+- **Drop candidates** (:mod:`twm.league.drops`, step F4): the owner's best lineup by
+  rest-of-season numbers (the lineup optimizer); the lowest-numbered QB/RB/WR/TE non-starter is
+  the candidate, a spare K or D/ST apart. An ESPN IR-slot player (``lineupSlotId`` 21) never is.
 
 Output: NFL player names and numbers only (no fantasy team, owner or member id).
 """
@@ -25,6 +23,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +31,7 @@ import duckdb
 import polars as pl
 
 from twm.league import store
-from twm.league.regret import IR
-from twm.league.settings_diff import MULTI_SLOTS
+from twm.league.drops import DropView, drop_view
 
 RADAR_POSITIONS = ("QB", "RB", "WR", "TE")
 STREAM_POSITIONS = ("K", "DST")
@@ -58,7 +56,7 @@ def pinned_versions(pins_path: Path | None = None) -> dict[str, tuple[int, str]]
 
 LIST_SQL = """
     SELECT entity_id, rank_group AS position, score, rank, band, reasons_json, tier, kind,
-           model_version, week
+           model_version, week, horizon, as_of
     FROM predictions WHERE season = ? AND model_version IN ({marks}) {week}
 """
 
@@ -188,22 +186,6 @@ def position_list(view: LeagueView, rows: pl.DataFrame, position: str, limit: in
     return PositionList(position, free.head(limit), outside, free.height, unknown)
 
 
-def needs(slots: dict[str, int]) -> dict[str, tuple[float, str]]:
-    """Position -> (players the lineup needs there, how): its own starting slots plus its share
-    of every FLEX-type slot that can hold it (an RB/WR/TE slot: 1/3 each to RB, WR and TE)."""
-    out = {}
-    for pos in POSITIONS:
-        own = int(slots.get(ESPN_POSITION.get(pos, pos), 0))
-        need, parts = float(own), [f"{own} {pos}"]
-        for label, held in MULTI_SLOTS.items():
-            n = int(slots.get(label, 0))
-            if n and pos in held:
-                need += n / len(held)
-                parts.append(f"1/{len(held)} of {n} {label}")
-        out[pos] = (round(need, 4), " + ".join(parts))
-    return out
-
-
 def _f(x: Any, fmt: str = ".2f") -> str:
     return "-" if x is None else format(float(x), fmt)
 
@@ -217,78 +199,17 @@ def projection_numbers(reasons_json: str | None) -> str:
 
 
 @dataclass
-class DropCandidate:
-    position: str
-    rostered: int
-    need: float
-    how: str  # how the need is counted ("2 RB + 1/3 of 1 RB/WR/TE")
-    name: str | None = None  # the candidate (None: nobody at the position has a number)
-    value: float | None = None  # his projection (points per game) or chance (K, D/ST)
-    numbers: str = ""
-    status: str = ""  # ESPN's injury status when not ACTIVE
-    unrated: list[str] = field(default_factory=list)  # players without a number
-
-
-def _rating(position: str, row: dict[str, Any]) -> tuple[float | None, str]:
-    """(the number a drop is judged by, the numbers behind it) of one stored row."""
-    if position in STREAM_POSITIONS:
-        band = json.loads(row["band"]) if row.get("band") else {}
-        value = band.get("chance", row.get("score"))
-        what = "the streamer's chance" if band else "the streamer's model"
-        return value, (f"{what} {chance_text(position, row.get('band'), row.get('score'))}, "
-                       f"rank {row['rank']} of the week's pool")  # fmt: skip
-    value = row.get("score")
-    return value, (f"projects {_f(value)} points per game for the rest of the season "
-                   + projection_numbers(row.get("reasons_json")))  # fmt: skip
-
-
-def drop_candidates(
-    view: LeagueView, streamer: pl.DataFrame, projections: pl.DataFrame
-) -> tuple[list[DropCandidate], int]:
-    """(one candidate per position with depth, IR-slot players left out). ``streamer``: the
-    week's pinned K / D/ST rows; ``projections``: Regression Watch's pinned rows of the week."""
-    if view.my_team is None:
-        return [], 0
-    mine = view.rosters.filter(pl.col("league_team_id") == view.my_team)
-    on_ir = mine.filter(pl.col("lineup_slot") == IR).height
-    active = mine.filter(pl.col("lineup_slot").fill_null("") != IR)
-    rated = pl.concat([streamer, projections], how="vertical_relaxed")
-    out = []
-    for pos, (need, how) in needs(view.slots).items():
-        players = active.filter(pl.col("position") == pos).sort("player_name", "espn_id")
-        if players.height <= need:
-            continue
-        cand = DropCandidate(pos, players.height, need, how)
-        best: tuple | None = None
-        for p in players.iter_rows(named=True):
-            ent = p["entity_id"]
-            hit = rated.filter((pl.col("position") == pos) & (pl.col("entity_id") == ent)) if (
-                ent is not None) else rated.clear()  # fmt: skip
-            if hit.height == 0:
-                cand.unrated.append(p["player_name"])
-                continue
-            value, numbers = _rating(pos, hit.row(0, named=True))
-            if value is not None and (best is None or value < best[0]):
-                best = (value, p, numbers)
-        if best is not None:
-            value, p, cand.numbers = best
-            cand.name, cand.value = p["player_name"], float(value)
-            status = (p.get("injury_status") or "").upper()
-            cand.status = "" if status in ("", "ACTIVE", "NORMAL") else status
-        out.append(cand)
-    return out, on_ir
-
-
-@dataclass
 class PersonalRadar:
     season: int
     sync_week: int  # the ESPN week of the free-agent sync
     week: int  # the lists' week N (made after week N's games)
     lists: list[PositionList]
-    drops: list[DropCandidate]
-    on_ir: int
+    drops: DropView | None  # None: the owner's team was not identified
     team_found: bool
     notes: list[str] = field(default_factory=list)
+    projections: pl.DataFrame = field(default_factory=pl.DataFrame)  # the week's RW rows
+    roster: pl.DataFrame = field(default_factory=pl.DataFrame)  # the owner's roster rows
+    as_of: datetime | None = None  # the lists' as-of (naive UTC)
 
 
 def _pins(pins_path: Path | None, season: int) -> tuple[dict[str, str], list[str]]:
@@ -313,6 +234,7 @@ def build(
     week: int | None = None,
     limit: int = 10,
     pins_path: Path | None = None,
+    warehouse: Path | None = None,
 ) -> PersonalRadar:
     """The personalized lists and drop candidates of the latest sync (``week``: the lists'
     week, default the latest one stored at or before the sync's ESPN week)."""
@@ -351,9 +273,14 @@ def build(
     proj = rows.filter(pl.col("model_version") == versions.get(PROJECTION_PIN, ""))
     if PROJECTION_PIN in versions and proj.height == 0:
         notes.append(f"no stored Regression Watch projections for week {week}")
-    drops, on_ir = drop_candidates(view, stream, proj)
-    return PersonalRadar(view.season, view.week, week, lists, drops, on_ir,
-                         view.my_team is not None, notes)  # fmt: skip
+    mine, drops = view.rosters.clear(), None
+    if view.my_team is not None:
+        mine = view.rosters.filter(pl.col("league_team_id") == view.my_team)
+        drops = drop_view(mine, view.slots, stream, proj, season=view.season, week=week,
+                          warehouse=warehouse)  # fmt: skip
+    as_of = rows.filter(pl.col("model_version") == radar_v).get_column("as_of").max()
+    return PersonalRadar(view.season, view.week, week, lists, drops, view.my_team is not None,
+                         notes, proj, mine, as_of)  # fmt: skip
 
 
 OUTSIDE_SHOWN = 5  # "not in the pool" names printed per position
@@ -392,28 +319,9 @@ def list_lines(pl_: PositionList, limit: int) -> list[str]:
 
 
 def drop_lines(res: PersonalRadar) -> list[str]:
-    out = ["Drop candidates on your roster: at each position with more players than its "
-           "starting slots plus its FLEX share, the lowest rest-of-season number (Regression "
-           "Watch's projection; K and D/ST: the streamer's chance). IR-slot players are never "
-           "suggested."]  # fmt: skip
-    if not res.team_found:
-        return [*out, "  your team was not identified in the last sync (ESPN_SWID matched no "
-                "team owner)."]  # fmt: skip
-    if not res.drops:
-        out.append("  no position has more players than it needs.")
-    for d in res.drops:
-        need = f"{d.need:.2f}".rstrip("0").rstrip(".")
-        head = f"  {d.position}: {d.rostered} rostered for {need} ({d.how}): "
-        if d.name is None:
-            out.append(head + "nobody here has a number")
-        else:
-            status = f" [ESPN status: {d.status}]" if d.status else ""
-            out.append(head + f"{d.name}{status}, {d.numbers}")
-        if d.unrated:
-            out.append(f"      no number (not in the week's list): {', '.join(d.unrated)}")
-    if res.on_ir:
-        out.append(f"  ({res.on_ir} IR-slot player(s) left out)")
-    return out
+    from twm.league.drops import drop_text
+
+    return drop_text(res.drops)
 
 
 def radar_text(res: PersonalRadar, scoring: str | None = None, limit: int = 10) -> list[str]:

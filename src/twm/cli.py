@@ -2684,10 +2684,10 @@ def league_radar(
 ) -> None:
     """The week's Waiver Radar and K / D/ST streamer lists (the approved models' stored lists,
     their chances unchanged) restricted to your league's free agents from the last sync, ESPN
-    free agents the lists' pools miss shown apart without a chance, and the drop candidates on
-    your roster (lowest rest-of-season projection at a position with depth; never an IR-slot
-    player). Reads only; prints NFL player names and numbers. Exit 2 when My League is off,
-    nothing is synced or a list is missing."""
+    free agents the lists' pools miss shown apart without a chance, and the drop candidate on
+    your roster (the lowest-numbered bench player once your best rest-of-season lineup is set;
+    never an IR-slot player). Reads only; prints NFL player names and numbers. Exit 2 when My
+    League is off, nothing is synced or a list is missing."""
     from twm.league.commands import run_radar
 
     raise typer.Exit(code=run_radar(week, limit))
@@ -2705,6 +2705,25 @@ def league_regret(
     from twm.league.commands import run_regret
 
     raise typer.Exit(code=run_regret(season))
+
+
+@league_app.command("report")
+def league_report(
+    week: int | None = typer.Option(
+        None,
+        help="The lists' week N (made after week N's games; default: the latest stored "
+        "at or before the synced ESPN week).",
+    ),
+) -> None:
+    """The weekly league report: one self-contained HTML file in reports/league/
+    (<season>-W<nn>.html, never published) with the personalized Waiver Radar and K / D/ST
+    streamer, the drop candidates, Regression Watch's tags on your players, lineup regret, the
+    scoring check against ESPN's box scores and the settings difference with its suggested
+    patch (nothing is applied). Exit 2 when My League is off, nothing is synced or a list is
+    missing."""
+    from twm.league.commands import run_report
+
+    raise typer.Exit(code=run_report(week))
 
 
 if __name__ == "__main__":

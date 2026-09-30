@@ -21,12 +21,18 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, isLocalUrl, withDatabase } from "../db/url";
 import { TEST_DATABASES, serverUrl, setupDatabase } from "./setup-db";
+import { writeLeagueFixture } from "./smoke/league-fixture";
 
 const web = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = new Set(process.argv.slice(2));
 const REAL = args.has("--real");
 const KEEP = args.has("--keep");
 const NO_SETUP = args.has("--no-setup");
+// My League (PROJECT_SPEC 8.3): the production servers get the flag AND a fixture report folder,
+// so tests/smoke/league.test.ts proves `next start` still answers 404 at /league.
+const LEAGUE_DIR = writeLeagueFixture();
+// --keep: the servers outlive this script and still point at the folder
+if (!KEEP) process.on("exit", () => rmSync(LEAGUE_DIR, { recursive: true, force: true }));
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -58,7 +64,13 @@ async function waitUp(base: string, child: ChildProcess, ms = 60_000): Promise<v
 
 async function startServer(dbUrl: string): Promise<{ base: string; child: ChildProcess }> {
   const port = await freePort();
-  const env: NodeJS.ProcessEnv = { ...process.env, TWM_LOCAL_DATABASE_URL: dbUrl, PORT: String(port) };
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    TWM_LOCAL_DATABASE_URL: dbUrl,
+    PORT: String(port),
+    ENABLE_MY_LEAGUE: "true",
+    LEAGUE_REPORTS_DIR: LEAGUE_DIR,
+  };
   delete env.DATABASE_URL;
   // --keep: the server outlives this script, so its output goes to a file under .next/
   const logFile = KEEP ? openSync(join(web, ".next", `smoke-server-${port}.log`), "a") : null;
@@ -108,7 +120,7 @@ async function stopServer(child: ChildProcess): Promise<void> {
 function runTests(env: Record<string, string>): Promise<number> {
   return new Promise((resolve) => {
     // layout: the overlap check in headless Chrome (tests/smoke/layout.test.ts)
-    const files = ["pages", "modules", "a11y", "empty", "layout"].map((f) => join("tests", "smoke", `${f}.test.ts`));
+    const files = ["pages", "modules", "a11y", "empty", "layout", "league"].map((f) => join("tests", "smoke", `${f}.test.ts`));
     const child = spawn(
       join(web, "node_modules", ".bin", "tsx"),
       ["--test", "--test-concurrency=1", "--test-reporter=spec", ...files],
@@ -158,6 +170,7 @@ async function main(): Promise<number> {
       ...(emptyBase ? { SMOKE_EMPTY_BASE_URL: emptyBase } : {}),
       SMOKE_REQUIRE: "1",
       SMOKE_DATA: REAL ? "real" : "seed",
+      SMOKE_LEAGUE_DIR: LEAGUE_DIR,
     });
     return code;
   } catch (err) {

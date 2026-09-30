@@ -314,6 +314,9 @@ def _reasons(proj: float) -> str:
                        "fpoe_pg": 2.0, "xfp_used": proj - 1.5, "fpoe_used": 1.5})  # fmt: skip
 
 
+RW_HORIZON = 14  # Regression Watch's horizon: the regular-season weeks left after week 3
+
+
 def _predictions(path: Path, rows: list[tuple]) -> Path:
     """``rows``: (pin key or a version, position, entity, rank, score, band, week, tier)."""
     from twm import predictions as pr
@@ -327,9 +330,10 @@ def _predictions(path: Path, rows: list[tuple]) -> Path:
             con.execute(
                 "INSERT INTO predictions (module, entity_type, entity_id, season, week, as_of, "
                 "horizon, rank_group, score, raw_score, rank, band, model_version, reasons_json, "
-                "kind, created_at, tier, incomplete) VALUES (?, 'player', ?, ?, ?, ?, 1, ?, ?, "
+                "kind, created_at, tier, incomplete) VALUES (?, 'player', ?, ?, ?, ?, ?, ?, ?, "
                 "NULL, ?, ?, ?, ?, 'live', ?, ?, FALSE)",
-                [module, ent, SEASON, week, datetime(2026, 9, 29, 14), pos, score, rank, band,
+                [module, ent, SEASON, week, datetime(2026, 9, 29, 14),
+                 RW_HORIZON if module == "regression_watch" else 1, pos, score, rank, band,
                  version, reasons, datetime(2026, 9, 29, 15), tier],
             )  # fmt: skip
     finally:
@@ -432,30 +436,7 @@ def test_an_explicit_week_and_a_missing_one(world):
         _build(world, week=2)
 
 
-def test_drop_candidates_are_the_lowest_number_at_a_position_with_depth(world):
-    res = _build(world)
-    drops = {d.position: d for d in res.drops}
-    assert sorted(drops) == ["K", "QB", "RB", "WR"]  # TE 1 <= 1.33, D/ST 1 <= 1
-    assert (drops["QB"].name, drops["QB"].value, drops["QB"].rostered) == ("Mine QB Two", 14, 2)
-    rb = drops["RB"]
-    assert (rb.name, rb.value, rb.rostered) == ("Mine RB C", 7.5, 3)  # never the IR-slot RB (3.0)
-    assert rb.how == "2 RB + 1/3 of 1 RB/WR/TE" and rb.need == pytest.approx(7 / 3, abs=1e-4)
-    assert "projects 7.50 points per game" in rb.numbers and "over 3 games" in rb.numbers
-    assert (drops["WR"].name, drops["WR"].unrated) == ("Mine WR B", ["Mine WR Unmatched"])
-    k = drops["K"]
-    assert (k.name, k.value, k.status) == ("Mine K B", 0.22, "QUESTIONABLE")
-    assert "rank 5 of the week's pool" in k.numbers
-    assert res.on_ir == 1
-    text = "\n".join(personal.radar_text(res))
-    assert "Mine RB Hurt" not in text and "1 IR-slot player(s) left out" in text
-    assert "RB: 3 rostered for 2.33 (2 RB + 1/3 of 1 RB/WR/TE): Mine RB C" in text
-
-
-def test_the_needs_count_every_flex_type_slot_share():
-    got = personal.needs({"QB": 1, "RB": 2, "WR": 2, "TE": 1, "RB/WR/TE": 1, "OP": 1, "K": 1})
-    assert got["QB"] == (1.25, "1 QB + 1/4 of 1 OP")
-    assert got["WR"][0] == pytest.approx(2 + 1 / 3 + 1 / 4, abs=1e-4)
-    assert got["DST"] == (0.0, "0 DST")
+# the drop candidates (step F4's optimizer rule): tests/test_league_f4.py
 
 
 def test_no_pinned_model_for_the_season_or_no_owner_team(world, tmp_path):
@@ -464,7 +445,7 @@ def test_no_pinned_model_for_the_season_or_no_owner_team(world, tmp_path):
         _build((db, preds, _pins(tmp_path / "old.yaml", season=2025)))
     other = _league_db(tmp_path / "o.duckdb", rosters=ROSTERS, free_agents=FREE, mine=False)
     res = _build((other, preds, world[2]))
-    assert res.drops == [] and not res.team_found
+    assert res.drops is None and not res.team_found
     assert "your team was not identified" in "\n".join(personal.radar_text(res))
 
 
@@ -497,8 +478,9 @@ def test_cli_radar_after_a_fake_league_sync(f3_sync):
     assert "the week 3 lists (made after week 3's games)" in out and "ESPN week 3" in out
     assert "Fake Waiver Back" in out and "52% (similar players hit 45-55%)" in out
     assert "not in the Radar's pool (no chance): Fake Unknown Rookie (-, 42%)" in out
-    assert "Fake Runner" not in out  # rostered: never offered as a pickup
-    assert "no position has more players than it needs" in out
+    lists = out.split("Drop candidates on your roster")[0]
+    assert "Fake Runner" not in lists  # rostered: never offered as a pickup
+    assert "candidate: none (no QB/RB/WR/TE on the bench has a number)" in out
     assert "scores" not in out  # the fixture's scoring equals config/scoring.yaml
     assert _run("radar", "--week", "7")[0] == commands.EXIT_UNAVAILABLE
 

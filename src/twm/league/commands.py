@@ -9,6 +9,7 @@ only: no team, owner or player name, never a cookie.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
@@ -135,7 +136,8 @@ def run_radar(week: int | None, limit: int, echo: Callable[[str], None] = typer.
     predictions, pins = lists_paths()
     con = store.connect(path, read_only=True)
     try:
-        res = build(con, predictions, week=week, limit=limit, pins_path=pins)
+        res = build(con, predictions, week=week, limit=limit, pins_path=pins,
+                    warehouse=paths()[1])  # fmt: skip
         note = scoring_note(con)
     except PersonalUnavailableError as e:
         echo(str(e))
@@ -169,4 +171,40 @@ def run_regret(season: int | None, echo: Callable[[str], None] = typer.echo) -> 
         con.close()
     for line in season_text(res, "slots: " + ", ".join(f"{s} {n}" for s, n in slots.items())):
         echo(line)
+    return 0
+
+
+def report_dir() -> Path:
+    """reports/league/ (git-ignored): the folder of the unmatched-players list, so tests that
+    replace :func:`paths` redirect the report too."""
+    return paths()[2].parent
+
+
+def run_report(
+    week: int | None, echo: Callable[[str], None] = typer.echo, now: datetime | None = None
+) -> int:
+    """`twm league report`: the weekly HTML report into reports/league/<season>-W<nn>.html."""
+    from twm.league import store
+    from twm.league.personal import PersonalUnavailableError
+    from twm.league.report import gather, write
+
+    path = _synced_db(echo)
+    if path is None:
+        return EXIT_UNAVAILABLE
+    predictions, pins = lists_paths()
+    con = store.connect(path, read_only=True)
+    try:
+        data = gather(con, predictions, paths()[1], week=week, pins_path=pins)
+    except PersonalUnavailableError as e:
+        echo(str(e))
+        return EXIT_UNAVAILABLE
+    finally:
+        con.close()
+    generated = (now or datetime.now(UTC)).replace(tzinfo=None)
+    out = write(data, report_dir(), generated)
+    r = data.radar
+    echo(f"My League: wrote {_rel(out)} (the week {r.week} lists on the sync of ESPN week "
+         f"{r.sync_week})")  # fmt: skip
+    if data.weeks is not None and data.weeks.warning:
+        echo(f"  warning: {data.weeks.warning}")
     return 0

@@ -2673,5 +2673,39 @@ def league_settings_diff() -> None:
     raise typer.Exit(code=run_settings_diff())
 
 
+@league_app.command("radar")
+def league_radar(
+    week: int | None = typer.Option(
+        None,
+        help="The lists' week N (made after week N's games; default: the latest stored "
+        "at or before the synced ESPN week).",
+    ),
+    limit: int = typer.Option(10, "--limit", help="Free agents per position to print."),
+) -> None:
+    """The week's Waiver Radar and K / D/ST streamer lists (the approved models' stored lists,
+    their chances unchanged) restricted to your league's free agents from the last sync, ESPN
+    free agents the lists' pools miss shown apart without a chance, and the drop candidates on
+    your roster (lowest rest-of-season projection at a position with depth; never an IR-slot
+    player). Reads only; prints NFL player names and numbers. Exit 2 when My League is off,
+    nothing is synced or a list is missing."""
+    from twm.league.commands import run_radar
+
+    raise typer.Exit(code=run_radar(week, limit))
+
+
+@league_app.command("regret")
+def league_regret(
+    season: int | None = typer.Option(None, help="Season (default: the latest synced)."),
+) -> None:
+    """Lineup regret per past week from the synced box scores: your actual points, the
+    decision-time best lineup (by ESPN's projections before kickoff) and the hindsight best
+    lineup (by actual points), so points lost to decisions and to luck, per week and for the
+    season. Sync each past week first (`twm league sync --week N`). Exit 2 when My League is
+    off or nothing is synced."""
+    from twm.league.commands import run_regret
+
+    raise typer.Exit(code=run_regret(season))
+
+
 if __name__ == "__main__":
     app()

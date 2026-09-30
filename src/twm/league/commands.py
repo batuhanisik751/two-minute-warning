@@ -103,3 +103,70 @@ def run_settings_diff(echo: Callable[[str], None] = typer.echo) -> int:
     for line in lines:
         echo(line)
     return 0
+
+
+def lists_paths() -> tuple[Path, Path | None]:
+    """(the predictions store, the pins file: None = config/production_models.yaml); tests
+    replace it."""
+    from twm import predictions as pr
+
+    return pr.default_path(), None
+
+
+def _synced_db(echo: Callable[[str], None]) -> Path | None:
+    """The league store, or None (one line printed) when My League is off or nothing is synced."""
+    if _env(echo) is None:
+        return None
+    path = paths()[0]
+    if not path.exists():
+        echo("My League: nothing synced yet: run `uv run twm league sync` first.")
+        return None
+    return path
+
+
+def run_radar(week: int | None, limit: int, echo: Callable[[str], None] = typer.echo) -> int:
+    """`twm league radar`: the personalized Radar and streamer lists and the drop candidates."""
+    from twm.league import store
+    from twm.league.personal import PersonalUnavailableError, build, radar_text, scoring_note
+
+    path = _synced_db(echo)
+    if path is None:
+        return EXIT_UNAVAILABLE
+    predictions, pins = lists_paths()
+    con = store.connect(path, read_only=True)
+    try:
+        res = build(con, predictions, week=week, limit=limit, pins_path=pins)
+        note = scoring_note(con)
+    except PersonalUnavailableError as e:
+        echo(str(e))
+        return EXIT_UNAVAILABLE
+    finally:
+        con.close()
+    for line in radar_text(res, note, limit):
+        echo(line)
+    return 0
+
+
+def run_regret(season: int | None, echo: Callable[[str], None] = typer.echo) -> int:
+    """`twm league regret`: lineup regret per past week of ``season`` (default: the latest)."""
+    from twm.league import store
+    from twm.league.lineup import starting_slots
+    from twm.league.regret import RegretUnavailableError, load_season, season_text
+
+    path = _synced_db(echo)
+    if path is None:
+        return EXIT_UNAVAILABLE
+    con = store.connect(path, read_only=True)
+    try:
+        res = load_season(con, season, paths()[1])
+        part = store.latest(con, "league_settings", res.season)
+        slots = starting_slots(store.slot_counts(store.settings_of(
+            con, part.league_id, res.season)))[0] if part else {}  # fmt: skip
+    except RegretUnavailableError as e:
+        echo(str(e))
+        return EXIT_UNAVAILABLE
+    finally:
+        con.close()
+    for line in season_text(res, "slots: " + ", ".join(f"{s} {n}" for s, n in slots.items())):
+        echo(line)
+    return 0

@@ -13,6 +13,7 @@ the player map) insert-or-replace by primary key; one transaction per sync.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import duckdb
@@ -195,3 +196,51 @@ def player_map(players: list[dict], bridge: dict[str, str] | None) -> list[dict]
         g = (bridge or {}).get(str(eid))
         out.append({**base, "gsis_id": g, "entity_id": g, "method": "bridge" if g else "unmatched"})
     return out
+
+
+# ---- readers for `twm league radar` / `twm league regret` (step F3) ------------------------
+
+
+@dataclass(frozen=True)
+class Partition:
+    """The (league, season, week) a sync wrote, and when."""
+
+    league_id: int
+    season: int
+    week: int
+    synced_at: datetime
+
+
+def latest(
+    con: duckdb.DuckDBPyConnection, table: str, season: int | None = None
+) -> Partition | None:
+    """The partition of ``table`` the newest sync wrote (of ``season`` when given), or None."""
+    where, args = (" WHERE season = ?", [season]) if season is not None else ("", [])
+    row = con.execute(
+        f"SELECT league_id, season, week, synced_at FROM {table}{where} "
+        "ORDER BY synced_at DESC, week DESC LIMIT 1", args
+    ).fetchone()  # fmt: skip
+    return None if row is None else Partition(int(row[0]), int(row[1]), int(row[2]), row[3])
+
+
+def my_team(con: duckdb.DuckDBPyConnection, league_id: int, season: int) -> int | None:
+    """The owner's fantasy team id (``league_is_mine``: an owner's member id is the SWID)."""
+    row = con.execute(
+        "SELECT league_team_id FROM league_teams WHERE league_id = ? AND season = ? AND "
+        "league_is_mine ORDER BY synced_at DESC LIMIT 1", [league_id, season]
+    ).fetchone()  # fmt: skip
+    return None if row is None else int(row[0])
+
+
+def settings_of(con: duckdb.DuckDBPyConnection, league_id: int, season: int) -> dict[str, str]:
+    """The season's ``league_settings`` (key -> value text) as the last sync stored them."""
+    rows = con.execute(
+        "SELECT key, value FROM league_settings WHERE league_id = ? AND season = ?",
+        [league_id, season],
+    ).fetchall()
+    return {str(k): str(v) for k, v in rows}
+
+
+def slot_counts(settings: dict[str, str]) -> dict[str, int]:
+    """ESPN lineup slot label -> count from :func:`settings_of` (the ``slot:*`` keys)."""
+    return {k.removeprefix("slot:"): int(v) for k, v in settings.items() if k.startswith("slot:")}

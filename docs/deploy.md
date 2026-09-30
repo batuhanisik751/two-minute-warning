@@ -384,6 +384,30 @@ evaluate`, `uv run twm model pin waiver_radar --version <version>` (after `uv ru
 waiver_radar` for a new model), then `uv run twm model check`, review `git diff`, commit the
 pin, the model, the snapshot and the reports together. The next run uses them.
 
+### The streamer's approved methods (step S2a)
+
+The K and D/ST streamer (docs/streamer.md) is pinned the same way, with two entries next to the
+Radar's (whose entry and files stay byte-identical):
+
+- `streamer_k` (`model: logit`): the logistic regression that ranks kickers,
+  `artifacts/production_models/streamer/<version>.joblib` (about 11 KB), and its frozen
+  backtest `backtest-<version>/` (`predictions`, `outcomes` = the dataset's `y_start` labels of
+  those picks, `model_versions`: 2013-2025, 2,318 picks, 13 folds);
+- `streamer_dst` (`model: rule`): the D/ST list is a rule, not a fitted model, so the "model"
+  file is the rule's definition (`<version>.json`: column, direction, tie-breakers; checked
+  against the code's rule when loaded) and the frozen backtest is one table, `hit_rates` (per
+  test season, list length and rank: how many lists, how many starts; 407 rows).
+
+`uv run twm streamer score` loads only these (sha256 first, then version and season; a changed
+file is never opened) and reads the chance and priority from the snapshots' seasons before the
+list's season. `uv run twm model check` (no argument: every pinned module; `streamer`: only
+these) also checks that the snapshots reproduce `reports/streamer/backtest.csv` (pooled and
+per-season precision@1/3/5 with their counts, and the K model's Brier: 33 rows). To approve
+after a new backtest: `uv run twm streamer backtest --store <store>`, then
+`uv run twm streamer pin --store <store>` (it trains the season's K fold, writes the rule and the
+snapshots, and refuses when they do not reproduce the committed report), `uv run twm model
+check`, review, commit the pin, the files and `reports/streamer/` together.
+
 ## The owner's steps for E4
 
 1. **Push** the commit with `.github/workflows/pipeline.yml` from your own GitHub account (as

@@ -273,7 +273,7 @@ def _folds_section(run: BacktestRun, position: str) -> list[str]:
             f = fr.fold
             top = ", ".join(f"{n} {_p(v, 0)}" for n, v in fr.importance[:TOP_FEATURES])
             constant = not any(v > 0 for _, v in fr.importance)
-            flag = " (constant model: ties, ranked by id)" if constant else ""
+            flag = " (constant model: ranked by the tie-breakers)" if constant else ""
             flag = " (dominant)" if fr.dominant else flag
             rows.append([
                 f.test_season, season_span(f.train_seasons), f.val_season or "thin",

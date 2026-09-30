@@ -4,6 +4,40 @@
 # snapshot named here, after checking every file's sha256. Written by `uv run twm model pin`
 # (or copied from the retrain workflow's artifact after review); change it only by committing
 # a reviewed model.
+streamer_dst:
+  season: 2026
+  model_version: baseline_opponent_dst-e76f31d80f3a905e
+  file: artifacts/production_models/streamer/baseline_opponent_dst-e76f31d80f3a905e.json
+  sha256: d4d693be7cfc58d03fbd012481a0fe2816a4e31471a4e1a3c59dee0041b16683
+  model: rule
+  approved: '2026-09-30'
+  backtest:
+    seasons: 2013-2025
+    hit_rates:
+      file: artifacts/production_models/streamer/backtest-baseline_opponent_dst-e76f31d80f3a905e/hit_rates.parquet
+      sha256: ac03b79748e4d7291c57026e66bf9bcd27e3ad5c388338d8a0a63f02132f4374
+      rows: 407
+streamer_k:
+  season: 2026
+  model_version: logit_k-dd21dd427fddf989
+  file: artifacts/production_models/streamer/logit_k-dd21dd427fddf989.joblib
+  sha256: a35b2e0ff072f8b7a4b4b3075a049b35a6efd54fd64bab4209d00f4457d3550f
+  model: logit
+  approved: '2026-09-30'
+  backtest:
+    seasons: 2013-2025
+    predictions:
+      file: artifacts/production_models/streamer/backtest-logit_k-dd21dd427fddf989/predictions.parquet
+      sha256: 0d31ed22c4f18c10228bd380cd93f8d963a6733ba0417c12f89dcc3e53f58929
+      rows: 2318
+    outcomes:
+      file: artifacts/production_models/streamer/backtest-logit_k-dd21dd427fddf989/outcomes.parquet
+      sha256: dc480f644e89cc8b13609b6cbcb8a116163566b204a06029c615206c3ff16d53
+      rows: 2318
+    model_versions:
+      file: artifacts/production_models/streamer/backtest-logit_k-dd21dd427fddf989/model_versions.parquet
+      sha256: 1572cb32b8ee310fc45b607e5e8252c925cddfee13c76fe3ffed5ca491e11967
+      rows: 13
 waiver_radar:
   season: 2026
   model_version: logit-5828a082c9e09093

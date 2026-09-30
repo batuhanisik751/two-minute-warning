@@ -81,11 +81,24 @@ def _capture(monkeypatch, name: str) -> list[dict]:
     return calls
 
 
+def _capture_streamer(monkeypatch) -> list[dict]:
+    from twm.modules.streamer import cli as streamer_cli
+
+    calls: list[dict] = []
+    monkeypatch.setattr(streamer_cli, "streamer_score", lambda **kw: calls.append(kw))
+    return calls
+
+
 def test_score_dispatches_a_season_week_to_the_radar(monkeypatch):
     calls = _capture(monkeypatch, "radar_score")
+    streamer = _capture_streamer(monkeypatch)  # S2a: `twm score` runs the streamer too
     out = runner.invoke(cli.app, ["score", "--as-of", "2025-W2", "--allow-incomplete"])
     assert out.exit_code == 0, out.output
-    assert len(calls) == 1
+    assert len(calls) == 1 and len(streamer) == 1
+    assert (streamer[0]["season"], streamer[0]["week"], streamer[0]["now"]) == (2025, 2, None)
+    only = runner.invoke(cli.app, ["score", "--as-of", "2025-W2", "--module", "waiver_radar"])
+    assert only.exit_code == 0 and len(calls) == 2 and len(streamer) == 1
+    calls.pop()
     assert (calls[0]["season"], calls[0]["week"], calls[0]["allow_incomplete"]) == (2025, 2, True)
     assert calls[0]["now"] is None  # the real clock: live or reconstructed by the usual rule
     default = runner.invoke(cli.app, ["score"])
@@ -94,6 +107,7 @@ def test_score_dispatches_a_season_week_to_the_radar(monkeypatch):
 
 def test_score_resolves_a_timestamp_through_the_warehouse(db, monkeypatch):
     calls = _capture(monkeypatch, "radar_score")
+    _capture_streamer(monkeypatch)
     out = runner.invoke(cli.app, ["score", "--as-of", "2025-09-20T12:00Z", "--db", str(db)])
     assert out.exit_code == 0, out.output
     assert (calls[0]["season"], calls[0]["week"]) == (2025, 2)

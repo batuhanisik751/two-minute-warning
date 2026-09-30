@@ -4,5 +4,7 @@ as a weekly starter the next week) follow the Waiver Radar's C1/C2 rules, adapte
 horizon; ``features`` (point-in-time, S1c) and ``dataset`` (pool + features + labels, one row per
 as-of and entity) follow C3; ``models``, ``backtest`` and ``backtest_report`` (S1d) run the
 baselines and the Radar's estimators through the shared walk-forward harness, one model per
-position; docs/streamer.md explains them in plain words.
+position; ``production`` (the approved K model and D/ST rule with their pins), ``confidence``,
+``reasons`` and ``weekly`` (S2a) make the weekly list like the Radar's C6 list; docs/streamer.md
+explains them in plain words.
 """

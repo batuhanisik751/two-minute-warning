@@ -49,6 +49,7 @@ from twm.modules.streamer.models import (
     LABEL,
     MODULE,
     POSITIONS,
+    TIE_COLUMNS,
     baseline_scores,
     estimator,
     graded_rows,
@@ -62,7 +63,7 @@ from twm.predictions import code_version, combine_hashes, frame_hash, model_vers
 
 DEFAULT_TESTS = tuple(range(2013, 2026))  # 2012 (the GitHub build's first season) trains 2013
 HORIZON_WEEKS = 1
-ENTITY_TYPES = {"K": "player", "DST": "team"}
+ENTITY_TYPES = {"K": "kicker", "DST": "team_defense"}  # the store's entity_type (S2a)
 
 
 def training_cutoff(dataset: pl.DataFrame, season: int) -> datetime:
@@ -240,7 +241,9 @@ def run_model(
         preds.append(p)
         folds.append(fr)
         n_train[s] = train.height
-    ranked = rank_scores(pl.concat(preds, how="vertical"))
+    ties = graded.select(*KEYS, *TIE_COLUMNS)
+    joined = pl.concat(preds, how="vertical").join(ties, on=list(KEYS), how="left")
+    ranked = rank_scores(joined)
     return MethodRun(name, position, _with_versions(ranked, versions), folds, versions, n_train)
 
 

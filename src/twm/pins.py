@@ -30,11 +30,17 @@ after; :func:`restore_backtest` writes the snapshot into a (fresh) predictions s
 :func:`evaluation_mismatches` checks it against the committed evaluation. The retrain workflow
 (``.github/workflows/retrain.yml``, ``twm model candidate``) produces a candidate model and
 backtest snapshot for the owner to review and commit; nothing commits automatically.
+
+The K and D/ST streamer (S2a, :mod:`twm.modules.streamer.production`) pins two more entries,
+``streamer_k`` (``model: logit``) and ``streamer_dst`` (``model: rule``: the file is the rule's
+JSON definition and the snapshot a ``hit_rates`` table); :func:`read_snapshot` reads any pin's
+snapshot files with the same sha256 and row checks. A pin without ``model`` is the Radar's.
 """
 
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -45,6 +51,8 @@ import yaml
 PIN_FILE = "production_models.yaml"
 ARTIFACT_DIR = Path("artifacts") / "production_models"
 BACKTEST_TABLES = ("predictions", "outcomes", "model_versions")
+# Every snapshot file a pin may name (S2a): a rule's frozen backtest is one hit-rate table.
+SNAPSHOT_TABLES = (*BACKTEST_TABLES, "hit_rates")
 PARQUET_LEVEL = 19  # zstd level of the snapshot files (measured: 0.89 MB for 91,638 rows)
 FLOAT_TOLERANCE = 1.01e-6  # the evaluation CSV prints 6 decimals
 HEADER = """\
@@ -85,6 +93,9 @@ class Pin:
     approved: str = ""  # the date `twm model pin` wrote it (informative)
     backtest_seasons: str = ""  # e.g. "2014-2025"
     backtest: dict[str, SnapshotFile] = field(default_factory=dict)  # table -> file
+    # what the file holds when it is not the Radar's pickled model (S2a streamer pins):
+    # 'logit' (a pickled model) or 'rule' (a ranking rule's definition, JSON); "" = the Radar's
+    model: str = ""
 
     def path(self, root: Path | None = None) -> Path:
         return _resolve(self.file, root)
@@ -94,12 +105,14 @@ class Pin:
             "season": self.season, "model_version": self.model_version, "file": self.file,
             "sha256": self.sha256,
         }  # fmt: skip
+        if self.model:
+            out["model"] = self.model
         if self.approved:
             out["approved"] = self.approved
         if self.backtest:
             out["backtest"] = {
                 "seasons": self.backtest_seasons,
-                **{t: self.backtest[t].as_dict() for t in BACKTEST_TABLES if t in self.backtest},
+                **{t: self.backtest[t].as_dict() for t in SNAPSHOT_TABLES if t in self.backtest},
             }
         return out
 
@@ -131,7 +144,7 @@ def sha256_of(path: Path) -> str:
 # The pin file
 # --------------------------------------------------------------------------------------
 
-_PIN_KEYS = {"season", "model_version", "file", "sha256", "approved", "backtest"}
+_PIN_KEYS = {"season", "model_version", "file", "sha256", "approved", "backtest", "model"}
 
 
 def _snapshot(module: str, table: str, entry: Any, where: Path) -> SnapshotFile:
@@ -157,15 +170,16 @@ def read_pins(path: Path | None = None) -> dict[str, Pin]:
         if missing or unknown:
             raise PinError(f"{path}: the pin of {module} lacks {missing} or has unknown {unknown}")
         bt = entry.get("backtest") or {}
-        if not isinstance(bt, dict) or set(bt) - {"seasons", *BACKTEST_TABLES}:
+        if not isinstance(bt, dict) or set(bt) - {"seasons", *SNAPSHOT_TABLES}:
             raise PinError(f"{path}: the backtest of {module} has unknown keys")
         pins[str(module)] = Pin(
             module=str(module), season=int(entry["season"]),
             model_version=str(entry["model_version"]), file=str(entry["file"]),
             sha256=str(entry["sha256"]).lower(), approved=str(entry.get("approved") or ""),
             backtest_seasons=str(bt.get("seasons") or ""),
-            backtest={t: _snapshot(str(module), t, bt[t], path) for t in BACKTEST_TABLES
+            backtest={t: _snapshot(str(module), t, bt[t], path) for t in SNAPSHOT_TABLES
                       if t in bt},
+            model=str(entry.get("model") or ""),
         )  # fmt: skip
     return pins
 
@@ -326,22 +340,16 @@ def export_backtest(
     return files, span
 
 
-def load_backtest(pin: Pin, root: Path | None = None) -> dict[str, Any]:
-    """The pin's backtest snapshot as frames ({table: frame}). Each file's sha256 is checked
-    before it is read and its row count after; the frames must hang together (every
-    prediction's version and outcome present, one production model and label)."""
+def read_snapshot(pin: Pin, tables: Sequence[str], root: Path | None = None) -> dict[str, Any]:
+    """The pin's snapshot files ``tables`` as frames: each file's sha256 is checked before it
+    is read (a changed file is never opened) and its row count after."""
     import polars as pl
 
-    from twm.modules.waiver_radar.production import LABEL, MODEL
-
-    if set(pin.backtest) != set(BACKTEST_TABLES):
-        raise PinError(
-            f"the pin of {pin.module} has no approved backtest snapshot (it needs "
-            f"{', '.join(BACKTEST_TABLES)}): approve it again with `uv run twm model pin "
-            f"{pin.module} --version {pin.model_version}`"
-        )
+    missing = [t for t in tables if t not in pin.backtest]
+    if missing:
+        raise PinError(f"the pin of {pin.module} names no backtest {', '.join(missing)}")
     frames = {}
-    for table in BACKTEST_TABLES:
+    for table in tables:
         snap = pin.backtest[table]
         path = snap.path(root)
         if not path.exists():
@@ -356,6 +364,23 @@ def load_backtest(pin: Pin, root: Path | None = None) -> dict[str, Any]:
         if df.height != snap.rows:
             raise PinError(f"{snap.file} has {df.height:,} rows, the pin says {snap.rows:,}")
         frames[table] = df
+    return frames
+
+
+def load_backtest(pin: Pin, root: Path | None = None) -> dict[str, Any]:
+    """The pin's backtest snapshot as frames ({table: frame}). Each file's sha256 is checked
+    before it is read and its row count after; the frames must hang together (every
+    prediction's version and outcome present, one production model and label)."""
+
+    from twm.modules.waiver_radar.production import LABEL, MODEL
+
+    if set(pin.backtest) != set(BACKTEST_TABLES):
+        raise PinError(
+            f"the pin of {pin.module} has no approved backtest snapshot (it needs "
+            f"{', '.join(BACKTEST_TABLES)}): approve it again with `uv run twm model pin "
+            f"{pin.module} --version {pin.model_version}`"
+        )
+    frames = read_snapshot(pin, BACKTEST_TABLES, root)
     v, p, o = frames["model_versions"], frames["predictions"], frames["outcomes"]
     kinds = set(v.select("model", "label").unique().iter_rows())
     if kinds != {(MODEL, LABEL)}:

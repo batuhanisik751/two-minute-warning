@@ -367,3 +367,199 @@ def streamer_backtest(
         )
     typer.echo(f"wrote {target}")
     typer.echo(f"wrote {csv_path}")
+
+
+def _approved(season: int):
+    """(K model, D/ST rule, K confidence, D/ST confidence) from the committed pins; every file's
+    sha256 checked before it is opened (twm.pins.PinError otherwise)."""
+    from twm.modules.streamer import confidence as sc
+    from twm.modules.streamer import production as sp
+
+    pm, kpin = sp.load_pinned_k(season)
+    rule, dpin = sp.load_pinned_rule(season)
+    k_conf = sc.k_confidence(sp.load_k_snapshot(kpin), season)
+    d_conf = sc.dst_confidence(sp.load_hit_rates(dpin), season)
+    return pm, rule, k_conf, d_conf
+
+
+@streamer_app.command("score")
+def streamer_score(
+    season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+    week: int | None = typer.Option(
+        None,
+        "--week",
+        help="Week N: the list at its Tuesday as-of (default: the latest week "
+        "whose as-of has passed).",
+    ),  # fmt: skip
+    allow_incomplete: bool = typer.Option(
+        False,
+        "--allow-incomplete",
+        help="Score even if some of the week's data has not arrived (the list is marked).",
+    ),  # fmt: skip
+    limit: int = typer.Option(5, "--limit", help="Picks per position to print."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    store: Path | None = typer.Option(
+        None, "--store", help="Predictions store (default: settings paths.predictions)."
+    ),
+    backtest_csv: Path = typer.Option(
+        Path("reports/streamer/backtest.csv"),
+        "--backtest-csv",
+        help="The committed backtest (the list's notes on each method quote it).",
+    ),  # fmt: skip
+    out: Path | None = typer.Option(
+        None, "--out", help="Report (default: reports/streamer/weekly/<season>-W<nn>.md)."
+    ),
+    now: str | None = typer.Option(
+        None,
+        "--now",
+        hidden=True,
+        help="Pretend it is this UTC time (ISO); the list is then never stored as 'live'.",
+    ),  # fmt: skip
+) -> None:
+    """Rank a week's kickers and D/STs with the owner-approved methods (config/
+    production_models.yaml: the K model and the D/ST rule, sha256-checked): checks the week's
+    data (exit code 3 if it has not arrived), stores the list, writes the weekly report and
+    prints the top of each position (docs/streamer.md 'The weekly list')."""
+    import polars as pl
+
+    from twm import pins
+    from twm import predictions as pr
+    from twm.asof import WarehouseTooOldError, weekly_as_of
+    from twm.cli import _clock, _display_path, _project_path
+    from twm.config import ROOT, settings
+    from twm.modules.streamer import weekly as sw
+
+    path = _warehouse(db)
+    clock = _clock(now)
+    chosen = season if season is not None else settings().current_season
+    try:
+        wk = week if week is not None else sw.rw.default_week(path, chosen, clock)
+        as_of = weekly_as_of(path, chosen, wk)
+    except LookupError as e:
+        typer.echo(f"cannot score: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    fresh = sw.check_freshness(sw.freshness_inputs(path, chosen, wk), chosen, wk, as_of, clock)
+    if not fresh.ok and not allow_incomplete:
+        typer.echo(fresh.message(), err=True)
+        raise typer.Exit(code=sw.EXIT_NOT_READY)
+    store_path = _project_path(store if store is not None else pr.default_path())
+    try:
+        pm, rule, k_conf, d_conf = _approved(chosen)
+        run = sw.run_week(
+            path, chosen, wk, k_model=pm, rule=rule, k_conf=k_conf, d_conf=d_conf, now=clock,
+            allow_incomplete=allow_incomplete, real_clock=now is None,
+        )  # fmt: skip
+    except sw.rw.NotReadyError as e:  # pragma: no cover - checked above; data changed meanwhile
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=sw.EXIT_NOT_READY) from e
+    except (pins.PinError, WarehouseTooOldError, LookupError, ValueError) as e:
+        typer.echo(f"cannot score: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    try:
+        counts = sw.store_week(run, store_path, created_at=clock.replace(tzinfo=None))
+    except pr.LiveWeekError as e:
+        typer.echo(f"not stored: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    command = f"uv run twm streamer score --season {chosen} --week {wk}" + (
+        " --allow-incomplete" if allow_incomplete else "")  # fmt: skip
+    notes = sw.method_notes(_project_path(backtest_csv), chosen)
+    text = sw.build_report(run, generated=f"Generated at {clock:%Y-%m-%d %H:%M} UTC.",
+                           command=command, notes=notes)  # fmt: skip
+    target = _project_path(out) if out is not None else sw.report_path(chosen, wk)
+    sw.write_report(text, target)
+    typer.echo(f"{chosen} week {wk}, as-of {as_of:%a %Y-%m-%d %H:%M} UTC: stored as '{run.kind}'"
+               + (" (INCOMPLETE DATA)" if run.incomplete else ""))  # fmt: skip
+    typer.echo(f"K: {pm.model_version} (approved); D/ST: {rule.model_version} (approved rule)")
+    cols = ["rank", "name", "team", "chance", "tier"]
+    with pl.Config(**_TABLE):  # type: ignore[arg-type]
+        for pos in ("K", "DST"):
+            top = run.scored.filter((pl.col("position") == pos) & (pl.col("rank") <= limit))
+            typer.echo(f"{pos}:\n{top.select(cols).with_columns(pl.col('chance') * 100)}")
+    typer.echo(f"stored {counts['predictions']:,} predictions in {_display_path(store_path, ROOT)}")
+    typer.echo(f"wrote {_display_path(target, ROOT)}")
+
+
+@streamer_app.command("pin")
+def streamer_pin(
+    season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+    store: Path = typer.Option(
+        ...,
+        "--store",
+        help="The predictions store holding the streamer backtest to approve "
+        "(`twm streamer backtest --store`; opened read-only).",
+    ),  # fmt: skip
+    dataset: Path = typer.Option(
+        Path("data/streamer/dataset.parquet"),
+        "--dataset",
+        help="The dataset the backtest was run on (its labels go into the snapshot).",
+    ),  # fmt: skip
+    backtest_csv: Path = typer.Option(
+        Path("reports/streamer/backtest.csv"),
+        "--backtest-csv",
+        help="The committed backtest report the snapshots must reproduce.",
+    ),  # fmt: skip
+) -> None:
+    """Approve the streamer's production methods for a season: train the K model (the
+    backtest's fold for that season), write the D/ST rule, export both frozen backtests to
+    artifacts/production_models/streamer/ and pin them (streamer_k, streamer_dst) in
+    config/production_models.yaml with sha256s. Refused unless the snapshots reproduce the
+    committed backtest report. Review, then commit: `twm streamer score` uses only the pins."""
+    import polars as pl
+
+    from twm.cli import _display_path, _project_path
+    from twm.config import ROOT, settings
+    from twm.modules.streamer import production as sp
+
+    chosen = season if season is not None else settings().current_season
+    source = _project_path(dataset)
+    if not source.exists():
+        typer.echo(f"dataset not found: {source}", err=True)
+        raise typer.Exit(code=1)
+    try:
+        made = sp.approve(pl.read_parquet(source), store=_project_path(store), season=chosen,
+                          csv_path=_project_path(backtest_csv))  # fmt: skip
+        pm, _ = sp.load_pinned_k(chosen)
+        sp.load_pinned_rule(chosen)
+    except (sp.StreamerProductionError, ValueError) as e:
+        typer.echo(f"not pinned: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    typer.echo(f"pinned streamer {chosen}: {pm.describe()}")
+    for pin in made.values():
+        typer.echo(f"  {pin.module}: {pin.file} (model {pin.model}, sha256 {pin.sha256[:12]}...)")
+        for t, b in pin.backtest.items():
+            typer.echo(f"    {t}: {b.file} ({b.rows:,} rows, sha256 {b.sha256[:12]}...)")
+    typer.echo(f"  wrote {_display_path(ROOT / 'config' / 'production_models.yaml', ROOT)}; "
+               "review the files, then commit them")  # fmt: skip
+
+
+def check_pins(season: int, backtest_csv: Path = Path("reports/streamer/backtest.csv")) -> None:
+    """`twm model check` for the streamer (exit 1 on any problem): both pins present, the K
+    model and the D/ST rule files as pinned (sha256 before opening, version, season), every
+    snapshot file's sha256 and rows, and the snapshots reproduce the committed backtest
+    report's rows of the production methods. Changes nothing."""
+    from twm import pins
+    from twm.cli import _project_path
+    from twm.modules.streamer import production as sp
+
+    try:
+        pm, kpin = sp.load_pinned_k(season)
+        rule, dpin = sp.load_pinned_rule(season)
+        frames, hit_rates = sp.load_k_snapshot(kpin), sp.load_hit_rates(dpin)
+    except pins.PinError as e:
+        typer.echo(f"not usable: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    for pin, what in ((kpin, pm.describe()), (dpin, rule.describe())):
+        typer.echo(f"{pin.module} {season}: approved {pin.model} {pin.model_version} ({pin.file}, "
+                   f"sha256 {pin.sha256[:12]}..., approved {pin.approved or '?'})")  # fmt: skip
+        typer.echo(f"  {what}")
+        rows = ", ".join(f"{b.rows:,} {t}" for t, b in pin.backtest.items())
+        typer.echo(f"  backtest snapshot {pin.backtest_seasons}: {rows} (sha256 and rows checked)")
+    problems = sp.track_record_mismatches(frames, hit_rates, _project_path(backtest_csv))
+    if problems:
+        typer.echo(
+            f"not usable: the approved streamer backtest disagrees with {backtest_csv} in "
+            f"{len(problems)} places, e.g. " + "; ".join(problems[:3]),
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    typer.echo(f"  matches {backtest_csv} (the production methods' rows the snapshots determine)")

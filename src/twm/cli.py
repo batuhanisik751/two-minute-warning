@@ -1377,6 +1377,117 @@ def regression_stability(
     typer.echo(f"wrote {csv_path}")
 
 
+@regression_app.command("backtest")
+def regression_backtest(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    out: Path = typer.Option(
+        Path("reports/regression_watch/backtest.md"),
+        "--out",
+        help="Markdown file to write (relative paths are under the project root); a CSV with "
+        "the same name is written next to it.",
+    ),
+    end: int | None = typer.Option(
+        None, "--end", help="Last test season (default: the last complete one, current - 1)."
+    ),
+    n_boot: int = typer.Option(2000, "--boot", help="Bootstrap resamples for the intervals."),
+) -> None:
+    """Walk-forward backtest of the rest-of-season projection and the Sell-high / Buy-low /
+    Legit tags (step D3): MAE and rank correlation against season-to-date PPG and last-3 PPG,
+    tag hit rates, the variant and thresholds chosen per season (markdown + CSV). Writes
+    nothing else (no predictions store)."""
+    import duckdb
+
+    from twm.asof import WarehouseTooOldError
+    from twm.config import ROOT, league, settings
+    from twm.modules.regression_watch import backtest as bt
+    from twm.modules.regression_watch.backtest_report import (
+        build_backtest_report,
+        write_backtest_report,
+    )
+    from twm.modules.regression_watch.stability_report import _built_at
+
+    path = _warehouse_or_exit(db)
+    last = end if end is not None else settings().current_season - 1
+    if last < bt.FIRST_TEST_SEASON:
+        raise typer.BadParameter(f"--end must be {bt.FIRST_TEST_SEASON} or later")
+    try:
+        frame, asofs = bt.load_inputs(path, last)
+        result = bt.run_backtest(
+            frame, asofs, league(), last_season=last, n_boot=n_boot,
+            progress=lambda m: typer.echo(m, err=True),
+        )  # fmt: skip
+        report = build_backtest_report(result, league(), _built_at(path))
+    except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot run the backtest: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    target = out if out.is_absolute() else ROOT / out
+    csv_path = write_backtest_report(report, target)
+    for line in report.summary:
+        typer.echo(line)
+    typer.echo(f"wrote {target}")
+    typer.echo(f"wrote {csv_path}")
+
+
+@regression_app.command("project")
+def regression_project(
+    season: int = typer.Argument(..., help="Season, e.g. 2026."),
+    week: int = typer.Argument(..., help="Regular-season week: its official Tuesday as-of."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    position: str | None = typer.Option(None, "--position", help="Only QB, RB, WR or TE."),
+    top: int = typer.Option(15, "--top", help="Players shown per position (by projection)."),
+    csv_out: Path | None = typer.Option(
+        None, "--csv", help="Also write every universe player to this CSV file."
+    ),
+) -> None:
+    """Rest-of-season projection and Sell-high / Buy-low / Legit tags at a week's as-of (step
+    D3), with the variant and thresholds the backtest would use for that season (chosen on the
+    seasons before it). Prints a table; writes nothing unless --csv is given."""
+    import duckdb
+    import polars as pl
+
+    from twm.asof import WarehouseTooOldError
+    from twm.config import league
+    from twm.modules.regression_watch import backtest as bt
+    from twm.modules.regression_watch.tags import TAG_TITLES, TAGS
+
+    path = _warehouse_or_exit(db)
+    pos = position.upper() if position else None
+    if pos is not None and pos not in ("QB", "RB", "WR", "TE"):
+        raise typer.BadParameter(f"--position {position}: QB, RB, WR or TE")
+    try:
+        wp = bt.project_week(path, season, week, league())
+    except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot project: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    ch = wp.choice
+    typer.echo(f"{season} week {week}, as of {wp.as_of:%Y-%m-%d %H:%M} UTC; variant "
+               f"{ch.variant.name} ({ch.variant.describe()}); X Sell-high {ch.sell.x:g}, "
+               f"Buy-low {ch.buy.x:g} (chosen on {len(ch.validation_seasons)} earlier "
+               "seasons)")  # fmt: skip
+    table = wp.table.with_columns(
+        pl.concat_str(
+            [pl.when(pl.col(t)).then(pl.lit(TAG_TITLES[t])) for t in TAGS], separator=", ",
+            ignore_nulls=True,
+        ).alias("tags")
+    )  # fmt: skip
+    for p in ("QB", "RB", "WR", "TE"):
+        if pos is not None and p != pos:
+            continue
+        sub = table.filter(pl.col("position") == p).head(top)
+        typer.echo(f"\n{p}  name  team  games  PPG  xFP/g  FPOE/g  shrink  projection  tags")
+        for r in sub.iter_rows(named=True):
+            typer.echo(f"  {r['name'] or r['gsis_id']}  {r['team']}  {r['games']}  "
+                       f"{r['ppg']:.1f}  {r['xfp_pg']:.1f}  {r['fpoe_pg']:+.1f}  "
+                       f"{r['r_' + ch.variant.metric]:.2f}  {r['ppg_ros']:.1f}  "
+                       f"{r['tags']}")  # fmt: skip
+    if csv_out is not None:
+        keep = ["season", "week", "gsis_id", "name", "team", "position", "games", "g_opp", "ppg",
+                "xfp_pg", "fpoe_pg", "last3_ppg", "ppg_rank", "xfp_rank", "ppg_ros",
+                "fpoe_top", "fpoe_bottom", *TAGS, "tags"]  # fmt: skip
+        table.select(keep).write_csv(csv_out)
+        typer.echo(f"wrote {csv_out}")
+
+
 # --------------------------------------------------------------------------------------
 # The spec's generic entry points (PROJECT_SPEC 9): `twm train|backtest <module>`, `twm score`
 # --------------------------------------------------------------------------------------
@@ -1513,7 +1624,8 @@ def score(
         False, "--pinned", help="Use the owner-approved model (config/production_models.yaml)."
     ),
 ) -> None:
-    """Score every module's list at an official as-of (waiver_radar: `twm radar score`).
+    """Score every module's list at an official as-of (waiver_radar: `twm radar score`;
+    streamer: `twm streamer score`, always with its approved K model and D/ST rule).
 
     A list is always made from the data as it stood at a week's official as-of (the Tuesday
     14:00 UTC after the week's games), never at an arbitrary moment: `--as-of 2026-W3` is week
@@ -1523,7 +1635,8 @@ def score(
     Exit codes as `twm radar score` (3: the week's data has not arrived)."""
     from twm.asof import AsOfParseError, parse_as_of, week_at
 
-    chosen = [_module_or_exit(m) for m in (modules or list(MODULES))]
+    names = modules or [*MODULES, "streamer"]  # S2a: the streamer scores with its pins only
+    chosen = ["streamer" if m.strip().lower() == "streamer" else _module_or_exit(m) for m in names]
     season: int | None = None
     week: int | None = None
     if as_of is not None:
@@ -1544,7 +1657,16 @@ def score(
                 f"--as-of {target:%Y-%m-%d %H:%M} UTC is in the window of {season} week {week} "
                 f"(its list is made at the official as-of {official:%a %Y-%m-%d %H:%M} UTC)"
             )
-    for _module in dict.fromkeys(chosen):  # only waiver_radar exists
+    for module in dict.fromkeys(chosen):
+        if module == "streamer":
+            from twm.modules.streamer.cli import streamer_score
+
+            streamer_score(
+                season=season, week=week, allow_incomplete=allow_incomplete, limit=limit, db=db,
+                store=store, backtest_csv=Path("reports/streamer/backtest.csv"), out=None,
+                now=None,
+            )  # fmt: skip
+            continue
         radar_score(
             season=season, week=week, allow_incomplete=allow_incomplete, limit=limit,
             retrain=retrain, db=db, store=store, dataset=dataset, models_dir=None,
@@ -1592,7 +1714,9 @@ def _check_against_evaluation(store: Path, evaluation_csv: Path) -> list[str]:
 
 @model_app.command("check")
 def model_check(
-    module: str = typer.Argument("waiver_radar", help="Module: waiver_radar."),
+    module: str = typer.Argument(
+        "all", help="Module: waiver_radar, streamer, or all (every pinned module)."
+    ),
     season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
     evaluation_csv: Path = typer.Option(
         Path("reports/waiver_radar/evaluation.csv"),
@@ -1604,14 +1728,19 @@ def model_check(
     present; model file present, sha256 and version as pinned; every backtest file present
     with its sha256 and row count; and the snapshot reproduces the committed evaluation's rows
     of the production model (precision@10 pooled, by season and position, buckets, PR-AUC,
-    Brier, calibration). Changes nothing."""
+    Brier, calibration). The streamer's pins (K model, D/ST rule) are checked the same way
+    against reports/streamer/backtest.csv (S2a). Changes nothing."""
     import tempfile
 
     from twm import pins
     from twm.config import settings
+    from twm.modules.streamer.cli import check_pins as check_streamer_pins
 
-    key = _module_or_exit(module)
     chosen = season if season is not None else settings().current_season
+    if module.strip().lower() == "streamer":
+        check_streamer_pins(chosen)
+        return
+    key = "waiver_radar" if module.strip().lower() == "all" else _module_or_exit(module)
     try:
         pm, pin = pins.load_pinned(key, chosen)
         typer.echo(f"{key} {chosen}: approved model {pm.model_version} ({pin.file}, sha256 "
@@ -1634,6 +1763,8 @@ def model_check(
         )
         raise typer.Exit(code=1)
     typer.echo(f"  matches {evaluation_csv} (the production model's rows the store determines)")
+    if module.strip().lower() == "all" and any(k.startswith("streamer") for k in pins.read_pins()):
+        check_streamer_pins(chosen)
 
 
 @model_app.command("restore-backtest")

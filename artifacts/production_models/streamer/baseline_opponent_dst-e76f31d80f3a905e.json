@@ -1,0 +1,28 @@
+{
+  "column": "next_opp_points_per_game",
+  "description": "next opponent: points it allowed per game (K, more is better) / scored per game (DST, fewer is better)",
+  "format": 1,
+  "higher_is_better": false,
+  "label": "y_start",
+  "method": "baseline_opponent",
+  "model": "rule",
+  "model_version": "baseline_opponent_dst-e76f31d80f3a905e",
+  "module": "streamer",
+  "position": "DST",
+  "season": 2026,
+  "stored_name": "baseline_opponent_dst",
+  "tie_break": [
+    [
+      "kdst_points_last",
+      true
+    ],
+    [
+      "kdst_points_per_game",
+      true
+    ],
+    [
+      "kdst_preseason_rank",
+      false
+    ]
+  ]
+}

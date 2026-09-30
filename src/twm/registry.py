@@ -722,6 +722,125 @@ def _stability_entries() -> list[Entry]:
     ]
 
 
+def _projection_entries() -> list[Entry]:
+    """The rest-of-season projection and the tags (D3: twm.modules.regression_watch.projection,
+    tags). Texts quote the league shape (config/league.yaml)."""
+    from twm.modules.regression_watch import projection as pj
+    from twm.modules.regression_watch import tags as tg
+
+    lg = league()
+    sizes = ", ".join(f"{p} {n}" for p, n in pj.universe_sizes(lg).items())
+    starters = ", ".join(f"{p} top {n}" for p, n in lg.starter_thresholds().items())
+    grid = " / ".join("none" if h is None else str(h) for h in pj.HALF_LIVES)
+    decile = "top (bottom) ceil(n / 10) FPOE/game of his position's universe at that as-of"
+    rows = [
+        ("regression_universe", "Regression Watch universe", "concept", "players",
+         f"QB/RB/WR/TE with at least {pj.MIN_GAMES} games so far whose PPG or xFP/game ranks "
+         f"inside teams x (starting slots the position can fill, FLEX included) x "
+         f"{lg.candidate_pool_multiplier:g}: {sizes}",
+         "The fantasy-relevant players Regression Watch projects and tags each week.", False),
+        ("recency_weighted_xfp", "Recency-weighted xFP per game", "metric", "points per game",
+         "sum of 0.5 ** (k / h) x xFP over his games this season / sum of 0.5 ** (k / h), k = "
+         f"games before his latest one, h = the half-life ({grid} games; chosen per season on "
+         "earlier seasons)",
+         "His expected points per game, with recent games counting a little more.", True),
+        ("ppg_ros", "Rest-of-season projection", "metric", "points per game",
+         "recency-weighted xFP/game + r(g) x FPOE/game (spec: shrink toward 0) or m + r(g) x "
+         "(FPOE/game - m) (toward the position's average m); r(g) = shrinkage_factor after his "
+         "g games with an opportunity, estimated only on seasons before this one; the variant "
+         "(target, half-life, garbage time) is chosen on earlier seasons "
+         "(docs/regression_watch.md)",
+         "The points per game we expect for the rest of the season: his opportunity, plus the "
+         "small part of his luck-or-skill surplus that tends to last.", True),
+        ("sell_high", "Sell-high", "metric", "yes/no",
+         f"FPOE/game in the {decile.replace(' (bottom)', '')} AND ppg_ros at least X "
+         "(tag_threshold_x) below his PPG",
+         "He has scored well above what his chances were worth, and the projection says it "
+         "will fade: a good time to trade him away.", True),
+        ("buy_low", "Buy-low", "metric", "yes/no",
+         f"FPOE/game in the {decile.replace('top (bottom)', 'bottom')} AND ppg_ros at least X "
+         "above his PPG",
+         "He has scored well below what his chances were worth: his points should rise, so he "
+         "may be cheap to trade for.", True),
+        ("legit", "Legit", "metric", "yes/no",
+         f"PPG rank inside the starter threshold ({starters}) AND FPOE/game not in the top "
+         "decile of his position's universe",
+         "A starter whose production is carried by his opportunity, not by luck.", True),
+        ("tag_threshold_x", "Tag threshold X", "concept", "points per game",
+         f"per season, the X in 0, 0.5 .. 6 with the best Sell-high (Buy-low) precision on "
+         f"the earlier seasons among those tagging at least {tg.MIN_TAGS_PER_ASOF} players per "
+         "week; never chosen on the season it is used in",
+         "How far the projection must sit from his current PPG before we tag him.", False),
+        ("rest_of_season_ppg", "Rest-of-season PPG (actual)", "label", "points per game",
+         "fantasy points per game over his regular-season games public after the as-of "
+         f"(graded only with at least {pj.MIN_GAMES} such games)",
+         "What he really scored per game afterwards: what the projection is graded on.", False),
+    ]  # fmt: skip
+    return [
+        Entry(
+            name=name,
+            title=title,
+            kind=kind,
+            modules=("regression_watch",),
+            unit=unit,
+            formula=formula,
+            explanation=explanation,
+            source="twm.modules.regression_watch."
+            + ("tags" if kind == "metric" and unit == "yes/no" else "projection"),
+            step="D3",
+            model_output=model,
+        )  # fmt: skip
+        for name, title, kind, unit, formula, explanation, model in rows
+    ]
+
+
+# The streamer's reason sentences (step S2a, twm.modules.streamer.reasons): (yes / value, no).
+# The games-so-far features have none: they are never reasons (they say how much data there
+# is, not why a pick is good).
+_STREAMER_REASONS: dict[str, tuple[str, str | None]] = {
+    "kdst_points_per_game": ("Has scored {value:.1f} fantasy points per game this season", None),
+    "kdst_ppg_rank": ("Ranks #{value:.0f} at {pos} in fantasy points per game this season", None),
+    "kdst_preseason_rank": ("Was ranked #{value:.0f} at {pos} before the season", None),
+    "kdst_points_last": ("Scored {value:.1f} fantasy points in the last game", None),
+    "is_team_kicker": ("Is {team}'s kicker now: he kicked in its latest game", None),
+    "k_fg_att_per_game": ("Tries {value:.1f} field goals per game", None),
+    "k_pat_att_per_game": ("Kicks {value:.1f} extra points per game (his offense scores "
+                           "touchdowns)", None),
+    "k_fg_att_40_plus_per_game": ("Tries {value:.1f} field goals of 40+ yards per game (long "
+                                  "kicks score more)", None),
+    "k_fg_pct_0_39": ("Has made {value:.0%} of his field goals under 40 yards this season", None),
+    "k_fg_pct_40_49": ("Has made {value:.0%} of his 40-49-yard field goals this season", None),
+    "k_fg_pct_50_plus": ("Has made {value:.0%} of his 50+ yard field goals this season", None),
+    "dst_sacks_per_game": ("Gets {value:.1f} sacks per game", None),
+    "dst_takeaways_per_game": ("Forces {value:.1f} takeaways (interceptions and fumbles) per "
+                               "game", None),
+    "dst_tds_per_game": ("Scores {value:.2f} defense or return touchdowns per game", None),
+    "dst_points_allowed_per_game": ("Allows {value:.1f} points per game", None),
+    "team_points_per_game": ("{team} scores {value:.1f} points per game", None),
+    "team_rz_trips_per_game": ("{team} reaches the red zone {value:.1f} times per game", None),
+    "team_rz_stalls_per_game": ("{team}'s red-zone drives stall {value:.1f} times per game "
+                                "(short field-goal chances)", None),
+    "team_rz_stall_rate": ("{team} scores no touchdown on {value:.0%} of its red-zone trips",
+                           None),
+    "next_opp_points_allowed_per_game": ("Next week's opponent allows {value:.1f} points per "
+                                         "game", None),
+    "next_opp_rz_trips_allowed_per_game": ("Next week's opponent allows {value:.1f} red-zone "
+                                           "trips per game", None),
+    "next_opp_rz_stall_rate_forced": ("Next week's opponent keeps {value:.0%} of red-zone trips "
+                                      "out of the end zone", None),
+    "next_opp_points_per_game": ("Next week's opponent scores {value:.1f} points per game", None),
+    "next_opp_sacks_allowed_per_game": ("Next week's opponent gives up {value:.1f} sacks per "
+                                        "game", None),
+    "next_opp_giveaways_per_game": ("Next week's opponent turns the ball over {value:.1f} times "
+                                    "per game", None),
+    "next_is_home": ("Plays at home next week", None),
+    "next_venue_dome": ("Next week's game is indoors: no wind or rain", None),
+    "next_venue_retractable": ("Next week's stadium has a retractable roof", None),
+    "weekly_ecr_rank": ("Experts ranked {player} #{value:.0f} at {pos} last week", None),
+    "weekly_ecr_listed": ("Was on the experts' weekly {pos} list", None),
+}  # fmt: skip
+
+
 def _streamer_entries() -> list[Entry]:
     """The K and D/ST streamer's features (step S1c, twm.modules.streamer.features) and its
     label (S1b), one entry per column."""
@@ -918,6 +1037,8 @@ def _streamer_entries() -> list[Entry]:
             explanation=explanation,
             source=f"{feat}; {source}",
             step="S1c",
+            reason_template=_STREAMER_REASONS.get(name, (None, None))[0],
+            reason_if_false=_STREAMER_REASONS.get(name, (None, None))[1],
         )
         for name, title, unit, formula, explanation, source in rows
     ] + [
@@ -1333,6 +1454,7 @@ def _entries() -> list[Entry]:
         *_feature_entries(),
         *_regression_entries(),
         *_stability_entries(),
+        *_projection_entries(),
         *_streamer_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
@@ -1677,6 +1799,7 @@ def glossary_markdown() -> str:
                 said = f'"{e.reason_template}"'
                 if e.reason_if_false:
                     said += f' (when no: "{e.reason_if_false}")'
-                lines.append(f"- **Waiver Radar reason:** {said}")
+                who = "Streamer" if "streamer" in e.modules else "Waiver Radar"
+                lines.append(f"- **{who} reason:** {said}")
             lines.append("")
     return "\n".join(lines).rstrip() + "\n"

@@ -235,6 +235,73 @@ split (ffopportunity's weekly rows); the bootstrap treats player-seasons as inde
 FPOE average of QB player-seasons is below zero (-0.8 per game: lost fumbles have no expected
 value), so shrinking toward 0 or toward the position average is a D3 choice (`prior_mean`).
 
+## The rest-of-season projection and the tags (step D3)
+
+`projection.py`, `tags.py`, `backtest.py`; results in `reports/regression_watch/backtest.md`
+(+ .csv); `twm glossary ppg_ros` (and `sell_high`, `buy_low`, `legit`) explains each number.
+
+**Who is projected.** Every Tuesday (the official as-of), the *universe*: QBs, RBs, WRs and TEs
+with at least 3 games this season whose points per game (PPG) or xFP per game ranks inside
+teams x (the starting slots the position can fill, FLEX included) x 1.5. In the 12-team league
+of `config/league.yaml` that is QB 18, RB 54, WR 54, TE 36; the numbers follow the config (a
+10-team league gets 15, 45, 45, 30).
+
+**The projection.** Points per game for the rest of the season =
+
+    his xFP per game (recent games count a little more) + r(g) x his FPOE per game
+
+His opportunity carries over; of his points over expected only the share r(g) that repeats
+(D2's shrinkage factor after his g games, about 0.1-0.2 after 8 games) is kept. For season S,
+r(g) comes only from the seasons 2009 to S-1. Example (`twm regression project 2026 3`): Jaxon
+Smith-Njigba scored 34.7 points per game on 22.2 xFP (+12.5 over expected): projection 22.9.
+
+**What the backtest chose (never looking at the season it tests).** 24 variants were
+compared: shrink toward 0 (the spec's formula) or toward the position's average FPOE (QBs
+average about -0.8 a game); recent games weighted with a half-life of 8, 4 or 2 games, or not
+at all; garbage time kept, left out of the efficiency, or left out of both parts. For test
+season S the variant with the smallest error on the earlier seasons 2010 to S-1 is used. The
+choice: toward the position average, with a half-life of 4 games (2011-2013), then 8 games
+(2014-2025). Leaving garbage time out never helped (as D2 found, it does not make FPOE
+stickier). The spec's formula as written is only 0.03 points per game behind.
+
+**How good is it?** Tested on 2011-2025 at the as-ofs after weeks 4, 6, 8 and 10 (9,985
+player-weeks), against what each player really scored per game afterwards (players with fewer
+than 3 games left are not graded; the report counts them). Mean absolute error, points per
+game (95% intervals from resampling whole seasons):
+
+| | projection | season-to-date PPG | last-3 PPG | projection - PPG |
+|---|---|---|---|---|
+| all positions | 3.21 | 3.41 | 4.02 | -0.19 (-0.25 to -0.13) |
+| QB / RB / WR / TE | 3.38 / 3.47 / 3.40 / 2.49 | 3.50 / 3.58 / 3.64 / 2.75 | 4.18 / 4.20 / 4.33 / 3.23 | QB -0.11 (-0.31 to 0.09); RB, WR, TE clearly better |
+
+The P1 target ("beats season-to-date PPG on MAE") is **met**. The gain is largest early (week
+4: 3.16 against 3.48) and small late (week 14: 3.85 against 3.92). For QBs the interval
+includes 0. The *order* of the players is no better than PPG's (Spearman 0.525 against 0.516,
+difference within noise): the projection mostly corrects each player's level toward his
+opportunity.
+
+**The tags** (per position, at each as-of; X chosen on the earlier seasons as the most accurate
+value that still tags at least 3 players a week):
+
+- **Sell-high**: FPOE per game in the top tenth of his position AND a projection at least X
+  (4.5-5.5) points per game below his PPG. 92% of 237 tags came true (he scored less per game
+  afterwards), against 60% for any universe player and 82% for the top tenth alone.
+- **Buy-low**: the mirror (bottom tenth, projection at least X, usually 3, above his PPG). 62%
+  came true against 39% for anyone, but 61% for the bottom tenth alone: the X adds little.
+- **Legit**: a starter by PPG (QB top 12, RB 24, WR 24, TE 12) whose FPOE is NOT in the top
+  tenth: his points come from his role. 61% were still starters for the rest of the season,
+  the same as all starters (61%); starters with top-tenth FPOE stayed 63% of the time (they rank
+  higher, so they have further to fall). Read Legit as a description, not a forecast.
+
+**Point in time.** Each projection of season S uses only S's games public at the as-of and the
+seasons before S; the variant and X for S are chosen on seasons before S. Tests change season S
+(its shrinkage and choices stay the same) and season S+1 (nothing of S changes); the live
+command reads the warehouse through an as-of view and matches the backtest to the bit.
+
+**Limits.** xFP and the garbage-time flag come from nflverse models trained on later seasons
+too (PROJECT_SPEC 6.3); a player is graded on the games he played; one variant serves all
+positions; the season-block intervals treat seasons as independent.
+
 ## Commands
 
 ```
@@ -242,6 +309,8 @@ uv run twm regression player "CeeDee Lamb" --season 2023   # weekly points, xFP,
 uv run twm regression player 00-0036358 --as-of 2026-W3     # as it looked at week 3's Tuesday as-of
 uv run twm regression xfp-report                            # reports/regression_watch/xfp.md (+ .csv)
 uv run twm regression stability                             # reports/regression_watch/stability.md (+ .csv), 2009 to last season
-uv run pytest tests/test_regression_watch.py tests/test_regression_stability.py   # offline tests
+uv run twm regression project 2026 3 --position WR          # projections and tags at week 3's as-of (--csv to save)
+uv run twm regression backtest                              # reports/regression_watch/backtest.md (+ .csv), about 20 s
+uv run pytest tests/test_regression_watch.py tests/test_regression_stability.py tests/test_regression_projection.py   # offline tests
 uv run pytest -m realdata -k regression                     # the checks on the real cache
 ```

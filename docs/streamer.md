@@ -10,12 +10,14 @@ below; the full tables are in `reports/streamer/backtest.md`.
 Code: `src/twm/modules/streamer/` (`pool.py` who is probably on waivers, `labels.py` the target,
 `features.py` what the model knows, `dataset.py` all three in one table, `models.py` the
 baselines and models, `backtest.py` the walk-forward backtest, `backtest_report.py` its report,
-`cli.py` the commands); scoring in `src/twm/scoring_kdst.py` (docs/scoring.md); tables
+`production.py` the approved K model and D/ST rule with their pins, `confidence.py` the chance
+and priority, `reasons.py` the reasons, `weekly.py` the weekly list, `cli.py` the commands); scoring in `src/twm/scoring_kdst.py` (docs/scoring.md); tables
 `fact_kicker_week`, `fact_defense_week`, `fact_ranking_kdst` (docs/warehouse.md). Reports:
 `reports/streamer/pool_labels.md` (pool sizes and start rates) and `reports/streamer/backtest.md`
 (the backtest). Tests: `tests/test_scoring_kdst.py`, `tests/test_kdst_warehouse.py`,
 `tests/test_streamer_pool.py`, `tests/test_streamer_labels.py`,
-`tests/test_streamer_features.py`, `tests/test_streamer_backtest.py`.
+`tests/test_streamer_features.py`, `tests/test_streamer_backtest.py`,
+`tests/test_streamer_production.py`, `tests/test_streamer_weekly.py`.
 
 ## What streaming is
 
@@ -123,19 +125,22 @@ Share of picks that scored like a starter the next week, 2013-2025 (from
 | | Kickers | D/STs |
 |---|---|---|
 | a random pool pick (base rate) | 24.6% | 37.4% |
-| model: top 5 (precision@5) | 37.9% (36.0-39.6) | 39.1% (36.1-42.2) |
-| best simple rule: top 5 | 36.6% (last game; points per game the same) | 40.2% (next opponent) |
-| model: #1 pick | 42.9% (38.2-47.8) | 46.5% (39.4-53.0) |
-| best simple rule: #1 pick | 41.0% (last game) | 49.8% (next opponent) |
+| model: top 5 (precision@5) | 38.4% (36.3-40.3) | 39.1% (36.1-42.2) |
+| best simple rule: top 5 | 36.9% (last game; points per game 36.7%) | 40.3% (next opponent) |
+| model: #1 pick | 42.4% (37.1-47.6) | 46.5% (39.4-53.0) |
+| best simple rule: #1 pick | 40.0% (last game) | 49.8% (next opponent) |
 
-- **Kickers**: the model is ahead of every simple rule, but only by about 1 pick in 100 on the
+(Numbers of the S2a re-run: ties are now broken by last game's points instead of by id, and a
+tuning setting that makes a constant model is skipped; S1d's first run had kickers at 37.9%.)
+
+- **Kickers**: the model is ahead of every simple rule, but only by about 1 pick in 70 on the
   top 5 against "last game" and "points per game", and the interval of that gap includes zero
-  (-0.4 to +2.9 points). It is clearly better than "next opponent" alone, mostly because that
+  (-0.2 to +3.0 points). It is clearly better than "next opponent" alone, mostly because that
   rule happily ranks practice-squad kickers who will not play.
-- **D/STs**: the model beats "last game" (clearly) and "points per game" (almost clearly), but
+- **D/STs**: the model beats "points per game" (just clearly) and "last game" (almost), but
   NOT "stream against the weakest offense": that rule is 1 point better on the top 5 and 3
   points better on the #1 pick (neither gap is certain). For D/STs the old streaming rule of
-  thumb is as good as our model.
+  thumb is as good as our model, so **the weekly D/ST list uses that rule** (below).
 - **Probabilities**: the model also gives each pick a chance of starting. For kickers these
   chances are better than saying "25%" for everyone, but unreliable at the extremes; for D/STs
   they are WORSE than saying "37%" for everyone. Read the list as an order, not as percentages.
@@ -144,6 +149,50 @@ In plain words: streaming works (the top of any sensible list starts far more of
 random free agent), but on Tuesday, without betting lines or weather, most of what can be known
 is already in last week's points (kickers) or in the opponent's scoring (D/STs). The model adds
 little on top.
+
+## The weekly list (S2a)
+
+Every Tuesday as-of, `uv run twm streamer score` ranks that week's pool with the methods the
+owner approved, and writes `reports/streamer/weekly/<season>-W<nn>.md`:
+
+- **Kickers: the logistic regression.** It is the fold the backtest would use for the season:
+  trained on every earlier season (labels public by the season's first Tuesday), tuned and
+  calibrated on the last one. A tuning setting whose model gives every kicker the same score is
+  never chosen, and the production fold is refused if it is constant. Kickers with the same
+  score are ordered by **last game's points, then points per game, then preseason rank**
+  (never by an id, unless all of these are equal). The 2026 model (trained 2012-2025) kept one
+  feature, "he kicked in his team's latest game": in practice, team kickers first, ordered by
+  last game's points.
+- **D/STs: a simple rule, not a model.** Ranked by how many points next week's opponent scores
+  per game, fewer first (ties: last game's points, then points per game). In the 2013-2025
+  backtest this rule picked starters a little more often than our model (top 5: 40.3% vs
+  39.1%; #1 pick: 49.8% vs 46.5%), so a method that lost is not shipped. A D/ST has no model
+  probability.
+- **Chance and its range**: read off the frozen backtest of the seasons BEFORE the list's
+  season (a reconstructed 2020 list never uses 2020-2025 results). Kickers: how often kickers
+  the model scored alike (bins of at least 200 backtest picks) started, with a 90% interval.
+  D/STs: how often the rule's pick at that rank started (bins of ranks with at least 100 picks;
+  a better rank never shows a lower chance). For 2026 the rule's #1 pick started 49.8% of the
+  time, #2 41.3%, #3 39.2%.
+- **Priority** from the chance, as on the Waiver Radar: must-add 50%+, speculative 25-50%,
+  watch below 25%. In the 2013-2025 backtest no kicker bin and no D/ST rank reached 50%, so
+  today's lists have no must-add: streaming picks are coin flips at best, and the list says so.
+- **Why**: plain-English reasons from the registry's sentences (docs/glossary.md, "Streamer
+  reason"): for kickers the features that push the model's score up (the Radar's rules), plus
+  the tie-breaker when a kicker shares his score; for D/STs the rule's own number.
+- **Data check**: the same freshness rules as the Radar (exit code 3 when the week's data has
+  not arrived; `--allow-incomplete` marks the list), plus kicker and D/ST rows for every played
+  game. **Live or reconstructed**: 'live' only when run on the real clock between the Tuesday
+  as-of and the next week's first kickoff; any other run is stored as 'backtest'.
+- **Stored** in the predictions store (`entity_type` 'kicker' / 'team_defense', one version for
+  the K model and one for the D/ST rule); a live week is never overwritten. No outcomes are
+  stored (the store's outcomes table holds the Radar's labels).
+- **Approved and pinned** in `config/production_models.yaml` (`streamer_k`: `model: logit`;
+  `streamer_dst`: `model: rule`) with their files under `artifacts/production_models/streamer/`:
+  the K model (a pickle, opened only after its sha256 matches), the rule's definition (JSON),
+  and the frozen backtests (the K predictions with their labels; the rule's hit-rate table: per
+  season, list length and rank, lists and starts). `uv run twm model check` verifies every
+  sha256 and that the snapshots reproduce `reports/streamer/backtest.csv`.
 
 ## Limitations
 
@@ -159,9 +208,12 @@ little on top.
 - **Gaps in the data**: no kicker pool in week 1 of 2012-2015 (rosters of that era are only
   published after the games), no answer for bye weeks or after the last regular-season week,
   and the FantasyPros weekly ranks start in late 2020 and are one week old on Tuesday.
-- **Some trained models found nothing**: in a few seasons the chosen model had no signal left
-  (a constant score) and ranked by id instead; `reports/streamer/backtest.md` marks those
-  seasons ("constant model"). The logistic regression kept for kickers had one (2018).
+- **Some trained models found (almost) nothing**: a tuning setting whose model scores every
+  pick alike (e.g. the strongest L1 penalty) is now skipped, but a model with ONE feature left
+  is allowed: the kicker folds of 2021 and of 2026 (the one ranking this season's lists) keep
+  only "is his team's kicker", so among team kickers the order is last game's points (the
+  tie-breaker). LightGBM's thin 2013 fold (default settings, no tuning) is still constant;
+  `reports/streamer/backtest.md` marks it.
 - **Probabilities are calibrated on one season** (about 80-300 rows), which is noisy; see above.
 - The models are trained once before each season (no updates during the season).
 
@@ -173,6 +225,16 @@ uv run twm streamer backtest                 # the backtest -> reports/streamer/
 uv run twm streamer backtest --store PATH    # ... and store every prediction in a predictions store
 ```
 
-`twm streamer backtest` does not write any predictions store unless `--store` is given (step
-S1 never writes the owner's `data/predictions.duckdb`). The live weekly list, the site tabs and
-the nightly pipeline come in step S2.
+```bash
+uv run twm streamer score                    # this week's list (approved methods) -> store + report
+uv run twm streamer score --season 2026 --week 3 --store PATH   # a given week, another store
+uv run twm streamer pin --store PATH         # approve: train the K fold, write the rule, pin both
+uv run twm model check                       # the Radar's and the streamer's pins (sha256, report)
+uv run twm score                             # every module's list (the Radar, then the streamer)
+```
+
+`twm streamer backtest` does not write any predictions store unless `--store` is given;
+`twm streamer score` writes the configured store (`data/predictions.duckdb`) unless `--store`
+is given. `twm streamer pin` reads the store holding the backtest to approve (read-only) and
+writes `artifacts/production_models/streamer/` and `config/production_models.yaml`: review,
+then commit. The site tabs and the nightly pipeline come in step S2b.

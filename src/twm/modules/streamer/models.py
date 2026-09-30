@@ -23,8 +23,15 @@ are (no streamer feature is categorical, so their categorical branch is empty).
   allowed per game (more is better); for a D/ST the points the next opponent scored per game
   (fewer is better).
 
-A row without a value is ranked below every row with one. **Ranks**: within each (as-of,
-position), highest score first; ties -> higher uncalibrated score, then the smaller entity_id.
+A row without a value is ranked below every row with one. **Ranks** (:func:`rank_scores`):
+within each (as-of, position), highest score first; ties (and every row of a constant model)
+-> higher uncalibrated score, then last game's points, then points per game, then the better
+preseason rank (S2a reviewer rule: never by id while any of these differ); only rows equal on
+all of them fall back to the smaller entity_id, so the order stays total and reproducible.
+
+**Constant models are invalid** (S2a): a tuning setting whose model scores every validation
+row the same (e.g. C=0.01 with an L1 penalty zeroes every weight) gets no tuning score
+(:func:`tune_metric` returns None), so the harness never picks it over a real model.
 """
 
 from __future__ import annotations
@@ -50,6 +57,11 @@ KEYS = ("season", "week", "position", "entity_id")
 LIST_KS = (1, 3, 5)  # precision@1 = "the #1 pick started"
 TUNE_K = 5
 TRAIN_ON = ("pool", "universe")
+# Tie-breakers after the score and the raw score (column, descending), nulls last.
+TIE_BREAK: tuple[tuple[str, bool], ...] = (
+    ("kdst_points_last", True), ("kdst_points_per_game", True), ("kdst_preseason_rank", False),
+)  # fmt: skip
+TIE_COLUMNS = tuple(c for c, _ in TIE_BREAK)
 
 
 @dataclass(frozen=True)
@@ -130,12 +142,23 @@ def baseline_scores(rows: pl.DataFrame, name: str) -> pl.DataFrame:
             continue
         v = pl.col(col).cast(pl.Float64)
         value = pl.when(pl.col("position") == pos).then(v if higher else -v).otherwise(value)
-    return rows.select(*KEYS, value.alias(RAW_SCORE), value.alias(SCORE))
+    return rows.select(*KEYS, value.alias(RAW_SCORE), value.alias(SCORE), *TIE_COLUMNS)
 
 
 def rank_scores(scored: pl.DataFrame) -> pl.DataFrame:
-    """Rank within (as-of, position): score desc, raw_score desc, entity_id asc; no score last."""
-    return add_rank(scored, group=GROUP, by=[(SCORE, True), (RAW_SCORE, True)], id_col=ID)
+    """Rank within (as-of, position): score desc, raw_score desc, then :data:`TIE_BREAK`
+    (last game's points, points per game, preseason rank), entity_id only when all are equal;
+    no score last. ``scored`` must carry the tie-break columns."""
+    missing = [c for c in TIE_COLUMNS if c not in scored.columns]
+    if missing:
+        raise ValueError(f"ranking needs the tie-break columns {missing}")
+    by = [(SCORE, True), (RAW_SCORE, True), *TIE_BREAK]
+    return add_rank(scored, group=GROUP, by=by, id_col=ID)
+
+
+def is_constant(scores: pl.Series) -> bool:
+    """True when every score is the same (a model that cannot rank anything)."""
+    return scores.len() > 0 and scores.n_unique() <= 1
 
 
 def list_table(ranked: pl.DataFrame, label: str = LABEL) -> pl.DataFrame:
@@ -153,9 +176,12 @@ def list_table(ranked: pl.DataFrame, label: str = LABEL) -> pl.DataFrame:
 
 
 def tune_metric():
-    """Pooled precision@5 over the validation season's pool lists (uncalibrated score)."""
+    """Pooled precision@5 over the validation season's pool lists (uncalibrated score); None
+    (never chosen while another setting has a score) for a constant model."""
 
     def metric(val: pl.DataFrame) -> float | None:
+        if is_constant(val.get_column(RAW_SCORE)):
+            return None  # a constant model is not a valid setting (S2a)
         rows = val.filter(pl.col("in_pool")) if "in_pool" in val.columns else val
         scored = rows.with_columns(pl.col(RAW_SCORE).alias(SCORE))
         return pooled_precision(

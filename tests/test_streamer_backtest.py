@@ -120,22 +120,45 @@ def test_pooled_interval_and_paired_difference_on_toy_lists():
     assert (d.value, d.lo, d.hi, d.share_above_zero) == pytest.approx((0.2, 0.2, 0.2, 1.0))
 
 
-def test_baselines_rank_by_their_column_with_nulls_last_and_ties_by_id():
+def test_baselines_rank_by_their_column_with_nulls_last_and_ties_by_last_points():
     rows = pl.DataFrame({
-        "season": [2020] * 4, "week": [1] * 4, "position": ["DST"] * 4,
-        "entity_id": ["DST-B", "DST-A", "DST-C", "DST-D"],
-        "next_opp_points_per_game": [30.0, 17.0, None, 17.0],
+        "season": [2020] * 5, "week": [1] * 5, "position": ["DST"] * 5,
+        "entity_id": ["DST-B", "DST-A", "DST-C", "DST-D", "DST-E"],
+        "next_opp_points_per_game": [30.0, 17.0, None, 17.0, 17.0],
+        "kdst_points_last": [1.0, 5.0, 2.0, 9.0, 5.0],
+        "kdst_points_per_game": [1.0, 4.0, 2.0, 1.0, 6.0],
+        "kdst_preseason_rank": [1, 2, 3, 4, 5],
     })  # fmt: skip
     ranked = sm.rank_scores(sm.baseline_scores(rows, "baseline_opponent"))
-    # DST: FEWER points scored by the next opponent is better; the tie goes to DST-A
-    assert ranked.get_column("entity_id").to_list() == ["DST-A", "DST-D", "DST-B", "DST-C"]
-    assert ranked.get_column("rank").to_list() == [1, 2, 3, 4]
+    # DST: FEWER points scored by the next opponent is better; the three-way tie at 17 goes to
+    # last game's points (D 9), then points per game (E 6 before A 4), never to the id
+    assert ranked.get_column("entity_id").to_list() == ["DST-D", "DST-E", "DST-A", "DST-B",
+                                                        "DST-C"]  # fmt: skip
+    assert ranked.get_column("rank").to_list() == [1, 2, 3, 4, 5]
     k = rows.with_columns(
         pl.lit("K").alias("position"),
         pl.col("next_opp_points_per_game").alias("next_opp_points_allowed_per_game"),
     )
     ranked_k = sm.rank_scores(sm.baseline_scores(k, "baseline_opponent"))
-    assert ranked_k.get_column("entity_id").to_list() == ["DST-B", "DST-A", "DST-D", "DST-C"]
+    assert ranked_k.get_column("entity_id").to_list()[0] == "DST-B"
+    with pytest.raises(ValueError, match="tie-break"):
+        sm.rank_scores(sm.baseline_scores(rows, "baseline_opponent").drop("kdst_points_last"))
+
+
+def test_a_constant_model_gets_no_tuning_score():
+    """S2a: a setting whose model scores every validation row alike (C=0.01 with L1) is
+    invalid: the tune metric gives it None, so the harness never picks it."""
+    val = pl.DataFrame({
+        "season": [2020] * 6, "week": [1, 1, 1, 2, 2, 2], "position": ["K"] * 6,
+        "entity_id": list("abcabc"), "in_pool": [True] * 6, "y_start": [1, 0, 0, 0, 1, 0],
+        "kdst_points_last": [1.0] * 6, "kdst_points_per_game": [1.0] * 6,
+        "kdst_preseason_rank": [1] * 6,
+    })  # fmt: skip
+    metric = sm.tune_metric()
+    assert metric(val.with_columns(pl.lit(0.3).alias("raw_score"))) is None
+    scored = val.with_columns(pl.Series("raw_score", [0.9, 0.1, 0.2, 0.1, 0.8, 0.3]))
+    assert metric(scored) == pytest.approx(1 / 3)  # one start in each list of 3
+    assert sm.is_constant(pl.Series([0.2, 0.2])) and not sm.is_constant(pl.Series([0.2, 0.3]))
 
 
 def test_position_features_are_registered_and_exclude_the_other_position():
@@ -237,7 +260,7 @@ def test_store_frames_write_to_a_predictions_store(run, tmp_path):
     assert counts == {"predictions": n_graded * 5, "model_versions": 5 * 2 * 2, "outcomes": 0}
     back = pr.read_table(store, "predictions")
     types = back.group_by("rank_group").agg(pl.col("entity_type").unique()).sort("rank_group")
-    assert types.rows() == [("DST", ["team"]), ("K", ["player"])]
+    assert types.rows() == [("DST", ["team_defense"]), ("K", ["kicker"])]
     assert set(back.get_column("module")) == {"streamer"} and set(back["horizon"]) == {1}
     names = set(pr.read_table(store, "model_versions").get_column("model"))
     assert names == {bt.stored_name(m, p) for m in sm.ALL_METHODS for p in sm.POSITIONS}

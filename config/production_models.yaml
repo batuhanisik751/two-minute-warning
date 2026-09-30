@@ -4,6 +4,13 @@
 # snapshot named here, after checking every file's sha256. Written by `uv run twm model pin`
 # (or copied from the retrain workflow's artifact after review); change it only by committing
 # a reviewed model.
+regression_watch:
+  season: 2026
+  model_version: mean_flat_all-77146b2e5d2169fc
+  file: artifacts/production_models/regression_watch/mean_flat_all-77146b2e5d2169fc.json
+  sha256: 7e3e2773e7ab0689792dfb20405c6101520bd715c2e321453662e362339c2be1
+  model: params
+  approved: '2026-09-30'
 streamer_dst:
   season: 2026
   model_version: baseline_opponent_dst-e76f31d80f3a905e

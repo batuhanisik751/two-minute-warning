@@ -1488,22 +1488,230 @@ def regression_project(
         typer.echo(f"wrote {csv_out}")
 
 
+def _regression_approved(season: int):
+    """The approved Regression Watch parameters (sha256 checked before the file is read)."""
+    from twm.modules.regression_watch import production as rprod
+
+    return rprod.load_pinned_params(season)[0]
+
+
+@regression_app.command("score")
+def regression_score(
+    season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+    week: int | None = typer.Option(
+        None,
+        "--week",
+        help="Week N: the list at its Tuesday as-of (default: the latest week "
+        "whose as-of has passed).",
+    ),  # fmt: skip
+    allow_incomplete: bool = typer.Option(
+        False,
+        "--allow-incomplete",
+        help="Score even if some of the week's data has not arrived (the list is marked).",
+    ),  # fmt: skip
+    limit: int = typer.Option(5, "--limit", help="Players per tag to print."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    store: Path | None = typer.Option(
+        None, "--store", help="Predictions store (default: settings paths.predictions)."
+    ),
+    backtest_csv: Path = typer.Option(
+        Path("reports/regression_watch/backtest.csv"),
+        "--backtest-csv",
+        help="The committed backtest (the list's notes on each tag quote it).",
+    ),  # fmt: skip
+    out: Path | None = typer.Option(
+        None, "--out", help="Report (default: reports/regression_watch/weekly/<season>-W<nn>.md)."
+    ),
+    now: str | None = typer.Option(
+        None,
+        "--now",
+        hidden=True,
+        help="Pretend it is this UTC time (ISO); the list is then never stored as 'live'.",
+    ),  # fmt: skip
+) -> None:
+    """Regression Watch's weekly list with the owner-approved frozen parameters
+    (config/production_models.yaml, sha256-checked; nothing is re-estimated): checks the
+    week's data (exit code 3 if it has not arrived), stores every universe player's
+    rest-of-season projection and tag, grades stored lists of finished seasons, writes the
+    weekly report and prints the Sell-high and Buy-low tops (docs/regression_watch.md)."""
+    import polars as pl
+
+    from twm import pins
+    from twm import predictions as pr
+    from twm.asof import WarehouseTooOldError, weekly_as_of
+    from twm.config import ROOT, league, settings
+    from twm.modules.regression_watch import weekly as rwk
+
+    path = _warehouse_or_exit(db)
+    clock = _clock(now)
+    chosen = season if season is not None else settings().current_season
+    try:
+        wk = week if week is not None else rwk.rw.default_week(path, chosen, clock)
+        as_of = weekly_as_of(path, chosen, wk)
+    except LookupError as e:
+        typer.echo(f"cannot score: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    fresh = rwk.check_freshness(rwk.freshness_inputs(path, chosen, wk), chosen, wk, as_of, clock)
+    if not fresh.ok and not allow_incomplete:
+        typer.echo(fresh.message(), err=True)
+        raise typer.Exit(code=rwk.EXIT_NOT_READY)
+    store_path = _project_path(store if store is not None else pr.default_path())
+    try:
+        params = _regression_approved(chosen)
+        run = rwk.run_week(path, chosen, wk, params=params, league=league(), now=clock,
+                           allow_incomplete=allow_incomplete, real_clock=now is None)  # fmt: skip
+    except rwk.rw.NotReadyError as e:  # pragma: no cover - checked above; data changed meanwhile
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=rwk.EXIT_NOT_READY) from e
+    except (pins.PinError, WarehouseTooOldError, LookupError, ValueError) as e:
+        typer.echo(f"cannot score: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    if run.table.height == 0:
+        typer.echo(f"{chosen} week {wk}: no player has 3 games yet at the as-of, so there is no "
+                   "Regression Watch list this week (nothing stored)")  # fmt: skip
+        return
+    try:
+        counts = rwk.store_week(run, store_path, created_at=clock.replace(tzinfo=None))
+    except pr.LiveWeekError as e:
+        typer.echo(f"not stored: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    graded = rwk.update_outcomes(path, store_path, clock)
+    command = f"uv run twm regression score --season {chosen} --week {wk}" + (
+        " --allow-incomplete" if allow_incomplete else "")  # fmt: skip
+    notes = rwk.tag_notes(_project_path(backtest_csv), chosen)
+    text = rwk.build_report(run, league(), generated=f"Generated at {clock:%Y-%m-%d %H:%M} UTC.",
+                            command=command, notes=notes)  # fmt: skip
+    target = _project_path(out) if out is not None else rwk.report_path(chosen, wk)
+    rwk.write_report(text, target)
+    typer.echo(f"{chosen} week {wk}, as-of {as_of:%a %Y-%m-%d %H:%M} UTC: stored as '{run.kind}'"
+               + (" (INCOMPLETE DATA)" if run.incomplete else ""))  # fmt: skip
+    typer.echo(f"approved parameters: {params.describe()}")
+    t = run.table
+    for tag, gap in (("sell_high", pl.col("ppg") - pl.col("ppg_ros")),
+                     ("buy_low", pl.col("ppg_ros") - pl.col("ppg"))):  # fmt: skip
+        top = t.filter(pl.col(tag)).with_columns(gap.alias("_gap"))
+        top = top.sort(["_gap", "gsis_id"], descending=[True, False]).head(limit)
+        typer.echo(f"{tag.replace('_', '-').capitalize()} ({t.filter(pl.col(tag)).height}):")
+        for r in top.iter_rows(named=True):
+            typer.echo(f"  {r['name'] or r['gsis_id']} {r['position']} {r['team']}: PPG "
+                       f"{r['ppg']:.1f}, xFP/g {r['xfp_pg']:.1f}, FPOE/g {r['fpoe_pg']:+.1f}, "
+                       f"projection {r['ppg_ros']:.1f}")  # fmt: skip
+    typer.echo(f"Legit: {t.filter(pl.col('legit')).height} players")
+    typer.echo(f"stored {counts['predictions']:,} predictions in {_display_path(store_path, ROOT)}"
+               + (f"; {graded:,} final outcomes" if graded else ""))  # fmt: skip
+    typer.echo(f"wrote {_display_path(target, ROOT)}")
+
+
+@regression_app.command("pin")
+def regression_pin(
+    season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    backtest_csv: Path = typer.Option(
+        Path("reports/regression_watch/backtest.csv"),
+        "--backtest-csv",
+        help="The committed backtest the parameters' record must reproduce.",
+    ),  # fmt: skip
+) -> None:
+    """Approve the season's Regression Watch parameters: recompute D3's choice for it (variant,
+    X, shrinkage estimated on the seasons before it) from the warehouse, refuse unless the same
+    run reproduces the committed backtest's rows of the season before, then write
+    artifacts/production_models/regression_watch/<version>.json and pin it in
+    config/production_models.yaml (the other pins keep theirs). Review, then commit."""
+    from twm import pins
+    from twm.config import ROOT, league, settings
+    from twm.modules.regression_watch import production as rprod
+
+    path = _warehouse_or_exit(db)
+    chosen = season if season is not None else settings().current_season
+    try:
+        params = rprod.build_params(path, chosen, league(),
+                                    progress=lambda m: typer.echo(m, err=True))  # fmt: skip
+        pin = rprod.approve(params, csv_path=_project_path(backtest_csv))
+    except (rprod.RegressionProductionError, LookupError, ValueError) as e:
+        typer.echo(f"cannot approve: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    typer.echo(f"approved {params.describe()}")
+    typer.echo(f"wrote {pin.file} (sha256 {pin.sha256[:12]}...) and pinned it in "
+               f"{_display_path(pins.default_pin_path(), ROOT)}")  # fmt: skip
+
+
+@regression_app.command("outcomes")
+def regression_outcomes(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    store: Path | None = typer.Option(
+        None, "--store", help="Predictions store (default: settings paths.predictions)."
+    ),
+    now: str | None = typer.Option(None, "--now", hidden=True, help="Pretend it is this time."),
+) -> None:
+    """Grade the stored Regression Watch lists of every season whose regular season is over:
+    each row's actual rest-of-season points per game (outcomes.y_value, 'final'). `twm
+    regression score` does this too after storing a list."""
+    from twm import predictions as pr
+    from twm.config import ROOT
+    from twm.modules.regression_watch import weekly as rwk
+
+    path = _warehouse_or_exit(db)
+    store_path = _project_path(store if store is not None else pr.default_path())
+    n = rwk.update_outcomes(path, store_path, _clock(now))
+    typer.echo(f"wrote {n:,} final outcomes into {_display_path(store_path, ROOT)}")
+
+
+def check_regression_pin(
+    season: int, backtest_csv: Path = Path("reports/regression_watch/backtest.csv")
+) -> None:
+    """`twm model check` for Regression Watch (exit 1 on any problem): the pin present, the
+    parameters file as pinned (sha256 before it is read, version = the hash of its content,
+    season), and its record of the last backtest season reproduces the committed backtest
+    CSV's rows (the variant, validation MAE and both X). Changes nothing."""
+    from twm import pins
+    from twm.modules.regression_watch import production as rprod
+
+    try:
+        params, pin = rprod.load_pinned_params(season)
+    except pins.PinError as e:
+        typer.echo(f"not usable: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"{pin.module} {season}: approved {pin.model} {pin.model_version} ({pin.file}, "
+               f"sha256 {pin.sha256[:12]}..., approved {pin.approved or '?'})")  # fmt: skip
+    typer.echo(f"  {params.describe()}")
+    problems = rprod.record_mismatches(params, _project_path(backtest_csv))
+    if problems:
+        typer.echo(
+            f"not usable: the approved parameters disagree with {backtest_csv} in "
+            f"{len(problems)} places, e.g. " + "; ".join(problems[:3]),
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    rec = params.record
+    typer.echo(f"  matches {backtest_csv} (season {rec['season']}: variant {rec['variant']}, "
+               f"X {rec['sell_high']['x']:g} / {rec['buy_low']['x']:g})")  # fmt: skip
+
+
 # --------------------------------------------------------------------------------------
 # The spec's generic entry points (PROJECT_SPEC 9): `twm train|backtest <module>`, `twm score`
 # --------------------------------------------------------------------------------------
 
 # Modules with a train/backtest/score implementation (the `twm radar ...` commands stay).
 MODULES = {"waiver_radar": "Waiver Radar (`twm radar ...`)"}
+# Built modules without a trained model (D4a): `twm backtest` and `twm score` run them; `twm
+# train` and the model-file commands refuse them.
+PARAMS_MODULES = {
+    "regression_watch": "Regression Watch (`twm regression ...`) has no trained model: its "
+    "frozen parameters are approved with `twm regression pin`",
+}
 # Modules of the spec that are not built yet, with the phase that builds them (spec 11).
-PLANNED_MODULES = {"regression_watch": "phase D", "decisions": "phase G", "hot_seat": "phase H",
-                   "board": "phase I"}  # fmt: skip
+PLANNED_MODULES = {"decisions": "phase G", "hot_seat": "phase H", "board": "phase I"}
 
 
-def _module_or_exit(name: str) -> str:
+def _module_or_exit(name: str, *, allow: tuple[str, ...] = ()) -> str:
+    """The module key of ``name``; ``allow``: modules of :data:`PARAMS_MODULES` the command
+    accepts too."""
     key = name.strip().lower().replace("-", "_")
-    if key in MODULES:
+    if key in MODULES or key in allow:
         return key
-    built = ", ".join(MODULES)
+    built = ", ".join([*MODULES, *allow])
+    if key in PARAMS_MODULES:
+        raise typer.BadParameter(PARAMS_MODULES[key])
     if key in PLANNED_MODULES:
         raise typer.BadParameter(
             f"{key} is not built yet ({PLANNED_MODULES[key]}); available: {built}"
@@ -1574,7 +1782,7 @@ def train(
 
 @app.command("backtest")
 def backtest(
-    module: str = typer.Argument(..., help="Module to backtest: waiver_radar."),
+    module: str = typer.Argument(..., help="Module to backtest: waiver_radar, regression_watch."),
     dataset: Path = typer.Option(
         Path("data/waiver_radar/dataset.parquet"), "--dataset", help="The dataset."
     ),
@@ -1587,15 +1795,30 @@ def backtest(
         None, "--label", help="Label(s) (repeatable; default y_hit): y_hit, y_sustained."
     ),
     store: Path | None = typer.Option(None, "--store", help="Predictions store to write."),
-    out: Path = typer.Option(
-        Path("reports/waiver_radar/backtest.md"), "--out", help="Markdown report to write."
+    out: Path | None = typer.Option(
+        None, "--out", help="Markdown report to write (default: the module's reports folder)."
+    ),
+    db: Path | None = typer.Option(
+        None, "--db", help="Warehouse file (regression_watch; default from config)."
     ),
 ) -> None:
-    """Walk-forward backtest of a module (waiver_radar: the same as `twm radar backtest`)."""
-    _module_or_exit(module)
+    """Walk-forward backtest of a module (waiver_radar: the same as `twm radar backtest`;
+    regression_watch: the same as `twm regression backtest`, which takes only --end, --out
+    and --db)."""
+    key = _module_or_exit(module, allow=("regression_watch",))
+    if key == "regression_watch":
+        extra = [o for o, v in (("--start", start), ("--model", models), ("--label", labels),
+                                ("--store", store)) if v]  # fmt: skip
+        if extra:
+            raise typer.BadParameter(f"{', '.join(extra)} do not apply to regression_watch")
+        regression_backtest(
+            db=db, out=out or Path("reports/regression_watch/backtest.md"), end=end, n_boot=2000
+        )
+        return
     radar_backtest(
-        dataset=dataset, start=start, end=end, models=models, labels=labels, store=store, out=out
-    )
+        dataset=dataset, start=start, end=end, models=models, labels=labels, store=store,
+        out=out or Path("reports/waiver_radar/backtest.md"),
+    )  # fmt: skip
 
 
 @app.command("score")
@@ -1625,7 +1848,8 @@ def score(
     ),
 ) -> None:
     """Score every module's list at an official as-of (waiver_radar: `twm radar score`;
-    streamer: `twm streamer score`, always with its approved K model and D/ST rule).
+    streamer: `twm streamer score`, always with its approved K model and D/ST rule;
+    regression_watch: `twm regression score`, always with its approved frozen parameters).
 
     A list is always made from the data as it stood at a week's official as-of (the Tuesday
     14:00 UTC after the week's games), never at an arbitrary moment: `--as-of 2026-W3` is week
@@ -1635,8 +1859,13 @@ def score(
     Exit codes as `twm radar score` (3: the week's data has not arrived)."""
     from twm.asof import AsOfParseError, parse_as_of, week_at
 
-    names = modules or [*MODULES, "streamer"]  # S2a: the streamer scores with its pins only
-    chosen = ["streamer" if m.strip().lower() == "streamer" else _module_or_exit(m) for m in names]
+    # S2a: the streamer scores with its pins only; D4a: Regression Watch with its parameters
+    names = modules or [*MODULES, "streamer", "regression_watch"]
+    chosen = [
+        "streamer" if m.strip().lower() == "streamer"
+        else _module_or_exit(m, allow=("regression_watch",))
+        for m in names
+    ]  # fmt: skip
     season: int | None = None
     week: int | None = None
     if as_of is not None:
@@ -1658,6 +1887,13 @@ def score(
                 f"(its list is made at the official as-of {official:%a %Y-%m-%d %H:%M} UTC)"
             )
     for module in dict.fromkeys(chosen):
+        if module == "regression_watch":
+            regression_score(
+                season=season, week=week, allow_incomplete=allow_incomplete, limit=5, db=db,
+                store=store, backtest_csv=Path("reports/regression_watch/backtest.csv"),
+                out=None, now=None,
+            )  # fmt: skip
+            continue
         if module == "streamer":
             from twm.modules.streamer.cli import streamer_score
 
@@ -1715,7 +1951,8 @@ def _check_against_evaluation(store: Path, evaluation_csv: Path) -> list[str]:
 @model_app.command("check")
 def model_check(
     module: str = typer.Argument(
-        "all", help="Module: waiver_radar, streamer, or all (every pinned module)."
+        "all",
+        help="Module: waiver_radar, streamer, regression_watch, or all (every pinned module).",
     ),
     season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
     evaluation_csv: Path = typer.Option(
@@ -1729,7 +1966,9 @@ def model_check(
     with its sha256 and row count; and the snapshot reproduces the committed evaluation's rows
     of the production model (precision@10 pooled, by season and position, buckets, PR-AUC,
     Brier, calibration). The streamer's pins (K model, D/ST rule) are checked the same way
-    against reports/streamer/backtest.csv (S2a). Changes nothing."""
+    against reports/streamer/backtest.csv (S2a), and Regression Watch's frozen parameters
+    (sha256, version, and its record of the last backtest season against
+    reports/regression_watch/backtest.csv; D4a). Changes nothing."""
     import tempfile
 
     from twm import pins
@@ -1739,6 +1978,9 @@ def model_check(
     chosen = season if season is not None else settings().current_season
     if module.strip().lower() == "streamer":
         check_streamer_pins(chosen)
+        return
+    if module.strip().lower().replace("-", "_") == "regression_watch":
+        check_regression_pin(chosen)
         return
     key = "waiver_radar" if module.strip().lower() == "all" else _module_or_exit(module)
     try:
@@ -1765,6 +2007,8 @@ def model_check(
     typer.echo(f"  matches {evaluation_csv} (the production model's rows the store determines)")
     if module.strip().lower() == "all" and any(k.startswith("streamer") for k in pins.read_pins()):
         check_streamer_pins(chosen)
+    if module.strip().lower() == "all" and "regression_watch" in pins.read_pins():
+        check_regression_pin(chosen)
 
 
 @model_app.command("restore-backtest")

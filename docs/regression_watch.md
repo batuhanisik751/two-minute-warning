@@ -302,6 +302,49 @@ command reads the warehouse through an as-of view and matches the backtest to th
 too (PROJECT_SPEC 6.3); a player is graded on the games he played; one variant serves all
 positions; the season-block intervals treat seasons as independent.
 
+## The weekly list (step D4a)
+
+**One frozen, approved configuration.** The weekly job never estimates anything. The owner
+approved ONE parameters file, `artifacts/production_models/regression_watch/<version>.json`
+(4 KB), pinned with its sha256 in `config/production_models.yaml` (`regression_watch`,
+`model: params`, like the streamer's D/ST rule). For 2026 it holds what D3's rule picks for
+2026: the variant `mean_flat_all` (shrink toward the position's average FPOE, no recency
+weight, garbage time kept; lowest validation MAE on 2010-2025, 3.200 against 3.229 for the spec
+formula), the shrinkage table estimated on 2009-2025 (per position, with and without garbage
+time: the signal and noise variances behind r(g) and the prior mean), and the X of Sell-high
+(4.5 points/game) and Buy-low (3.5). It also holds the record of 2025 (the same run's choice
+for the last backtest season: `mean_hl8_all`, X 4.5 and 3.0), which must equal the committed
+`reports/regression_watch/backtest.csv` rows for 2025: `uv run twm model check` checks the
+sha256, the version (a hash of the content) and that record. `uv run twm regression pin`
+recomputes the file from the warehouse (about 10 s) and refuses when the record disagrees.
+
+**Each week** (`uv run twm regression score`, also part of `uv run twm score`):
+
+- **Freshness** as the Radar's list (final scores, stats, snaps, expected points, injury
+  reports, rosters, the Tuesday as-of has come) plus play-by-play rows for every played game
+  (the garbage-time split). Missing data: exit code 3, nothing stored (`--allow-incomplete`
+  scores anyway and marks the list).
+- **The list**: the universe at the week's official as-of (read through one as-of view), the
+  projection and the tags with the frozen parameters. It equals D3's `regression project` of the
+  same week. Weeks 1-2: nobody has 3 games yet, so there is no list (exit 0, nothing stored).
+- **Live or reconstructed** by the Radar's rule: 'live' only when run on the real clock after
+  the as-of and before week N+1's first kickoff; any other run is stored as 'backtest'. A stored
+  live week is never overwritten.
+- **Stored**: every universe player (module `regression_watch`, entity type `player`): `score`
+  = projected points per game for the rest of the season, `rank` within the position, `band` =
+  the tag (`sell_high`, `buy_low`, `legit` or empty; a Buy-low starter is also Legit and stored
+  as `buy_low`), `horizon` = the regular-season weeks left (the column is a number of weeks),
+  `reasons_json` = the numbers behind it (PPG, xFP/game, FPOE/game, games, the shrinkage and
+  the value it shrinks toward, the gap to his PPG, the X, and the same without garbage time).
+- **Outcomes**: once a season's regular season is over, every stored row gets his actual
+  points per game over the rest of it (`outcomes.y_value`, a numeric outcome column added in
+  D4a; empty with fewer than 3 games left, which the backtest does not grade either).
+  `uv run twm regression outcomes` does only this.
+- **Report** `reports/regression_watch/weekly/<season>-W<nn>.md`: Sell-high, Buy-low and Legit
+  tables in plain words, each with its backtest hit rate next to the base rate. **Legit** means
+  "no regression flag: the production is backed by opportunity"; its rate (61% stayed starters)
+  equals the rate of every starter (61%), and the list says so.
+
 ## Commands
 
 ```
@@ -310,7 +353,10 @@ uv run twm regression player 00-0036358 --as-of 2026-W3     # as it looked at we
 uv run twm regression xfp-report                            # reports/regression_watch/xfp.md (+ .csv)
 uv run twm regression stability                             # reports/regression_watch/stability.md (+ .csv), 2009 to last season
 uv run twm regression project 2026 3 --position WR          # projections and tags at week 3's as-of (--csv to save)
-uv run twm regression backtest                              # reports/regression_watch/backtest.md (+ .csv), about 20 s
-uv run pytest tests/test_regression_watch.py tests/test_regression_stability.py tests/test_regression_projection.py   # offline tests
+uv run twm regression backtest                              # reports/regression_watch/backtest.md (+ .csv), about 20 s (= twm backtest regression_watch)
+uv run twm regression score                                 # the weekly list with the approved parameters (exit 3: data not ready)
+uv run twm regression pin                                   # approve the season's parameters (review, then commit)
+uv run twm regression outcomes                              # grade stored lists of finished seasons
+uv run pytest tests/test_regression_watch.py tests/test_regression_stability.py tests/test_regression_projection.py tests/test_regression_weekly.py   # offline tests
 uv run pytest -m realdata -k regression                     # the checks on the real cache
 ```

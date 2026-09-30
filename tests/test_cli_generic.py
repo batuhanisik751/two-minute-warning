@@ -5,6 +5,7 @@ maps a timestamp to a week (twm.asof.parse_as_of / week_at). Offline and synthet
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -92,12 +93,17 @@ def _capture_streamer(monkeypatch) -> list[dict]:
 def test_score_dispatches_a_season_week_to_the_radar(monkeypatch):
     calls = _capture(monkeypatch, "radar_score")
     streamer = _capture_streamer(monkeypatch)  # S2a: `twm score` runs the streamer too
+    regression = _capture(monkeypatch, "regression_score")  # D4a: and Regression Watch
     out = runner.invoke(cli.app, ["score", "--as-of", "2025-W2", "--allow-incomplete"])
     assert out.exit_code == 0, out.output
-    assert len(calls) == 1 and len(streamer) == 1
+    assert len(calls) == 1 and len(streamer) == 1 and len(regression) == 1
     assert (streamer[0]["season"], streamer[0]["week"], streamer[0]["now"]) == (2025, 2, None)
+    assert (regression[0]["season"], regression[0]["week"], regression[0]["now"]) == (2025, 2, None)
+    assert regression[0]["allow_incomplete"] is True
     only = runner.invoke(cli.app, ["score", "--as-of", "2025-W2", "--module", "waiver_radar"])
     assert only.exit_code == 0 and len(calls) == 2 and len(streamer) == 1
+    rw_only = runner.invoke(cli.app, ["score", "--module", "regression-watch"])
+    assert rw_only.exit_code == 0 and len(calls) == 2 and len(regression) == 2
     calls.pop()
     assert (calls[0]["season"], calls[0]["week"], calls[0]["allow_incomplete"]) == (2025, 2, True)
     assert calls[0]["now"] is None  # the real clock: live or reconstructed by the usual rule
@@ -108,6 +114,7 @@ def test_score_dispatches_a_season_week_to_the_radar(monkeypatch):
 def test_score_resolves_a_timestamp_through_the_warehouse(db, monkeypatch):
     calls = _capture(monkeypatch, "radar_score")
     _capture_streamer(monkeypatch)
+    _capture(monkeypatch, "regression_score")
     out = runner.invoke(cli.app, ["score", "--as-of", "2025-09-20T12:00Z", "--db", str(db)])
     assert out.exit_code == 0, out.output
     assert (calls[0]["season"], calls[0]["week"]) == (2025, 2)
@@ -136,8 +143,9 @@ def test_backtest_dispatches_to_the_radar(monkeypatch):
     assert out.exit_code == 0, out.output
     assert calls[0]["start"] == 2020 and calls[0]["models"] == ["logit"]
     assert calls[0]["labels"] == ["y_sustained"]
-    bad = runner.invoke(cli.app, ["backtest", "regression_watch"])
-    assert bad.exit_code == 2 and "phase D" in bad.output and calls[1:] == []
+    assert calls[0]["out"] == Path("reports/waiver_radar/backtest.md")
+    bad = runner.invoke(cli.app, ["backtest", "hot_seat"])
+    assert bad.exit_code == 2 and "phase H" in bad.output and calls[1:] == []
 
 
 def test_train_builds_then_reuses_the_production_fold(tmp_path):

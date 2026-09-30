@@ -35,6 +35,8 @@ The K and D/ST streamer (S2a, :mod:`twm.modules.streamer.production`) pins two m
 ``streamer_k`` (``model: logit``) and ``streamer_dst`` (``model: rule``: the file is the rule's
 JSON definition and the snapshot a ``hit_rates`` table); :func:`read_snapshot` reads any pin's
 snapshot files with the same sha256 and row checks. A pin without ``model`` is the Radar's.
+Regression Watch (D4a, :mod:`twm.modules.regression_watch.production`) pins
+``regression_watch`` (``model: params``: one JSON file of frozen parameters, no snapshot).
 """
 
 from __future__ import annotations
@@ -291,8 +293,10 @@ def backtest_frames(store: Path, season: int) -> tuple[dict[str, Any], str]:
             f"IN ({marks}) ORDER BY model_version, season, week, rank_group, rank, entity_id",
             [MODULE, *ids],
         ).pl()
+        # the pre-D4a outcome columns only: the Radar's snapshot keeps its exact layout
+        cols = ", ".join(f"o.{c}" for c in pr.LEGACY_OUTCOME_COLUMNS)
         outs = con.execute(
-            f"SELECT o.* FROM outcomes o WHERE o.module = ? AND (o.entity_id, o.season, o.week) "
+            f"SELECT {cols} FROM outcomes o WHERE o.module = ? AND (o.entity_id, o.season, o.week) "
             f"IN (SELECT entity_id, season, week FROM predictions WHERE module = ? AND "
             f"kind = 'backtest' AND model_version IN ({marks})) ORDER BY season, week, entity_id",
             [MODULE, MODULE, *ids],

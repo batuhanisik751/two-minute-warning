@@ -408,6 +408,26 @@ after a new backtest: `uv run twm streamer backtest --store <store>`, then
 snapshots, and refuses when they do not reproduce the committed report), `uv run twm model
 check`, review, commit the pin, the files and `reports/streamer/` together.
 
+### Regression Watch's approved parameters (step D4a)
+
+Regression Watch (docs/regression_watch.md "The weekly list") has no trained model: its weekly
+list uses one frozen parameters file, pinned as a third kind of entry next to the others (their
+entries and files stay byte-identical):
+
+- `regression_watch` (`model: params`): `artifacts/production_models/regression_watch/
+  <version>.json` (4 KB: the variant, the shrinkage table estimated on the seasons before the
+  pinned one, the Sell-high / Buy-low X, and the record of the last backtest season). No
+  snapshot: the version is a hash of the file's content, and the record must equal the
+  committed `reports/regression_watch/backtest.csv` rows of that season.
+
+`uv run twm regression score` loads only this file (sha256 first, then the version and the
+season). `uv run twm model check` (no argument, or `regression_watch`) checks the file and the
+record. To approve for a new season: `uv run twm regression backtest` (the committed report),
+then `uv run twm regression pin` (it recomputes the choice from the warehouse and refuses when
+its record disagrees with the report), `uv run twm model check`, review, commit the pin, the
+file and `reports/regression_watch/` together. The scheduled job (`twm pipeline run`) does not
+run Regression Watch yet; `uv run twm score` does.
+
 ## The owner's steps for E4
 
 1. **Push** the commit with `.github/workflows/pipeline.yml` from your own GitHub account (as

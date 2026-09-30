@@ -14,7 +14,8 @@ Tables:
   'must-add', 'speculative', 'watch' or NULL) and ``incomplete`` (TRUE when the week was scored
   although some of its data had not arrived: ``twm radar score --allow-incomplete``).
 - ``outcomes``: what happened, per (module, entity, season, week): the labels and whether they
-  are final.
+  are final; ``y_value`` (added in D4a, appended so older stores migrate in place) is a numeric
+  outcome (Regression Watch: the rest-of-season points per game), NULL for the Radar's rows.
 - ``model_versions``: what produced a prediction: model, label, feature list, hyperparameters,
   training seasons, the dataset hash, the code version and notes.
 
@@ -91,7 +92,14 @@ OUTCOME_COLUMNS: dict[str, str] = {
     "y_hit": "BOOLEAN",
     "y_sustained": "BOOLEAN",
     "label_status": "VARCHAR NOT NULL",
+    # added in D4a (a numeric outcome: Regression Watch's rest-of-season points per game);
+    # ALTERed into older stores by connect(), NULL for the Radar's rows
+    "y_value": "DOUBLE",
 }
+# Outcome columns a writer may leave out (filled with these defaults): the D4a addition.
+OUTCOME_DEFAULTS: dict[str, tuple[Any, pl.DataType]] = {"y_value": (None, pl.Float64())}
+# The outcome columns before D4a (what the Radar's approved backtest snapshot holds).
+LEGACY_OUTCOME_COLUMNS = tuple(c for c in OUTCOME_COLUMNS if c not in OUTCOME_DEFAULTS)
 VERSION_COLUMNS: dict[str, str] = {
     "model_version": "VARCHAR NOT NULL",
     "module": "VARCHAR NOT NULL",
@@ -225,6 +233,9 @@ def connect(path: Path | str, *, read_only: bool = False) -> duckdb.DuckDBPyConn
         con.execute(
             f"ALTER TABLE predictions ADD COLUMN IF NOT EXISTS {col} {PREDICTION_COLUMNS[col]}"
         )
+    # ... and a store written before D4a lacks the numeric outcome column
+    for col in OUTCOME_DEFAULTS:
+        con.execute(f"ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS {col} {OUTCOME_COLUMNS[col]}")
     return con
 
 
@@ -234,6 +245,12 @@ def _check(df: pl.DataFrame, table: str) -> pl.DataFrame:
         df = df.with_columns(
             pl.lit(value, dtype=dtype).alias(c)
             for c, (value, dtype) in PREDICTION_DEFAULTS.items()
+            if c not in df.columns
+        )
+    if table == "outcomes":
+        df = df.with_columns(
+            pl.lit(value, dtype=dtype).alias(c)
+            for c, (value, dtype) in OUTCOME_DEFAULTS.items()
             if c not in df.columns
         )
     missing = [c for c in cols if c not in df.columns]
@@ -351,6 +368,31 @@ def write_predictions(
         "model_versions": vers.height,
         "outcomes": 0 if outs is None else outs.height,
     }
+
+
+def write_outcomes(path: Path | str, outcomes: pl.DataFrame) -> int:
+    """Write outcomes alone (D4a: Regression Watch grades its stored lists once a season is
+    over): the stored outcomes of the same (module, entity, season, week) are replaced, nothing
+    else is touched. Returns the rows written."""
+    outs = _naive(_check(outcomes, "outcomes"))
+    if outs.height == 0:
+        return 0
+    con = connect(path)
+    try:
+        con.execute("BEGIN TRANSACTION")
+        con.register("new_outcomes", outs.to_arrow())
+        con.execute(
+            "DELETE FROM outcomes o USING new_outcomes n WHERE o.module = n.module AND "
+            "o.entity_id = n.entity_id AND o.season = n.season AND o.week = n.week"
+        )
+        con.execute("INSERT INTO outcomes SELECT * FROM new_outcomes")
+        con.execute("COMMIT")
+    except BaseException:
+        con.execute("ROLLBACK")
+        raise
+    finally:
+        con.close()
+    return outs.height
 
 
 def register_version(path: Path | str, version: pl.DataFrame) -> bool:

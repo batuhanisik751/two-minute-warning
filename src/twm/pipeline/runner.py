@@ -3,9 +3,9 @@
 The stages, in order (each ``twm`` command runs as its own process, with the same code, the
 same exit codes and the same files as when the owner types it):
 
-1. **preflight** (here): the approved model loads (``config/production_models.yaml``: file,
-   sha256 and version checked); where the publish goes and, for Neon, which CA bundle checks
-   its certificate.
+1. **preflight** (here): the approved models load (``config/production_models.yaml``: file,
+   sha256 and version checked; the Radar's, the streamer's and Regression Watch's); where the
+   publish goes and, for Neon, which CA bundle checks its certificate.
 2. **gate** (here, :func:`twm.pipeline.schedule.gate`): offseason days without a run stop here.
 3. **ingest**: ``twm ingest --start <season> --force`` (the nightly refresh: the current season
    and the one-file datasets); on a cold cache (historical seasons missing) first
@@ -21,8 +21,21 @@ same exit codes and the same files as when the owner types it):
    differed by a few top-10 orderings).
 8. **score** (only when a list is due): ``twm radar score --pinned`` (exit code 3 = not ready).
 9. **export** (here): the scored list as CSV and Parquet for the run's files.
-10. **publish**: ``twm publish`` (remote when ``DATABASE_URL`` is set, else skipped with a
-    warning), also after a not-ready score, so outcomes and player pages stay fresh.
+10. **streamer_dataset**: ``twm streamer dataset`` (the K and D/ST pool, features and labels:
+    the publish reads its teams, outcomes and the D/ST rule's backtest from it).
+11. **streamer_backtest**: ``twm model check streamer``: the approved K model and D/ST rule and
+    their frozen backtest (sha256, rows, and ``reports/streamer/backtest.csv`` reproduced). Nothing
+    is restored: the weekly list and the publish read the snapshot in place.
+12. **streamer_score** / **streamer_export** (only when a list is due): ``twm streamer score``
+    with the approved methods, the Radar's not-ready rules (exit code 3).
+13. **regression_backtest**: ``twm model check regression_watch``: the approved parameters and
+    their frozen backtest lists (sha256, rows, ``reports/regression_watch/backtest.csv``). The
+    publish reads the lists in place; nothing is recomputed on the runner.
+    **regression_score** / **regression_export** (only when a list is due): ``twm regression
+    score`` with the approved frozen parameters, the same rules.
+14. **publish**: ``twm publish`` (remote when ``DATABASE_URL`` is set, else skipped with a
+    warning), ONE publish for every module, also after a not-ready score, so outcomes and player
+    pages stay fresh.
 
 Exit codes of the run: :data:`EXIT_OK` (0: done, including a skipped publish, an offseason day
 and a week that is not ready on an early attempt, each with a warning), :data:`EXIT_FAILED` (1: a
@@ -58,7 +71,15 @@ PUBLISH_SHRINK_REFUSED = 5  # `twm publish`: a replaced table would lose too man
 PUBLISH_MODES = ("auto", "local", "remote", "skip")
 # Per-stage limits (seconds); the workflow's job timeout is the outer limit.
 TIMEOUTS = {"ingest": 25 * 60, "build": 15 * 60, "dataset": 15 * 60, "backtest": 20 * 60,
-            "score": 15 * 60, "publish": 15 * 60}  # fmt: skip
+            "score": 15 * 60, "streamer_dataset": 15 * 60, "streamer_backtest": 10 * 60,
+            "streamer_score": 15 * 60, "regression_backtest": 10 * 60,
+            "regression_score": 15 * 60,
+            "publish": 15 * 60}  # fmt: skip
+# The modules scored after the Radar (step P2): stage, the `twm` command, the report's title.
+MODULE_SCORES = {
+    "streamer": ("streamer_score", ["streamer", "score"], "streamer"),
+    "regression_watch": ("regression_score", ["regression", "score"], "regression_watch"),
+}
 INGEST_RETRY_WAIT_S = 60.0
 
 
@@ -110,6 +131,8 @@ class RunResult:
     attempt: str = ""
     score: str = "none"  # none | scored | not_ready | late | failed
     list_kind: str = ""  # live | backtest (what the score stored)
+    # the other modules' lists (MODULE_SCORES): module -> {score, list_kind}
+    modules: dict[str, dict[str, str]] = field(default_factory=dict)
     publish: str = "not run"  # published | dry_run | skipped (why) | failed | refused
     target: str = ""
     stages: list[StageResult] = field(default_factory=list)
@@ -217,6 +240,8 @@ class Hooks:
     windows: Callable[[int], list[sc.WeekWindow]]
     missing_cache: Callable[[int], list[str]]  # "<dataset> <season>" missing from the cache
     export_list: Callable[[int, int, Path], dict[str, Any]]  # files, kind, incomplete
+    # (module, season, week, folder) -> files, kind, incomplete (the streamer, Regression Watch)
+    export_module: Callable[[str, int, int, Path], dict[str, Any]]
     resolve_target: Callable[[str], Any]  # "local" | "remote" -> twm.publish.target.Target
     record_failure: Callable[..., bool]
     sleep: Callable[[float], None] = time.sleep
@@ -270,8 +295,17 @@ def default_hooks() -> Hooks:
         pm, pin = pins.load_pinned(MODULE, season)
         frames = pins.load_backtest(pin)  # sha256 and rows of the snapshot, before any work
         n = frames["predictions"].height
+        # step P2: the streamer's K model and D/ST rule and Regression Watch's parameters load
+        # too (sha256 checked), so a broken pin stops the run before any download
+        from twm.modules.regression_watch.production import load_pinned_params
+        from twm.modules.streamer.production import load_pinned_k, load_pinned_rule
+
+        k, rule = load_pinned_k(season)[0], load_pinned_rule(season)[0]
+        params = load_pinned_params(season)[0]
         return (f"approved model {pm.model_version} ({pin.file}, sha256 {pin.sha256[:12]}...) "
-                f"and its backtest {pin.backtest_seasons} ({n:,} predictions)")  # fmt: skip
+                f"and its backtest {pin.backtest_seasons} ({n:,} predictions); streamer "
+                f"{k.model_version} and {rule.model_version}; Regression Watch "
+                f"{params.model_version}")  # fmt: skip
 
     return Hooks(
         check_model=check_model,
@@ -280,6 +314,9 @@ def default_hooks() -> Hooks:
         missing_cache=missing_cache,
         export_list=lambda s, w, out: rp.export_list(
             settings().path("predictions"), settings().path("warehouse"), s, w, out
+        ),
+        export_module=lambda m, s, w, out: rp.export_module_list(
+            settings().path("predictions"), m, s, w, out
         ),
         resolve_target=tg.resolve,
         record_failure=wr.record_failure_at,
@@ -375,7 +412,8 @@ class _Run:
         r = self.res
         return {
             "trigger": r.trigger, "cron": r.cron, "season": r.season, "week": r.week,
-            "score": r.score, "attempt": r.attempt, "run_url": self.opts.run_url or None,
+            "score": r.score, "modules": r.modules, "attempt": r.attempt,
+            "run_url": self.opts.run_url or None,
             "pretend_now": None if r.pretend_now is None else r.pretend_now.isoformat(),
             "stages": {st.name: {"status": st.status, "seconds": st.seconds} for st in r.stages},
         }  # fmt: skip
@@ -482,59 +520,86 @@ class _Run:
         self.add("plan", "ok", t0, p.reason + (f"; {self.res.attempt}" if self.res.attempt else ""))
         return p
 
-    def score(self, p: sc.Plan) -> bool:
+    def _state(self, module: str, key: str, value: str | None = None) -> str:
+        """The Radar's ``score`` / ``list_kind`` or another module's (``res.modules``)."""
+        if module == "waiver_radar":
+            if value is not None:
+                setattr(self.res, key, value)
+            return str(getattr(self.res, key))
+        mine = self.res.modules.setdefault(module, {"score": "none", "list_kind": ""})
+        if value is not None:
+            mine[key] = value
+        return mine[key]
+
+    def score(self, p: sc.Plan, module: str = "waiver_radar") -> bool:
+        """Score ``module``'s list of the planned week (``twm radar score --pinned``, ``twm
+        streamer score``, ``twm regression score``): exit code 3 = not ready, a warning before
+        the last attempt and 'late' from it on; any other failure stops the run."""
         t0 = time.perf_counter()
+        radar = module == "waiver_radar"
+        stage, cmd, stem = ("score", ["radar", "score"], "") if radar else MODULE_SCORES[module]
+        who = "" if radar else f"{module.replace('_', ' ')}: "
         if p.week is None:
-            self.add("score", "skipped", t0, p.reason)
+            self.add(stage, "skipped", t0, p.reason)
             return True
-        report = self.out / "reports" / f"{self.season}-W{p.week:02d}.md"
-        args = ["radar", "score", "--season", str(self.season), "--week", str(p.week),
-                "--pinned", "--out", str(report)]  # fmt: skip
+        name = f"{stem + '-' if stem else ''}{self.season}-W{p.week:02d}.md"
+        report = self.out / "reports" / name
+        args = [*cmd, "--season", str(self.season), "--week", str(p.week),
+                *(["--pinned"] if radar else []), "--out", str(report)]  # fmt: skip
         if self.opts.now is not None:
             args += ["--now", self.opts.now.isoformat()]
-        code, log = self.cli("score", args)
+        code, log = self.cli(stage, args)
         logs = [self.rel(log)]
         if code == 0:
-            self.res.score = "scored"
-            self.res.files.append(self.rel(report))
-            self.add("score", "ok", t0, f"week {p.week} scored", code=code, logs=logs)
+            self._state(module, "score", "scored")
+            if report.exists() or radar:
+                self.res.files.append(self.rel(report))
+            self.add(stage, "ok", t0, f"{who}week {p.week} scored", code=code, logs=logs)
             return True
         if code == SCORE_NOT_READY:
             missing = _tail(log, 8)
             if p.not_ready_fails(self.now):
-                self.res.score = "late"
-                text = (f"week {p.week}'s data has not arrived by the last attempt "
+                self._state(module, "score", "late")
+                text = (f"{who}week {p.week}'s data has not arrived by the last attempt "
                         f"({self.res.attempt}); the score log says what is missing")  # fmt: skip
-                self.res.errors.append(f"score: {text}")
-                self.add("score", "late", t0, text + (f"\n{missing}" if missing else ""),
+                self.res.errors.append(f"{stage}: {text}")
+                self.add(stage, "late", t0, text + (f"\n{missing}" if missing else ""),
                          code=code, logs=logs)  # fmt: skip
             else:
-                self.res.score = "not_ready"
-                text = f"week {p.week}'s data has not fully arrived yet ({self.res.attempt})"
+                self._state(module, "score", "not_ready")
+                text = f"{who}week {p.week}'s data has not fully arrived yet ({self.res.attempt})"
                 self.warn(text)
-                self.add("score", "not_ready", t0, text + (f"\n{missing}" if missing else ""),
+                self.add(stage, "not_ready", t0, text + (f"\n{missing}" if missing else ""),
                          code=code, logs=logs)  # fmt: skip
             return True  # the publish still runs: outcomes and player pages stay fresh
-        self.res.score = "failed"
-        self.fail("score", f"`twm radar score` exited with {code}", t0, code=code, logs=[log])
+        self._state(module, "score", "failed")
+        self.fail(stage, f"`twm {' '.join(cmd)}` exited with {code}", t0, code=code, logs=[log])
         return False
 
-    def export(self, p: sc.Plan) -> None:
-        if self.res.score != "scored" or p.week is None:
+    def export(self, p: sc.Plan, module: str = "waiver_radar") -> None:
+        if self._state(module, "score") != "scored" or p.week is None:
             return
         t0 = time.perf_counter()
+        radar = module == "waiver_radar"
+        stage = "export" if radar else MODULE_SCORES[module][0].replace("score", "export")
+        what = "list" if radar else f"{module.replace('_', ' ')} list"
+        except_text = f"the {what} could not be exported to the run's files"
         try:
-            info = self.hooks.export_list(self.season, p.week, self.out / "lists")
+            if radar:
+                info = self.hooks.export_list(self.season, p.week, self.out / "lists")
+            else:
+                info = self.hooks.export_module(module, self.season, p.week, self.out / "lists")
         except Exception as e:  # the list is stored and published anyway
-            self.warn(f"the list could not be exported to the run's files: {e}")
-            self.add("export", "warning", t0, str(e))
+            self.warn(f"{except_text}: {e}")
+            self.add(stage, "warning", t0, str(e))
             return
-        self.res.list_kind = str(info.get("kind", ""))
+        kind = self._state(module, "list_kind", str(info.get("kind", "")))
         files = [self.rel(Path(f)) for f in info.get("files", [])]
         self.res.files += files
         if info.get("incomplete"):
-            self.warn(f"week {p.week}'s list was scored with incomplete data")
-        self.add("export", "ok", t0, f"{self.res.list_kind} list: " + ", ".join(files))
+            self.warn(f"week {p.week}'s {what} was scored with incomplete data")
+        self.add(stage, "ok", t0, f"{kind} list: " + ", ".join(files) if files
+                 else "no list was stored this week")  # fmt: skip
 
     def publish(self) -> bool:
         t0 = time.perf_counter()
@@ -573,8 +638,9 @@ class _Run:
     def finish(self) -> RunResult:
         r = self.res
         r.finished = datetime.now(UTC)
+        late = r.score == "late" or any(m.get("score") == "late" for m in r.modules.values())
         if r.status != "failed" and r.status != "skipped":
-            r.status = "late" if r.score == "late" else ("warning" if r.warnings else "ok")
+            r.status = "late" if late else ("warning" if r.warnings else "ok")
         r.exit_code = exit_code_for(r.status)
         return r
 
@@ -625,4 +691,23 @@ def _stages(r: _Run) -> None:
         ok = r.score(p)
         if ok:
             r.export(p)
-            r.publish()
+    # step P2: the K and D/ST streamer and Regression Watch, then ONE publish for every module
+    ok = ok and r.command("streamer_dataset", ["streamer", "dataset", "--end", str(season)],
+                          "the K and D/ST pool, features and labels")  # fmt: skip
+    ok = ok and r.command(
+        "streamer_backtest", ["model", "check", "streamer", "--season", str(season)],
+        "the approved K model and D/ST rule and their frozen backtest checked (sha256, rows, "
+        "reports/streamer/backtest.csv); read in place, nothing restored",
+    )  # fmt: skip
+    ok = ok and r.command(
+        "regression_backtest", ["model", "check", "regression_watch", "--season", str(season)],
+        "the approved parameters and their frozen backtest lists checked (sha256, rows, "
+        "reports/regression_watch/backtest.csv); read in place, never recomputed",
+    )  # fmt: skip
+    for module in MODULE_SCORES:
+        if ok and p is not None:
+            ok = r.score(p, module)
+            if ok:
+                r.export(p, module)
+    if ok and p is not None:
+        r.publish()

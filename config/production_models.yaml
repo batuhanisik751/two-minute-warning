@@ -11,6 +11,20 @@ regression_watch:
   sha256: 7e3e2773e7ab0689792dfb20405c6101520bd715c2e321453662e362339c2be1
   model: params
   approved: '2026-09-30'
+  backtest:
+    seasons: 2011-2025
+    predictions:
+      file: artifacts/production_models/regression_watch/backtest-mean_flat_all-77146b2e5d2169fc/predictions.parquet
+      sha256: 99daf5cfc006ef73054731ed0aae6c3bec4f77fd24bc85a70454143c587dfb9f
+      rows: 10787
+    outcomes:
+      file: artifacts/production_models/regression_watch/backtest-mean_flat_all-77146b2e5d2169fc/outcomes.parquet
+      sha256: dd3b214bf785ab3e4cf987746bffcff171017e305e0a824061f58e2a3a97952e
+      rows: 10787
+    model_versions:
+      file: artifacts/production_models/regression_watch/backtest-mean_flat_all-77146b2e5d2169fc/model_versions.parquet
+      sha256: 20359f343cf5a98e7e3ed7966563945a3ed3c5c6f510bc89183eace50bc4b194
+      rows: 15
 streamer_dst:
   season: 2026
   model_version: baseline_opponent_dst-e76f31d80f3a905e

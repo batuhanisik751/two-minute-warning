@@ -51,6 +51,10 @@ def summary_markdown(result: Any) -> str:
         kind = f", stored as '{r.list_kind}'" if r.list_kind else ""
         facts.append(("List", f"week {r.week}: {r.score}{kind}" + (
             f" ({r.attempt})" if r.attempt else "")))  # fmt: skip
+    titles = {"streamer": "K and D/ST streamer", "regression_watch": "Regression Watch"}
+    for module, m in (getattr(r, "modules", None) or {}).items():
+        kind = f", stored as '{m['list_kind']}'" if m.get("list_kind") else ""
+        facts.append((titles.get(module, module), f"week {r.week}: {m.get('score')}{kind}"))
     facts.append(("Publish", r.publish + (f" to {r.target}" if r.target else "")))
     lines += [f"- **{k}:** {_cell(v)}" for k, v in facts if v]
     lines += ["", "| stage | result | time | notes |", "|---|---|---:|---|"]
@@ -83,7 +87,11 @@ def annotations(result: Any) -> list[str]:
             for w in result.warnings]  # fmt: skip
     out.append(
         f"::notice title=Two-Minute Warning pipeline::{STATUS_TEXT.get(result.status)}; "
-        f"list: {result.score}; publish: {result.publish}"
+        f"list: {result.score}"
+        + "".join(
+            f"; {k}: {m.get('score')}" for k, m in (getattr(result, "modules", None) or {}).items()
+        )
+        + f"; publish: {result.publish}"
     )
     return out
 
@@ -168,6 +176,38 @@ def export_list(
     flat.write_parquet(parquet)
     return {"files": [csv, parquet], "kind": "/".join(info["kind"]),
             "incomplete": bool(info["incomplete"])}  # fmt: skip
+
+
+def export_module_list(
+    store: Path, module: str, season: int, week: int, out_dir: Path
+) -> dict[str, Any]:
+    """Write the stored list of ``module`` (the streamer, Regression Watch) of ``season`` week
+    ``week`` as CSV and Parquet into ``out_dir`` (``<module>-<season>-W<nn>``), every stored
+    row with its reasons: {files, kind, incomplete}. No files when nothing was stored; the
+    store is opened read-only."""
+    import duckdb
+
+    con = duckdb.connect(str(store), read_only=True)
+    try:
+        rows = con.execute(
+            "SELECT season, week, as_of, kind, coalesce(incomplete, FALSE) AS incomplete, "
+            "rank_group AS position, rank, entity_id, score, band, tier, reasons_json, "
+            "model_version FROM predictions WHERE module = ? AND season = ? AND week = ? "
+            "ORDER BY rank_group, rank, entity_id",
+            [module, int(season), int(week)],
+        ).pl()
+    finally:
+        con.close()
+    if rows.height == 0:  # e.g. Regression Watch before anyone has 3 games: no list
+        return {"files": [], "kind": "", "incomplete": False}
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = out_dir / f"{module}-{season}-W{week:02d}"
+    csv, parquet = stem.with_suffix(".csv"), stem.with_suffix(".parquet")
+    rows.write_csv(csv)
+    rows.write_parquet(parquet)
+    kinds = sorted(set(rows.get_column("kind").to_list()))
+    return {"files": [csv, parquet], "kind": "/".join(kinds),
+            "incomplete": bool(rows.get_column("incomplete").any())}  # fmt: skip
 
 
 # --------------------------------------------------------------------------------------

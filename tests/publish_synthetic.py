@@ -361,6 +361,7 @@ def build(root: Path, *, live_weeks: tuple[int, ...] = (1,), now: datetime = NOW
         evaluation_csv=root / "evaluation.csv",
         season=SEASON,
         now=now,
+        modules=("waiver_radar",),  # the streamer's and Regression Watch's: publish_modules.py
     )
     return Synthetic(root, inputs, rows)
 

@@ -211,27 +211,37 @@ def run_week(
     return WeeklyRun(season, week, as_of, now, kind, fresh, params, table, kickoff, horizon)
 
 
-def store_frames(run: WeeklyRun, *, created_at: datetime | None = None):
-    """(predictions, model_versions) for :func:`twm.predictions.write_predictions`
-    (``replace='weeks'``): every universe row of the list."""
+def list_rows(
+    table: pl.DataFrame, params: ProductionParams, *, as_of: datetime, horizon: int, kind: str,
+    created: datetime, incomplete: bool,
+) -> pl.DataFrame:  # fmt: skip
+    """The store's ``predictions`` rows of one list (:func:`score_week`'s table): every universe
+    row. The published backtest lists (twm.publish.regression_lists) are made with it too."""
     from twm.asof import to_utc
-    from twm.modules.regression_watch.production import version_frame
 
-    created = created_at if created_at is not None else pr.now_utc()
-    t = run.table
-    preds = t.select(
+    return table.select(
         pl.lit(MODULE).alias("module"), pl.lit(ENTITY_TYPE).alias("entity_type"),
         pl.col("gsis_id").alias("entity_id"), pl.col("season").cast(pl.Int32),
         pl.col("week").cast(pl.Int32),
-        pl.lit(to_utc(run.as_of).replace(tzinfo=None), dtype=pl.Datetime("us")).alias("as_of"),
-        pl.lit(run.horizon, dtype=pl.Int32).alias("horizon"),
+        pl.lit(to_utc(as_of).replace(tzinfo=None), dtype=pl.Datetime("us")).alias("as_of"),
+        pl.lit(horizon, dtype=pl.Int32).alias("horizon"),
         pl.col("position").alias("rank_group"), pl.col("ppg_ros").alias("score"),
         pl.lit(None, dtype=pl.Float64).alias("raw_score"), "rank", "band",
-        pl.lit(run.params.model_version).alias("model_version"), "reasons_json",
-        pl.lit(run.kind).alias("kind"),
+        pl.lit(params.model_version).alias("model_version"), "reasons_json",
+        pl.lit(kind).alias("kind"),
         pl.lit(created, dtype=pl.Datetime("us")).alias("created_at"),
-        pl.lit(None, dtype=pl.String).alias("tier"), pl.lit(run.incomplete).alias("incomplete"),
+        pl.lit(None, dtype=pl.String).alias("tier"), pl.lit(incomplete).alias("incomplete"),
     )  # fmt: skip
+
+
+def store_frames(run: WeeklyRun, *, created_at: datetime | None = None):
+    """(predictions, model_versions) for :func:`twm.predictions.write_predictions`
+    (``replace='weeks'``): every universe row of the list."""
+    from twm.modules.regression_watch.production import version_frame
+
+    created = created_at if created_at is not None else pr.now_utc()
+    preds = list_rows(run.table, run.params, as_of=run.as_of, horizon=run.horizon,
+                      kind=run.kind, created=created, incomplete=run.incomplete)  # fmt: skip
     return preds, version_frame(run.params, created_at=created)
 
 
@@ -372,6 +382,21 @@ def tag_notes(csv_path: Path, season: int) -> dict[str, str]:
     return out
 
 
+FIRST_BACKTESTED_WEEK, LAST_BACKTESTED_WEEK = 4, 14  # D3's as-of weeks (backtest.ALL_WEEKS)
+
+
+def early_note(week: int) -> str | None:
+    """The warning a list made before the first backtested as-of carries (the weekly report and
+    the published regression_list.note; reviewer's rule after D4a); None from week 4 on."""
+    if int(week) >= FIRST_BACKTESTED_WEEK:
+        return None
+    return (
+        f"Week {week} is earlier than the backtested weeks {FIRST_BACKTESTED_WEEK}-"
+        f"{LAST_BACKTESTED_WEEK}: nobody has more than {week} games yet, and the projection and "
+        "the tags were never checked this early in the season, so treat them as rough."
+    )
+
+
 def _kind_text(run: WeeklyRun) -> str:
     from twm.asof import to_utc
 
@@ -445,6 +470,7 @@ def build_report(
         f"# Regression Watch: {run.season} week {run.week}", "",
         f"{generated} Command: `{command}`.", "",
         f"- {_kind_text(run)}",
+        *([f"- **Early in the season.** {early_note(run.week)}"] if early_note(run.week) else []),
         f"- **As-of** {to_utc(run.as_of):%a %Y-%m-%d %H:%M} UTC: only data public then is used. "
         f"The projection is points per game over the rest of the regular season (weeks "
         f"{run.week + 1} on, {run.horizon} weeks).",

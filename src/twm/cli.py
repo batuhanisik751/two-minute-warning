@@ -1633,6 +1633,50 @@ def regression_pin(
     typer.echo(f"approved {params.describe()}")
     typer.echo(f"wrote {pin.file} (sha256 {pin.sha256[:12]}...) and pinned it in "
                f"{_display_path(pins.default_pin_path(), ROOT)}")  # fmt: skip
+    _freeze_regression(path, chosen, backtest_csv)  # P2: its frozen backtest lists too
+
+
+def _freeze_regression(path: Path, season: int, backtest_csv: Path) -> None:
+    from twm import pins
+    from twm.config import ROOT, league
+    from twm.modules.regression_watch import frozen as fz
+    from twm.modules.regression_watch import production as rprod
+
+    try:
+        pin = fz.freeze(path, season, league(), csv_path=_project_path(backtest_csv),
+                        progress=lambda m: typer.echo(m, err=True))  # fmt: skip
+    except (rprod.RegressionProductionError, pins.PinError, LookupError, ValueError) as e:
+        typer.echo(f"cannot freeze the backtest lists: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    for table in fz.TABLES:
+        f = pin.backtest[table]
+        size = fz.snapshot_dir(pin.model_version, ROOT).joinpath(f"{table}.parquet").stat()
+        typer.echo(f"wrote {f.file} ({f.rows:,} rows, {size.st_size / 1e3:,.0f} KB, sha256 "
+                   f"{f.sha256[:12]}...)")  # fmt: skip
+    typer.echo(f"pinned them in {_display_path(pins.default_pin_path(), ROOT)} (the parameters "
+               "file and the other pins are unchanged); review and commit")  # fmt: skip
+
+
+@regression_app.command("freeze")
+def regression_freeze(
+    season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    backtest_csv: Path = typer.Option(
+        Path("reports/regression_watch/backtest.csv"),
+        "--backtest-csv",
+        help="The committed backtest the frozen lists must reproduce.",
+    ),  # fmt: skip
+) -> None:
+    """Freeze the time machine's backtest lists of the approved parameters (P2): the headline
+    as-of weeks of every D3 test season, made from the warehouse (it must reach back to 2006:
+    run this on the owner's Mac, never in the scheduled job), refused unless every season's
+    choice, the headline MAE and the tag hit rates equal the committed backtest CSV and the
+    parameters' record; written under artifacts/production_models/regression_watch/ and pinned
+    with their sha256 (`twm regression pin` does this too). Review, then commit."""
+    from twm.config import settings
+
+    chosen = season if season is not None else settings().current_season
+    _freeze_regression(_warehouse_or_exit(db), chosen, backtest_csv)
 
 
 @regression_app.command("outcomes")
@@ -1662,7 +1706,9 @@ def check_regression_pin(
     """`twm model check` for Regression Watch (exit 1 on any problem): the pin present, the
     parameters file as pinned (sha256 before it is read, version = the hash of its content,
     season), and its record of the last backtest season reproduces the committed backtest
-    CSV's rows (the variant, validation MAE and both X). Changes nothing."""
+    CSV's rows (the variant, validation MAE and both X); the frozen backtest lists (P2) as
+    pinned, every season's choice, the headline MAE and tag hit rates equal to the CSV's, and
+    the parameters' record equal to the lists' last season. Changes nothing."""
     from twm import pins
     from twm.modules.regression_watch import production as rprod
 
@@ -1685,6 +1731,27 @@ def check_regression_pin(
     rec = params.record
     typer.echo(f"  matches {backtest_csv} (season {rec['season']}: variant {rec['variant']}, "
                f"X {rec['sell_high']['x']:g} / {rec['buy_low']['x']:g})")  # fmt: skip
+    # P2: the frozen backtest lists (the time machine): sha256 before reading, then the report
+    from twm.config import league
+    from twm.modules.regression_watch import frozen as fz
+
+    try:
+        frames = fz.load_snapshot(pin)
+    except pins.PinError as e:
+        typer.echo(f"not usable: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    problems = fz.snapshot_mismatches(frames, _project_path(backtest_csv), league(), params)
+    if problems:
+        typer.echo(
+            f"not usable: the frozen backtest lists disagree with {backtest_csv} or the "
+            f"parameters in {len(problems)} places, e.g. " + "; ".join(problems[:3]),
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    rows = ", ".join(f"{pin.backtest[t].rows:,} {t}" for t in fz.TABLES)
+    typer.echo(f"  frozen backtest lists {pin.backtest_seasons}: {rows} (sha256 and rows "
+               f"checked); every season's choice, the headline MAE and the tag hit rates match "
+               f"{backtest_csv}")  # fmt: skip
 
 
 # --------------------------------------------------------------------------------------
@@ -2377,6 +2444,17 @@ def publish(
         "--evaluation",
         help="The committed evaluation CSV (published as the track record).",
     ),
+    streamer_dataset: Path = typer.Option(
+        Path("data/streamer/dataset.parquet"),
+        "--streamer-dataset",
+        help="The K and D/ST streamer dataset (teams, outcomes, the D/ST rule's backtest).",
+    ),
+    modules: list[str] | None = typer.Option(
+        None,
+        "--module",
+        hidden=True,
+        help="Publish only these modules' lists (repeatable; waiver_radar always; tests).",
+    ),
     now: str | None = typer.Option(None, "--now", hidden=True, help="Pretend clock (tests)."),
     allow_shrink: bool = typer.Option(
         False,
@@ -2394,14 +2472,19 @@ def publish(
         None, "--result-json", hidden=True, help="Write a machine-readable summary here."
     ),
 ) -> None:
-    """Publish the Waiver Radar lists, outcomes, track record, player pages and glossary to
-    Postgres, in one transaction (docs/deploy.md). Live lists already published are never
-    changed (frozen); everything else is replaced, except a table whose content is unchanged
-    (not rewritten). Exit codes: 0 done, 1 refused or failed (nothing changed), 4 done but some
-    live lists were skipped as incomplete (retry later), 5 refused because a replaced table
-    would shrink too much (the local inputs look missing; --allow-shrink)."""
+    """Publish the Waiver Radar, K and D/ST streamer and Regression Watch lists, their outcomes
+    and track records, the player pages and the glossary to Postgres, in one transaction
+    (docs/deploy.md). Reads the predictions store read-only (never writes it). Live lists
+    already published are never changed (frozen); everything else is replaced, except a table
+    whose content is unchanged (not rewritten). Exit codes: 0 done, 1 refused or failed
+    (nothing changed), 4 done but some live lists were skipped as incomplete (retry later), 5
+    refused because a replaced table would shrink too much (the local inputs look missing;
+    --allow-shrink)."""
     import json
     import uuid
+
+    import duckdb
+    import polars as pl
 
     from twm.config import settings
     from twm.publish import collect as col
@@ -2439,6 +2522,8 @@ def publish(
         evaluation_csv=_project_path(evaluation_csv),
         season=s.current_season,
         now=clock,
+        streamer_dataset=_project_path(streamer_dataset),
+        modules=tuple(dict.fromkeys(["waiver_radar", *modules])) if modules else col.MODULES,
     )
 
     def fail(message: str, step: str) -> None:
@@ -2459,7 +2544,8 @@ def publish(
 
     try:
         data = col.collect(inputs)
-    except (col.PublishInputError, FileNotFoundError, ValueError) as e:
+    except (col.PublishInputError, FileNotFoundError, ValueError, KeyError, duckdb.Error,
+            pl.exceptions.PolarsError) as e:  # fmt: skip
         fail(str(e), "collect")
     problems = col.validate(data)
     if problems:

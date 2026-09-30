@@ -141,7 +141,8 @@ def no_env_file(monkeypatch: pytest.MonkeyPatch) -> None:
 def _cli_args(syn: ps.Synthetic, target: str) -> list[str]:
     i = syn.inputs
     return ["publish", "--target", target, "--db", str(i.warehouse), "--store", str(i.store),
-            "--dataset", str(i.dataset), "--evaluation", str(i.evaluation_csv)]  # fmt: skip
+            "--dataset", str(i.dataset), "--evaluation", str(i.evaluation_csv),
+            "--module", "waiver_radar"]  # fmt: skip
 
 
 def test_cli_refusals_never_print_the_url(

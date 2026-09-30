@@ -1,6 +1,7 @@
-# The scheduled pipeline (step E4): refresh the nflverse data, rebuild the warehouse, score the
-# Waiver Radar week whose list is due with the owner-approved model, publish to the public
-# database. docs/deploy.md "The scheduled pipeline". All logic lives in `twm pipeline run`
+# The scheduled pipeline (step E4, P2): refresh the nflverse data, rebuild the warehouse, score
+# the week whose lists are due (Waiver Radar, K and D/ST streamer, Regression Watch) with the
+# owner-approved models, publish all of them at once to the public database. docs/deploy.md
+# "The scheduled pipeline". All logic lives in `twm pipeline run`
 # (src/twm/pipeline/); this file only sets up the runner, the cache and the artifact.
 #
 # The job NEVER commits (permissions: contents: read). Results go to the database (only when

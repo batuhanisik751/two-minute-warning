@@ -79,6 +79,8 @@ class Fake:
             windows=lambda s: windows(), missing_cache=lambda s: list(self.missing),
             export_list=lambda s, w, out: {"files": [out / f"{s}-W{w:02d}.csv"], "kind": "live",
                                            "incomplete": False},
+            export_module=lambda m, s, w, out: {"files": [out / f"{m}-{s}-W{w:02d}.csv"],
+                                                "kind": "live", "incomplete": False},
             resolve_target=lambda mode: FakeTarget(), record_failure=record,
             sleep=self.slept.append,
         )  # fmt: skip
@@ -101,9 +103,27 @@ def test_a_full_run_in_season(tmp_path: Path) -> None:
     fake = Fake()
     res = run(fake, tmp_path)
     assert res.exit_code == rn.EXIT_OK and res.status == "ok", res.errors
-    assert fake.stages() == ["ingest", "build", "dataset", "backtest", "score", "publish"]
+    assert fake.stages() == ["ingest", "build", "dataset", "backtest", "score", "streamer_dataset",
+                             "streamer_backtest", "regression_backtest", "streamer_score",
+                             "regression_score", "publish"]  # fmt: skip
     assert fake.args("ingest") == [["ingest", "--start", "2026", "--force"]]
+    # Regression Watch's backtest lists are frozen: the job's warehouse still starts in 2012
     assert fake.args("build") == [["build", "--start", "2012", "--end", "2026"]]
+    assert fake.args("streamer_dataset") == [["streamer", "dataset", "--end", "2026"]]
+    # the streamer's frozen backtest is checked, never retrained or restored
+    assert fake.args("streamer_backtest") == [["model", "check", "streamer", "--season", "2026"]]
+    # Regression Watch's frozen backtest lists: checked, never recomputed on the runner
+    assert fake.args("regression_backtest") == [["model", "check", "regression_watch",
+                                                 "--season", "2026"]]  # fmt: skip
+    for stage, cmd in (("streamer_score", ["streamer", "score"]),
+                       ("regression_score", ["regression", "score"])):  # fmt: skip
+        args = fake.args(stage)[0]
+        assert args[:6] == [*cmd, "--season", "2026", "--week", "3"] and "--pinned" not in args
+        assert args[args.index("--out") + 1].endswith("-2026-W03.md") and "--now" in args
+    assert res.modules == {
+        "streamer": {"score": "scored", "list_kind": "live"},
+        "regression_watch": {"score": "scored", "list_kind": "live"},
+    }
     # the approved backtest is restored, never retrained
     assert fake.args("backtest") == [["model", "restore-backtest", "waiver_radar", "--season",
                                       "2026"]]  # fmt: skip
@@ -116,12 +136,17 @@ def test_a_full_run_in_season(tmp_path: Path) -> None:
     notes = json.loads(Path(pub[pub.index("--notes-file") + 1]).read_text())["pipeline"]
     assert notes["week"] == 3 and notes["score"] == "scored" and notes["trigger"] == "schedule"
     order = ["preflight", "gate", "ingest", "build", "plan", "dataset", "backtest", "score",
-             "export", "publish"]  # fmt: skip
+             "export", "streamer_dataset", "streamer_backtest", "regression_backtest",
+             "streamer_score", "streamer_export", "regression_score", "regression_export",
+             "publish"]  # fmt: skip
     assert [s.name for s in res.stages] == order
     assert res.week == 3 and res.list_kind == "live" and res.publish == "published"
     out = tmp_path / "run"
     summary = (out / "summary.md").read_text()
     assert "pipeline: done" in summary and "| glossary | 101 | 0 | unchanged" in summary
+    assert "**K and D/ST streamer:** week 3: scored, stored as 'live'" in summary
+    assert "**Regression Watch:** week 3: scored" in summary
+    assert notes["modules"]["streamer"]["score"] == "scored"
     assert json.loads((out / "result.json").read_text())["exit_code"] == 0
     assert SECRET not in summary and "S3cret" not in (out / "result.json").read_text()
 
@@ -163,6 +188,36 @@ def test_not_ready_on_the_last_attempt_fails_with_code_3(tmp_path: Path) -> None
     notes = json.loads(Path(fake.args("publish")[0][fake.args("publish")[0].index(
         "--notes-file") + 1]).read_text())["pipeline"]  # fmt: skip
     assert notes["score"] == "late"
+
+
+def test_the_streamer_and_regression_watch_follow_the_same_not_ready_rules(
+    tmp_path: Path,
+) -> None:
+    # an early attempt: a warning, the other lists and the one publish still run
+    fake = Fake(codes={"streamer_score": rn.SCORE_NOT_READY})
+    res = run(fake, tmp_path / "a", now="2026-09-29T15:20")
+    assert res.exit_code == rn.EXIT_OK and res.status == "warning" and res.score == "scored"
+    assert res.modules["streamer"]["score"] == "not_ready"
+    assert fake.stages()[-2:] == ["regression_score", "publish"]
+    assert res.stage("streamer_export") is None
+    assert any(w.startswith("streamer: week 3's data has not fully arrived") for w in res.warnings)
+    # the last attempt: late (exit code 3), still published once
+    fake = Fake(codes={"regression_score": rn.SCORE_NOT_READY})
+    res = run(fake, tmp_path / "b", now="2026-09-30T03:20", cron="17 3 * * 3")
+    assert res.exit_code == rn.EXIT_NOT_READY and res.status == "late"
+    assert res.score == "scored" and res.modules["regression_watch"]["score"] == "late"
+    assert fake.stages().count("publish") == 1
+    assert any(e.startswith("regression_score: regression watch: week 3") for e in res.errors)
+
+
+def test_a_failed_streamer_or_regression_stage_stops_before_the_publish(tmp_path: Path) -> None:
+    for i, stage in enumerate(("streamer_dataset", "streamer_backtest", "regression_backtest",
+                               "streamer_score", "regression_score")):  # fmt: skip
+        fake = Fake(codes={stage: 1})
+        res = run(fake, tmp_path / str(i))
+        assert res.exit_code == rn.EXIT_FAILED and res.status == "failed", stage
+        assert "publish" not in fake.stages() and fake.failures[0]["stage"] == stage
+        assert fake.stages()[-1] == stage
 
 
 def test_a_failed_stage_stops_the_run_and_is_recorded(tmp_path: Path) -> None:

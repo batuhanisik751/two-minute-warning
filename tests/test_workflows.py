@@ -108,6 +108,31 @@ def test_the_scheduled_path_never_retrains() -> None:
     `twm radar backtest`, `twm train` or `--retrain` anywhere in its code or workflow."""
     text = (WORKFLOWS / "pipeline.yml").read_text()
     code = (ROOT / "src" / "twm" / "pipeline" / "runner.py").read_text()
-    for needle in ('"radar", "backtest"', '"train"', "--retrain", "radar backtest"):
+    for needle in ('"radar", "backtest"', '"train"', "--retrain", "radar backtest",
+                   '"streamer", "backtest"', "streamer backtest", '"regression", "backtest"',
+                   "regression backtest", '"pin"', "streamer pin", "regression pin"):  # fmt: skip
         assert needle not in text and needle not in code, needle
     assert '"restore-backtest"' in code and '"--pinned"' in code
+    # P2: the streamer's frozen backtest is only checked; both modules score with their pins
+    assert '["model", "check", "streamer"' in code
+    assert '["streamer", "score"]' in code and '["regression", "score"]' in code
+
+
+def test_one_publish_carries_every_module() -> None:
+    """P2: the streamer and Regression Watch are scored after the Radar, then ONE publish."""
+    code = (ROOT / "src" / "twm" / "pipeline" / "runner.py").read_text()
+    assert code.count('"publish", "--target"') == 1
+    stages = code[code.index("def _stages(") :]
+    order = ['r.command("dataset"', 'r.score(p)', 'r.command("streamer_dataset"',
+             '"streamer_backtest"', '"regression_backtest"', "for module in MODULE_SCORES",
+             "r.publish()"]  # fmt: skip
+    at = [stages.index(s) for s in order]
+    assert at == sorted(at), order
+    # Regression Watch's backtest lists are frozen (the reviewer's rule after P2): the publish
+    # reads the pinned snapshot and never recomputes D3 (nor needs the warehouse before 2012)
+    assert settings().pipeline.build_start == 2012
+    publish = (ROOT / "src" / "twm" / "publish" / "regression_lists.py").read_text()
+    for needle in ("build_rows", "bt.choose", "make_params", "player_games_history(db, list(range("
+                   "pj.FIRST_DATA_SEASON"):  # fmt: skip
+        assert needle not in publish, needle
+    assert "load_snapshot" in publish

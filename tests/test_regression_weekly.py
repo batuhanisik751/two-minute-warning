@@ -418,6 +418,22 @@ def test_report_is_deterministic_and_states_what_each_tag_means(world, tmp_path)
     assert path.read_text() == a
 
 
+def test_a_list_before_week_4_says_it_is_earlier_than_the_backtested_weeks(world):
+    """Reviewer's rule after D4a (P2): the report (and the published regression_list.note)."""
+    from twm.modules.regression_watch import backtest as bt
+
+    backtested = (rwk.FIRST_BACKTESTED_WEEK, rwk.LAST_BACKTESTED_WEEK)
+    assert backtested == (bt.ALL_WEEKS[0], bt.ALL_WEEKS[-1])
+    assert rwk.early_note(4) is None and rwk.early_note(14) is None
+    note = rwk.early_note(3)
+    assert note is not None and "earlier than the backtested weeks 4-14" in note
+    kw = {"generated": "Generated at X.", "command": "c"}
+    early = rwk.build_report(_run(world, week=3, now=LATER, allow_incomplete=True), league(),
+                             **kw)  # fmt: skip
+    assert f"- **Early in the season.** {note}" in early
+    assert "Early in the season" not in rwk.build_report(_run(world, now=LATER), league(), **kw)
+
+
 def test_cli_scores_stores_and_writes_the_report(world, tmp_path, monkeypatch):
     from twm import cli
 
@@ -476,6 +492,19 @@ def test_real_parameters_are_reproduced_from_the_warehouse():
     assert rp.params_json(fresh) == (ROOT / pin.file).read_text()
 
 
+def _drop_week(store: Path, module: str, season: int, week: int) -> None:
+    """Remove a week's rows from a SCRATCH copy of the store: the owner's store holds week 3's
+    live list since 2026-09-30, which a reconstructed run must never overwrite."""
+    import duckdb
+
+    con = duckdb.connect(str(store))
+    try:
+        con.execute("DELETE FROM predictions WHERE module = ? AND season = ? AND week = ?",
+                    [module, season, week])  # fmt: skip
+    finally:
+        con.close()
+
+
 @pytest.mark.realdata
 def test_real_2026_week_3_reconstructed_into_a_scratch_store(tmp_path):
     """The committed pin lists 2026 week 3 (reconstructed: a set clock after week 4's games)
@@ -486,6 +515,7 @@ def test_real_2026_week_3_reconstructed_into_a_scratch_store(tmp_path):
     before = pins.sha256_of(owner) if owner.exists() else None
     if owner.exists():
         shutil.copyfile(owner, store)
+        _drop_week(store, "regression_watch", 2026, 3)  # the owner's live week 3 (P2 note)
     out = tmp_path / "2026-W03.md"
     res = runner.invoke(app, ["regression", "score", "--db", str(db), "--season", "2026",
                               "--week", "3", "--store", str(store), "--now", "2026-10-08T12:00",

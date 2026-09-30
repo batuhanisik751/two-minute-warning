@@ -40,6 +40,7 @@ import polars as pl
 from twm.config import FANTASY_POSITIONS
 
 MODULE = "waiver_radar"
+MODULES = ("waiver_radar", "streamer", "regression_watch")  # tables.FAMILIES
 TOP_N = 25  # published picks per list (the weekly report's top 25: confidence.TOP_N)
 # nflverse gsis ids: "00-0034796" (most players) or "BAT138483" (older ids; checked: every
 # dim_player id in the 2026-09-28 warehouse matches one of the two)
@@ -76,7 +77,9 @@ class PublishInputError(ValueError):
 
 @dataclass(frozen=True)
 class Inputs:
-    """Where the local inputs are, the current season and the clock (aware UTC)."""
+    """Where the local inputs are, the current season and the clock (aware UTC). ``modules``:
+    the modules whose lists a publish carries (the others' tables are not touched); the
+    streamer's and Regression Watch's inputs default to the project's paths."""
 
     warehouse: Path
     store: Path
@@ -84,6 +87,10 @@ class Inputs:
     evaluation_csv: Path
     season: int
     now: datetime
+    modules: tuple[str, ...] = MODULES
+    streamer_dataset: Path | None = None
+    streamer_csv: Path | None = None
+    regression_csv: Path | None = None
 
     @classmethod
     def default(cls, now: datetime | None = None) -> Inputs:
@@ -99,24 +106,70 @@ class Inputs:
             now=now or datetime.now(UTC),
         )
 
+    def path(self, name: str) -> Path:
+        """The streamer's / Regression Watch's input ``name`` (its default when unset)."""
+        from twm.config import ROOT
+
+        defaults = {
+            "streamer_dataset": ROOT / "data" / "streamer" / "dataset.parquet",
+            "streamer_csv": ROOT / "reports" / "streamer" / "backtest.csv",
+            "regression_csv": ROOT / "reports" / "regression_watch" / "backtest.csv",
+        }
+        value = getattr(self, name)
+        return Path(value) if value is not None else defaults[name]
+
+
+@dataclass
+class ListData:
+    """One module's lists as published (tables.FAMILIES): ``lists`` and ``rows`` in the
+    tables' column order; ``outcome_source``: outcome rows of every list the module may have
+    in the target (the writer keeps those its lists need, frozen live lists included);
+    ``outcome_keys``: (season, week, row id) whose outcomes are always published."""
+
+    lists: pl.DataFrame
+    rows: pl.DataFrame
+    outcome_source: pl.DataFrame
+    outcome_keys: pl.DataFrame
+
 
 @dataclass
 class PublishData:
-    """Everything a publish writes, before it meets the target."""
+    """Everything a publish writes, before it meets the target. ``families``: the modules'
+    lists (a module missing here is not touched by the publish)."""
 
     season: int
     now: datetime
-    lists: pl.DataFrame  # LIST_SCHEMA
-    picks: pl.DataFrame  # PICK_SCHEMA
-    # outcome rows of every dataset row (the writer keeps those the published picks need)
-    outcome_source: pl.DataFrame
-    # (season, week, gsis_id) whose outcomes are always published (picks + current season)
-    outcome_keys: pl.DataFrame
-    tables: dict[str, pl.DataFrame]  # model_versions, dim_team, dim_player, track_record,
+    families: dict[str, ListData]
+    tables: dict[str, pl.DataFrame]  # model_versions, dim_team, dim_player, the track records,
     # tier_stats, player_week_summary, glossary (in tables.TABLES column order)
     meta: dict[str, str]
     data_as_of: datetime | None
     warnings: list[str] = field(default_factory=list)
+
+    # the Waiver Radar's lists by their E2 names
+    @property
+    def lists(self) -> pl.DataFrame:
+        return self.families[MODULE].lists
+
+    @lists.setter
+    def lists(self, df: pl.DataFrame) -> None:
+        self.families[MODULE].lists = df
+
+    @property
+    def picks(self) -> pl.DataFrame:
+        return self.families[MODULE].rows
+
+    @picks.setter
+    def picks(self, df: pl.DataFrame) -> None:
+        self.families[MODULE].rows = df
+
+    @property
+    def outcome_source(self) -> pl.DataFrame:
+        return self.families[MODULE].outcome_source
+
+    @property
+    def outcome_keys(self) -> pl.DataFrame:
+        return self.families[MODULE].outcome_keys
 
 
 # --------------------------------------------------------------------------------------
@@ -208,10 +261,13 @@ def store_list_rows(store: Path, season: int) -> pl.DataFrame:
     )
 
 
-def choose_lists(rows: pl.DataFrame) -> pl.DataFrame:
-    """One model version per (season, week, position, kind): the latest written (the most
-    recent ``created_at``), then the store's current version, then the larger version id."""
-    key = ["season", "week", "position", "kind"]
+def choose_lists(
+    rows: pl.DataFrame, key: Sequence[str] = ("season", "week", "position", "kind")
+) -> pl.DataFrame:
+    """One model version per list (``key``: (season, week, position, kind)): the latest written
+    (the most recent ``created_at``), then the store's current version, then the larger version
+    id."""
+    key = list(key)
     if rows.height == 0:
         return rows
     per_version = rows.group_by([*key, "model_version"]).agg(
@@ -219,13 +275,81 @@ def choose_lists(rows: pl.DataFrame) -> pl.DataFrame:
     )
     chosen = (
         per_version.sort(
-            [*key, "_written", "_cur", "model_version"], descending=[False] * 4 + [True, True, True]
-        )  # fmt: skip
+            [*key, "_written", "_cur", "model_version"],
+            descending=[False] * len(key) + [True, True, True],
+        )
         .group_by(key, maintain_order=True)
         .first()
         .select(*key, "model_version")
     )
     return rows.join(chosen, on=[*key, "model_version"], how="inner")
+
+
+def module_store_rows(store: Path, module: str, season: int) -> pl.DataFrame:
+    """Every stored row of ``module``'s lists a publish may carry (steps P2): every 'live' row
+    and every row of ``season`` (live or reconstructed); the store is opened read-only. Rows
+    of earlier seasons' backtests come from the module's frozen backtest, never from here."""
+    if not store.exists():
+        raise PublishInputError(f"predictions store not found: {store}")
+    con = _duck(store)
+    try:
+        df = con.execute(
+            """
+            SELECT season, week, rank_group AS position, kind, rank, entity_id, entity_type,
+                   score, raw_score, band, reasons_json, tier, incomplete, as_of, created_at,
+                   model_version, TRUE AS is_current
+            FROM predictions WHERE module = ? AND (kind = 'live' OR season = ?)
+            """,
+            [module, int(season)],
+        ).pl()
+    finally:
+        con.close()
+    return df.with_columns(
+        pl.col("season").cast(pl.Int32),
+        pl.col("week").cast(pl.Int32),
+        pl.col("rank").cast(pl.Int32),
+        pl.col("incomplete").cast(pl.Boolean).fill_null(False),
+        pl.col("tier").cast(pl.String),
+    )
+
+
+def version_rows(frame: pl.DataFrame, created_at: datetime | None = None) -> pl.DataFrame:
+    """Model-version rows as the store keeps them (lists as JSON text) -> as published (lists
+    as lists; ``created_at`` aware UTC, or ``created_at`` where the frame has none)."""
+    df = frame
+    if "created_at" not in df.columns:
+        df = df.with_columns(pl.lit(created_at, dtype=pl.Datetime("us", "UTC")).alias("created_at"))
+    df = _as_utc(df, "created_at")
+    return df.select(
+        "model_version", "module", "model", "label",
+        pl.Series("training_seasons",
+                  [[int(s) for s in json.loads(x)] for x in df.get_column("training_seasons")],
+                  dtype=pl.List(pl.Int32)),
+        pl.col("test_season").cast(pl.Int32),
+        pl.Series("feature_list",
+                  [[str(f) for f in json.loads(x)] for x in df.get_column("feature_list")],
+                  dtype=pl.List(pl.String)),
+        "params", "created_at",
+    )  # fmt: skip
+
+
+def list_table(
+    rows: pl.DataFrame, key: Sequence[str], *, pool: str = "n_pool", version: str = "model_version"
+) -> pl.DataFrame:
+    """One row per list of the chosen store rows (every module): its as-of, model version, when
+    it was written (``generated_at``), whether it was scored with incomplete data, and how many
+    rows it has (``pool``)."""
+    return _as_utc(
+        rows.group_by(list(key)).agg(
+            pl.col("as_of").max(),
+            pl.col("model_version").first().alias(version),
+            pl.col("created_at").max().alias("generated_at"),
+            pl.col("incomplete").any(),
+            pl.len().cast(pl.Int32).alias(pool),
+        ),
+        "as_of",
+        "generated_at",
+    )
 
 
 def radar_lists(
@@ -236,17 +360,7 @@ def radar_lists(
     key = ["season", "week", "position", "kind"]
     if rows.height == 0:
         return pl.DataFrame(schema=LIST_SCHEMA), pl.DataFrame(schema=PICK_SCHEMA)
-    lists = _as_utc(
-        rows.group_by(key).agg(
-            pl.col("as_of").max(),
-            pl.col("model_version").first(),
-            pl.col("created_at").max().alias("generated_at"),
-            pl.col("incomplete").any(),
-            pl.len().cast(pl.Int32).alias("n_pool"),
-        ),
-        "as_of",
-        "generated_at",
-    )
+    lists = list_table(rows, key)
     notes = [
         notes_by_season.get(int(s), {}).get(p)
         for s, p in zip(lists.get_column("season"), lists.get_column("position"), strict=True)
@@ -472,6 +586,19 @@ def player_week_summary(con, first_season: int) -> pl.DataFrame:
     ).pl()
 
 
+NG_COLUMNS = ("points_ng", "xfp_ng", "fpoe_ng")
+
+
+def with_ng(pws: pl.DataFrame, ng: pl.DataFrame | None) -> pl.DataFrame:
+    """The weekly player summary with its no-garbage-time points, xFP and FPOE (step P2:
+    Regression Watch's D1 frame, :func:`twm.publish.regression_lists.ng_columns`; NULL where
+    the frame has no row, or without it)."""
+    if ng is None:
+        return pws.with_columns(pl.lit(None, dtype=pl.Float64).alias(c) for c in NG_COLUMNS)
+    keys = ["gsis_id", "season", "week"]
+    return pws.join(ng.select(*keys, *NG_COLUMNS), on=keys, how="left", maintain_order="left")
+
+
 def dim_player(con, ids: Sequence[str], fallback_names: pl.DataFrame) -> pl.DataFrame:
     """The warehouse's players among ``ids``; a player missing there (or without a name)
     takes his name from ``fallback_names`` (gsis_id, name)."""
@@ -576,6 +703,29 @@ def track_record(csv_path: Path, module: str = MODULE) -> pl.DataFrame:
     )
 
 
+def csv_table(path: Path, table: str, rename: dict[str, str] | None = None) -> pl.DataFrame:
+    """Every row of a committed report CSV as ``table`` publishes it (step P2: the streamer's
+    and Regression Watch's track records): ``line`` = the data row's number (from 1), the
+    CSV's columns (``rename``: CSV name -> column) cast to the table's types (integers through
+    float, so '12.0' is 12)."""
+    from twm.publish.tables import TABLES
+
+    if not path.exists():
+        raise PublishInputError(f"report not found: {path}")
+    df = pl.read_csv(path, infer_schema_length=0).rename(rename or {})
+    exprs = []
+    for c, typ in TABLES[table].columns:
+        if c == "line":
+            exprs.append(pl.int_range(1, pl.len() + 1, dtype=pl.Int32).alias("line"))
+        elif typ == "integer":
+            exprs.append(pl.col(c).cast(pl.Float64).cast(pl.Int32))
+        elif typ == "double precision":
+            exprs.append(pl.col(c).cast(pl.Float64))
+        else:
+            exprs.append(pl.col(c).cast(pl.String))
+    return df.select(exprs)
+
+
 def tier_stats(store: Path, season: int) -> pl.DataFrame:
     """The priority table of the weekly report (every week, and each week number alone), from
     the backtest seasons before ``season`` (confidence.seasons_before)."""
@@ -635,20 +785,7 @@ def model_versions(store: Path, versions: Sequence[str]) -> pl.DataFrame:
         ).pl()
     finally:
         con.close()
-    df = _as_utc(df, "created_at")
-    return df.with_columns(
-        pl.Series(
-            "training_seasons",
-            [[int(s) for s in json.loads(x)] for x in df.get_column("training_seasons")],
-            dtype=pl.List(pl.Int32),
-        ),
-        pl.col("test_season").cast(pl.Int32),
-        pl.Series(
-            "feature_list",
-            [[str(f) for f in json.loads(x)] for x in df.get_column("feature_list")],
-            dtype=pl.List(pl.String),
-        ),
-    )
+    return version_rows(df)
 
 
 def glossary() -> pl.DataFrame:
@@ -674,11 +811,9 @@ def glossary() -> pl.DataFrame:
 # --------------------------------------------------------------------------------------
 
 
-def collect(inputs: Inputs) -> PublishData:
-    """Read every local input and build what a publish writes (nothing is written here)."""
-    from twm import predictions as pr
-    from twm.config import settings
-
+def radar(inputs: Inputs) -> tuple[ListData, pl.DataFrame]:
+    """The Waiver Radar's lists and outcomes (module docstring) and its dataset's (gsis_id,
+    name) for player names."""
     season = int(inputs.season)
     dataset = read_dataset(inputs.dataset)
     rows = choose_lists(store_list_rows(inputs.store, season))
@@ -693,23 +828,67 @@ def collect(inputs: Inputs) -> PublishData:
         picks.select("season", "week", "gsis_id"),
         dataset.filter(pl.col("season") == season).select("season", "week", "gsis_id"),
     ]).unique(maintain_order=True)  # fmt: skip
+    return ListData(lists, picks, outcomes, keys), dataset.select("gsis_id", "name")
 
+
+def collect(inputs: Inputs) -> PublishData:
+    """Read every local input and build what a publish writes (nothing is written here)."""
+    from twm import predictions as pr
+    from twm.config import settings
+    from twm.publish import regression_lists as rl
+    from twm.publish import stream_lists as sl
+
+    season = int(inputs.season)
+    unknown = [m for m in inputs.modules if m not in MODULES]
+    if unknown or MODULE not in inputs.modules:
+        raise PublishInputError(f"modules must include {MODULE} and be among {MODULES}")
+    families: dict[str, ListData] = {}
+    families[MODULE], names = radar(inputs)
+    extra: list[sl.Collected] = []
+    tables: dict[str, pl.DataFrame] = {}
+    first = int(settings().seasons["snaps_start"])
     con = _duck(inputs.warehouse)
     try:
         teams = dim_team(con)
-        first = int(settings().seasons["snaps_start"])
         pws = player_week_summary(con, first)
-        ids = keys.get_column("gsis_id").to_list() + pws.get_column("gsis_id").to_list()
-        names = pl.concat([
-            dataset.select("gsis_id", "name"),
-            pws.select("gsis_id", pl.col("player_display_name").alias("name")),
-        ])  # fmt: skip
-        players = dim_player(con, ids, names)
+        if "streamer" in inputs.modules:
+            got = sl.collect_streamer(
+                inputs.store, inputs.path("streamer_dataset"), inputs.path("streamer_csv"),
+                season, con, inputs.now.astimezone(UTC).replace(tzinfo=None),
+            )  # fmt: skip
+            families["streamer"], tables["stream_track_record"] = got.data, got.track_record
+            extra.append(got)
         data_as_of, meta = data_freshness(con, season, inputs.now)
     finally:
         con.close()
+    frame = None
+    if "regression_watch" in inputs.modules:
+        frame = rl.history(inputs.warehouse, min(first, rl.FIRST_LIVE_SEASON), season)
+        got = rl.collect_regression(inputs.store, inputs.warehouse, inputs.path("regression_csv"),
+                                    season, inputs.now, frame)  # fmt: skip
+        families["regression_watch"], tables["regression_track_record"] = got.data, got.track_record
+        extra.append(got)
+    pws = with_ng(pws, None if frame is None else rl.ng_columns(frame))
+    ids = families[MODULE].outcome_keys.get_column("gsis_id").to_list()
+    ids += pws.get_column("gsis_id").to_list()
+    if "regression_watch" in families:
+        ids += families["regression_watch"].rows.get_column("gsis_id").to_list()
+    names = pl.concat([names, pws.select("gsis_id", pl.col("player_display_name").alias("name"))])
+    con = _duck(inputs.warehouse)
+    try:
+        players = dim_player(con, ids, names)
+    finally:
+        con.close()
+    from twm.publish.tables import FAMILIES
 
-    versions = model_versions(inputs.store, lists.get_column("model_version").to_list())
+    wanted = [v for m, f in families.items() for v in
+              f.lists.get_column(FAMILIES[m].version).to_list()]  # fmt: skip
+    versions = model_versions(inputs.store, wanted)
+    more = [e.versions for e in extra if e.versions.height]
+    if more:
+        versions = pl.concat([versions, *more], how="vertical_relaxed").unique(
+            "model_version", keep="first", maintain_order=True
+        ).filter(pl.col("model_version").is_in(wanted)).sort("model_version")  # fmt: skip
     code = pr.code_version()
     sha = re.search(r"\(([0-9a-f]+)\)", code)
     meta.update({
@@ -718,26 +897,17 @@ def collect(inputs: Inputs) -> PublishData:
         "code_version": code,
         "git_sha": sha.group(1) if sha else "",
     })  # fmt: skip
-    return PublishData(
-        season=season,
-        now=inputs.now,
-        lists=lists,
-        picks=picks,
-        outcome_source=outcomes,
-        outcome_keys=keys,
-        tables={
-            "model_versions": versions,
-            "dim_team": teams,
-            "dim_player": players,
-            "track_record": track_record(inputs.evaluation_csv),
-            "tier_stats": tier_stats(inputs.store, season),
-            "player_week_summary": pws.drop("player_display_name"),
-            "glossary": glossary(),
-        },
-        meta=meta,
-        data_as_of=data_as_of,
-        warnings=warnings,
-    )
+    tables.update({
+        "model_versions": versions,
+        "dim_team": teams,
+        "dim_player": players,
+        "track_record": track_record(inputs.evaluation_csv),
+        "tier_stats": tier_stats(inputs.store, season),
+        "player_week_summary": pws.drop("player_display_name"),
+        "glossary": glossary(),
+    })  # fmt: skip
+    return PublishData(season=season, now=inputs.now, families=families, tables=tables,
+                       meta=meta, data_as_of=data_as_of)  # fmt: skip
 
 
 # --------------------------------------------------------------------------------------
@@ -745,95 +915,196 @@ def collect(inputs: Inputs) -> PublishData:
 # --------------------------------------------------------------------------------------
 
 
+def _list_problems(
+    name: str, lists: pl.DataFrame, rows: pl.DataFrame, key: list[str], *,
+    positions: Sequence[str] | None, pool: str, row_id: str, ranked: bool,
+    top: int | None = TOP_N,
+) -> list[str]:  # fmt: skip
+    """The checks every module's lists pass: one list per key, known kinds and positions, every
+    row in a list, and (``ranked``) ranks 1..n without gaps or repeats, n = min(``top``, pool
+    size) (``top`` None: the whole pool); unranked lists hold one row per pool member."""
+    problems = []
+    if lists.select(key).is_duplicated().any():
+        problems.append(f"two {name} lists share a ({', '.join(key)})")
+    bad_kind = lists.filter(~pl.col("kind").is_in(KINDS))
+    if bad_kind.height:
+        problems.append(f"unknown {name} list kinds: {bad_kind['kind'].unique().to_list()}")
+    if positions is not None:
+        where = lists if "position" in lists.columns else rows
+        bad_pos = where.filter(~pl.col("position").is_in(list(positions)))
+        if bad_pos.height:
+            problems.append(f"unknown {name} positions: {bad_pos['position'].unique().to_list()}")
+    aggs = [pl.len().alias("n"), pl.col(row_id).n_unique().alias("players")]
+    if ranked:
+        aggs += [pl.col("rank").min().alias("lo"), pl.col("rank").max().alias("hi"),
+                 pl.col("rank").n_unique().alias("u")]  # fmt: skip
+    joined = lists.select(*key, pool).join(rows.group_by(key).agg(aggs), on=key, how="left")
+    expected = pl.min_horizontal(pl.col(pool), pl.lit(top)) if ranked and top else pl.col(pool)
+    broken = pl.col("n").is_null() | (pl.col("n") != expected) | (pl.col("players") != pl.col("n"))
+    if ranked:
+        broken = broken | (pl.col("lo") != 1) | (pl.col("hi") != pl.col("n")) | (
+            pl.col("u") != pl.col("n"))  # fmt: skip
+    bad = joined.filter(broken)
+    if bad.height:
+        r = bad.row(0, named=True)
+        what = f"rank their top {top or 'n'} as 1..n without gaps or repeats" if ranked else \
+            f"hold one row per player of the pool ({pool})"  # fmt: skip
+        problems.append(f"{bad.height} {name} lists do not {what} (e.g. "
+                        + " ".join(str(r[k]) for k in key) + ")")  # fmt: skip
+    orphans = rows.join(lists.select(key), on=key, how="anti")
+    if orphans.height:
+        problems.append(f"{orphans.height} {name} rows belong to no published list")
+    return problems
+
+
+def _range_problems(name: str, rows: pl.DataFrame, columns: Sequence[str]) -> list[str]:
+    """Probabilities and chances within [0, 1] and each chance inside its own range."""
+    problems = []
+    for c in columns:
+        out = rows.filter(pl.col(c).is_nan() | (pl.col(c) < 0) | (pl.col(c) > 1))
+        if out.height:
+            problems.append(f"{out.height} {name} have {c} outside [0, 1]")
+    band = rows.filter(
+        pl.col("chance").is_not_null()
+        & ((pl.col("chance_low") > pl.col("chance")) | (pl.col("chance") > pl.col("chance_high")))
+    )
+    if band.height:
+        problems.append(f"{band.height} {name} have a chance outside its own range")
+    tiers = rows.filter(pl.col("tier").is_not_null() & ~pl.col("tier").is_in(
+        ["must-add", "speculative", "watch"]))  # fmt: skip
+    if tiers.height:
+        problems.append(f"{tiers.height} {name} have an unknown priority")
+    return problems
+
+
+def _team_problems(name: str, rows: pl.DataFrame, teams: set[str], column: str = "team",
+                   *, required: bool = True) -> list[str]:  # fmt: skip
+    problems = []
+    no_team = rows.filter(pl.col(column).is_null()) if required else rows.clear()
+    if no_team.height:
+        r = no_team.row(0, named=True)
+        who = r.get("gsis_id") or r.get("entity_id")
+        problems.append(
+            f"{no_team.height} {name} have no team in the dataset (e.g. {who} in {r['season']} "
+            f"week {r['week']}): rebuild it"
+        )
+    unknown = rows.filter(pl.col(column).is_not_null() & ~pl.col(column).is_in(list(teams)))
+    if unknown.height:
+        problems.append(
+            f"{unknown.height} {name} name a team that is not a current franchise: "
+            f"{sorted(set(unknown.get_column(column).to_list()))[:5]}"
+        )
+    return problems
+
+
+def _streamer_problems(d: ListData, teams: set[str]) -> list[str]:
+    """The streamer's lists: keys, ranks 1..n, kickers' gsis ids and D/ST ids of the pick's own
+    team, entity types, chances and the K model's probability within [0, 1], teams."""
+    from twm.publish.stream_lists import ENTITY_PATTERN, ENTITY_TYPES, POSITIONS
+
+    rows = d.rows
+    problems = _list_problems("streamer", d.lists, rows, ["season", "week", "position", "kind"],
+                              positions=POSITIONS, pool="n_pool", row_id="entity_id",
+                              ranked=True, top=None)  # fmt: skip
+    odd = rows.filter(~pl.col("entity_id").str.contains(ENTITY_PATTERN.pattern))
+    if odd.height:
+        problems.append(f"{odd.height} streamer picks have an id that is neither a gsis id nor "
+                        f"DST-<team>, e.g. {odd.get_column('entity_id')[0]!r}")  # fmt: skip
+    wrong = rows.filter(
+        (pl.col("entity_type") != pl.col("position").replace_strict(ENTITY_TYPES, default=""))
+        | ((pl.col("position") == "DST") & (pl.col("entity_id") != "DST-" + pl.col("team")))
+        | ((pl.col("position") == "K") & pl.col("entity_id").str.starts_with("DST-"))
+    )
+    if wrong.height:
+        problems.append(f"{wrong.height} streamer picks do not match their position (entity "
+                        "type, or a D/ST id of another team)")  # fmt: skip
+    problems += _range_problems("streamer picks", rows, ("model_prob", "chance", "chance_low",
+                                                         "chance_high"))  # fmt: skip
+    if rows.filter((pl.col("position") == "K") & pl.col("model_prob").is_null()).height:
+        problems.append("some K picks have no model probability")
+    if rows.filter(pl.col("display_name").is_null()).height:
+        problems.append("some streamer picks have no name in the streamer dataset")
+    problems += _team_problems("streamer picks", rows, teams)
+    problems += _team_problems("streamer picks' next opponents", rows, teams, "next_opponent",
+                               required=False)  # fmt: skip
+    return problems
+
+
+def _regression_problems(d: ListData, teams: set[str], players: set[str]) -> list[str]:
+    """Regression Watch's lists: keys, one row per universe player, positions, tags, the
+    projection present, teams and players known."""
+    from twm.modules.regression_watch.tags import TAGS
+
+    rows = d.rows
+    problems = _list_problems("Regression Watch", d.lists, rows, ["season", "week", "kind"],
+                              positions=FANTASY_POSITIONS, pool="n_universe", row_id="gsis_id",
+                              ranked=False)  # fmt: skip
+    bad_tag = rows.filter(
+        (pl.col("tag").is_not_null() & ~pl.col("tag").is_in(list(TAGS)))
+        | (pl.col("tag").is_null() != (pl.col("tags").list.len() == 0))
+        | (pl.col("tag").is_not_null() & (pl.col("tags").list.first() != pl.col("tag")))
+    )
+    if bad_tag.height:
+        problems.append(f"{bad_tag.height} Regression Watch rows have a tag that is not the "
+                        "first of their tags (sell_high, buy_low, legit)")  # fmt: skip
+    if rows.filter(pl.col("projection").is_null() | pl.col("ppg").is_null()).height:
+        problems.append("some Regression Watch rows have no projection or PPG")
+    problems += _team_problems("Regression Watch rows", rows, teams)
+    missing = rows.filter(~pl.col("gsis_id").is_in(list(players)))
+    if missing.height:
+        problems.append(f"{missing.height} Regression Watch rows name a player missing from "
+                        "dim_player")  # fmt: skip
+    return problems
+
+
 def validate(data: PublishData) -> list[str]:
     """Plain-English problems (empty = publishable): see docs/deploy.md "What is checked"."""
+    from twm.publish.tables import FAMILIES
+
     problems: list[str] = []
-    lists, picks, t = data.lists, data.picks, data.tables
-    # 1. no identifiers other than gsis_id and team codes, no league data
-    frames = {"radar_list": lists, "radar_pick": picks, **t}
+    t, fam = data.tables, data.families
+    # 1. no identifiers other than gsis_id, the D/ST ids and team codes, no league data, no NaN
+    frames = {**{FAMILIES[m].lists: d.lists for m, d in fam.items()},
+              **{FAMILIES[m].rows: d.rows for m, d in fam.items()}, **t}  # fmt: skip
     for name, df in frames.items():
         bad = sorted(c for c in df.columns if c.lower() in FORBIDDEN_COLUMNS)
         if bad:
             problems.append(f"{name} carries columns that must never be published: {bad}")
-    for name, df in frames.items():
-        floats = [c for c, d in df.schema.items() if d == pl.Float64]
-        nan = [c for c in floats if df.get_column(c).is_nan().any()]
+        nan = [c for c, d in df.schema.items() if d == pl.Float64 and df[c].is_nan().any()]
         if nan:
             problems.append(f"{name} has NaN values in {nan}")
-    ids = pl.concat([
-        picks.select("gsis_id"), t["dim_player"].select("gsis_id"),
-        t["player_week_summary"].select("gsis_id"), data.outcome_keys.select("gsis_id"),
-    ]).unique()  # fmt: skip
+    gsis = [
+        data.picks.select("gsis_id"),
+        t["dim_player"].select("gsis_id"),
+        t["player_week_summary"].select("gsis_id"),
+        data.outcome_keys.select("gsis_id"),
+    ]
+    if "regression_watch" in fam:
+        gsis.append(fam["regression_watch"].rows.select("gsis_id"))
+    ids = pl.concat(gsis).unique()
     odd = ids.filter(~pl.col("gsis_id").str.contains(GSIS_PATTERN.pattern))
     if odd.height:
         problems.append(
             f"{odd.height} player ids are not gsis ids (00-nnnnnnn or AAAnnnnnn), e.g. "
             f"{odd.get_column('gsis_id')[0]!r}"
         )
-    # 2. lists: valid keys, kinds, positions, pool sizes
-    key = ["season", "week", "position", "kind"]
-    if lists.select(key).is_duplicated().any():
-        problems.append("two lists share a (season, week, position, kind)")
-    bad_kind = lists.filter(~pl.col("kind").is_in(KINDS))
-    if bad_kind.height:
-        problems.append(f"unknown list kinds: {bad_kind.get_column('kind').unique().to_list()}")
-    bad_pos = lists.filter(~pl.col("position").is_in(list(FANTASY_POSITIONS)))
-    if bad_pos.height:
-        problems.append(f"unknown positions: {bad_pos.get_column('position').unique().to_list()}")
-    # 3. ranks 1..n contiguous, n = min(TOP_N, pool size)
-    per = picks.group_by(key).agg(
-        pl.len().alias("n"), pl.col("rank").min().alias("lo"), pl.col("rank").max().alias("hi"),
-        pl.col("rank").n_unique().alias("u"), pl.col("gsis_id").n_unique().alias("players"),
-    )  # fmt: skip
-    joined = lists.select(*key, "n_pool").join(per, on=key, how="left")
-    expected = pl.min_horizontal(pl.col("n_pool"), pl.lit(TOP_N))
-    broken = joined.filter(
-        pl.col("n").is_null() | (pl.col("n") != expected) | (pl.col("lo") != 1)
-        | (pl.col("hi") != pl.col("n")) | (pl.col("u") != pl.col("n"))
-        | (pl.col("players") != pl.col("n"))
-    )  # fmt: skip
-    if broken.height:
-        r = broken.row(0, named=True)
-        problems.append(
-            f"{broken.height} lists do not rank their top {TOP_N} as 1..n without gaps or "
-            f"repeats (e.g. {r['season']} week {r['week']} {r['position']} {r['kind']})"
-        )
-    orphans = picks.join(lists.select(key), on=key, how="anti")
-    if orphans.height:
-        problems.append(f"{orphans.height} picks belong to no published list")
-    # 4. probabilities and chances within [0, 1], chance inside its range
-    for c in ("model_prob", "chance", "chance_low", "chance_high"):
-        out = picks.filter(pl.col(c).is_nan() | (pl.col(c) < 0) | (pl.col(c) > 1))
-        if out.height:
-            problems.append(f"{out.height} picks have {c} outside [0, 1]")
-    if picks.filter(pl.col("model_prob").is_null()).height:
-        problems.append("some picks have no model probability")
-    band = picks.filter(
-        pl.col("chance").is_not_null()
-        & ((pl.col("chance_low") > pl.col("chance")) | (pl.col("chance") > pl.col("chance_high")))
-    )
-    if band.height:
-        problems.append(f"{band.height} picks have a chance outside its own range")
-    tiers = picks.filter(pl.col("tier").is_not_null() & ~pl.col("tier").is_in(
-        ["must-add", "speculative", "watch"]))  # fmt: skip
-    if tiers.height:
-        problems.append(f"{tiers.height} picks have an unknown priority")
-    # 5. every pick's player and team exist
     players = set(t["dim_player"].get_column("gsis_id").to_list())
     teams = set(t["dim_team"].get_column("team_abbr").to_list())
-    no_team = picks.filter(pl.col("team").is_null())
-    if no_team.height:
-        r = no_team.row(0, named=True)
-        problems.append(
-            f"{no_team.height} picks have no team in the dataset (e.g. {r['gsis_id']} in "
-            f"{r['season']} week {r['week']}): rebuild it with `uv run twm radar dataset`"
-        )
-    unknown_team = picks.filter(pl.col("team").is_not_null() & ~pl.col("team").is_in(teams))
-    if unknown_team.height:
-        problems.append(
-            f"{unknown_team.height} picks name a team that is not a current franchise: "
-            f"{sorted(set(unknown_team.get_column('team').to_list()))[:5]}"
-        )
+    # 2. the Waiver Radar's lists and picks
+    lists, picks = data.lists, data.picks
+    problems += _list_problems("Waiver Radar", lists, picks, ["season", "week", "position",
+                               "kind"], positions=FANTASY_POSITIONS, pool="n_pool",
+                               row_id="gsis_id", ranked=True)  # fmt: skip
+    problems += _range_problems("picks", picks, ("model_prob", "chance", "chance_low",
+                                                 "chance_high"))  # fmt: skip
+    if picks.filter(pl.col("model_prob").is_null()).height:
+        problems.append("some picks have no model probability")
+    problems += _team_problems("picks", picks, teams)
+    if "streamer" in fam:
+        problems += _streamer_problems(fam["streamer"], teams)
+    if "regression_watch" in fam:
+        problems += _regression_problems(fam["regression_watch"], teams, players)
+    # 3. every player named exists; the weekly summary is clean
     for name, df in (("picks", picks), ("player_week_summary", t["player_week_summary"])):
         missing = df.filter(~pl.col("gsis_id").is_in(players))
         if missing.height:
@@ -847,15 +1118,13 @@ def validate(data: PublishData) -> list[str]:
     pws = t["player_week_summary"]
     if pws.select("gsis_id", "season", "week").is_duplicated().any():
         problems.append("player_week_summary repeats a (player, season, week)")
-    bad_pws_team = pws.filter(~pl.col("team").is_in(teams))
-    if bad_pws_team.height:
-        problems.append(
-            f"{bad_pws_team.height} player_week_summary rows name a team that is not a current "
-            "franchise"
-        )
-    # 6. every list's model version is published with it
+    if pws.filter(~pl.col("team").is_in(list(teams))).height:
+        problems.append("some player_week_summary rows name a team that is not a current "
+                        "franchise")  # fmt: skip
+    # 4. every list's model version is published with it
     known = set(t["model_versions"].get_column("model_version").to_list())
-    unknown = set(lists.get_column("model_version").to_list()) - known
-    if unknown:
-        problems.append(f"lists of unknown model versions: {sorted(unknown)[:3]}")
+    for m, d in fam.items():
+        unknown = set(d.lists.get_column(FAMILIES[m].version).to_list()) - known
+        if unknown:
+            problems.append(f"{m} lists of unknown model versions: {sorted(unknown)[:3]}")
     return problems

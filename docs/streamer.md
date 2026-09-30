@@ -193,6 +193,12 @@ owner approved, and writes `reports/streamer/weekly/<season>-W<nn>.md`:
   and the frozen backtests (the K predictions with their labels; the rule's hit-rate table: per
   season, list length and rank, lists and starts). `uv run twm model check` verifies every
   sha256 and that the snapshots reproduce `reports/streamer/backtest.csv`.
+- **Published** (step P2) with the other modules by `twm publish` and the scheduled job
+  (`streamer_dataset`, `streamer_backtest` = `twm model check streamer`, `streamer_score`):
+  `stream_list`, `stream_pick` (every pick of a list), `stream_outcome`, `stream_track_record`,
+  plus the 2013-2025 backtest lists for the time machine, read from the frozen backtest in place
+  (the D/ST rule is applied again to the dataset and must give the pinned hit-rate table;
+  docs/deploy.md "What a publish does").
 
 ## Limitations
 

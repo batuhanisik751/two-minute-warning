@@ -343,7 +343,16 @@ recomputes the file from the warehouse (about 10 s) and refuses when the record 
 - **Report** `reports/regression_watch/weekly/<season>-W<nn>.md`: Sell-high, Buy-low and Legit
   tables in plain words, each with its backtest hit rate next to the base rate. **Legit** means
   "no regression flag: the production is backed by opportunity"; its rate (61% stayed starters)
-  equals the rate of every starter (61%), and the list says so.
+  equals the rate of every starter (61%), and the list says so. A list before week 4 (in
+  practice week 3, the first with a list) opens with "Early in the season": week 3 is earlier
+  than the backtested weeks 4-14, so its projection and tags were never checked that early
+  (step P2; the published `regression_list.note` carries the same sentence).
+- **Published** (step P2) with the other modules by `twm publish` and the scheduled job
+  (`regression_score` stage): `regression_list`, `regression_row`, `regression_outcome`,
+  `regression_track_record`, plus the backtest lists of the headline weeks of 2011-2025 for the
+  time machine: frozen once on the owner's Mac (`uv run twm regression freeze`, part of `twm
+  regression pin`) and pinned next to the parameters, never rebuilt by the job (docs/deploy.md
+  "Regression Watch's approved parameters").
 
 ## Commands
 

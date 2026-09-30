@@ -245,6 +245,14 @@ def test_real_2026_week_3_reconstructed_into_a_scratch_store(real_full_db, tmp_p
     before = pins.sha256_of(owner) if owner.exists() else None
     if owner.exists():
         shutil.copyfile(owner, store)
+        # the owner's store holds week 3's LIVE list since 2026-09-30 (P2), which a
+        # reconstructed run must never overwrite: drop it from the scratch copy only
+        import duckdb
+
+        con = duckdb.connect(str(store))
+        con.execute("DELETE FROM predictions WHERE module = 'streamer' AND season = 2026 "
+                    "AND week = 3")  # fmt: skip
+        con.close()
     out = tmp_path / "2026-W03.md"
     res = CliRunner().invoke(app, ["streamer", "score", "--db", str(path), "--season", "2026",
                                    "--week", "3", "--store", str(store), "--now",

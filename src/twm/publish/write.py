@@ -1,6 +1,8 @@
-"""Write a publish to Postgres in one transaction (step E2).
+"""Write a publish to Postgres in one transaction (step E2; step P2: every module's lists).
 
-One run (:func:`publish`), all or nothing:
+One run (:func:`publish`), all or nothing; steps 2, 4 and 5 run for each module the publish
+carries (:data:`twm.publish.tables.FAMILIES`: the Waiver Radar, the K and D/ST streamer,
+Regression Watch) with the same code:
 
 1. take a transaction-scoped advisory lock (two publishes never interleave) and check that the
    target has every table and column this code writes (else: run the migrations);
@@ -33,7 +35,7 @@ from typing import Any
 import polars as pl
 
 from twm.publish.collect import PublishData
-from twm.publish.tables import KEEP_ON_CONFLICT, REPLACED, TABLES, Table
+from twm.publish.tables import FAMILIES, KEEP_ON_CONFLICT, SHARED, TABLES, Family, Table
 from twm.publish.target import Target, redact
 
 STAGE = "publish"
@@ -44,7 +46,6 @@ HASH_VERSION = "v1"
 # pg_advisory_xact_lock key: any fixed 64-bit number shared by every twm publisher
 LOCK_KEY = 7_274_871_120_260_928
 CONNECT_TIMEOUT_S = 20
-LIVE_KEY = ("season", "week", "position")
 
 
 class PublishError(RuntimeError):
@@ -71,13 +72,18 @@ class ShrinkError(PublishError):
 class LiveDecision:
     season: int
     week: int
-    position: str
+    position: str  # '' for a list without positions (Regression Watch)
     action: str  # insert | kept | skipped | replace
     detail: str = ""
+    module: str = "waiver_radar"
 
     @property
     def label(self) -> str:
-        return f"{self.season}-W{self.week:02d} {self.position}"
+        """'2026-W03 QB' (the Radar), 'streamer 2026-W03 K', 'regression watch 2026-W03'."""
+        fam = FAMILIES.get(self.module)
+        prefix = fam.label if fam is not None else self.module
+        text = f"{self.season}-W{self.week:02d}" + (f" {self.position}" if self.position else "")
+        return f"{prefix} {text}" if prefix else text
 
 
 @dataclass
@@ -230,20 +236,47 @@ def check_schema(conn) -> None:
         )
 
 
-def target_live(conn) -> dict[tuple[int, int, str], dict[str, Any]]:
-    """The published live lists: (season, week, position) -> model_version, generated_at,
-    and the picks in rank order."""
+RADAR = FAMILIES["waiver_radar"]
+
+
+def _key3(row: Sequence[Any], family: Family) -> tuple[int, int, str]:
+    """A live list's key as (season, week, position); position '' without positions."""
+    return (int(row[0]), int(row[1]), str(row[2]) if len(family.key) > 2 else "")
+
+
+def target_live(conn, family: Family = RADAR) -> dict[tuple[int, int, str], dict[str, Any]]:
+    """The published live lists of ``family``: (season, week, position) -> model_version,
+    generated_at, and the listed ids in order."""
+    from psycopg import sql
+
+    key = sql.SQL(", ").join(sql.SQL("l.{}").format(sql.Identifier(c)) for c in family.key)
+    using = sql.SQL(", ").join(map(sql.Identifier, [*family.key, "kind"]))
+    n = len(family.key)
+    stmt = sql.SQL(
+        "SELECT {key}, l.{version}, l.generated_at, "
+        "array_remove(array_agg(k.{row_id} ORDER BY k.{order}), NULL) "
+        "FROM {lists} l LEFT JOIN {rows} k USING ({using}) "
+        "WHERE l.kind = 'live' GROUP BY {groups}"
+    ).format(
+        key=key, version=sql.Identifier(family.version), row_id=sql.Identifier(family.row_id),
+        order=sql.Identifier(family.order or family.row_id), lists=sql.Identifier(family.lists),
+        rows=sql.Identifier(family.rows), using=using,
+        groups=sql.SQL(", ".join(str(i) for i in range(1, n + 3))),
+    )  # fmt: skip
     out: dict[tuple[int, int, str], dict[str, Any]] = {}
-    for s, w, p, version, generated, picks in conn.execute(
-        "SELECT l.season, l.week, l.position, l.model_version, l.generated_at, "
-        "array_remove(array_agg(k.gsis_id ORDER BY k.rank), NULL) "
-        "FROM radar_list l LEFT JOIN radar_pick k USING (season, week, position, kind) "
-        "WHERE l.kind = 'live' GROUP BY 1, 2, 3, 4, 5"
-    ).fetchall():
-        out[(int(s), int(w), str(p))] = {
+    for row in conn.execute(stmt).fetchall():
+        version, generated, picks = row[n], row[n + 1], row[n + 2]
+        out[_key3(row, family)] = {
             "model_version": version, "generated_at": generated, "picks": list(picks or []),
         }  # fmt: skip
     return out
+
+
+def local_live_weeks(data: PublishData) -> set[tuple[int, int]]:
+    """(season, week) of every local live list, whatever the module."""
+    return {(int(s), int(w)) for d in data.families.values()
+            for s, w in d.lists.filter(pl.col("kind") == "live").select("season", "week")
+            .iter_rows()}  # fmt: skip
 
 
 def plan_live(
@@ -252,64 +285,71 @@ def plan_live(
     *,
     allow_incomplete: bool,
     replace_live: Iterable[tuple[int, int]],
+    module: str = "waiver_radar",
 ) -> tuple[list[LiveDecision], pl.DataFrame]:
-    """What happens to each local live list (see the module docstring) and the list keys
-    (season, week, position) to write. Raises when a named replacement is impossible."""
+    """What happens to each local live list of ``module`` (see the module docstring) and the
+    list keys to write. Raises when a named replacement is impossible (a week no module has a
+    local live list of; an incomplete list without ``allow_incomplete``). A week named by
+    ``replace_live`` replaces the module's published lists of that week only where the module
+    has a local list of it."""
+    fam = FAMILIES[module]
     weeks = sorted(set(replace_live))
-    live = data.lists.filter(pl.col("kind") == "live")
-    picks = data.picks.filter(pl.col("kind") == "live")
-    local_weeks = {(int(s), int(w)) for s, w in live.select("season", "week").iter_rows()}
+    have = local_live_weeks(data)
     for s, w in weeks:
-        if (s, w) not in local_weeks:
+        if (s, w) not in have:
             raise PublishError(
                 f"--replace-live {s}-W{w:02d}: the local predictions store has no live list of "
                 f"{s} week {w} to replace it with; nothing was published"
             )
+    d = data.families[module]
+    live = d.lists.filter(pl.col("kind") == "live")
+    rows = d.rows.filter(pl.col("kind") == "live")
+    mine_weeks = {(int(s), int(w)) for s, w in live.select("season", "week").iter_rows()}
     decisions: list[LiveDecision] = []
-    write: list[tuple[int, int, str]] = []
+    write: list[tuple] = []
     for r in live.iter_rows(named=True):
-        key = (int(r["season"]), int(r["week"]), str(r["position"]))
-        replacing = key[:2] in weeks
+        key = _key3([r[c] for c in fam.key], fam)
+        replacing = key[:2] in weeks and key[:2] in mine_weeks
         old = published.get(key)
         if r["incomplete"] and not allow_incomplete and (replacing or old is None):
             if replacing:
                 raise PublishError(
-                    f"--replace-live {key[0]}-W{key[1]:02d}: the local {key[2]} list was scored "
-                    "with incomplete data; add --allow-incomplete to publish it anyway. "
-                    "Nothing was published."
+                    f"--replace-live {key[0]}-W{key[1]:02d}: the local {fam.label or 'Radar'} "
+                    f"{key[2]} list was scored with incomplete data; add --allow-incomplete to "
+                    "publish it anyway. Nothing was published."
                 )
-            decisions.append(LiveDecision(*key, "skipped", "scored with incomplete data"))
+            decisions.append(LiveDecision(*key, "skipped", "scored with incomplete data",
+                                          module=module))  # fmt: skip
             continue
-        mine = (
-            picks.filter(
-                (pl.col("season") == key[0]) & (pl.col("week") == key[1])
-                & (pl.col("position") == key[2])
-            ).sort("rank").get_column("gsis_id").to_list()
-        )  # fmt: skip
+        match = pl.lit(True)
+        for c in fam.key:
+            match = match & (pl.col(c) == r[c])
+        mine = rows.filter(match).sort(fam.order or fam.row_id).get_column(fam.row_id).to_list()
+        version = r[fam.version]
         if replacing:
             detail = (
                 "nothing published yet" if old is None else
                 f"replaces the list of {old['model_version']} generated "
                 f"{old['generated_at']:%Y-%m-%d %H:%M} UTC ({len(old['picks'])} picks, No. 1 "
-                f"{(old['picks'] or ['-'])[0]}) with {r['model_version']} generated "
+                f"{(old['picks'] or ['-'])[0]}) with {version} generated "
                 f"{r['generated_at']:%Y-%m-%d %H:%M} UTC ({len(mine)} picks, No. 1 "
                 f"{(mine or ['-'])[0]})"
             )  # fmt: skip
-            decisions.append(LiveDecision(*key, "replace", detail))
-            write.append(key)
+            decisions.append(LiveDecision(*key, "replace", detail, module=module))
+            write.append(tuple(r[c] for c in fam.key))
         elif old is not None:
-            same = old["picks"] == mine and old["model_version"] == r["model_version"]
+            same = old["picks"] == mine and old["model_version"] == version
             detail = "" if same else (
                 "the local list differs from the published one; the published one is kept "
                 f"(to replace it: --replace-live {key[0]}-W{key[1]:02d})"
             )  # fmt: skip
-            decisions.append(LiveDecision(*key, "kept", detail))
+            decisions.append(LiveDecision(*key, "kept", detail, module=module))
         else:
-            decisions.append(LiveDecision(*key, "insert"))
-            write.append(key)
-    keys = pl.DataFrame(
-        write, schema={"season": pl.Int32, "week": pl.Int32, "position": pl.String}, orient="row"
-    )
+            decisions.append(LiveDecision(*key, "insert", module=module))
+            write.append(tuple(r[c] for c in fam.key))
+    schema = {c: TABLES[fam.lists].types[TABLES[fam.lists].names.index(c)] for c in fam.key}
+    keys = pl.DataFrame(write, schema={c: pl.Int32 if schema[c] == "integer" else pl.String
+                                       for c in fam.key}, orient="row")  # fmt: skip
     return decisions, keys
 
 
@@ -401,14 +441,30 @@ class _StepError(RuntimeError):
 # The empty-replacement guard and the unchanged-table skip (reviewer's rules after E2)
 # --------------------------------------------------------------------------------------
 
-# The replaced tables, as the guard and the hashes see them: the backtest part of the lists
-# (live lists are frozen, never replaced) and every "replace" table except site_meta.
-GUARDED = ("radar_list", "radar_pick", "radar_outcome", "track_record", "tier_stats",
-           "player_week_summary", "glossary")  # fmt: skip
-BACKTEST_ONLY = {"radar_list", "radar_pick"}
-# hash units: the backtest lists and picks are written (or skipped) together
-UNITS = ("backtest_lists", "radar_outcome", "track_record", "tier_stats", "player_week_summary",
-         "glossary")  # fmt: skip
+# The replaced tables, as the guard and the hashes see them (step P2: per module): the backtest
+# part of each module's lists (live lists are frozen, never replaced), its outcomes and other
+# replaced tables, and the tables every module shares (site_meta excepted).
+BACKTEST_ONLY = {n for f in FAMILIES.values() for n in (f.lists, f.rows)}
+
+
+def guarded(modules: Iterable[str]) -> tuple[str, ...]:
+    """The tables the empty-replacement guard watches in a publish of ``modules``."""
+    out = [n for m in FAMILIES if m in set(modules)
+           for n in (FAMILIES[m].lists, FAMILIES[m].rows, FAMILIES[m].outcomes,
+                     *FAMILIES[m].replaced)]  # fmt: skip
+    return (*out, *SHARED)
+
+
+def units(modules: Iterable[str]) -> dict[str, tuple[str, ...]]:
+    """Hash unit -> the tables it covers, in write order: each module's backtest lists (its
+    lists and rows together), its outcomes and other replaced tables, then the shared ones."""
+    out: dict[str, tuple[str, ...]] = {}
+    for m in [m for m in FAMILIES if m in set(modules)]:
+        f = FAMILIES[m]
+        out[f.unit] = (f.lists, f.rows)
+        out.update({n: (n,) for n in (f.outcomes, *f.replaced)})
+    out.update({n: (n,) for n in SHARED})
+    return out
 
 
 def _jsonable(v: Any) -> Any:
@@ -431,10 +487,10 @@ def content_hash(*frames: pl.DataFrame) -> str:
     return f"{HASH_VERSION}:{h.hexdigest()}"
 
 
-def target_counts(conn) -> dict[str, int]:
-    """Rows the target holds now in each guarded table (lists and picks: backtest only)."""
+def target_counts(conn, names: Iterable[str] = guarded(FAMILIES)) -> dict[str, int]:
+    """Rows the target holds now in each guarded table (lists and rows: backtest only)."""
     out = {}
-    for name in GUARDED:
+    for name in names:
         where = " WHERE kind = 'backtest'" if name in BACKTEST_ONLY else ""
         out[name] = int(conn.execute(f'SELECT count(*) FROM "{name}"{where}').fetchone()[0])
     return out
@@ -443,7 +499,7 @@ def target_counts(conn) -> dict[str, int]:
 def shrink_problems(current: dict[str, int], new: dict[str, int], share: float) -> list[str]:
     """Tables that would lose more than ``share`` of the rows the target holds."""
     problems = []
-    for name in GUARDED:
+    for name in current:
         cur, nxt = current.get(name, 0), new.get(name, 0)
         if cur > 0 and nxt < cur * (1 - share):
             what = f"{name} (backtest rows)" if name in BACKTEST_ONLY else name
@@ -458,6 +514,63 @@ def stored_hashes(conn) -> dict[str, str]:
         "SELECT key, value FROM site_meta WHERE key LIKE %s", [HASH_PREFIX + "%"]
     ).fetchall()
     return {str(k)[len(HASH_PREFIX) :]: str(v) for k, v in rows}
+
+
+def _target_keys(conn, family: Family, where: str = "") -> pl.DataFrame:
+    """(season, week, row id) of the rows ``family`` holds in the target."""
+    rows = conn.execute(
+        f'SELECT DISTINCT season, week, "{family.row_id}" FROM "{family.rows}" {where}'
+    ).fetchall()
+    return pl.DataFrame(rows, orient="row", schema={"season": pl.Int32, "week": pl.Int32,
+                                                    family.row_id: pl.String})  # fmt: skip
+
+
+def _planned_frames(
+    conn, data: PublishData, mods: Sequence[str], weeks: Sequence[tuple[int, int]]
+) -> tuple[dict[str, pl.DataFrame], dict[str, tuple[pl.DataFrame, pl.DataFrame]],
+           dict[str, list[tuple[int, int]]]]:  # fmt: skip
+    """(frames, backs, replaced): what each replaced table will hold (a module's outcomes: of
+    every row in the target after the publish, i.e. its local lists' and the frozen live
+    lists' already there, less the live weeks it replaces; its other replaced tables; the
+    shared ones), each module's backtest (lists, rows), and the live weeks each replaces."""
+    frames: dict[str, pl.DataFrame] = {}
+    backs: dict[str, tuple[pl.DataFrame, pl.DataFrame]] = {}
+    replaced: dict[str, list[tuple[int, int]]] = {}
+    for m in mods:
+        f, d = FAMILIES[m], data.families[m]
+        backs[m] = (d.lists.filter(pl.col("kind") == "backtest"),
+                    d.rows.filter(pl.col("kind") == "backtest"))  # fmt: skip
+        mine = {(int(s), int(w)) for s, w in d.lists.filter(pl.col("kind") == "live")
+                .select("season", "week").iter_rows()}  # fmt: skip
+        replaced[m] = [wk for wk in weeks if wk in mine]
+        okey = ["season", "week", f.row_id]
+        kept = _target_keys(conn, f, "WHERE kind = 'live'")
+        if replaced[m]:
+            gone = pl.DataFrame(replaced[m], schema={"season": pl.Int32, "week": pl.Int32},
+                                orient="row")  # fmt: skip
+            kept = kept.join(gone, on=["season", "week"], how="anti")
+        keys = pl.concat([d.outcome_keys.select(okey), kept]).unique()
+        frames[f.outcomes] = d.outcome_source.join(keys, on=okey).sort(okey)
+        frames.update({n: data.tables[n] for n in f.replaced})
+    frames.update({n: data.tables[n] for n in SHARED})
+    return frames, backs, replaced
+
+
+def _missing_outcomes(conn, mods: Sequence[str], frames: dict[str, pl.DataFrame]) -> list[str]:
+    """A warning per module whose published rows (frozen ones included) lack an outcome row."""
+    out = []
+    for m in mods:
+        f = FAMILIES[m]
+        none = _target_keys(conn, f).join(frames[f.outcomes], on=["season", "week", f.row_id],
+                                          how="anti")  # fmt: skip
+        if none.height:
+            r = none.row(0, named=True)
+            what = "published picks" if not f.label else f"published {f.label} rows"
+            out.append(
+                f"{none.height} {what} have no outcome row in the dataset (e.g. {r[f.row_id]} "
+                f"in {r['season']} week {r['week']}); the site shows them without an outcome"
+            )
+    return out
 
 
 def _publish(
@@ -487,37 +600,27 @@ def _publish(
     result: PublishResult | None = None
     weeks = sorted(set(replace_live))
     t = data.tables
-    key = list(LIVE_KEY)
-    okey = ["season", "week", "gsis_id"]
+    mods = [m for m in FAMILIES if m in data.families]
     # one transaction: any exception rolls it back
     with conn.transaction():
         conn.execute("SELECT pg_advisory_xact_lock(%s)", [LOCK_KEY])
         check_schema(conn)
-        published = target_live(conn)
-        decisions, live_keys = plan_live(
-            data, published, allow_incomplete=allow_incomplete, replace_live=weeks
-        )
+        decisions: list[LiveDecision] = []
+        plans: dict[str, pl.DataFrame] = {}
+        for m in mods:
+            dec, plans[m] = plan_live(data, target_live(conn, FAMILIES[m]),
+                                      allow_incomplete=allow_incomplete, replace_live=weeks,
+                                      module=m)  # fmt: skip
+            decisions += dec
         step("plan")
         # what the replaced tables will hold (computed before anything is written)
-        back = data.lists.filter(pl.col("kind") == "backtest")
-        back_picks = data.picks.filter(pl.col("kind") == "backtest")
-        kept_live = pl.DataFrame(
-            conn.execute(
-                "SELECT DISTINCT season, week, gsis_id FROM radar_pick WHERE kind = 'live'"
-            ).fetchall(),
-            schema={"season": pl.Int32, "week": pl.Int32, "gsis_id": pl.String}, orient="row",
-        )  # fmt: skip
-        if weeks:  # the live weeks being replaced keep only the local picks
-            gone = pl.DataFrame(weeks, schema={"season": pl.Int32, "week": pl.Int32},
-                                orient="row")  # fmt: skip
-            kept_live = kept_live.join(gone, on=["season", "week"], how="anti")
-        keys = pl.concat([data.outcome_keys.select(okey), kept_live]).unique()
-        outcomes = data.outcome_source.join(keys, on=okey).sort(okey)
-        frames = {"radar_outcome": outcomes, **{n: t[n] for n in REPLACED if n in t}}
-        new_counts = {"radar_list": back.height, "radar_pick": back_picks.height,
-                      **{n: frames[n].height for n in GUARDED if n in frames}}  # fmt: skip
+        frames, backs, replaced_weeks = _planned_frames(conn, data, mods, weeks)
+        new_counts = {n: f.height for n, f in frames.items()}
+        for m, (back, back_rows) in backs.items():
+            new_counts[FAMILIES[m].lists] = back.height
+            new_counts[FAMILIES[m].rows] = back_rows.height
         # 1. the empty-replacement guard
-        current = target_counts(conn)
+        current = target_counts(conn, guarded(mods))
         problems = shrink_problems(current, new_counts, max_shrink_share)
         if problems and not allow_shrink:
             raise ShrinkError(
@@ -530,71 +633,61 @@ def _publish(
             warnings += [f"--allow-shrink: {p}" for p in problems]
         step("guard")
         # 2. content hashes: an unchanged table is not rewritten
-        hashes = {
-            "backtest_lists": content_hash(
-                back.drop("generated_at"), back_picks.select(TABLES["radar_pick"].names)
-            ),
-            **{n: content_hash(frames[n].select(TABLES[n].names)) for n in UNITS[1:]},
-        }  # fmt: skip
+        plan_units = units(mods)
+        hashes = {}
+        for unit, names in plan_units.items():
+            if len(names) == 2:  # a module's backtest lists
+                back, back_rows = backs[next(m for m in mods if FAMILIES[m].unit == unit)]
+                hashes[unit] = content_hash(back.drop("generated_at"),
+                                            back_rows.select(TABLES[names[1]].names))  # fmt: skip
+            else:
+                hashes[unit] = content_hash(frames[unit].select(TABLES[unit].names))
         before = stored_hashes(conn)
 
-        def same(unit: str, *tables: str) -> bool:
+        def same(unit: str) -> bool:
             return before.get(unit) == hashes[unit] and all(
-                current[n] == new_counts[n] for n in tables
+                current[n] == new_counts[n] for n in plan_units[unit]
             )
 
         for name in ("model_versions", "dim_team", "dim_player"):
             written[name] = _upsert(conn, TABLES[name], rows_of(t[name], TABLES[name]))
         step("upsert")
-        # backtest lists: replaced (unless unchanged)
-        n_lists = n_picks = 0
-        if same("backtest_lists", "radar_list", "radar_pick"):
-            unchanged.append("backtest_lists")
-        else:
-            conn.execute("DELETE FROM radar_pick WHERE kind = 'backtest'")
-            conn.execute("DELETE FROM radar_list WHERE kind = 'backtest'")
-            n_lists = _copy(conn, TABLES["radar_list"], rows_of(back, TABLES["radar_list"]))
-            n_picks = _copy(conn, TABLES["radar_pick"], rows_of(back_picks, TABLES["radar_pick"]))
-        step("backtest_lists")
-        # live lists: frozen; only new ones (and named replacements) are written
-        for s, w in weeks:
-            conn.execute(
-                "DELETE FROM radar_pick WHERE kind = 'live' AND season = %s AND week = %s",
-                [s, w],
-            )
-            conn.execute(
-                "DELETE FROM radar_list WHERE kind = 'live' AND season = %s AND week = %s",
-                [s, w],
-            )
-        live = data.lists.filter(pl.col("kind") == "live").join(live_keys, on=key)
-        live_picks = data.picks.filter(pl.col("kind") == "live").join(live_keys, on=key)
-        n_lists += _copy(conn, TABLES["radar_list"], rows_of(live, TABLES["radar_list"]))
-        n_picks += _copy(conn, TABLES["radar_pick"], rows_of(live_picks, TABLES["radar_pick"]))
-        written["radar_list"], written["radar_pick"] = n_lists, n_picks
-        step("live_lists")
-        # outcomes (every pick in the target, frozen live lists included) and the other tables
-        target_keys = pl.DataFrame(
-            conn.execute("SELECT DISTINCT season, week, gsis_id FROM radar_pick").fetchall(),
-            schema={"season": pl.Int32, "week": pl.Int32, "gsis_id": pl.String},
-            orient="row",
-        )
-        no_outcome = target_keys.join(outcomes, on=okey, how="anti")
-        if no_outcome.height:
-            r = no_outcome.row(0, named=True)
-            warnings.append(
-                f"{no_outcome.height} published picks have no outcome row in the dataset "
-                f"(e.g. {r['gsis_id']} in {r['season']} week {r['week']}); the site shows "
-                "them without an outcome"
-            )
-        for name in UNITS[1:]:
-            if same(name, name):
-                unchanged.append(name)
-                written[name] = 0
+        for m in mods:  # backtest lists: replaced (unless unchanged)
+            f, (back, back_rows) = FAMILIES[m], backs[m]
+            written[f.lists] = written[f.rows] = 0
+            if same(f.unit):
+                unchanged.append(f.unit)
                 continue
-            written[name] = _replace(conn, TABLES[name], rows_of(frames[name], TABLES[name]))
+            conn.execute(f"DELETE FROM \"{f.rows}\" WHERE kind = 'backtest'")
+            conn.execute(f"DELETE FROM \"{f.lists}\" WHERE kind = 'backtest'")
+            written[f.lists] = _copy(conn, TABLES[f.lists], rows_of(back, TABLES[f.lists]))
+            written[f.rows] = _copy(conn, TABLES[f.rows], rows_of(back_rows, TABLES[f.rows]))
+        step("backtest_lists")
+        for m in mods:  # live lists: frozen; only new ones (and named replacements) are written
+            f, d = FAMILIES[m], data.families[m]
+            for s, w in replaced_weeks[m]:
+                for name in (f.rows, f.lists):
+                    conn.execute(f'DELETE FROM "{name}" WHERE kind = \'live\' AND season = %s '
+                                 "AND week = %s", [s, w])  # fmt: skip
+            key = list(f.key)
+            live = d.lists.filter(pl.col("kind") == "live").join(plans[m], on=key)
+            live_rows = d.rows.filter(pl.col("kind") == "live").join(plans[m], on=key)
+            written[f.lists] += _copy(conn, TABLES[f.lists], rows_of(live, TABLES[f.lists]))
+            written[f.rows] += _copy(conn, TABLES[f.rows], rows_of(live_rows, TABLES[f.rows]))
+        step("live_lists")
+        warnings += _missing_outcomes(conn, mods, frames)
+        for unit, names in plan_units.items():
+            if len(names) == 2:
+                continue
+            if same(unit):
+                unchanged.append(unit)
+                written[unit] = 0
+                continue
+            written[unit] = _replace(conn, TABLES[unit], rows_of(frames[unit], TABLES[unit]))
         step("replace")
         meta = dict(data.meta)
         meta.update(_latest_lists(conn))
+        meta.update({HASH_PREFIX + u: h for u, h in before.items() if u not in hashes})
         meta.update({HASH_PREFIX + u: h for u, h in hashes.items()})
         written["site_meta"] = _replace(conn, TABLES["site_meta"], sorted(meta.items()))
         counts = {
@@ -622,15 +715,20 @@ def _publish(
 
 
 def _latest_lists(conn) -> dict[str, str]:
+    """site_meta's latest list (any kind, and live) of every module: 'latest_list_season' ...
+    for the Radar, 'stream_latest_list_season' ... and 'regression_latest_list_season' ...
+    for the others (tables.Family.meta)."""
     out = {}
-    for kind in ("live", None):
-        where = "WHERE kind = 'live'" if kind else ""
-        row = conn.execute(
-            f"SELECT season, week FROM radar_list {where} ORDER BY season DESC, week DESC LIMIT 1"
-        ).fetchone()
-        prefix = "latest_live_list" if kind else "latest_list"
-        out[f"{prefix}_season"] = "" if row is None else str(row[0])
-        out[f"{prefix}_week"] = "" if row is None else str(row[1])
+    for f in FAMILIES.values():
+        for kind in ("live", None):
+            where = "WHERE kind = 'live'" if kind else ""
+            row = conn.execute(
+                f'SELECT season, week FROM "{f.lists}" {where} '
+                "ORDER BY season DESC, week DESC LIMIT 1"
+            ).fetchone()
+            prefix = f.meta + ("latest_live_list" if kind else "latest_list")
+            out[f"{prefix}_season"] = "" if row is None else str(row[0])
+            out[f"{prefix}_week"] = "" if row is None else str(row[1])
     return out
 
 
@@ -775,10 +873,11 @@ def summary_lines(result: PublishResult, target: Target) -> list[str]:
 def table_notes(result: PublishResult) -> dict[str, str]:
     """Per table: 'unchanged (not rewritten)' where the content hash matched."""
     out = {}
+    plan = units(FAMILIES)
     for unit in result.unchanged:
-        names = ("radar_list", "radar_pick") if unit == "backtest_lists" else (unit,)
+        names = plan.get(unit, (unit,))
         for n in names:
-            out[n] = "backtest rows unchanged (not rewritten)" if unit == "backtest_lists" \
+            out[n] = "backtest rows unchanged (not rewritten)" if len(names) == 2 \
                 else "unchanged (not rewritten)"  # fmt: skip
     return out
 

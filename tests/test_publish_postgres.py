@@ -351,6 +351,7 @@ def test_cli_exit_codes(db: tg.Target, tmp_path: Path, monkeypatch: pytest.Monke
     i = syn.inputs
     args = ["publish", "--target", "local", "--db", str(i.warehouse), "--store", str(i.store),
             "--dataset", str(i.dataset), "--evaluation", str(i.evaluation_csv),
+            "--module", "waiver_radar",
             "--now", "2026-09-28T20:00:00"]  # fmt: skip
     runner = CliRunner()
     res = runner.invoke(app, args)
@@ -508,6 +509,7 @@ def test_the_shrink_guard_exit_code(db: tg.Target, tmp_path: Path, monkeypatch) 
     i = syn.inputs
     args = ["publish", "--target", "local", "--db", str(i.warehouse), "--store", str(i.store),
             "--dataset", str(i.dataset), "--evaluation", str(i.evaluation_csv),
+            "--module", "waiver_radar",
             "--now", "2026-09-28T20:00:00", "--result-json", str(tmp_path / "r.json")]  # fmt: skip
     runner = CliRunner()
     assert runner.invoke(app, args).exit_code == 0
@@ -602,3 +604,148 @@ def test_a_model_version_keeps_its_first_created_at(db: tg.Target) -> None:
             "SELECT created_at, params FROM model_versions WHERE model_version = 'logit-test'"
         ).fetchone()
     assert got[0] == first and got[1] == {"C": 2}
+
+
+# --------------------------------------------------------------------------------------
+# Step P2: the streamer's and Regression Watch's lists follow the same rules
+# --------------------------------------------------------------------------------------
+
+
+def publish_all(target: tg.Target, inputs, modules: dict | None = None, *, live: bool = True,
+                **kwargs) -> wr.PublishResult:  # fmt: skip
+    """The Radar's synthetic publish plus the streamer's and Regression Watch's lists
+    (tests/publish_modules_synthetic.py); ``live=False``: a fresh runner, whose store has no
+    live list of those modules (their outcomes stay available, as the datasets keep them)."""
+    from tests import publish_modules_synthetic as pm
+
+    data = pm.add_modules(col.collect(inputs), **(modules or {}))
+    if not live:
+        for m in ("streamer", "regression_watch"):
+            f = data.families[m]
+            f.lists = f.lists.filter(pl.col("kind") != "live")
+            f.rows = f.rows.filter(pl.col("kind") != "live")
+    assert col.validate(data) == []
+    return wr.publish(target, data, **kwargs)
+
+
+def test_every_module_is_published_and_a_second_run_rewrites_nothing(
+    db: tg.Target, tmp_path: Path
+) -> None:
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    first = publish_all(db, syn.inputs)
+    c = first.counts
+    assert (c["stream_list"], c["stream_pick"], c["stream_outcome"]) == (10, 45, 45)
+    assert (c["regression_list"], c["regression_row"], c["regression_outcome"]) == (3, 18, 18)
+    assert c["stream_track_record"] == c["regression_track_record"] == 3
+    actions = {d.label: d.action for d in first.live}
+    assert actions["streamer 2026-W03 K"] == actions["regression watch 2026-W03"] == "insert"
+    assert actions["2026-W03 QB"] == "insert"  # the Radar's label is unchanged
+    meta = dict(rows(db, "SELECT key, value FROM site_meta"))
+    assert meta["stream_latest_live_list_week"] == "3" and meta["latest_live_list_week"] == "3"
+    assert meta["regression_latest_list_season"] == "2026"
+    assert meta["hash:stream_backtest_lists"].startswith("v1:")
+    note = rows(db, "SELECT note FROM regression_list WHERE kind = 'live'")[0][0]
+    assert note.startswith("Week 3 is earlier than the backtested weeks 4-14")
+    assert rows(db, "SELECT tags FROM regression_row WHERE kind = 'live' AND tag = 'buy_low'") \
+        == [(["buy_low", "legit"],)]  # fmt: skip
+    assert rows(db, "SELECT count(*) FROM stream_pick WHERE model_prob IS NULL")[0][0] == 20
+    content = dump(db)
+    res = publish_all(db, syn.inputs)
+    assert {"stream_backtest_lists", "regression_backtest_lists", "stream_outcome",
+            "regression_outcome", "stream_track_record",
+            "regression_track_record"} <= set(res.unchanged)  # fmt: skip
+    assert {d.action for d in res.live} == {"kept"} and dump(db) == content
+
+
+def test_streamer_and_regression_live_lists_are_frozen(db: tg.Target, tmp_path: Path) -> None:
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    publish_all(db, syn.inputs)
+    k = "SELECT entity_id FROM stream_pick WHERE kind = 'live' AND position = 'K' ORDER BY rank"
+    rw = "SELECT gsis_id, ppg FROM regression_row WHERE kind = 'live' ORDER BY gsis_id"
+    k0, rw0 = rows(db, k), rows(db, rw)
+    # 1. a local list that differs never overwrites the published one
+    res = publish_all(db, syn.inputs, {"streamer": {"shift": 2}, "regression": {"shift": 1}})
+    got = {d.label: d for d in res.live}
+    assert got["streamer 2026-W03 K"].action == "kept"
+    assert "differs" in got["streamer 2026-W03 K"].detail
+    # (a list's players and version are compared, as the Radar's: same players here)
+    assert got["regression watch 2026-W03"].action == "kept"
+    assert "differs" not in got["streamer 2026-W03 DST"].detail
+    assert (rows(db, k), rows(db, rw)) == (k0, rw0)
+    # 2. a fresh runner without them keeps them, outcomes included
+    res = publish_all(db, syn.inputs, live=False)
+    assert not [d for d in res.live if d.module != "waiver_radar"]
+    assert (rows(db, k), rows(db, rw)) == (k0, rw0)
+    assert not any("no outcome row" in w for w in res.warnings)
+    assert res.counts["stream_outcome"] == 45 and res.counts["regression_outcome"] == 18
+    # 3. --replace-live replaces every module's list of that week
+    res = publish_all(db, syn.inputs, {"streamer": {"shift": 2}, "regression": {"shift": 1}},
+                      replace_live=[(2026, 3)])  # fmt: skip
+    got = {d.label: d.action for d in res.live}
+    assert got["streamer 2026-W03 K"] == got["regression watch 2026-W03"] == "replace"
+    assert got["2026-W03 QB"] == "replace"
+    assert rows(db, k)[0][0] == k0[2][0] and rows(db, rw) != rw0
+
+
+def test_incomplete_module_lists_are_skipped_and_shrinking_is_refused(
+    db: tg.Target, tmp_path: Path
+) -> None:
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    res = publish_all(db, syn.inputs, {"streamer": {"incomplete": True}})
+    assert sorted(d.label for d in res.skipped) == ["streamer 2026-W03 DST",
+                                                    "streamer 2026-W03 K"]  # fmt: skip
+    assert rows(db, "SELECT count(*) FROM stream_list WHERE kind = 'live'")[0][0] == 0
+    assert rows(db, "SELECT count(*) FROM regression_list WHERE kind = 'live'")[0][0] == 1
+    # half of the streamer's backtest lists go missing locally: refused, nothing changes
+    content = dump(db)
+    with pytest.raises(wr.PublishError, match=r"stream_pick \(backtest rows\) would go from 36"):
+        publish_all(db, syn.inputs, {"streamer": {"backtest": (2025,)}})
+    assert dump(db) == content
+    res = publish_all(db, syn.inputs, {"streamer": {"backtest": (2025,)}}, allow_shrink=True)
+    # 4 backtest lists; the live ones, complete now, are published at last
+    assert res.counts["stream_list"] == 4 + 2 and any("--allow-shrink" in w for w in res.warnings)
+    with pytest.raises(wr.PublishError, match="regression_track_record would go from 3 to 1"):
+        publish_all(db, syn.inputs, {"regression": {"n_track": 1}})
+
+
+def test_the_p2_tables_are_covered_by_roles_made_before_them(
+    server: str, roles: dict[str, str], tmp_path: Path
+) -> None:
+    """Neon's order: roles.sql ran on the E2 schema; the owner applies the P2 migration later.
+    The job must write the new tables and the site read them (the default privileges)."""
+    import shutil
+
+    name = f"{PREFIX}_p2roles"
+    old = tmp_path / "drizzle"
+    shutil.copytree(mg.migrations_dir(), old)
+    journal = old / "meta" / "_journal.json"
+    entries = json.loads(journal.read_text())
+    entries["entries"] = entries["entries"][:1]
+    journal.write_text(json.dumps(entries))
+    with psycopg.connect(server, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{name}"')
+    url = make_conninfo(server, dbname=name)
+    try:
+        with psycopg.connect(url, autocommit=True) as owner:
+            assert mg.apply_migrations(owner, old) == ["0000_init"]
+            with owner.transaction():
+                for role, key in (("twm_web", "web"), ("twm_job", "job")):
+                    owner.execute("SELECT set_config(%s, %s, true)",
+                                  [f"twm.{key}_password", roles[role]])  # fmt: skip
+                owner.execute((ROOT / "scripts" / "neon" / "roles.sql").read_text())
+            assert mg.apply_migrations(owner) == ["0001_streamer_regression_watch"]
+        job = tg.resolve("local", env={tg.LOCAL_ENV: make_conninfo(
+            url, user="twm_job", password=roles["twm_job"])}, env_file=NO_ENV_FILE)  # fmt: skip
+        syn = ps.build(tmp_path / "syn", live_weeks=(3,))
+        res = publish_all(job, syn.inputs)
+        assert res.counts["stream_pick"] == 45 and res.counts["regression_row"] == 18
+        web = make_conninfo(url, user="twm_web", password=roles["twm_web"])
+        with psycopg.connect(web, autocommit=True) as conn:
+            for t in ("stream_list", "stream_pick", "regression_row", "regression_track_record"):
+                assert conn.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] > 0
+            with pytest.raises((psycopg.errors.InsufficientPrivilege,
+                                psycopg.errors.ReadOnlySqlTransaction)):  # fmt: skip
+                conn.execute("DELETE FROM stream_pick")
+    finally:
+        with psycopg.connect(server, autocommit=True) as admin:
+            admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')

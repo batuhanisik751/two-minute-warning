@@ -267,3 +267,103 @@ def streamer_dataset(
         f"{target.stat().st_size / 1e6:.1f} MB, {secs:.0f} s"
     )
     typer.echo(f"wrote {target}")
+
+
+@streamer_app.command("backtest")
+def streamer_backtest(
+    dataset: Path = typer.Option(
+        Path("data/streamer/dataset.parquet"),
+        "--dataset",
+        help="The dataset from `twm streamer dataset` (relative paths are under the project root).",
+    ),
+    start: int = typer.Option(2013, "--start", help="First test season (2012 trains it)."),
+    end: int = typer.Option(2025, "--end", help="Last test season."),
+    models: list[str] | None = typer.Option(
+        None,
+        "--model",
+        help="Methods to run (repeatable; default all): baseline_last_points, "
+        "baseline_ppg, baseline_opponent, logit, lgbm.",
+    ),  # fmt: skip
+    pos: str | None = typer.Option(None, "--pos", help="Only this position (K or DST)."),
+    sensitivity: bool = typer.Option(
+        True,
+        "--sensitivity/--no-sensitivity",
+        help="Also train the models on the whole universe (in or out of the pool) as context.",
+    ),  # fmt: skip
+    store: Path | None = typer.Option(
+        None,
+        "--store",
+        help="Predictions store to write (a DuckDB file); default: not stored. "
+        "S1 never writes the configured store (data/predictions.duckdb).",
+    ),  # fmt: skip
+    out: Path = typer.Option(
+        Path("reports/streamer/backtest.md"),
+        "--out",
+        help="Markdown report (relative paths are under the project root); a CSV with the same "
+        "name is written next to it.",
+    ),  # fmt: skip
+) -> None:
+    """Walk-forward backtest of the streamer, per position: three baselines, logistic regression
+    and LightGBM trained on earlier seasons only (labels public by the season's first as-of);
+    writes the report and, with --store, the predictions."""
+    import time
+
+    import polars as pl
+
+    from twm import predictions as pr
+    from twm.backtest.walkforward import WalkForwardError
+    from twm.config import ROOT
+    from twm.modules.streamer import backtest as bt
+    from twm.modules.streamer import backtest_report as rep
+    from twm.modules.streamer.models import ALL_METHODS, MODELS, POSITIONS
+    from twm.registry import FeatureCheckError
+
+    source = dataset if dataset.is_absolute() else ROOT / dataset
+    if not source.exists():
+        typer.echo(f"dataset not found: {source}; run `twm streamer dataset` first", err=True)
+        raise typer.Exit(code=1)
+    if start > end:
+        raise typer.BadParameter(f"--start {start} is after --end {end}")
+    positions = _positions(pos) or list(POSITIONS)
+    methods = list(models or ALL_METHODS)
+    t0 = time.perf_counter()
+
+    def progress(msg: str) -> None:
+        typer.echo(f"  {msg} ({time.perf_counter() - t0:.0f} s)")
+
+    df = pl.read_parquet(source)
+    kw = dict(positions=positions, test_seasons=range(start, end + 1), progress=progress)
+    try:
+        run = bt.run_backtest(df, methods=methods, **kw)  # type: ignore[arg-type]
+        alt_models = [m for m in methods if m in MODELS]
+        alt = None
+        if sensitivity and alt_models:
+            alt = bt.run_backtest(df, methods=alt_models, train_on="universe", **kw)  # type: ignore[arg-type]
+    except (WalkForwardError, FeatureCheckError, ValueError, KeyError) as e:
+        typer.echo(f"cannot run the backtest: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    created = pr.now_utc()
+    args = ["uv run twm streamer backtest"]
+    if (start, end) != (2013, 2025):
+        args.append(f"--start {start} --end {end}")
+    args += [f"--model {m}" for m in models or []]
+    args += [f"--pos {pos}"] if pos else []
+    args += [] if sensitivity else ["--no-sensitivity"]
+    report = rep.build_report(
+        run, alt=alt, command=" ".join(args), dataset_name=str(dataset),
+        created=f"Created {created:%Y-%m-%d %H:%M} UTC in {time.perf_counter() - t0:.0f} s.",
+    )  # fmt: skip
+    target = out if out.is_absolute() else ROOT / out
+    csv_path = rep.write_report(report, target)
+    for line in report.summary:
+        typer.echo(line)
+    if store is not None:
+        path = store if store.is_absolute() else ROOT / store
+        preds, versions = bt.store_frames(run, created_at=created)
+        counts = pr.write_predictions(path, predictions=preds, versions=versions)
+        typer.echo(
+            f"stored {counts['predictions']:,} predictions, {counts['model_versions']} model "
+            f"versions in {path}"
+        )
+    typer.echo(f"wrote {target}")
+    typer.echo(f"wrote {csv_path}")

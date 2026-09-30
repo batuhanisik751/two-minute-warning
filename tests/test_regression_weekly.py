@@ -16,7 +16,7 @@ import polars as pl
 import pytest
 from typer.testing import CliRunner
 
-from tests.conftest import frame, game
+from tests.conftest import frame, game, plain
 from tests.test_regression_watch import (
     P_QB,
     P_RB,
@@ -464,9 +464,9 @@ def test_generic_commands_run_regression_watch(monkeypatch):
         "reports/regression_watch/backtest.md"
     )
     bad = runner.invoke(app, ["backtest", "regression_watch", "--model", "logit"])
-    assert bad.exit_code == 2 and "--model do not apply" in bad.output
+    assert bad.exit_code == 2 and "--model do not apply" in plain(bad.output)
     train = runner.invoke(app, ["train", "regression_watch"])
-    assert train.exit_code == 2 and "twm regression pin" in train.output
+    assert train.exit_code == 2 and "twm regression pin" in plain(train.output)
 
 
 # --------------------------------------------------------------------------------------

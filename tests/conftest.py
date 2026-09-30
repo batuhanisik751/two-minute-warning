@@ -814,3 +814,13 @@ def real_full_db(tmp_path_factory: pytest.TempPathFactory) -> Any:
     yield path, {m["table_name"]: m for m in manifest}
     for f in path.parent.glob(path.name + "*"):
         f.unlink(missing_ok=True)
+
+
+def plain(text: str) -> str:
+    """Typer prints usage errors in a Rich panel: colored when CI forces color, boxed, and
+    wrapped to the terminal width. Strip all of that so assertions see the message itself."""
+    import re as _re
+
+    text = _re.sub(r"\x1b\[[0-9;]*m", "", text)
+    text = _re.sub(r"[│╭╮╰╯─]", " ", text)
+    return " ".join(text.split())

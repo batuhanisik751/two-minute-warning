@@ -262,6 +262,13 @@ def check_env(ctx: Context) -> Check:
                 + ", ".join(cookies)
                 + " (copy them from your browser's cookies into .env yourself)"
             )
+        if not missing and not cookies:
+            synced = (ctx.root / "data" / "league.duckdb").exists()  # a dangling link: not yet
+            details.append(
+                "My League: configured (league id, year and both cookies set); "
+                + ("synced data in data/league.duckdb (local only, never published)" if synced
+                   else "not synced yet: `uv run twm league sync`")
+            )  # fmt: skip
     else:
         details.append("My League: off (ENABLE_MY_LEAGUE is not true); the app runs without ESPN")
     return Check(status, ".env parsed (values are never shown)", details)

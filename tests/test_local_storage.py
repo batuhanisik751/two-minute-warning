@@ -36,4 +36,6 @@ def test_models_and_data_are_linked_out_and_rerunning_is_safe(tmp_path):
     assert (root / "models").is_symlink() and (root / "models").resolve() == store / "models"
     assert (store / "models" / "waiver_radar" / "logit-x.joblib").read_bytes() == b"model"
     assert (root / "data" / "raw").is_symlink() and (root / "data" / "waiver_radar").is_symlink()
+    league = root / "data" / "league.duckdb"  # F2: linked before the first sync
+    assert league.is_symlink() and Path(os.readlink(league)) == store / "league.duckdb"
     assert "ok     models ->" in out.stdout

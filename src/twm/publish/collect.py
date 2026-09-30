@@ -51,6 +51,9 @@ FORBIDDEN_COLUMNS = frozenset({
     "player_id", "pfr_id", "pfr_player_id", "espn_id", "sleeper_id", "fantasypros_id",
     "yahoo_id", "sportradar_id", "mfl_id", "rotowire_id", "nfl_id", "headshot_url",
     "owned_avg", "owned_espn", "league_id", "espn_s2", "swid",
+    # My League (F2: twm.league.store.PRIVATE_COLUMNS; tests/test_league.py checks the list)
+    "league_team_id", "league_team_abbrev", "league_team_name", "league_is_mine",
+    "league_opponent_id",
 })  # fmt: skip
 
 LIST_SCHEMA: dict[str, Any] = {

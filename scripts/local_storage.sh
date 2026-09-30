@@ -63,5 +63,8 @@ if [ -e "$ROOT/data/warehouse.duckdb" ] || [ -L "$ROOT/data/warehouse.duckdb" ];
   relocate data/warehouse.duckdb file
   rm -f "$ROOT/data/warehouse.duckdb.build.lock"  # the lock now lives next to the target
 fi
+# My League's data (F2; local only, never published) is linked even before the first sync:
+# DuckDB follows the dangling link and creates the file in the store.
+relocate data/league.duckdb file
 
 (cd "$ROOT" && uv run python -c "import twm; print('import twm ok:', twm.__version__)")

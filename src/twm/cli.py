@@ -2637,5 +2637,41 @@ def glossary(
         typer.echo(f"  planned: built in step {e.step}")
 
 
+# ---- My League (ESPN; step F2): optional, local only. twm.league is imported inside each
+# command, never at import time, so the rest of the app (and the publish) never loads it.
+
+league_app = typer.Typer(
+    help="My League (ESPN, optional, local only): needs ENABLE_MY_LEAGUE=true and the ESPN keys "
+    "in .env; otherwise every command prints one line and exits with code 2.",
+    no_args_is_help=True,
+)
+app.add_typer(league_app, name="league")
+
+
+@league_app.command("sync")
+def league_sync(
+    week: int | None = typer.Option(
+        None, help="Week to read (default: ESPN's current week; rosters and box scores then)."
+    ),
+) -> None:
+    """Read the league from ESPN into data/league.duckdb (never published): settings, teams,
+    rosters, free agents, box scores (starters, bench, actual and ESPN-projected points) and
+    recent activity; ESPN ids are joined to gsis ids (unmatched players listed in
+    reports/league/). Prints counts only. Exit 1 when ESPN fails, 2 when My League is off."""
+    from twm.league.commands import run_sync
+
+    raise typer.Exit(code=run_sync(week))
+
+
+@league_app.command("settings-diff")
+def league_settings_diff() -> None:
+    """Compare the league's real settings (last sync) with config/scoring.yaml and
+    config/league.yaml: every scoring item incl. K and D/ST, the lineup slots, the number of
+    teams. Prints the differences and a suggested YAML patch; never edits the config."""
+    from twm.league.commands import run_settings_diff
+
+    raise typer.Exit(code=run_settings_diff())
+
+
 if __name__ == "__main__":
     app()

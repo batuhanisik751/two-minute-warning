@@ -2,6 +2,8 @@
 
 `uv run twm regression backtest` on the warehouse built 2026-09-29 20:58:11. Walk-forward test seasons 2011-2025, headline as-of weeks 4, 6, 8, 10; all weeks 4-14 as a secondary table. Points per game, full PPR (config/scoring.yaml). Glossary: `twm glossary ppg_ros`.
 
+**Note added 2026-09-30 (after this run; nothing below changed):** the product dropped the Legit tag, which predicted nothing (60.6% of its players stayed starters, base rate 61.1%); it stays in this report as tested (docs/regression_watch.md).
+
 **P1 acceptance (MET).** Pooled over the test seasons at the headline as-of weeks, the projection's MAE is 3.21 points per game against 3.41 for season-to-date PPG: a difference of -0.19 (-0.25 to -0.13) (95% season-block bootstrap interval), which excludes 0.
 
 Variants chosen (on earlier seasons only): `mean_hl4_all`, `mean_hl8_all` (by season below).

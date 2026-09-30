@@ -1596,7 +1596,6 @@ def regression_score(
             typer.echo(f"  {r['name'] or r['gsis_id']} {r['position']} {r['team']}: PPG "
                        f"{r['ppg']:.1f}, xFP/g {r['xfp_pg']:.1f}, FPOE/g {r['fpoe_pg']:+.1f}, "
                        f"projection {r['ppg_ros']:.1f}")  # fmt: skip
-    typer.echo(f"Legit: {t.filter(pl.col('legit')).height} players")
     typer.echo(f"stored {counts['predictions']:,} predictions in {_display_path(store_path, ROOT)}"
                + (f"; {graded:,} final outcomes" if graded else ""))  # fmt: skip
     typer.echo(f"wrote {_display_path(target, ROOT)}")

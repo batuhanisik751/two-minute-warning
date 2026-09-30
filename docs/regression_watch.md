@@ -292,6 +292,12 @@ value that still tags at least 3 players a week):
   tenth: his points come from his role. 61% were still starters for the rest of the season,
   the same as all starters (61%); starters with top-tenth FPOE stayed 63% of the time (they rank
   higher, so they have further to fall). Read Legit as a description, not a forecast.
+  **Tested, not shown (owner, 2026-09-30):** Legit had no forecast value (60.6% of the 3,195
+  tagged player-as-ofs stayed starters against the 61.1% base rate of every starter), so the
+  product dropped it: the weekly list assigns only Sell-high and Buy-low (step R1). This
+  backtest, its report and its CSV stay as they were run (Legit included: the finding is
+  history), and so does the frozen backtest snapshot; `twm publish` strips Legit from every
+  list it writes.
 
 **Point in time.** Each projection of season S uses only S's games public at the as-of and the
 seasons before S; the variant and X for S are chosen on seasons before S. Tests change season S
@@ -332,27 +338,34 @@ recomputes the file from the warehouse (about 10 s) and refuses when the record 
   live week is never overwritten.
 - **Stored**: every universe player (module `regression_watch`, entity type `player`): `score`
   = projected points per game for the rest of the season, `rank` within the position, `band` =
-  the tag (`sell_high`, `buy_low`, `legit` or empty; a Buy-low starter is also Legit and stored
-  as `buy_low`), `horizon` = the regular-season weeks left (the column is a number of weeks),
-  `reasons_json` = the numbers behind it (PPG, xFP/game, FPOE/game, games, the shrinkage and
+  the tag (`sell_high`, `buy_low` or empty; since step R1 no `legit`: lists stored before
+  keep it in their rows), `horizon` = the regular-season weeks left (the column is a number
+  of weeks), `reasons_json` = the numbers behind it (PPG, xFP/game, FPOE/game, games, the shrinkage and
   the value it shrinks toward, the gap to his PPG, the X, and the same without garbage time).
 - **Outcomes**: once a season's regular season is over, every stored row gets his actual
   points per game over the rest of it (`outcomes.y_value`, a numeric outcome column added in
   D4a; empty with fewer than 3 games left, which the backtest does not grade either).
   `uv run twm regression outcomes` does only this.
-- **Report** `reports/regression_watch/weekly/<season>-W<nn>.md`: Sell-high, Buy-low and Legit
-  tables in plain words, each with its backtest hit rate next to the base rate. **Legit** means
-  "no regression flag: the production is backed by opportunity"; its rate (61% stayed starters)
-  equals the rate of every starter (61%), and the list says so. A list before week 4 (in
-  practice week 3, the first with a list) opens with "Early in the season": week 3 is earlier
+- **Report** `reports/regression_watch/weekly/<season>-W<nn>.md`: Sell-high and Buy-low
+  tables in plain words, each with its backtest hit rate next to the base rate. One line
+  ("Two tags only.") says that a third tag, Legit, was tested and dropped because it predicted
+  nothing, with its two rates from backtest.csv (60.6% of its players stayed starters; 61.1% of
+  every starter did). Reports written before step R1 keep their Legit table. A list before
+  week 4 (in practice week 3, the first with a list) opens with "Early in the season": week 3 is earlier
   than the backtested weeks 4-14, so its projection and tags were never checked that early
   (step P2; the published `regression_list.note` carries the same sentence).
 - **Published** (step P2) with the other modules by `twm publish` and the scheduled job
   (`regression_score` stage): `regression_list`, `regression_row`, `regression_outcome`,
-  `regression_track_record`, plus the backtest lists of the headline weeks of 2011-2025 for the
+  `regression_track_record`, `regression_stability` (step R1: `reports/regression_watch/
+  stability.csv` row for row, `table` -> `section` and `window` -> `seasons`, for the
+  methodology page; replaced each publish, skipped when unchanged, refused when it would
+  shrink, like the track record), plus the backtest lists of the headline weeks of 2011-2025 for the
   time machine: frozen once on the owner's Mac (`uv run twm regression freeze`, part of `twm
   regression pin`) and pinned next to the parameters, never rebuilt by the job (docs/deploy.md
-  "Regression Watch's approved parameters").
+  "Regression Watch's approved parameters"). Every published row carries only the product's
+  tags: the frozen backtest lists (made with D3's three tags) lose Legit at publish time (a row
+  whose tag was Legit has none); live lists already published are frozen and keep their rows
+  (2026 week 3), so the site hides 'legit'.
 
 ## Commands
 

@@ -53,8 +53,8 @@ to them), checks them, then writes to the database in **one transaction**: eithe
 is written or nothing is. One publish carries every module's lists (step P2): the Waiver
 Radar (`radar_list`, `radar_pick`, `radar_outcome`), the K and D/ST streamer (`stream_list`,
 `stream_pick`, `stream_outcome`, `stream_track_record`) and Regression Watch
-(`regression_list`, `regression_row`, `regression_outcome`, `regression_track_record`), with
-the same rules for all three (the code is shared: `src/twm/publish/tables.py` `FAMILIES`).
+(`regression_list`, `regression_row`, `regression_outcome`, `regression_track_record`,
+`regression_stability`), with the same rules for all three (the code is shared: `src/twm/publish/tables.py` `FAMILIES`).
 
 1. **Target check.** `--target local` uses `TWM_LOCAL_DATABASE_URL` (default: the container
    above) and refuses any host that is not this computer. `--target remote` uses
@@ -67,7 +67,8 @@ the same rules for all three (the code is shared: `src/twm/publish/tables.py` `F
    the dataset and the predictions store agree on every final outcome. Streamer picks: a
    kicker's gsis_id or `DST-<its team>`, the entity type of its position, a model probability
    for every kicker. Regression Watch: one row per universe player, the tag = the first of its
-   tags (sell_high, buy_low, legit). The frozen backtests must reproduce their committed
+   tags, and only the product's tags (sell_high, buy_low: Legit, tested and dropped on
+   2026-09-30, is stripped from the frozen backtest lists at publish time). The frozen backtests must reproduce their committed
    reports (below), else nothing is published.
 3. **Live lists are frozen.** A live list (made in real time on a Tuesday) is published once
    and never changed or removed afterwards, even when your local predictions store no longer
@@ -541,7 +542,10 @@ re-checked here where possible.
   columns the writer sends, a test checks them against a migrated database, and `FAMILIES`:
   each module's list tables and how a publish treats them), `migrate.py` (the local migration
   helper). `web/drizzle/0001_streamer_regression_watch.sql` adds the P2 tables (the reviewer
-  applies it to Neon with `npm --prefix web run db:migrate` before the first P2 publish).
+  applies it to Neon with `npm --prefix web run db:migrate` before the first P2 publish);
+  `web/drizzle/0002_regression_stability.sql` adds `regression_stability` (step R1: the D2
+  stability study for the methodology page; apply it to Neon the same way before the first
+  publish that carries it, or that publish fails on the missing table and writes nothing).
 - `scripts/neon/roles.sql`, `scripts/neon/apply_roles.py`: the two Neon roles.
 - `.github/workflows/pipeline.yml`, `src/twm/pipeline/` (`schedule.py` the calendar,
   `runner.py` the stages and exit codes, `report.py` the job summary and the run's files): the

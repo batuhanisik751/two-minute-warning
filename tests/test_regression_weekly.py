@@ -320,6 +320,29 @@ def test_the_list_uses_the_frozen_parameters(world):
     assert rwk.score_week(pl.DataFrame(), pl.DataFrame(), toy_params(), league(), 1).height == 0
 
 
+def test_the_product_assigns_two_tags_and_the_tested_three_reproduce_d3(world):
+    """Owner, 2026-09-30: the lists carry Sell-high and Buy-low only; tags=TESTED_TAGS (how the
+    frozen backtest lists were made) adds D3's Legit back and changes nothing else."""
+    from twm.asof import AsOfView
+    from twm.modules.regression_watch.player_week import player_games_for
+
+    run = _run(world)
+    with AsOfView(world, run.as_of) as view:
+        std = player_games_for(view, SEASON)
+        names = view.sql("SELECT gsis_id, display_name AS name FROM dim_player")
+    two = rwk.score_week(std, names, toy_params(), league(), 4)
+    three = rwk.score_week(std, names, toy_params(), league(), 4, tags=rwk.TESTED_TAGS)
+    assert rwk.BAND_ORDER == ("sell_high", "buy_low") and rwk.TESTED_TAGS == tg.TAGS
+    assert two.equals(run.table) and "legit" not in two.columns
+    assert three.drop("legit").equals(two)  # nobody is Legit in the toy world
+    row = {**three.row(0, named=True), "legit": True, "sell_high": False, "buy_low": False}
+    assert rwk.reasons(row, toy_params())["tags"] == []
+    assert rwk.reasons(row, toy_params(), rwk.TESTED_TAGS)["tags"] == ["legit"]
+    for bad in ((), ("legit", "sell_high"), ("sell_high", "hot")):
+        with pytest.raises(ValueError, match="tags must be among"):
+            rwk.score_week(std, names, toy_params(), league(), 4, tags=bad)
+
+
 # --------------------------------------------------------------------------------------
 # The store: round trip, a live week kept, final outcomes, an old store
 # --------------------------------------------------------------------------------------
@@ -404,16 +427,22 @@ def test_report_is_deterministic_and_states_what_each_tag_means(world, tmp_path)
     notes = rwk.tag_notes(csv_path, 2026)
     assert set(notes) == {"sell_high", "buy_low", "legit"}
     assert "92.0% of the 200 Sell-high players fell below their PPG" in notes["sell_high"]
-    assert "the same within noise" in notes["legit"] and "61.1%" in notes["legit"]
+    assert notes["legit"].startswith("A third tag, Legit (a starter whose points over expected")
+    assert "was tested and dropped because it predicted nothing" in notes["legit"]
+    assert "60.6% of the 200 players it tagged stayed inside the starter threshold" in notes[
+        "legit"] and "and so did 61.1% of every player inside it." in notes["legit"]  # fmt: skip
     assert rwk.tag_notes(csv_path, 2024) == {}  # a list never quotes later outcomes
     run = _run(world, now=LATER)
     kw = {"generated": "Generated at X.", "command": "c", "notes": notes}
     a, b = (rwk.build_report(run, league(), **kw) for _ in range(2))
     assert a == b and a.startswith("# Regression Watch: 2025 week 4")
     assert "**Reconstructed list (stored as 'backtest').**" in a
-    assert "## Sell-high (2)" in a and "## Buy-low (1)" in a and "## Legit (0)" in a
-    assert "No regression flag: the production is backed by opportunity" in a
-    assert "No Legit player this week." in a and toy_params().model_version in a
+    assert "## Sell-high (2)" in a and "## Buy-low (1)" in a
+    # owner, 2026-09-30: no Legit section; the drop is said once, with the two rates
+    assert "## Legit" not in a and a.count("Legit") == 1 and a.count("60.6%") == 1
+    assert f"- **Two tags only.** {notes['legit']}" in a and toy_params().model_version in a
+    bare = rwk.build_report(run, league(), generated="G.", command="c")
+    assert "- **Two tags only.** A third tag, Legit" in bare and "backtest.md)." in bare
     path = rwk.write_report(a, tmp_path / "r.md")
     assert path.read_text() == a
 
@@ -528,18 +557,18 @@ def test_real_2026_week_3_reconstructed_into_a_scratch_store(tmp_path):
     assert set(got["model_version"]) == {params.model_version}
     wp = bt.project_week(db, 2026, 3, league())
     assert wp.choice.variant == params.variant and wp.choice.sell.x == params.x_sell
-    want = wp.table.select("gsis_id", "ppg_ros", "sell_high", "buy_low", "legit").sort("gsis_id")
+    want = wp.table.select("gsis_id", "ppg_ros", "sell_high", "buy_low").sort("gsis_id")
     mine = got.select(
         pl.col("entity_id").alias("gsis_id"),
         pl.col("score").alias("ppg_ros"),
         *[(pl.col("band") == t).fill_null(False).alias(t) for t in rwk.BAND_ORDER],
     )
-    mine = mine.sort("gsis_id").with_columns(
-        (pl.col("legit") | pl.col("gsis_id").is_in(
-            want.filter(pl.col("buy_low") & pl.col("legit")).get_column("gsis_id").to_list()))
-        .alias("legit"))  # a Buy-low starter is also Legit (band = its first tag)  # fmt: skip
-    assert mine.equals(want)
-    assert "## Sell-high" in out.read_text() and "## Legit" in out.read_text()
+    assert mine.sort("gsis_id").equals(want)  # D3's Sell-high and Buy-low; no Legit (owner)
+    assert wp.table.get_column("legit").sum() > 0  # D3 still computes it: the list drops it
+    tags = {t for r in got.get_column("reasons_json") for t in json.loads(r)["tags"]}
+    assert tags == {"sell_high", "buy_low"} and set(got["band"].drop_nulls()) == tags
+    text = out.read_text()
+    assert "## Sell-high" in text and "## Legit" not in text and "60.6%" in text
     if owner.exists():
         assert pins.sha256_of(owner) == before  # the owner's store is untouched
 

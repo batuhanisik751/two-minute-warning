@@ -91,6 +91,7 @@ class Inputs:
     streamer_dataset: Path | None = None
     streamer_csv: Path | None = None
     regression_csv: Path | None = None
+    regression_stability_csv: Path | None = None
 
     @classmethod
     def default(cls, now: datetime | None = None) -> Inputs:
@@ -114,6 +115,7 @@ class Inputs:
             "streamer_dataset": ROOT / "data" / "streamer" / "dataset.parquet",
             "streamer_csv": ROOT / "reports" / "streamer" / "backtest.csv",
             "regression_csv": ROOT / "reports" / "regression_watch" / "backtest.csv",
+            "regression_stability_csv": ROOT / "reports" / "regression_watch" / "stability.csv",
         }
         value = getattr(self, name)
         return Path(value) if value is not None else defaults[name]
@@ -865,8 +867,10 @@ def collect(inputs: Inputs) -> PublishData:
     if "regression_watch" in inputs.modules:
         frame = rl.history(inputs.warehouse, min(first, rl.FIRST_LIVE_SEASON), season)
         got = rl.collect_regression(inputs.store, inputs.warehouse, inputs.path("regression_csv"),
-                                    season, inputs.now, frame)  # fmt: skip
+                                    season, inputs.now, frame,
+                                    inputs.path("regression_stability_csv"))  # fmt: skip
         families["regression_watch"], tables["regression_track_record"] = got.data, got.track_record
+        tables.update(got.tables)
         extra.append(got)
     pws = with_ng(pws, None if frame is None else rl.ng_columns(frame))
     ids = families[MODULE].outcome_keys.get_column("gsis_id").to_list()
@@ -1033,20 +1037,24 @@ def _streamer_problems(d: ListData, teams: set[str]) -> list[str]:
 def _regression_problems(d: ListData, teams: set[str], players: set[str]) -> list[str]:
     """Regression Watch's lists: keys, one row per universe player, positions, tags, the
     projection present, teams and players known."""
-    from twm.modules.regression_watch.tags import TAGS
+    from twm.modules.regression_watch.weekly import BAND_ORDER
 
     rows = d.rows
     problems = _list_problems("Regression Watch", d.lists, rows, ["season", "week", "kind"],
                               positions=FANTASY_POSITIONS, pool="n_universe", row_id="gsis_id",
                               ranked=False)  # fmt: skip
     bad_tag = rows.filter(
-        (pl.col("tag").is_not_null() & ~pl.col("tag").is_in(list(TAGS)))
+        (pl.col("tag").is_not_null() & ~pl.col("tag").is_in(list(BAND_ORDER)))
         | (pl.col("tag").is_null() != (pl.col("tags").list.len() == 0))
         | (pl.col("tag").is_not_null() & (pl.col("tags").list.first() != pl.col("tag")))
     )
     if bad_tag.height:
         problems.append(f"{bad_tag.height} Regression Watch rows have a tag that is not the "
-                        "first of their tags (sell_high, buy_low, legit)")  # fmt: skip
+                        "first of their tags (sell_high, buy_low)")  # fmt: skip
+    hidden = rows.filter(~pl.col("tags").list.eval(pl.element().is_in(list(BAND_ORDER))).list.all())
+    if hidden.height:
+        problems.append(f"{hidden.height} Regression Watch rows carry a tag the product does "
+                        "not show (only sell_high, buy_low: Legit was dropped)")  # fmt: skip
     if rows.filter(pl.col("projection").is_null() | pl.col("ppg").is_null()).height:
         problems.append("some Regression Watch rows have no projection or PPG")
     problems += _team_problems("Regression Watch rows", rows, teams)

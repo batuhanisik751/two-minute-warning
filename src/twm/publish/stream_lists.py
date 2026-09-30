@@ -21,7 +21,7 @@ Sources (opened read-only), with the Radar's rules (:mod:`twm.publish.collect`):
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -260,11 +260,13 @@ def outcome_rows(dataset: pl.DataFrame) -> pl.DataFrame:
 @dataclass
 class Collected:
     """A module's part of a publish: its lists, the model versions its backtest lists need
-    (not in the predictions store) and its track record."""
+    (not in the predictions store), its track record and its other replaced tables (by name;
+    step R1: Regression Watch's regression_stability)."""
 
     data: ListData
     versions: pl.DataFrame  # published layout (collect.version_rows)
     track_record: pl.DataFrame
+    tables: dict[str, pl.DataFrame] = field(default_factory=dict)
 
 
 def collect_streamer(

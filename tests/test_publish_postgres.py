@@ -637,6 +637,12 @@ def test_every_module_is_published_and_a_second_run_rewrites_nothing(
     assert (c["stream_list"], c["stream_pick"], c["stream_outcome"]) == (10, 45, 45)
     assert (c["regression_list"], c["regression_row"], c["regression_outcome"]) == (3, 18, 18)
     assert c["stream_track_record"] == c["regression_track_record"] == 3
+    assert c["regression_stability"] == 4  # step R1: the stability study, row for row
+    from tests.publish_modules_synthetic import stability
+
+    want = stability().select("line", "section", "seasons", "g", "value", "var_noise").rows()
+    assert rows(db, "SELECT line, section, seasons, g, value, var_noise FROM regression_stability "
+                    "ORDER BY line") == want  # fmt: skip
     actions = {d.label: d.action for d in first.live}
     assert actions["streamer 2026-W03 K"] == actions["regression watch 2026-W03"] == "insert"
     assert actions["2026-W03 QB"] == "insert"  # the Radar's label is unchanged
@@ -647,13 +653,15 @@ def test_every_module_is_published_and_a_second_run_rewrites_nothing(
     note = rows(db, "SELECT note FROM regression_list WHERE kind = 'live'")[0][0]
     assert note.startswith("Week 3 is earlier than the backtested weeks 4-14")
     assert rows(db, "SELECT tags FROM regression_row WHERE kind = 'live' AND tag = 'buy_low'") \
-        == [(["buy_low", "legit"],)]  # fmt: skip
+        == [(["buy_low"],)]  # fmt: skip
+    assert rows(db, "SELECT count(*) FROM regression_row WHERE 'legit' = ANY(tags) "
+                    "OR tag = 'legit'")[0][0] == 0  # fmt: skip
     assert rows(db, "SELECT count(*) FROM stream_pick WHERE model_prob IS NULL")[0][0] == 20
     content = dump(db)
     res = publish_all(db, syn.inputs)
     assert {"stream_backtest_lists", "regression_backtest_lists", "stream_outcome",
-            "regression_outcome", "stream_track_record",
-            "regression_track_record"} <= set(res.unchanged)  # fmt: skip
+            "regression_outcome", "stream_track_record", "regression_track_record",
+            "regression_stability"} <= set(res.unchanged)  # fmt: skip
     assert {d.action for d in res.live} == {"kept"} and dump(db) == content
 
 
@@ -706,6 +714,9 @@ def test_incomplete_module_lists_are_skipped_and_shrinking_is_refused(
     assert res.counts["stream_list"] == 4 + 2 and any("--allow-shrink" in w for w in res.warnings)
     with pytest.raises(wr.PublishError, match="regression_track_record would go from 3 to 1"):
         publish_all(db, syn.inputs, {"regression": {"n_track": 1}})
+    with pytest.raises(wr.PublishError, match="regression_stability would go from 4 to 1"):
+        publish_all(db, syn.inputs, {"stability": {"n": 1}})
+    assert rows(db, "SELECT count(*) FROM regression_stability")[0][0] == 4
 
 
 def test_the_p2_tables_are_covered_by_roles_made_before_them(
@@ -733,7 +744,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                     owner.execute("SELECT set_config(%s, %s, true)",
                                   [f"twm.{key}_password", roles[role]])  # fmt: skip
                 owner.execute((ROOT / "scripts" / "neon" / "roles.sql").read_text())
-            assert mg.apply_migrations(owner) == ["0001_streamer_regression_watch"]
+            assert mg.apply_migrations(owner) == ["0001_streamer_regression_watch",
+                                                  "0002_regression_stability"]  # fmt: skip
         job = tg.resolve("local", env={tg.LOCAL_ENV: make_conninfo(
             url, user="twm_job", password=roles["twm_job"])}, env_file=NO_ENV_FILE)  # fmt: skip
         syn = ps.build(tmp_path / "syn", live_weeks=(3,))
@@ -741,7 +753,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
         assert res.counts["stream_pick"] == 45 and res.counts["regression_row"] == 18
         web = make_conninfo(url, user="twm_web", password=roles["twm_web"])
         with psycopg.connect(web, autocommit=True) as conn:
-            for t in ("stream_list", "stream_pick", "regression_row", "regression_track_record"):
+            for t in ("stream_list", "stream_pick", "regression_row", "regression_track_record",
+                      "regression_stability"):  # fmt: skip
                 assert conn.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] > 0
             with pytest.raises((psycopg.errors.InsufficientPrivilege,
                                 psycopg.errors.ReadOnlySqlTransaction)):  # fmt: skip

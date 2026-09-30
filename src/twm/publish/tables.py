@@ -10,7 +10,7 @@ How a publish treats each table (the reviewer's rules of 2026-09-28):
 - **replace**: every row is deleted and written again in the publish transaction: the rows are
   derived from local files and can always be rebuilt (track_record, tier_stats, glossary,
   player_week_summary, site_meta, radar_outcome; step P2: stream_outcome, regression_outcome,
-  stream_track_record, regression_track_record).
+  stream_track_record, regression_track_record; step R1: regression_stability).
 - **lists**: radar_list / radar_pick (and, step P2, stream_list / stream_pick and
   regression_list / regression_row, with the same code: :data:`FAMILIES`) hold two kinds of
   list. 'backtest' lists (reconstructed)
@@ -164,6 +164,14 @@ TABLES: dict[str, Table] = {
             ("share_above_zero", "double precision"), ("per_asof", "double precision"),
             ("not_graded", "integer"), ("detail", "text"),
         ),
+        _t(  # step R1: reports/regression_watch/stability.csv row for row (the methodology page)
+            "regression_stability", ("line",), "replace",
+            ("line", "integer"), ("section", "text"), ("seasons", "text"), ("split", "text"),
+            ("position", "text"), ("metric", "text"), ("g", "integer"), ("n", "integer"),
+            ("value", "double precision"), ("lo", "double precision"),
+            ("hi", "double precision"), ("var_signal", "double precision"),
+            ("var_noise", "double precision"), ("prior_mean", "double precision"),
+        ),
         _t(
             "track_record",
             ("module", "label", "excl_rostered", "model", "scope", "scope_value", "season_from",
@@ -208,6 +216,7 @@ WRITE_ORDER = (
     "model_versions", "dim_team", "dim_player", "radar_list", "radar_pick", "radar_outcome",
     "stream_list", "stream_pick", "stream_outcome", "regression_list", "regression_row",
     "regression_outcome", "track_record", "stream_track_record", "regression_track_record",
+    "regression_stability",
     "tier_stats", "player_week_summary", "glossary", "site_meta", "pipeline_runs",
 )  # fmt: skip
 REPLACED = tuple(n for n in WRITE_ORDER if TABLES[n].mode == "replace")
@@ -250,7 +259,8 @@ FAMILIES: dict[str, Family] = {
                "stream_backtest_lists", ("stream_track_record",), "stream_", "streamer"),
         Family("regression_watch", "regression_list", "regression_row", "regression_outcome",
                ("season", "week"), "gsis_id", None, "params_version",
-               "regression_backtest_lists", ("regression_track_record",), "regression_",
+               "regression_backtest_lists", ("regression_track_record", "regression_stability"),
+               "regression_",
                "regression watch"),
     )
 }  # fmt: skip

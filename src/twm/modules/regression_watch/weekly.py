@@ -9,8 +9,9 @@ One run for a season and week N mirrors the Radar's weekly run
    garbage-time split). Anything missing: refuse (exit code 3) unless ``--allow-incomplete``.
 2. **The list** (:func:`score_week`, point in time: the D1 frame read through ONE
    :class:`~twm.asof.AsOfView` at the week's official as-of): the universe, the projection and
-   the Sell-high / Buy-low / Legit tags of D3 (:mod:`.projection`, :mod:`.tags`) with the
-   APPROVED frozen parameters (:mod:`.production`); nothing is estimated.
+   the Sell-high and Buy-low tags of D3 (:mod:`.projection`, :mod:`.tags`) with the
+   APPROVED frozen parameters (:mod:`.production`); nothing is estimated. D3's third tag,
+   Legit, is not assigned (owner, 2026-09-30: it predicted nothing, :data:`DROPPED_TAG`).
 3. **Live or reconstructed**: the Radar's clock rule (:func:`twm.modules.waiver_radar.weekly.
    run_kind`): 'live' only on the real clock between the as-of and week N+1's first kickoff.
 4. **Storing**: every universe row (``module`` 'regression_watch', ``entity_type`` 'player',
@@ -25,7 +26,7 @@ One run for a season and week N mirrors the Radar's weekly run
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -43,7 +44,13 @@ from twm.modules.waiver_radar import weekly as rw
 REPORT_DIR = Path("reports/regression_watch/weekly")
 EXIT_NOT_READY = rw.EXIT_NOT_READY
 ENTITY_TYPE = "player"
-BAND_ORDER = ("sell_high", "buy_low", "legit")  # a row's band: its first tag in this order
+# The tags the product assigns; a row's band is its first tag in this order. D3 tested a third,
+# Legit (tags.TAGS): it predicted nothing (60.6% of the players it tagged stayed starters, the
+# base rate was 61.1%), so the owner dropped it on 2026-09-30. The frozen backtest lists were
+# made with all three (TESTED_TAGS, frozen.build_snapshot); the publish strips Legit from them.
+BAND_ORDER = ("sell_high", "buy_low")
+DROPPED_TAG = "legit"
+TESTED_TAGS = tg.TAGS  # the three tags of the D3 backtest, in band order
 
 
 def freshness_inputs(db: Path | str, season: int, week: int) -> dict[str, pl.DataFrame]:
@@ -90,8 +97,11 @@ def _r(x: Any) -> float | None:
     return None if x is None else round(float(x), pj.STATE_ROUND)
 
 
-def reasons(row: Mapping[str, Any], params: ProductionParams) -> dict[str, Any]:
-    """The numbers behind one row's projection and tag (stored as ``reasons_json``)."""
+def reasons(
+    row: Mapping[str, Any], params: ProductionParams, tags: Sequence[str] = BAND_ORDER
+) -> dict[str, Any]:
+    """The numbers behind one row's projection and tag (stored as ``reasons_json``);
+    ``tags``: the tags assigned, in band order."""
     v = params.variant
     m = v.metric
     xfp_used = row[f"rw_xfp_ng_{pj.hl_suffix(v.half_life)}"] * row["ng_scale"] if (
@@ -106,7 +116,7 @@ def reasons(row: Mapping[str, Any], params: ProductionParams) -> dict[str, Any]:
         "xfp_used": _r(xfp_used), "fpoe_used": _r(row["ppg_ros"] - xfp_used),
         "projection": _r(row["ppg_ros"]), "gap": _r(row["ppg_ros"] - row["ppg"]),
         "fpoe_top_decile": bool(row["fpoe_top"]), "fpoe_bottom_decile": bool(row["fpoe_bottom"]),
-        "tags": [t for t in BAND_ORDER if row[t]],
+        "tags": [t for t in tags if row[t]],
         "x": {"sell_high": params.x_sell, "buy_low": params.x_buy},
         "without_garbage_time": {
             "ppg": _r(row["ppg_ng"]), "xfp_pg": _r(row["xfp_ng_pg"]),
@@ -117,12 +127,18 @@ def reasons(row: Mapping[str, Any], params: ProductionParams) -> dict[str, Any]:
 
 
 def score_week(
-    std: pl.DataFrame, names: pl.DataFrame, params: ProductionParams, league: League, week: int
-) -> pl.DataFrame:
+    std: pl.DataFrame, names: pl.DataFrame, params: ProductionParams, league: League, week: int,
+    *, tags: Sequence[str] = BAND_ORDER,
+) -> pl.DataFrame:  # fmt: skip
     """The universe at an as-of with its projection, tags, band, rank (within the position, by
     projection; ties by gsis_id) and reasons: ``std`` is ONE season's D1 frame as public at
     the as-of, ``names`` (gsis_id, name). Exactly D3's :func:`~twm.modules.regression_watch.
-    backtest.project_week` with the frozen parameters. Empty when nobody has 3 games yet."""
+    backtest.project_week` with the frozen parameters. Empty when nobody has 3 games yet.
+    ``tags``: the tags assigned (a column each), in band order: the product's two by default;
+    :data:`TESTED_TAGS` (Legit too) reproduces the frozen backtest lists."""
+    unknown = [t for t in tags if t not in TESTED_TAGS]
+    if not tags or unknown or list(tags) != [t for t in TESTED_TAGS if t in tags]:
+        raise ValueError(f"tags must be among {TESTED_TAGS}, in that order, not {tuple(tags)}")
     if std.height == 0:
         return pl.DataFrame()
     state = pj.player_state(std, league)
@@ -131,16 +147,17 @@ def score_week(
         return pl.DataFrame()
     uni = pj.project(uni, params.priors(), params.variant)
     uni = tg.decile_flags(uni.with_columns(pl.lit(int(week), dtype=pl.Int32).alias("week")))
+    exprs = tg.tag_exprs(league, params.x_sell, params.x_buy)
     table = (
-        uni.with_columns(*tg.tag_exprs(league, params.x_sell, params.x_buy))
+        uni.with_columns(*[e for e in exprs if e.meta.output_name() in tags])
         .join(names, on="gsis_id", how="left")
         .sort(["position", "ppg_ros", "gsis_id"], descending=[False, True, False])
         .with_columns(pl.int_range(1, pl.len() + 1).over("position").cast(pl.Int32).alias("rank"))
     )
-    band = pl.when(pl.col(BAND_ORDER[0])).then(pl.lit(BAND_ORDER[0]))
-    for t in BAND_ORDER[1:]:
+    band = pl.when(pl.col(tags[0])).then(pl.lit(tags[0]))
+    for t in tags[1:]:
         band = band.when(pl.col(t)).then(pl.lit(t))
-    texts = [json.dumps(reasons(r, params), sort_keys=True, separators=(",", ":"))
+    texts = [json.dumps(reasons(r, params, tags), sort_keys=True, separators=(",", ":"))
              for r in table.iter_rows(named=True)]  # fmt: skip
     return table.with_columns(
         band.otherwise(pl.lit(None, dtype=pl.String)).alias("band"),
@@ -343,9 +360,9 @@ def report_path(season: int, week: int, root: Path | None = None) -> Path:
 
 def tag_notes(csv_path: Path, season: int) -> dict[str, str]:
     """Per tag, how its picks did in the committed backtest (pooled, headline weeks) next to
-    the base rate, read from reports/regression_watch/backtest.csv; empty when the file is
-    missing or its test seasons reach ``season`` (a list never quotes outcomes after its
-    as-of)."""
+    the base rate, read from reports/regression_watch/backtest.csv; under :data:`DROPPED_TAG`,
+    why Legit is not shown (:func:`dropped_note`). Empty when the file is missing or its test
+    seasons reach ``season`` (a list never quotes outcomes after its as-of)."""
     if not csv_path.exists():
         return {}
     ev = pl.read_csv(csv_path, infer_schema_length=0)
@@ -361,10 +378,10 @@ def tag_notes(csv_path: Path, season: int) -> dict[str, str]:
         return hit.row(0, named=True) if hit.height else None
 
     out = {}
-    for tag, what, base in (("sell_high", "fell below their PPG", "every universe player"),
-                            ("buy_low", "rose above their PPG", "every universe player"),
-                            ("legit", "stayed inside the starter threshold",
-                             "every player inside it")):  # fmt: skip
+    for tag, what, base in (
+        ("sell_high", "fell below their PPG", "every universe player"),
+        ("buy_low", "rose above their PPG", "every universe player"),
+    ):
         t, b = get(tag, "tagged"), get(tag, "base")
         if not (t and b):
             continue
@@ -373,13 +390,24 @@ def tag_notes(csv_path: Path, season: int) -> dict[str, str]:
                 f"{int(t['n']):,} {tg.TAG_TITLES[tag]} players {what} for the rest of the "
                 f"season (95% interval {float(t['lo']):.1%} to {float(t['hi']):.1%}); the base "
                 f"rate for {base} was {bv:.1%}.")  # fmt: skip
-        if tag == "legit" and float(t["lo"]) <= bv <= float(t["hi"]):
-            text += (
-                " The two rates are the same within noise: Legit predicts nothing beyond "
-                "his PPG rank; it only says that no regression flag is raised."
-            )
         out[tag] = text
+    t, b = get(DROPPED_TAG, "tagged"), get(DROPPED_TAG, "base")
+    if t and b:
+        out[DROPPED_TAG] = dropped_note(float(t["value"]), float(b["value"]), int(t["n"]), span)
     return out
+
+
+DROPPED_TEXT = (
+    "A third tag, Legit (a starter whose points over expected are not in the top 10% of his "
+    "position), was tested and dropped because it predicted nothing"
+)
+
+
+def dropped_note(rate: float, base: float, n: int, span: str) -> str:
+    """Why the list has no Legit tag, with the backtest's two rates (backtest.csv)."""
+    return (f"{DROPPED_TEXT}: in the {span} backtest (as-of weeks 4, 6, 8, 10), {rate:.1%} of "
+            f"the {n:,} players it tagged stayed inside the starter threshold for the rest of the "
+            f"season, and so did {base:.1%} of every player inside it.")  # fmt: skip
 
 
 FIRST_BACKTESTED_WEEK, LAST_BACKTESTED_WEEK = 4, 14  # D3's as-of weeks (backtest.ALL_WEEKS)
@@ -432,16 +460,9 @@ def _tag_lines(run: WeeklyRun, tag: str, intro: str, note: str | None) -> list[s
         return [f"## {tg.TAG_TITLES[tag]} (0)", "", intro, "", "No player has "
                 f"{pj.MIN_GAMES} games yet.", ""]  # fmt: skip
     t = run.table.filter(pl.col(tag))
-    if tag == "buy_low":
-        t = t.with_columns((pl.col("ppg_ros") - pl.col("ppg")).alias("_gap"))
-        t = t.sort(["_gap", "gsis_id"], descending=[True, False])
-    elif tag == "sell_high":
-        t = t.with_columns((pl.col("ppg") - pl.col("ppg_ros")).alias("_gap"))
-        t = t.sort(["_gap", "gsis_id"], descending=[True, False])
-    else:
-        order = {p: i for i, p in enumerate(pj.FANTASY_POSITIONS)}
-        t = t.with_columns(pl.col("position").replace_strict(order, default=9).alias("_p"))
-        t = t.sort(["_p", "ppg_ros", "gsis_id"], descending=[False, True, False])
+    gap = pl.col("ppg_ros") - pl.col("ppg") if tag == "buy_low" else pl.col("ppg") - pl.col(
+        "ppg_ros")  # fmt: skip
+    t = t.with_columns(gap.alias("_gap")).sort(["_gap", "gsis_id"], descending=[True, False])
     lines = [f"## {tg.TAG_TITLES[tag]} ({t.height})", "", intro]
     if note:
         lines += ["", note]
@@ -462,10 +483,8 @@ def build_report(
     notes = notes or {}
     p = run.params
     sizes = pj.universe_sizes(league)
-    starters = league.starter_thresholds()
     s0, s1 = p.shrinkage_seasons[0], p.shrinkage_seasons[-1]
     size_text = ", ".join(f"{k} {sizes[k]}" for k in pj.FANTASY_POSITIONS)
-    start_text = ", ".join(f"{k} {starters[k]}" for k in pj.FANTASY_POSITIONS)
     lines = [
         f"# Regression Watch: {run.season} week {run.week}", "",
         f"{generated} Command: `{command}`.", "",
@@ -491,7 +510,9 @@ def build_report(
         f"(estimated on {s0}-{s1}).",
         f"- Approved parameters `{p.model_version}` (config/production_models.yaml), chosen on "
         f"the {p.choice['validation_seasons'][0]}-{p.choice['validation_seasons'][-1]} "
-        "seasons; nothing is re-estimated.", "",
+        "seasons; nothing is re-estimated.",
+        "- **Two tags only.** " + (notes.get(DROPPED_TAG) or DROPPED_TEXT
+                                   + " (reports/regression_watch/backtest.md)."), "",
     ]  # fmt: skip
     intros = {
         "sell_high": f"FPOE/game in the top 10% of his position AND the projection at least "
@@ -500,9 +521,6 @@ def build_report(
         "buy_low": f"FPOE/game in the bottom 10% of his position AND the projection at least "
                    f"{p.x_buy:g} points/game above his PPG: he has been unlucky and should "
                    "pick up.",
-        "legit": f"No regression flag: the production is backed by opportunity. His PPG ranks "
-                 f"inside the starter threshold ({start_text}) and his FPOE/game is not in the "
-                 "top 10% of his position (a Buy-low starter is listed here too).",
     }  # fmt: skip
     for tag in BAND_ORDER:
         lines += _tag_lines(run, tag, intros[tag], notes.get(tag))

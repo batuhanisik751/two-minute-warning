@@ -490,6 +490,29 @@ export const regressionTrackRecord = pgTable("regression_track_record", {
   detail: text("detail"),
 });
 
+/** Every row of reports/regression_watch/stability.csv (the D2 stability study), in its order
+ * (line = the CSV's data row, from 1; step R1: the methodology page shows the real numbers).
+ * section = the CSV's `table` (split_half: split-half correlation of a metric; shrinkage: the
+ * reliability r(g) of FPOE/game after g games) and seasons its `window` (both renamed: SQL
+ * keywords). g is empty on split_half rows; lo/hi (95% interval) where the study has one;
+ * var_signal, var_noise, prior_mean on shrinkage rows. */
+export const regressionStability = pgTable("regression_stability", {
+  line: integer("line").primaryKey(),
+  section: text("section").notNull(),
+  seasons: text("seasons").notNull(),
+  split: text("split").notNull(),
+  position: text("position").notNull(),
+  metric: text("metric").notNull(),
+  g: integer("g"),
+  n: integer("n").notNull(),
+  value: doublePrecision("value").notNull(),
+  lo: doublePrecision("lo"),
+  hi: doublePrecision("hi"),
+  varSignal: doublePrecision("var_signal"),
+  varNoise: doublePrecision("var_noise"),
+  priorMean: doublePrecision("prior_mean"),
+});
+
 /** How each suggested priority did in the backtest (top 25 of every list). week 0 = every
  * week; week N = the week-N lists only. chance_low/high: the "similar players hit" range
  * that defines the tier; prob_low/high: the model probabilities it maps to. */

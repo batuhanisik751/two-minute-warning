@@ -16,6 +16,12 @@ Sources (opened read-only), with the Radar's rules (:mod:`twm.publish.collect`):
   numbers); for every week of every season since :data:`FIRST_LIVE_SEASON`, so a frozen live
   list that is no longer in the local store (a fresh runner) still gets its outcomes;
 - **track record**: ``reports/regression_watch/backtest.csv``, row for row;
+- **stability study** (step R1, owner's decision of 2026-09-30: the methodology page shows the
+  real numbers): ``reports/regression_watch/stability.csv`` (D2), row for row
+  (:func:`stability_rows`);
+- **tags**: the product's Sell-high and Buy-low only; the frozen backtest lists still carry D3's
+  third tag, Legit, which is stripped here (:func:`shown_tags`; owner, 2026-09-30). Live lists
+  published before that keep their rows (frozen): the site hides 'legit';
 - **player_week_summary**'s points, xFP and FPOE without garbage time (the D1 frame).
 
 The warehouse needs only the seasons the job builds (2012 on): the D1 frame is read from the
@@ -32,6 +38,7 @@ from typing import Any
 import polars as pl
 
 from twm.modules.regression_watch.frozen import no_negative_zero
+from twm.modules.regression_watch.weekly import BAND_ORDER, DROPPED_TAG
 from twm.publish.collect import (
     ListData,
     PublishInputError,
@@ -44,6 +51,8 @@ from twm.publish.collect import (
 from twm.publish.stream_lists import Collected
 
 MODULE = "regression_watch"
+STABILITY_TABLE = "regression_stability"
+STABILITY_RENAME = {"table": "section", "window": "seasons"}  # SQL keywords -> column names
 LIST_KEY = ("season", "week", "kind")
 FIRST_LIVE_SEASON = 2026  # the first season with live lists (the project went live)
 LIST_SCHEMA: dict[str, Any] = {
@@ -122,11 +131,17 @@ def live_outcomes(
     ).cast(OUTCOME_SCHEMA).sort("season", "week", "gsis_id"))  # type: ignore[arg-type]  # fmt: skip
 
 
-def tag_reason(r: dict[str, Any], position: str, starters: dict[str, int]) -> str | None:
-    """Why the player carries each of his tags, in plain English (None without a tag)."""
+def shown_tags(tags: list[str] | None) -> list[str]:
+    """A row's tags as published: the product's (Sell-high, Buy-low), in band order; Legit, which
+    the frozen backtest lists still carry, is stripped (owner, 2026-09-30)."""
+    return [t for t in BAND_ORDER if t in (tags or [])]
+
+
+def tag_reason(r: dict[str, Any]) -> str | None:
+    """Why the player carries each of his shown tags, in plain English (None without one)."""
     texts = []
     x = r.get("x") or {}
-    for tag in r.get("tags") or []:
+    for tag in shown_tags(r.get("tags")):
         if tag == "sell_high":
             texts.append(
                 f"Sell-high: his {r['fpoe_pg']:+.1f} points over expected per game are in the top "
@@ -141,20 +156,13 @@ def tag_reason(r: dict[str, Any], position: str, starters: dict[str, int]) -> st
                 f"{r['gap']:.1f} points per game above his {r['ppg']:.1f} PPG (the cutoff is "
                 f"{x.get('buy_low', 0):g})."
             )
-        elif tag == "legit":
-            texts.append(
-                f"Legit: his PPG ranks No. {r['ppg_rank']} among {position}s, inside the starter "
-                f"threshold ({starters.get(position, 0)}), and his points over expected are not "
-                "in the top 10%: opportunity, not luck, carries it."
-            )
     return " ".join(texts) or None
 
 
-def regression_lists(
-    rows: pl.DataFrame, teams: pl.DataFrame, starters: dict[str, int]
-) -> tuple[pl.DataFrame, pl.DataFrame]:
+def regression_lists(rows: pl.DataFrame, teams: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
     """(lists, rows) from the chosen rows (store layout): one list per (season, week, kind)
-    with every universe player, his numbers read from the stored reasons."""
+    with every universe player, his numbers read from the stored reasons; tags as
+    :func:`shown_tags` (a row whose band was Legit has no tag)."""
     from twm.modules.regression_watch.weekly import early_note
 
     if rows.height == 0:
@@ -165,8 +173,7 @@ def regression_lists(
     )
     recs = [json.loads(r) for r in rows.get_column("reasons_json").to_list()]
     ng = [r.get("without_garbage_time") or {} for r in recs]
-    pos = rows.get_column("position").to_list()
-    reasons = [tag_reason(r, p, starters) for r, p in zip(recs, pos, strict=True)]
+    reasons = [tag_reason(r) for r in recs]
     for r, s in zip(recs, rows.get_column("score").to_list(), strict=True):
         r.setdefault("projection", s)
 
@@ -180,7 +187,7 @@ def regression_lists(
             "kind",
             pl.col("entity_id").alias("gsis_id"),
             "position",
-            pl.col("band").alias("tag"),
+            pl.when(pl.col("band") != DROPPED_TAG).then(pl.col("band")).alias("tag"),
         )
         .with_columns(  # fmt: skip
             pl.Series("games", [int(r["games"]) for r in recs], dtype=pl.Int32),
@@ -192,7 +199,7 @@ def regression_lists(
             num("fpoe_pg", ng).alias("fpoe_pg_ng"),
             rows.get_column("score").cast(pl.Float64).alias("projection"),
             num("shrinkage"),
-            pl.Series("tags", [list(r.get("tags") or []) for r in recs], dtype=pl.List(pl.String)),
+            pl.Series("tags", [shown_tags(r.get("tags")) for r in recs], dtype=pl.List(pl.String)),
             pl.Series("tag_reason", reasons, dtype=pl.String),
         )
         .join(teams, on=["season", "week", "gsis_id"], how="left")
@@ -201,6 +208,14 @@ def regression_lists(
     out = out.select(list(ROW_SCHEMA)).cast(ROW_SCHEMA)  # type: ignore[arg-type]
     return (lists.sort("season", "week", "kind"),
             no_negative_zero(out.sort("season", "week", "kind", "gsis_id")))  # fmt: skip
+
+
+def stability_rows(path: Path) -> pl.DataFrame:
+    """The D2 stability study (reports/regression_watch/stability.csv: split-half correlations
+    and the shrinkage table r(g) of every season window) row for row, as regression_stability
+    publishes it: ``line`` = the data row's number, every CSV column (``table`` -> ``section``,
+    ``window`` -> ``seasons``)."""
+    return csv_table(path, STABILITY_TABLE, STABILITY_RENAME)
 
 
 def ng_columns(frame: pl.DataFrame) -> pl.DataFrame:
@@ -214,14 +229,14 @@ def ng_columns(frame: pl.DataFrame) -> pl.DataFrame:
 
 
 def collect_regression(
-    store: Path, db: Path, csv_path: Path, season: int, now: datetime, frame: pl.DataFrame
-) -> Collected:
-    """Regression Watch's lists, outcomes, backtest versions and track record (module
-    docstring); ``frame``: :func:`history` (the D1 frame of the live seasons at least)."""
-    from twm.config import league
+    store: Path, db: Path, csv_path: Path, season: int, now: datetime, frame: pl.DataFrame,
+    stability_csv: Path,
+) -> Collected:  # fmt: skip
+    """Regression Watch's lists, outcomes, backtest versions, track record (``csv_path``) and
+    stability study (``stability_csv``) (module docstring); ``frame``: :func:`history` (the D1
+    frame of the live seasons at least)."""
     from twm.modules.regression_watch import frozen as fz
 
-    lg = league()
     created = now.astimezone(UTC).replace(tzinfo=None)
     live = module_store_rows(store, MODULE, season)
     back, snap = frozen_lists(season, created)
@@ -232,7 +247,7 @@ def collect_regression(
     frozen_team = snap["predictions"].select("season", "week", pl.col("entity_id").alias(
         "gsis_id"), "team")  # fmt: skip
     teams = pl.concat([fz.teams_at(frame, keys).select(frozen_team.columns), frozen_team])
-    lists, out = regression_lists(rows, teams, lg.starter_thresholds())
+    lists, out = regression_lists(rows, teams)
     frozen_out = snap["outcomes"].select(
         "season", "week", pl.col("entity_id").alias("gsis_id"), "ros_ppg", "ros_games",
         "label_status",
@@ -249,4 +264,5 @@ def collect_regression(
         ),  # fmt: skip
         version_rows(snap["model_versions"], created_at=now.astimezone(UTC)),
         csv_table(csv_path, "regression_track_record", {"table": "section", "group": "row_group"}),
+        {STABILITY_TABLE: stability_rows(stability_csv)},
     )

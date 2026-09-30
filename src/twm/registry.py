@@ -762,10 +762,13 @@ def _projection_entries() -> list[Entry]:
          "above his PPG",
          "He has scored well below what his chances were worth: his points should rise, so he "
          "may be cheap to trade for.", True),
-        ("legit", "Legit", "metric", "yes/no",
-         f"PPG rank inside the starter threshold ({starters}) AND FPOE/game not in the top "
-         "decile of his position's universe",
-         "A starter whose production is carried by his opportunity, not by luck.", True),
+        ("legit", "Legit (tested, not shown)", "metric", "yes/no",
+         f"tested, not shown: PPG rank inside the starter threshold ({starters}) AND FPOE/game "
+         "not in the top decile of his position's universe; D3's backtest only, dropped from "
+         "the product on 2026-09-30",
+         "Tested, not shown: a starter whose production is carried by his opportunity, not by "
+         "luck. It predicted nothing (in the backtest 60.6% of the players it tagged stayed "
+         "starters, and so did 61.1% of every starter), so the lists do not carry it.", True),
         ("tag_threshold_x", "Tag threshold X", "concept", "points per game",
          f"per season, the X in 0, 0.5 .. 6 with the best Sell-high (Buy-low) precision on "
          f"the earlier seasons among those tagging at least {tg.MIN_TAGS_PER_ASOF} players per "

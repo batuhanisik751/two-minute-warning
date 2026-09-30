@@ -95,8 +95,9 @@ def regression(
     who = players.filter(pl.col("position").is_in(["QB", "RB", "WR", "TE"])).head(6)
     weeks = [(s, w, "backtest") for s in backtest for w in (4, 6)]
     weeks += [(LIVE_SEASON, LIVE_WEEK, "live")] if live else []
-    tagging = [("sell_high", ["sell_high"]), ("buy_low", ["buy_low", "legit"]),
-               ("legit", ["legit"]), (None, []), (None, []), (None, [])]  # fmt: skip
+    # the product's tags only (Legit, stripped by the publish since R1, never reaches the rows)
+    tagging = [("sell_high", ["sell_high"]), ("buy_low", ["buy_low"]), (None, []), (None, []),
+               (None, []), (None, [])]  # fmt: skip
     lists, rows, versions = [], [], {}
     for s, w, kind in weeks:
         version = f"mean_flat_all-{'live' if kind == 'live' else s}"
@@ -133,13 +134,29 @@ def regression(
     return ListData(lists_df, rows_df, out, keys), list(versions.values()), track
 
 
+def stability(n: int = 4) -> pl.DataFrame:
+    """``n`` rows of Regression Watch's stability study (regression_stability, step R1): a
+    split-half row, then shrinkage rows r(g) for g = 1, 2, ..."""
+    rows = [{"line": 1, "section": "split_half", "seasons": "2009-2025", "split": "odd_even",
+             "position": "QB", "metric": "xfp", "g": None, "n": 607, "value": 0.76435,
+             "lo": 0.721062, "hi": 0.799518, "var_signal": None, "var_noise": None,
+             "prior_mean": None}]  # fmt: skip
+    rows += [{"line": i + 2, "section": "shrinkage", "seasons": "2009-2025", "split": "odd_even",
+              "position": "QB", "metric": "fpoe", "g": i + 1, "n": 607, "value": 0.0166 * (i + 1),
+              "lo": None, "hi": None, "var_signal": 0.588076, "var_noise": 34.904076,
+              "prior_mean": -0.784906} for i in range(n - 1)]  # fmt: skip
+    return _table("regression_stability", rows[:n])
+
+
 def add_modules(data: PublishData, **kw) -> PublishData:
     """``data`` (the Radar's synthetic publish) with the streamer's and Regression Watch's
-    lists; ``streamer=`` / ``regression=`` pass keyword arguments to each builder."""
+    lists; ``streamer=`` / ``regression=`` / ``stability=`` pass keyword arguments to each
+    builder."""
     st, st_versions, st_track = streamer(**kw.get("streamer", {}))
     rw, rw_versions, rw_track = regression(data.tables["dim_player"], **kw.get("regression", {}))
     data.families["streamer"], data.families["regression_watch"] = st, rw
     data.tables["stream_track_record"], data.tables["regression_track_record"] = st_track, rw_track
+    data.tables["regression_stability"] = stability(**kw.get("stability", {}))
     mv = data.tables["model_versions"]
     extra = pl.DataFrame([*st_versions, *rw_versions], schema=mv.schema, orient="row")
     data.tables["model_versions"] = pl.concat([mv, extra]).unique(

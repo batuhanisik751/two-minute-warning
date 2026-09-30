@@ -70,6 +70,9 @@ def test_the_synthetic_modules_pass_and_broken_rows_are_caught(data: col.Publish
         pl.col("gsis_id") != good_rw.get_column("gsis_id")[0])))  # fmt: skip
     assert any("missing from dim_player" in p for p in problems(regression=good_rw.with_columns(
         pl.lit("00-0999998").alias("gsis_id"))))  # fmt: skip
+    legit = [["buy_low", "legit"] if t == ["buy_low"] else t for t in good_rw["tags"].to_list()]
+    assert any("a tag the product does not show" in p for p in problems(
+        regression=good_rw.with_columns(pl.Series("tags", legit))))  # fmt: skip
     assert problems() == []
 
 
@@ -134,11 +137,13 @@ def test_backtest_chances_read_only_earlier_seasons() -> None:
 def test_tag_reasons_notes_and_negative_zero() -> None:
     r = {"tags": ["buy_low", "legit"], "fpoe_pg": -4.6, "projection": 13.2, "gap": 4.3,
          "ppg": 8.9, "ppg_rank": 11, "x": {"sell_high": 4.5, "buy_low": 3.5}}  # fmt: skip
-    text = rl.tag_reason(r, "WR", {"WR": 24})
+    text = rl.tag_reason(r)
     assert text is not None and text.startswith("Buy-low: his -4.6 points over expected")
     assert "4.3 points per game above his 8.9 PPG (the cutoff is 3.5)" in text
-    assert "Legit: his PPG ranks No. 11 among WRs, inside the starter threshold (24)" in text
-    assert rl.tag_reason({"tags": []}, "QB", {}) is None
+    assert "Legit" not in text  # tested, not shown (owner, 2026-09-30)
+    assert rl.tag_reason({"tags": []}) is None and rl.tag_reason({"tags": ["legit"]}) is None
+    assert rl.shown_tags(["legit", "buy_low", "sell_high"]) == ["sell_high", "buy_low"]
+    assert rl.shown_tags(None) == [] and rl.shown_tags(["legit"]) == []
     df = rl.no_negative_zero(pl.DataFrame({"a": [-0.0, 1.5, None], "b": ["x", "y", "z"]}))
     assert str(df.get_column("a").to_list()) == "[0.0, 1.5, None]"
 
@@ -158,6 +163,53 @@ def test_track_records_are_the_csvs_row_for_row() -> None:
     rw = col.csv_table(ROOT / "reports/regression_watch/backtest.csv", "regression_track_record",
                        {"table": "section", "group": "row_group"})  # fmt: skip
     assert set(rw.get_column("section").unique()) >= {"value", "tag", "choice", "threshold"}
+
+
+def test_the_stability_study_is_the_csv_row_for_row() -> None:
+    """Step R1 (owner, 2026-09-30: the methodology page shows the real numbers): every row and
+    column of reports/regression_watch/stability.csv, `table`/`window` renamed (SQL keywords)."""
+    path = ROOT / "reports" / "regression_watch" / "stability.csv"
+    csv = pl.read_csv(path, infer_schema_length=0)
+    got = rl.stability_rows(path)
+    names = TABLES["regression_stability"].names
+    assert got.columns == list(names) and got.height == csv.height == 1022
+    assert got.get_column("line").to_list() == list(range(1, csv.height + 1))
+    assert [rl.STABILITY_RENAME.get(c, c) for c in csv.columns] == list(names[1:])
+    for c in csv.columns:  # cell for cell: the same text, number or empty
+        want, have = csv.get_column(c), got.get_column(rl.STABILITY_RENAME.get(c, c))
+        if have.dtype == pl.String:
+            assert have.to_list() == want.to_list(), c
+        else:
+            kind = int if have.dtype == pl.Int32 else float
+            assert have.to_list() == [None if v is None else kind(float(v))
+                                      for v in want.to_list()], c  # fmt: skip
+    assert set(got.get_column("section")) == {"split_half", "shrinkage"}
+    assert got.filter(pl.col("section") == "split_half").get_column("g").null_count() == 70
+    assert col.Inputs.default().path("regression_stability_csv") == path
+    assert "regression_stability" in FAMILIES["regression_watch"].replaced
+    assert "regression_stability" in wr.guarded(["regression_watch"])
+    assert wr.units(["regression_watch"])["regression_stability"] == ("regression_stability",)
+    with pytest.raises(col.PublishInputError, match="report not found"):
+        rl.stability_rows(path.with_name("missing.csv"))
+
+
+def test_the_published_lists_carry_no_legit_tag() -> None:
+    """Owner, 2026-09-30: Legit is tested, not shown. The frozen backtest lists (made with D3's
+    three tags) keep it in their bytes; every list the publish writes strips it."""
+    rows, snap = rl.frozen_lists(2026, datetime(2026, 9, 30))
+    teams = snap["predictions"].select("season", "week", pl.col("entity_id").alias("gsis_id"),
+                                       "team")  # fmt: skip
+    lists, out = rl.regression_lists(rows, teams)
+    assert out.height == rows.height == 10_787 and lists.height == 60
+    bands = rows.get_column("band").value_counts().rows()
+    assert dict(bands)["legit"] > 3000  # the snapshot as frozen
+    assert {t for ts in out.get_column("tags").to_list() for t in ts} == {"sell_high", "buy_low"}
+    assert set(out.get_column("tag").drop_nulls()) == {"sell_high", "buy_low"}
+    assert out.filter(pl.col("tag").is_null()).height == rows.filter(
+        pl.col("band").is_null() | (pl.col("band") == "legit")).height  # fmt: skip
+    assert not out.get_column("tag_reason").drop_nulls().str.contains("Legit").any()
+    kept = rows.filter(pl.col("band").is_in(["sell_high", "buy_low"])).height
+    assert out.filter(pl.col("tag").is_not_null()).height == kept
 
 
 def test_the_run_exports_a_modules_stored_list(tmp_path: Path) -> None:

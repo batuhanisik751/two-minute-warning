@@ -266,12 +266,12 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Formula:** fact_opportunity_week.pass_interception, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
 
-### Legit \*
+### Legit (tested, not shown) \*
 
-A starter whose production is carried by his opportunity, not by luck.
+Tested, not shown: a starter whose production is carried by his opportunity, not by luck. It predicted nothing (in the backtest 60.6% of the players it tagged stayed starters, and so did 61.1% of every starter), so the lists do not carry it.
 
 - **Name:** `legit`; **unit:** yes/no; **used by:** regression_watch
-- **Formula:** PPG rank inside the starter threshold (QB top 12, RB top 24, WR top 24, TE top 12) AND FPOE/game not in the top decile of his position's universe
+- **Formula:** tested, not shown: PPG rank inside the starter threshold (QB top 12, RB top 24, WR top 24, TE top 12) AND FPOE/game not in the top decile of his position's universe; D3's backtest only, dropped from the product on 2026-09-30
 - **Source:** twm.modules.regression_watch.tags
 
 ### Neutral situation \*

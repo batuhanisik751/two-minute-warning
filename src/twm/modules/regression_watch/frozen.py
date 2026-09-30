@@ -13,7 +13,9 @@ the warehouse from 2006.
   walk-forward chose for that season (:func:`~twm.modules.regression_watch.production.
   make_params`: variant and X chosen on the seasons before, shrinkage estimated on 2009 ..
   S-1), in the store's layout (score = projection, band = tag, reasons_json = the numbers) plus
-  the player's ``team`` (his latest game public at the as-of);
+  the player's ``team`` (his latest game public at the as-of). The lists carry all three D3
+  tags, Legit too (the backtest as it was run); the product dropped Legit on 2026-09-30 and
+  ``twm publish`` strips it (:mod:`twm.publish.regression_lists`);
 - ``outcomes``: each row's rest of the season after the as-of: ``ros_ppg`` (NULL with fewer
   than 3 games, as D3 grades), ``ros_games`` and ``ros_rank`` (his rest-of-season PPG rank at
   his position), all 'final';
@@ -144,7 +146,10 @@ def build_snapshot(
         versions.append(rprod.version_frame(params))
         sf, end = frame.filter(pl.col("season") == s), last_reg_week(db, s) or 0
         for week, as_of in asofs.filter(pl.col("season") == s).select("week", "as_of").iter_rows():
-            table = rwk.score_week(visible(sf, _aware(as_of)), names, params, league, int(week))
+            # all three tags of the D3 backtest (Legit too): the snapshot is history, rebuilt
+            # byte for byte; the publish strips Legit (owner, 2026-09-30)
+            table = rwk.score_week(visible(sf, _aware(as_of)), names, params, league,
+                                   int(week), tags=rwk.TESTED_TAGS)  # fmt: skip
             if table.height:
                 lists.append(rwk.list_rows(table, params, as_of=_aware(as_of), horizon=end - week,
                                            kind="backtest", created=datetime(2000, 1, 1),

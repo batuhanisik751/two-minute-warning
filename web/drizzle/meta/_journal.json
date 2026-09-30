@@ -15,6 +15,13 @@
       "when": 1790734304597,
       "tag": "0001_streamer_regression_watch",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790804083198,
+      "tag": "0002_regression_stability",
+      "breakpoints": true
     }
   ]
 }

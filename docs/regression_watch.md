@@ -186,12 +186,62 @@ reads the raw warehouse fails it (tests/test_regression_watch.py).
   positions, availability), but its synthetic play-by-play has no yard columns, so its per-play
   points are 0; the points reconciliation is tested on synthetic plays and on the real cache.
 
+## Which parts repeat: the stability study (step D2)
+
+`src/twm/modules/regression_watch/stability.py`; results in
+`reports/regression_watch/stability.md` (+ .csv); a walk-through for beginners in
+`notebooks/02_regression_stability.ipynb`.
+
+**The idea.** Take every player-season with at least 8 games (2009 on; a game counts when he had
+a target, carry or pass; one position per player-season, the one of most of his games) and
+split his games in two: odd games (1st, 3rd, 5th ...) against even games, and, as a harder
+test, his first half against his second half. Both halves are the same player in the same
+season; only the luck differs. The **split-half correlation** (`twm glossary
+split_half_correlation`) across player-seasons says how much a number repeats: near 1 it is
+role or skill, near 0 it was luck. Intervals: 95%, 1,000 bootstrap resamples of the
+player-seasons.
+
+**What is measured** (per half): xFP, FPOE and points per game, each also without garbage time;
+and the parts of efficiency as rates over expected per chance: TD rate ((touchdowns - expected)
+per pass, carry or target), catch rate ((catches - expected) per target; for QBs completions
+per pass, CPOE) and YAC over expected per catch (ffopportunity has a YAC expectation for every
+catch from 2006, so it is studied on every season of the study). A rate needs 10 chances in each
+half.
+
+**What the data says** (2009-2025, odd against even games): opportunity is far stickier than
+efficiency at every position (xFP/game r 0.76 QB to 0.88 RB; FPOE/game 0.10 QB to 0.16 RB).
+Touchdowns over expected barely repeat (r about 0); catch rate, completion rate (QB 0.33) and
+YAC (WR, TE about 0.2) repeat a little. Without garbage time neither number gets stickier.
+
+**Shrinkage.** Each game's FPOE = the player's true level + luck. The covariance of the odd and
+even halves estimates how much true levels differ (`signal_variance`); the variance of their
+difference, divided by the average of 1/g_a + 1/g_b, estimates the luck of one game
+(`noise_variance`). After g games his FPOE/game is worth
+
+    r(g) = signal_variance / (signal_variance + noise_variance / g)
+
+of its value: the **shrinkage factor** for the rest-of-season projection (D3: xFP/game + r(g)
+x FPOE/game). On 2009-2025, r(8) is 0.12 QB, 0.20 RB, 0.13 WR, 0.15 TE; half weight takes
+30-60 games, i.e. several seasons. The estimates move between season windows (RB r(8) 0.33 on
+2009-2014, 0.10 on 2020-2025), which the report shows.
+
+**Point in time.** `stability.shrinkage(seasons)` reads only the seasons it is given (and,
+with `as_of`, only rows public then), so D3's walk-forward backtest for season S passes the
+seasons before S; a later season can never change the estimate (tested).
+
+**Limits.** One noise size per position (a high-volume player's FPOE swings more); backups are
+in the study, which widens opportunity's spread; the parts of efficiency have no garbage-time
+split (ffopportunity's weekly rows); the bootstrap treats player-seasons as independent; the
+FPOE average of QB player-seasons is below zero (-0.8 per game: lost fumbles have no expected
+value), so shrinking toward 0 or toward the position average is a D3 choice (`prior_mean`).
+
 ## Commands
 
 ```
 uv run twm regression player "CeeDee Lamb" --season 2023   # weekly points, xFP, FPOE, with and without garbage time
 uv run twm regression player 00-0036358 --as-of 2026-W3     # as it looked at week 3's Tuesday as-of
 uv run twm regression xfp-report                            # reports/regression_watch/xfp.md (+ .csv)
-uv run pytest tests/test_regression_watch.py                # offline tests
+uv run twm regression stability                             # reports/regression_watch/stability.md (+ .csv), 2009 to last season
+uv run pytest tests/test_regression_watch.py tests/test_regression_stability.py   # offline tests
 uv run pytest -m realdata -k regression                     # the checks on the real cache
 ```

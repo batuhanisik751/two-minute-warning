@@ -6,6 +6,14 @@ output (PROJECT_SPEC 6.3: trained on many seasons, a mild known leak in backtest
 
 ## Metrics
 
+### Average FPOE per game (prior) \*
+
+The value a shrunk FPOE/game is pulled toward when shrinking toward the position average instead of zero.
+
+- **Name:** `prior_mean`; **unit:** points; **used by:** regression_watch
+- **Formula:** sum of FPOE over sum of games, over the player-seasons of a position
+- **Source:** twm.modules.regression_watch.stability
+
 ### CPOE (completion percentage over expected) \*
 
 Whether a quarterback completes more passes than an average passer would have on the same throws.
@@ -22,6 +30,22 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Name:** `carries`; **unit:** carries; **used by:** regression_watch
 - **Formula:** fact_opportunity_week.rush_attempt (two-point tries excluded), from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Catch rate over expected \*
+
+How many more of his targets he caught than an average receiver would have.
+
+- **Name:** `catch_rate_over_expected`; **unit:** catches per target; **used by:** regression_watch
+- **Formula:** (receptions - receptions_exp) / targets, over the games of one half of a player-season (summed, then divided)
+- **Source:** twm.modules.regression_watch.stability
+
+### Completion rate over expected (CPOE) \*
+
+How many more of his passes were completed than an average passer's would have been.
+
+- **Name:** `completion_rate_over_expected`; **unit:** completions per pass; **used by:** regression_watch
+- **Formula:** (completions - completions_exp) / pass_attempts, over the games of one half of a player-season (summed, then divided)
+- **Source:** twm.modules.regression_watch.stability
 
 ### Completions
 
@@ -201,6 +225,14 @@ The points he scored while the game was still in doubt. Late points in a blowout
 - **Formula:** fantasy_points - points_garbage: the weekly stat line's points minus those scored on his garbage-time plays (fact_play.is_garbage_time)
 - **Source:** twm.modules.regression_watch.player_week
 
+### Games for half weight \*
+
+After this many games a player's FPOE/game deserves half its face value.
+
+- **Name:** `games_for_half_weight`; **unit:** games; **used by:** regression_watch
+- **Formula:** noise_variance / signal_variance: the g where r(g) = 0.5
+- **Source:** twm.modules.regression_watch.stability
+
 ### Garbage time \*
 
 Plays after the game is effectively decided. Stats piled up then say little about next week, so views can drop them.
@@ -233,6 +265,14 @@ Plays where the game is still in the balance and neither team is forced to pass 
 - **Name:** `is_neutral`; **unit:** boolean; **used by:** shared
 - **Formula:** win probability from 0.2 to 0.8 and more than 120 seconds left in the half
 - **Source:** fact_play.is_neutral (twm.situations)
+
+### Noise variance per game \*
+
+How much a single game's value swings by luck alone.
+
+- **Name:** `noise_variance`; **unit:** points squared; **used by:** regression_watch
+- **Formula:** var(odd-game mean - even-game mean) / mean(1 / odd games + 1 / even games), across player-seasons of a position
+- **Source:** twm.modules.regression_watch.stability
 
 ### Opportunities
 
@@ -298,6 +338,14 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Formula:** fact_opportunity_week.receptions, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
 
+### Reliability after g games \*
+
+The share of a g-game average that is real rather than luck; it grows with g.
+
+- **Name:** `reliability`; **unit:** share (0-1); **used by:** regression_watch
+- **Formula:** r(g) = signal_variance / (signal_variance + noise_variance / g)
+- **Source:** twm.modules.regression_watch.stability
+
 ### Rostership (percent of leagues)
 
 How many real leagues have the player on a roster. It checks the candidate pool (a player owned in fewer than 50% of leagues is really available); the pool itself never uses it, because it does not exist before 2020.
@@ -322,6 +370,30 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Formula:** fact_opportunity_week.rush_yards_gained, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
 
+### Shrinkage factor \*
+
+How much of a player's points over expected to keep when projecting the rest of the season; the rest is expected to fade.
+
+- **Name:** `shrinkage_factor`; **unit:** share (0-1); **used by:** regression_watch
+- **Formula:** reliability r(g) of FPOE/game for his position after his g games, estimated only from seasons before the one projected (stability.shrinkage(seasons))
+- **Source:** twm.modules.regression_watch.stability
+
+### Signal variance \*
+
+How much players truly differ in the metric once luck is taken out.
+
+- **Name:** `signal_variance`; **unit:** points squared; **used by:** regression_watch
+- **Formula:** covariance, across player-seasons of a position, of FPOE/game in his odd games and in his even games
+- **Source:** twm.modules.regression_watch.stability
+
+### Split-half correlation
+
+How much a number repeats within a season: near 1 it is a lasting trait (role or skill), near 0 it was mostly luck.
+
+- **Name:** `split_half_correlation`; **unit:** correlation (-1 to 1); **used by:** regression_watch
+- **Formula:** Pearson correlation, across player-seasons (8+ games with a target, carry or pass; 2009 on; one position per player-season), of a metric in one half of his games with the same metric in the other half: odd against even games, or his first n // 2 games against the rest
+- **Source:** twm.modules.regression_watch.stability
+
 ### Starter finish
 
 The player scored like a weekly starter in a 12-team league that week.
@@ -329,6 +401,14 @@ The player scored like a weekly starter in a 12-team league that week.
 - **Name:** `is_starter_finish`; **unit:** boolean; **used by:** waiver_radar
 - **Formula:** weekly_pos_rank <= the position's starter threshold (QB top 12, RB top 24, WR top 24, TE top 12)
 - **Source:** twm.modules.waiver_radar.labels.weekly_finishes
+
+### TD rate over expected \*
+
+Touchdowns beyond what his chances were worth, per pass, carry or target.
+
+- **Name:** `td_rate_over_expected`; **unit:** touchdowns per chance; **used by:** regression_watch
+- **Formula:** (passing_tds + rushing_tds + receiving_tds - the same three _exp) / (pass_attempts + carries + targets), over the games of one half of a player-season (summed, then divided)
+- **Source:** twm.modules.regression_watch.stability
 
 ### Targets
 
@@ -361,6 +441,14 @@ The chance the offense wins from this moment, given score, time, field position 
 - **Name:** `wp`; **unit:** probability (0-1); **used by:** shared, decisions
 - **Formula:** nflfastR's estimated probability that the team with the ball wins, before the snap
 - **Source:** fact_play.wp
+
+### YAC over expected \*
+
+Yards after the catch beyond what an average receiver gains on the same catches.
+
+- **Name:** `yac_over_expected`; **unit:** yards per catch; **used by:** regression_watch
+- **Formula:** (yac - yac_exp) / receptions, over the games of one half of a player-season (summed, then divided)
+- **Source:** twm.modules.regression_watch.stability
 
 ### Yards after the catch
 

@@ -654,6 +654,74 @@ def _regression_entries() -> list[Entry]:
     return out
 
 
+def _stability_entries() -> list[Entry]:
+    """The stability study's metrics (D2: twm.modules.regression_watch.stability)."""
+    src = "twm.modules.regression_watch.stability"
+    half = "over the games of one half of a player-season (summed, then divided)"
+    rows = [
+        ("split_half_correlation", "Split-half correlation", "correlation (-1 to 1)",
+         "Pearson correlation, across player-seasons (8+ games with a target, carry or pass; "
+         "2009 on; one position per player-season), of a metric in one half of his games with "
+         "the same metric in the other half: odd against even games, or his first n // 2 "
+         "games against the rest",
+         "How much a number repeats within a season: near 1 it is a lasting trait (role or "
+         "skill), near 0 it was mostly luck.", False),
+        ("td_rate_over_expected", "TD rate over expected", "touchdowns per chance",
+         "(passing_tds + rushing_tds + receiving_tds - the same three _exp) / (pass_attempts + "
+         f"carries + targets), {half}",
+         "Touchdowns beyond what his chances were worth, per pass, carry or target.", True),
+        ("catch_rate_over_expected", "Catch rate over expected", "catches per target",
+         f"(receptions - receptions_exp) / targets, {half}",
+         "How many more of his targets he caught than an average receiver would have.", True),
+        ("completion_rate_over_expected", "Completion rate over expected (CPOE)",
+         "completions per pass", f"(completions - completions_exp) / pass_attempts, {half}",
+         "How many more of his passes were completed than an average passer's would have "
+         "been.", True),
+        ("yac_over_expected", "YAC over expected", "yards per catch",
+         f"(yac - yac_exp) / receptions, {half}",
+         "Yards after the catch beyond what an average receiver gains on the same catches.",
+         True),
+        ("signal_variance", "Signal variance", "points squared",
+         "covariance, across player-seasons of a position, of FPOE/game in his odd games and "
+         "in his even games",
+         "How much players truly differ in the metric once luck is taken out.", True),
+        ("noise_variance", "Noise variance per game", "points squared",
+         "var(odd-game mean - even-game mean) / mean(1 / odd games + 1 / even games), across "
+         "player-seasons of a position",
+         "How much a single game's value swings by luck alone.", True),
+        ("reliability", "Reliability after g games", "share (0-1)",
+         "r(g) = signal_variance / (signal_variance + noise_variance / g)",
+         "The share of a g-game average that is real rather than luck; it grows with g.", True),
+        ("shrinkage_factor", "Shrinkage factor", "share (0-1)",
+         "reliability r(g) of FPOE/game for his position after his g games, estimated only "
+         "from seasons before the one projected (stability.shrinkage(seasons))",
+         "How much of a player's points over expected to keep when projecting the rest of the "
+         "season; the rest is expected to fade.", True),
+        ("games_for_half_weight", "Games for half weight", "games",
+         "noise_variance / signal_variance: the g where r(g) = 0.5",
+         "After this many games a player's FPOE/game deserves half its face value.", True),
+        ("prior_mean", "Average FPOE per game (prior)", "points",
+         "sum of FPOE over sum of games, over the player-seasons of a position",
+         "The value a shrunk FPOE/game is pulled toward when shrinking toward the position "
+         "average instead of zero.", True),
+    ]  # fmt: skip
+    return [
+        Entry(
+            name=name,
+            title=title,
+            kind="metric",
+            modules=("regression_watch",),
+            unit=unit,
+            formula=formula,
+            explanation=explanation,
+            source=src,
+            step="D2",
+            model_output=model,
+        )
+        for name, title, unit, formula, explanation, model in rows
+    ]
+
+
 def _streamer_entries() -> list[Entry]:
     """The K and D/ST streamer's features (step S1c, twm.modules.streamer.features) and its
     label (S1b), one entry per column."""
@@ -1264,6 +1332,7 @@ def _entries() -> list[Entry]:
         ),
         *_feature_entries(),
         *_regression_entries(),
+        *_stability_entries(),
         *_streamer_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(

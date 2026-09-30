@@ -1165,7 +1165,7 @@ def radar_week(
 
 
 # --------------------------------------------------------------------------------------
-# Regression Watch (phase D): `twm regression player`, `twm regression xfp-report`
+# Regression Watch (phase D): `twm regression player`, `xfp-report`, `stability`
 # --------------------------------------------------------------------------------------
 
 regression_app = typer.Typer(
@@ -1328,6 +1328,49 @@ def regression_xfp_report(
         raise typer.Exit(code=1) from e
     target = out if out.is_absolute() else ROOT / out
     csv_path = write_xfp_report(report, target)
+    for line in report.summary:
+        typer.echo(line)
+    typer.echo(f"wrote {target}")
+    typer.echo(f"wrote {csv_path}")
+
+
+@regression_app.command("stability")
+def regression_stability(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    out: Path = typer.Option(
+        Path("reports/regression_watch/stability.md"),
+        "--out",
+        help="Markdown file to write (relative paths are under the project root); a CSV with "
+        "the same name is written next to it.",
+    ),
+    start: int = typer.Option(2009, "--start", help="First season (the study starts in 2009)."),
+    end: int | None = typer.Option(
+        None, "--end", help="Last season (default: the last complete one, current - 1)."
+    ),
+    n_boot: int = typer.Option(1000, "--boot", help="Bootstrap resamples for the intervals."),
+) -> None:
+    """Write the stability study (step D2): split-half correlations of xFP, FPOE, points and
+    the parts of efficiency by position, and the FPOE shrinkage table (markdown + CSV)."""
+    import duckdb
+
+    from twm.asof import WarehouseTooOldError
+    from twm.config import ROOT, settings
+    from twm.modules.regression_watch.stability_report import (
+        build_stability_report,
+        write_stability_report,
+    )
+
+    path = _warehouse_or_exit(db)
+    last = end if end is not None else settings().current_season - 1
+    if start > last:
+        raise typer.BadParameter(f"--start {start} is after --end {last}")
+    try:
+        report = build_stability_report(path, list(range(start, last + 1)), n_boot=n_boot)
+    except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot build the report: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    target = out if out.is_absolute() else ROOT / out
+    csv_path = write_stability_report(report, target)
     for line in report.summary:
         typer.echo(line)
     typer.echo(f"wrote {target}")

@@ -9,6 +9,7 @@ Kicker points = PATs + 3 x field goals (30-39 yards); D/ST points = sacks (every
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import polars as pl
@@ -207,7 +208,14 @@ def rankings() -> pl.DataFrame:
     return frame(rows, RANKINGS_ALL_DTYPES)
 
 
-def write_world(cache: RawCache, *, week4_final: bool = True) -> None:
+def write_world(
+    cache: RawCache,
+    *,
+    week4_final: bool = True,
+    extras: Callable[[RawCache], None] | None = None,
+) -> None:
+    """Write the world's cache; ``extras`` may then overwrite datasets (S1c adds venues
+    and red-zone drives)."""
     cache.write("players", None, players())
     cache.write("ff_playerids", None, ff_playerids())
     cache.write("ff_rankings_all", None, rankings())
@@ -219,9 +227,16 @@ def write_world(cache: RawCache, *, week4_final: bool = True) -> None:
     cache.write_season(2025, g25, player_stats=[], team_stats=[], rosters=rosters_2025(g25))
     cache.write("player_stats", 2025, frame(kicker_stats(2025, g25), KICK_DTYPES))
     cache.write("team_stats", 2025, frame(team_stats(2025, g25), DEF_DTYPES))
+    if extras is not None:
+        extras(cache)
 
 
-def build_world(tmp: Path, *, week4_final: bool = True) -> Path:
+def build_world(
+    tmp: Path,
+    *,
+    week4_final: bool = True,
+    extras: Callable[[RawCache], None] | None = None,
+) -> Path:
     """Write the cache under ``tmp`` and build the warehouse (offline); returns the db path."""
     import pytest
 
@@ -241,7 +256,7 @@ def build_world(tmp: Path, *, week4_final: bool = True) -> Path:
         mp.setattr(ids, "overrides_path", lambda: tmp / "manual" / ids.OVERRIDES_FILE)
         cache = RawCache(root)
         cache.write_globals()
-        write_world(cache, week4_final=week4_final)
+        write_world(cache, week4_final=week4_final, extras=extras)
         db = tmp / "streamer.duckdb"
         wb.build_warehouse([2024, 2025], db_path=db)
     return db

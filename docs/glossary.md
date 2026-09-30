@@ -468,6 +468,14 @@ The share of his team's runs he got last game.
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.carries, fact_team_week.carries
 - **Waiver Radar reason:** "Got {value:.0%} of his team's carries last game"
 
+### Defense and return touchdowns per game
+
+Touchdowns scored by the defense or the return teams: rare, but worth a lot.
+
+- **Name:** `dst_tds_per_game`; **unit:** touchdowns per game; **used by:** streamer
+- **Formula:** mean (kickoff, punt, interception, fumble and blocked-kick return TDs), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game); NULL for K rows
+- **Source:** twm.modules.streamer.features; fact_defense_week.interception_return_tds, fact_defense_week.fumble_return_tds, fact_defense_week.kickoff_return_tds, fact_defense_week.punt_return_tds, fact_defense_week.blocked_kick_return_tds
+
 ### Depth-chart move
 
 How many spots he moved up the depth chart in a week.
@@ -504,6 +512,14 @@ Teams give early picks more chances.
 - **Source:** twm.modules.waiver_radar.features; dim_player.draft_round
 - **Waiver Radar reason:** "Was drafted in round {value:.0f}: teams give higher draft picks more chances"
 
+### Extra-point attempts per game
+
+Extra points follow touchdowns, so this shows how often his offense scores.
+
+- **Name:** `k_pat_att_per_game`; **unit:** attempts per game; **used by:** streamer
+- **Formula:** sum of pat_att / games, over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one)
+- **Source:** twm.modules.streamer.features; fact_kicker_week.pat_att
+
 ### FPOE (fantasy points over expected) \*
 
 Points above or below what his chances were worth: partly skill, largely luck, and it tends to shrink toward zero.
@@ -539,6 +555,38 @@ What he scored last game.
 - **Source:** twm.modules.waiver_radar.features; fact_player_week (twm.scoring.score_sql)
 - **Waiver Radar reason:** "Scored {value:.1f} fantasy points last game"
 
+### Field-goal accuracy, 0-39 yards
+
+How reliable he is on short kicks this season.
+
+- **Name:** `k_fg_pct_0_39`; **unit:** share (0-1); **used by:** streamer
+- **Formula:** fg_made / (fg_made + fg_missed) in the distance bucket, summed over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one); blocked kicks are not in nflverse's distance buckets and are left out; NULL without an attempt there (0-19, 20-29 and 30-39 yards)
+- **Source:** twm.modules.streamer.features; fact_kicker_week.fg_made_30_39, fact_kicker_week.fg_missed_30_39
+
+### Field-goal accuracy, 40-49 yards
+
+How reliable he is on medium-long kicks this season.
+
+- **Name:** `k_fg_pct_40_49`; **unit:** share (0-1); **used by:** streamer
+- **Formula:** fg_made / (fg_made + fg_missed) in the distance bucket, summed over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one); blocked kicks are not in nflverse's distance buckets and are left out; NULL without an attempt there (40-49 yards)
+- **Source:** twm.modules.streamer.features; fact_kicker_week.fg_made_40_49, fact_kicker_week.fg_missed_40_49
+
+### Field-goal accuracy, 50+ yards
+
+How reliable he is from 50 yards and beyond; coaches trust a strong leg with more long tries.
+
+- **Name:** `k_fg_pct_50_plus`; **unit:** share (0-1); **used by:** streamer
+- **Formula:** fg_made / (fg_made + fg_missed) in the distance bucket, summed over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one); blocked kicks are not in nflverse's distance buckets and are left out; NULL without an attempt there (50-59 and 60+ yards)
+- **Source:** twm.modules.streamer.features; fact_kicker_week.fg_made_50_59, fact_kicker_week.fg_missed_50_59
+
+### Field-goal attempts per game
+
+How often his team sends him out for field goals: the main source of kicker points.
+
+- **Name:** `k_fg_att_per_game`; **unit:** attempts per game; **used by:** streamer
+- **Formula:** sum of fg_att / games, over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one)
+- **Source:** twm.modules.streamer.features; fact_kicker_week.fg_att
+
 ### Games played this season
 
 How many games he has a stat line in so far.
@@ -566,6 +614,62 @@ Chances inside the 10-yard line: the most valuable touches in fantasy.
 - **Source:** twm.modules.waiver_radar.features; fact_play
 - **Waiver Radar reason:** "Had {value:.1f} chances per game inside the opponent's 10-yard line over the last {weeks} games"
 
+### Home game next week
+
+Teams tend to score more and allow less at home.
+
+- **Name:** `next_is_home`; **unit:** boolean; **used by:** streamer
+- **Formula:** the as-of team is the home team of its week N+1 game and the venue is not neutral (fact_schedule.location, public from slot_available_at); NULL on a bye or while the venue is not public
+- **Source:** twm.modules.streamer.features; fact_schedule.home_team, fact_schedule.location
+
+### K/DST games so far
+
+How many games the numbers so far are based on.
+
+- **Name:** `kdst_games_to_date`; **unit:** games; **used by:** streamer
+- **Formula:** the pool's games_to_date (K: games with a kick attempt; DST: team games)
+- **Source:** twm.modules.streamer.features; twm.modules.streamer.pool
+
+### K/DST points per game
+
+How many fantasy points the kicker or defense has scored per game so far.
+
+- **Name:** `kdst_points_per_game`; **unit:** points per game; **used by:** streamer
+- **Formula:** the pool's ppg_to_date: kicking: / defense: points (config/scoring.yaml) per regular-season game visible at the as-of (K: games with a kick attempt; DST: the team's games)
+- **Source:** twm.modules.streamer.features; fact_kicker_week, fact_defense_week (twm.scoring_kdst)
+
+### K/DST points, latest game
+
+What it scored last time out.
+
+- **Name:** `kdst_points_last`; **unit:** points; **used by:** streamer
+- **Formula:** fantasy points in the entity's most recent visible regular-season game of the season (K: his latest game with a kick attempt, any team)
+- **Source:** twm.modules.streamer.features; fact_kicker_week, fact_defense_week
+
+### K/DST points-per-game rank
+
+Where its points per game rank at its position so far.
+
+- **Name:** `kdst_ppg_rank`; **unit:** rank (1 = best); **used by:** streamer
+- **Formula:** the pool's ppg_pos_rank: rank of kdst_points_per_game among the position's universe with a game (ties share the better rank)
+- **Source:** twm.modules.streamer.features; twm.modules.streamer.pool
+
+### K/DST preseason rank
+
+Where experts (or last season's scoring) placed it before the season.
+
+- **Name:** `kdst_preseason_rank`; **unit:** rank (1 = best); **used by:** streamer
+- **Formula:** the pool's preseason_pos_rank: 2020 on the rank on FantasyPros' last August/September K or DST cheat sheet before week 1; earlier the rank by last season's points per game
+- **Source:** twm.modules.streamer.features; fact_ranking_kdst.pos_rank; twm.modules.streamer.pool
+
+### Long field-goal attempts per game
+
+Long kicks score more fantasy points than short ones in the default scoring.
+
+- **Name:** `k_fg_att_40_plus_per_game`; **unit:** attempts per game; **used by:** streamer
+- **Formula:** field goals made or missed from 40+ yards / games, over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one) (blocked kicks have no distance bucket)
+- **Source:** twm.modules.streamer.features; fact_kicker_week.fg_made_40_49, fact_kicker_week.fg_missed_40_49, fact_kicker_week.fg_made_50_59, fact_kicker_week.fg_made_60_
+
 ### New team this season
 
 He changed teams during the season (trade or signing).
@@ -574,6 +678,78 @@ He changed teams during the season (trade or signing).
 - **Formula:** his latest visible roster team differs from his earliest roster team this season
 - **Source:** twm.modules.waiver_radar.features; fact_roster_week
 - **Waiver Radar reason:** "Joined {team} during the season"
+
+### Next game under a fixed roof
+
+No wind or rain indoors, so kicks are easier.
+
+- **Name:** `next_venue_dome`; **unit:** boolean; **used by:** streamer
+- **Formula:** the week N+1 stadium (fact_schedule.stadium_id, used once fact_schedule.stadium is public) has a roof value 'dome' in earlier games visible at the as-of and never open/closed; NULL without an earlier game there
+- **Source:** twm.modules.streamer.features; fact_game.roof, fact_game.stadium_id
+
+### Next game under a retractable roof
+
+A retractable roof is often closed in bad weather.
+
+- **Name:** `next_venue_retractable`; **unit:** boolean; **used by:** streamer
+- **Formula:** an earlier visible game at the week N+1 stadium has roof 'open' or 'closed' (the game-day state itself is never used: it is decided on game day); NULL without an earlier game there
+- **Source:** twm.modules.streamer.features; fact_game.roof, fact_schedule.stadium_id
+
+### Next opponent: games so far
+
+How many games the opponent numbers are based on.
+
+- **Name:** `next_opp_games_to_date`; **unit:** games; **used by:** streamer
+- **Formula:** regular-season games with a final score of the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week)
+- **Source:** twm.modules.streamer.features; fact_game.result
+
+### Next opponent: giveaways per game
+
+An offense that throws interceptions and loses fumbles feeds a defense.
+
+- **Name:** `next_opp_giveaways_per_game`; **unit:** turnovers per game; **used by:** streamer
+- **Formula:** mean (def_interceptions + fumble_recovery_opp) of the defenses that faced the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game)
+- **Source:** twm.modules.streamer.features; fact_defense_week.def_interceptions, fact_defense_week.fumble_recovery_opp
+
+### Next opponent: points allowed per game
+
+A defense that gives up many points means more scoring chances for this team.
+
+- **Name:** `next_opp_points_allowed_per_game`; **unit:** points per game; **used by:** streamer
+- **Formula:** mean of the scores against the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game)
+- **Source:** twm.modules.streamer.features; fact_game.home_score, fact_game.away_score
+
+### Next opponent: points per game
+
+A weak offense next week is a good matchup for a team defense.
+
+- **Name:** `next_opp_points_per_game`; **unit:** points per game; **used by:** streamer
+- **Formula:** mean final score of the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game)
+- **Source:** twm.modules.streamer.features; fact_game.home_score, fact_game.away_score
+
+### Next opponent: red-zone stall rate forced
+
+A defense that holds teams to field goals in the red zone helps kickers.
+
+- **Name:** `next_opp_rz_stall_rate_forced`; **unit:** share (0-1); **used by:** streamer
+- **Formula:** stalls / trips of offenses facing the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week) (red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's 20 or closer (pass, run, field goal, kneel, spike or a penalty snap; two-point tries excluded); stall = a trip whose drive result is not 'Touchdown'); NULL without a trip
+- **Source:** twm.modules.streamer.features; fact_play.fixed_drive_result, fact_play.defteam
+
+### Next opponent: red-zone trips allowed
+
+How often offenses reach the red zone against next week's opponent.
+
+- **Name:** `next_opp_rz_trips_allowed_per_game`; **unit:** trips per game; **used by:** streamer
+- **Formula:** red-zone trips of offenses facing the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week) / its games with play-by-play (red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's 20 or closer (pass, run, field goal, kneel, spike or a penalty snap; two-point tries excluded); stall = a trip whose drive result is not 'Touchdown')
+- **Source:** twm.modules.streamer.features; fact_play.yardline_100, fact_play.defteam
+
+### Next opponent: sacks allowed per game
+
+An offense that gets sacked a lot gives a defense sack points.
+
+- **Name:** `next_opp_sacks_allowed_per_game`; **unit:** sacks per game; **used by:** streamer
+- **Formula:** mean def_sacks of the defenses that faced the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game)
+- **Source:** twm.modules.streamer.features; fact_defense_week.def_sacks, fact_defense_week.opponent_team
 
 ### Next opponents' points allowed
 
@@ -593,6 +769,14 @@ Whether the team lists him at all.
 - **Source:** twm.modules.waiver_radar.features; fact_depth_chart
 - **Waiver Radar reason:** "Is listed on his team's depth chart"
 
+### On the weekly expert list
+
+Experts list only the kickers and defenses worth starting.
+
+- **Name:** `weekly_ecr_listed`; **unit:** boolean; **used by:** streamer
+- **Formula:** a weekly K or DST page of the season is visible and lists the entity; NULL when no page is visible (before late 2020)
+- **Source:** twm.modules.streamer.features; fact_ranking_kdst.page_kind
+
 ### Opponent games observed
 
 How much evidence the matchup number rests on (little early in the season).
@@ -609,6 +793,14 @@ Where his points per game rank at his position so far.
 - **Formula:** rank of ppg_to_date within his roster position among roster players with a game (ties share the better rank; the candidate pool's ppg_pos_rank)
 - **Source:** twm.modules.waiver_radar.features; twm.modules.waiver_radar.pool
 - **Waiver Radar reason:** "Ranks No. {value:.0f} among {pos}s in points per game this season"
+
+### Points allowed per game (ESPN rule)
+
+How many points the defense gives up; fewer points allowed earn more fantasy points.
+
+- **Name:** `dst_points_allowed_per_game`; **unit:** points per game; **used by:** streamer
+- **Formula:** mean points_allowed (the opponent's score minus 6 for each touchdown the team's own offense gave up on an interception or fumble return), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game); NULL for K rows
+- **Source:** twm.modules.streamer.features; fact_defense_week.points_allowed
 
 ### Points per game this season
 
@@ -654,6 +846,22 @@ Carries inside the opponent's 20-yard line.
 - **Source:** twm.modules.waiver_radar.features; fact_play.rusher_player_id, yardline_100
 - **Waiver Radar reason:** "Got {value:.1f} carries per game inside the opponent's 20-yard line over the last {weeks} games"
 
+### Red-zone stall rate
+
+The share of red-zone trips that end without a touchdown.
+
+- **Name:** `team_rz_stall_rate`; **unit:** share (0-1); **used by:** streamer
+- **Formula:** stalls / trips of the as-of team this season (red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's 20 or closer (pass, run, field goal, kneel, spike or a penalty snap; two-point tries excluded); stall = a trip whose drive result is not 'Touchdown'); NULL without a trip
+- **Source:** twm.modules.streamer.features; fact_play.fixed_drive_result
+
+### Red-zone stalls per game
+
+Drives that reach the red zone but stall usually end in a short field goal: kicker points.
+
+- **Name:** `team_rz_stalls_per_game`; **unit:** stalls per game; **used by:** streamer
+- **Formula:** the as-of team's red-zone trips that did not end in a touchdown / its games with play-by-play (red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's 20 or closer (pass, run, field goal, kneel, spike or a penalty snap; two-point tries excluded); stall = a trip whose drive result is not 'Touchdown')
+- **Source:** twm.modules.streamer.features; fact_play.fixed_drive_result
+
 ### Red-zone targets per game
 
 Targets inside the opponent's 20-yard line, where touchdowns come from.
@@ -662,6 +870,14 @@ Targets inside the opponent's 20-yard line, where touchdowns come from.
 - **Formula:** mean over the team's last 3 games of his targets on pass plays (not two-point tries) with yardline_100 <= 20 (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_play.receiver_player_id, yardline_100
 - **Waiver Radar reason:** "Drew {value:.1f} targets per game inside the opponent's 20-yard line over the last {weeks} games"
+
+### Red-zone trips per game
+
+How often the offense gets inside the opponent's 20-yard line.
+
+- **Name:** `team_rz_trips_per_game`; **unit:** trips per game; **used by:** streamer
+- **Formula:** the as-of team's red-zone trips / its games with play-by-play (red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's 20 or closer (pass, run, field goal, kneel, spike or a penalty snap; two-point tries excluded); stall = a trip whose drive result is not 'Touchdown')
+- **Source:** twm.modules.streamer.features; fact_play.yardline_100, fact_play.fixed_drive
 
 ### Rookie
 
@@ -680,6 +896,14 @@ About how many pass plays he was on the field for: a stand-in for routes run, wh
 - **Formula:** mean over the team's last 3 games of (team dropbacks in the game x his snap share in it); dropbacks = plays with qb_dropback = 1 that are not two-point tries (passes, sacks, scrambles) (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_play.qb_dropback, fact_snaps.offense_pct
 - **Waiver Radar reason:** "Was on the field for about {value:.0f} pass plays per game over the last {weeks} games"
+
+### Sacks per game
+
+How often the defense sacks the quarterback; every sack scores for a team defense.
+
+- **Name:** `dst_sacks_per_game`; **unit:** sacks per game; **used by:** streamer
+- **Formula:** mean def_sacks (half sacks count 0.5), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game); NULL for K rows
+- **Source:** twm.modules.streamer.features; fact_defense_week.def_sacks
 
 ### Snap share
 
@@ -725,6 +949,14 @@ His playing time over the whole season so far.
 - **Formula:** mean offense_snap_share over all team games of the season (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_snaps.offense_pct
 - **Waiver Radar reason:** "Has played {value:.0%} of his team's snaps this season"
+
+### Takeaways per game
+
+Interceptions and recovered fumbles: both score for a team defense.
+
+- **Name:** `dst_takeaways_per_game`; **unit:** takeaways per game; **used by:** streamer
+- **Formula:** mean (def_interceptions + fumble_recovery_opp), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game); NULL for K rows
+- **Source:** twm.modules.streamer.features; fact_defense_week.def_interceptions, fact_defense_week.fumble_recovery_opp
 
 ### Target share
 
@@ -772,6 +1004,14 @@ Offensive efficiency when the game is close, the fairest view of a team.
 - **Source:** twm.modules.waiver_radar.features; fact_play.epa, is_neutral
 - **Waiver Radar reason:** "His offense ({team}) has been efficient when the game is close: {value:+.2f} expected points added per play"
 
+### Team games so far
+
+How many games the team numbers are based on.
+
+- **Name:** `team_games_to_date`; **unit:** games; **used by:** streamer
+- **Formula:** the as-of team's regular-season games of the season with a final score visible at the as-of
+- **Source:** twm.modules.streamer.features; fact_game.result
+
 ### Team neutral pass rate
 
 How pass-heavy his team is when the score does not force it.
@@ -789,6 +1029,22 @@ Pace: more plays mean more chances for everybody.
 - **Formula:** his team's run and pass plays (no two-point tries) / its visible games
 - **Source:** twm.modules.waiver_radar.features; fact_play
 - **Waiver Radar reason:** "His team ({team}) runs {value:.0f} plays per game: more plays, more chances"
+
+### Team points per game
+
+How much the team's offense scores: more scoring drives mean more kicks.
+
+- **Name:** `team_points_per_game`; **unit:** points per game; **used by:** streamer
+- **Formula:** mean of the entity's as-of team's final scores, per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game)
+- **Source:** twm.modules.streamer.features; fact_game.home_score, fact_game.away_score
+
+### Team's kicker
+
+Whether he is the kicker his team is using now; practice-squad and camp kickers are in the pool but rarely kick.
+
+- **Name:** `is_team_kicker`; **unit:** boolean; **used by:** streamer
+- **Formula:** the kicker has a kick attempt in his as-of team's latest visible regular-season game with one (the pool's is_team_kicker; NULL for DST rows)
+- **Source:** twm.modules.streamer.features; fact_kicker_week.team; twm.modules.streamer.pool
 
 ### Teammates out at his position
 
@@ -861,6 +1117,14 @@ One number for a receiver's recent opportunity.
 - **Formula:** mean nflverse wopr (1.5 x target share + 0.7 x air-yards share) over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.wopr
 - **Waiver Radar reason:** "Receiving workload (WOPR: targets and air yards combined) of {value:.2f} over the last {weeks} games"
+
+### Weekly expert rank
+
+Where experts ranked it last week.
+
+- **Name:** `weekly_ecr_rank`; **unit:** rank (1 = best); **used by:** streamer
+- **Formula:** the entity's pos_rank on FantasyPros' latest weekly K or DST ranking of the season visible at the as-of (the Friday before week N's games; late 2020 on); K by gsis_id, DST by team; NULL when not listed or no page
+- **Source:** twm.modules.streamer.features; fact_ranking_kdst.pos_rank
 
 ### Years of experience
 
@@ -955,6 +1219,14 @@ The count behind y_hit and y_sustained. A label detail: never a model feature.
 - **Name:** `n_starter_finishes`; **unit:** weeks; **used by:** waiver_radar
 - **Formula:** window weeks with is_starter_finish
 - **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Streamer label: a starter next week
+
+Would the kicker or defense you pick up on Tuesday have been worth starting in the very next game? Streaming is a one-week decision.
+
+- **Name:** `y_start`; **unit:** boolean; **used by:** streamer
+- **Formula:** the entity's week N+1 fantasy points (config/scoring.yaml kicking: / defense:) rank in the top (teams x lineup slots) at its position among everyone who played that week: top 12 K and top 12 DST in this league (ties at the cutoff all count); NULL on a bye, after the last regular-season week, or while week N+1 is not final; a kicker without a kick in week N+1 is False
+- **Source:** twm.modules.streamer.labels (fact_kicker_week, fact_defense_week)
 
 ### Sustained hit
 

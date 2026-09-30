@@ -50,14 +50,20 @@ def test_identifiers_are_real_columns():
 
 def test_available_features_are_real_columns():
     """A feature is a warehouse column, or a column the Waiver Radar feature code computes
-    (C3: twm.modules.waiver_radar.features), or one of the per-game values it computes from
-    warehouse columns (snap share = offense_pct, carry share, xFP, FPOE)."""
+    (C3: twm.modules.waiver_radar.features) or the streamer's (S1c:
+    twm.modules.streamer.features), or one of the per-game values it computes from warehouse
+    columns (snap share = offense_pct, carry share, xFP, FPOE)."""
+    from twm.modules.streamer.features import FEATURE_COLUMNS as STREAMER_FEATURES
     from twm.modules.waiver_radar.features import FEATURE_COLUMNS
 
     cols = set().union(*warehouse_columns().values())
-    computed = {"offense_snap_share", "carry_share", "xfp", "fpoe"}
+    computed = {"offense_snap_share", "carry_share", "xfp", "fpoe", *STREAMER_FEATURES}
     for e in rg.entries(kind="feature", status="available"):
         assert e.name in cols or e.name in computed or e.name in FEATURE_COLUMNS, e.name
+    # every streamer feature is registered for the streamer, and nothing else is
+    streamer = {e.name for e in rg.REGISTRY.values() if e.kind == "feature"
+                and "streamer" in e.modules}  # fmt: skip
+    assert streamer == set(STREAMER_FEATURES)
 
 
 def test_every_waiver_radar_feature_is_registered():

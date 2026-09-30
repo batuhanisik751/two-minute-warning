@@ -8,7 +8,8 @@ import typer
 
 streamer_app = typer.Typer(
     help="K and D/ST streamer: the pool of kickers and team defenses probably on waivers at a "
-    "Tuesday as-of, and their next-week labels (docs in src/twm/modules/streamer/)."
+    "Tuesday as-of, their point-in-time features and next-week labels, and the training "
+    "dataset (docs in src/twm/modules/streamer/)."
 )
 
 _TABLE = dict(
@@ -161,3 +162,108 @@ def streamer_pool_labels_report(
     typer.echo(f"{summary.height} position-seasons")
     typer.echo(f"wrote {md}")
     typer.echo(f"wrote {csv}")
+
+
+# Columns `twm streamer features` prints per position (every feature: `twm glossary <name>`).
+FEATURE_VIEW = {
+    "K": ["entity_id", "name", "team", "in_pool", "kdst_points_per_game", "is_team_kicker",
+          "k_fg_att_per_game", "k_fg_pct_50_plus", "team_rz_trips_per_game",
+          "team_rz_stall_rate", "next_opp_points_allowed_per_game",
+          "next_opp_rz_stall_rate_forced", "next_is_home", "next_venue_dome",
+          "weekly_ecr_rank"],
+    "DST": ["entity_id", "in_pool", "kdst_points_per_game", "dst_sacks_per_game",
+            "dst_takeaways_per_game", "dst_points_allowed_per_game", "next_opp_points_per_game",
+            "next_opp_sacks_allowed_per_game", "next_opp_giveaways_per_game", "next_is_home",
+            "weekly_ecr_rank"],
+}  # fmt: skip
+
+
+@streamer_app.command("features")
+def streamer_features(
+    season: int = typer.Argument(..., help="Season, e.g. 2023."),
+    week: int = typer.Argument(..., help="Regular-season week N; the pool at its Tuesday as-of."),
+    pos: str | None = typer.Option(None, "--pos", help="Only this position (K or DST)."),
+    show_all: bool = typer.Option(False, "--all", help="Also list entities outside the pool."),
+    limit: int = typer.Option(30, "--limit", help="Rows per position to print (0 = all)."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+) -> None:
+    """Print one as-of's K and DST pool with key point-in-time features (reference path,
+    through the as-of view), best points per game first. `twm glossary <feature>` explains
+    each column."""
+    import duckdb
+    import polars as pl
+
+    from twm.asof import WarehouseTooOldError
+    from twm.modules.streamer.features import features_as_of_week
+
+    path = _warehouse(db)
+    try:
+        when, df = features_as_of_week(path, season, week, positions=_positions(pos))
+    except (LookupError, ValueError, KeyError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot compute the features: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    if not show_all:
+        df = df.filter(pl.col("in_pool"))
+    for p in df.get_column("position").unique(maintain_order=True).to_list():
+        part = df.filter(pl.col("position") == p).sort(
+            ["kdst_points_per_game", "entity_id"], descending=[True, False], nulls_last=True
+        )
+        typer.echo(
+            f"{season} week {week} (for week {week + 1}), as-of {when:%Y-%m-%d %H:%M} UTC, {p}: "
+            f"{part.height} {'entities' if show_all else 'in the pool'}"
+        )
+        shown = part.select(FEATURE_VIEW[p])
+        with pl.Config(**{**_TABLE, "float_precision": 2}):  # type: ignore[arg-type]
+            typer.echo(str(shown if limit == 0 else shown.head(limit)))
+
+
+@streamer_app.command("dataset")
+def streamer_dataset(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    out: Path = typer.Option(
+        Path("data/streamer/dataset.parquet"),
+        "--out",
+        help="Parquet file to write (relative paths are under the project root; data/ is "
+        "gitignored).",
+    ),
+    start: int = typer.Option(2012, "--start", help="First season (the GitHub build's first)."),
+    end: int | None = typer.Option(None, "--end", help="Last season (default: current)."),
+) -> None:
+    """Build the streamer's training dataset: pool rows + features + next-week labels +
+    available_at, one row per (season, week, position, entity), sorted; deterministic (the
+    same warehouse gives the same file). Train on label_status == 'final' only."""
+    import time
+
+    import duckdb
+    import polars as pl
+
+    from twm.asof import WarehouseTooOldError
+    from twm.config import ROOT, settings
+    from twm.modules.streamer.dataset import build_dataset, write_dataset
+
+    path = _warehouse(db)
+    last = end if end is not None else settings().current_season
+    if start > last:
+        raise typer.BadParameter(f"--start {start} is after --end {last}")
+    t0 = time.perf_counter()
+    try:
+        df = build_dataset(path, list(range(start, last + 1)))
+    except (LookupError, ValueError, KeyError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot build the dataset: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    target = out if out.is_absolute() else ROOT / out
+    write_dataset(df, target)
+    secs = time.perf_counter() - t0
+    for p in ("K", "DST"):
+        part = df.filter(pl.col("position") == p)
+        final = part.filter(pl.col("label_status") == "final")
+        typer.echo(
+            f"{p}: {part.height:,} rows ({int(part.get_column('in_pool').sum()):,} in the pool), "
+            f"{final.height:,} with a final label ({int(final.get_column('y_start').sum()):,} "
+            "y_start)"
+        )
+    typer.echo(
+        f"{df.height:,} rows, {df.width} columns, seasons {start}-{last}, "
+        f"{target.stat().st_size / 1e6:.1f} MB, {secs:.0f} s"
+    )
+    typer.echo(f"wrote {target}")

@@ -4,6 +4,8 @@
 !.env.example
 
 # data: raw cache, warehouses, league data are local only. data/manual/ is committed.
+# data/* also ignores the model datasets (data/waiver_radar/, data/streamer/: symlinks made by
+# scripts/local_storage.sh).
 data/*
 !data/manual/
 !data/schemas/

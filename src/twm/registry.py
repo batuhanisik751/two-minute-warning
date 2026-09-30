@@ -30,6 +30,7 @@ Status = Literal["available", "planned"]
 MODULES = (
     "shared",
     "waiver_radar",
+    "streamer",
     "regression_watch",
     "my_league",
     "decisions",
@@ -653,6 +654,225 @@ def _regression_entries() -> list[Entry]:
     return out
 
 
+def _streamer_entries() -> list[Entry]:
+    """The K and D/ST streamer's features (step S1c, twm.modules.streamer.features) and its
+    label (S1b), one entry per column."""
+    from twm.modules.streamer.features import RED_ZONE_YARDLINE
+    from twm.modules.streamer.pool import StreamerRules
+
+    starts = StreamerRules.from_config().start_thresholds
+    per = (
+        "per game = mean over the team's regular-season games of the season visible at the "
+        "as-of (NULL before its first game)"
+    )
+    k_per = (
+        "over the kicker's regular-season games of the season with a field-goal or extra-point "
+        "attempt visible at the as-of, for any team (NULL for DST rows and for a kicker "
+        "without one)"
+    )
+    trip = (
+        f"red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's "
+        f"{RED_ZONE_YARDLINE} or closer (pass, run, field goal, kneel, spike or a penalty snap; "
+        "two-point tries excluded); stall = a trip whose drive result is not 'Touchdown'"
+    )
+    nxt = (
+        "the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after "
+        "the last regular-season week)"
+    )
+    feat = "twm.modules.streamer.features"
+    rows: list[tuple[str, str, str, str, str, str]] = [
+        # name, title, unit, formula, explanation, source
+        ("kdst_points_per_game", "K/DST points per game", "points per game",
+         "the pool's ppg_to_date: kicking: / defense: points (config/scoring.yaml) per "
+         "regular-season game visible at the as-of (K: games with a kick attempt; DST: the "
+         "team's games)",
+         "How many fantasy points the kicker or defense has scored per game so far.",
+         "fact_kicker_week, fact_defense_week (twm.scoring_kdst)"),
+        ("kdst_ppg_rank", "K/DST points-per-game rank", "rank (1 = best)",
+         "the pool's ppg_pos_rank: rank of kdst_points_per_game among the position's universe "
+         "with a game (ties share the better rank)",
+         "Where its points per game rank at its position so far.",
+         "twm.modules.streamer.pool"),
+        ("kdst_preseason_rank", "K/DST preseason rank", "rank (1 = best)",
+         "the pool's preseason_pos_rank: 2020 on the rank on FantasyPros' last August/"
+         "September K or DST cheat sheet before week 1; earlier the rank by last season's "
+         "points per game",
+         "Where experts (or last season's scoring) placed it before the season.",
+         "fact_ranking_kdst.pos_rank; twm.modules.streamer.pool"),
+        ("kdst_games_to_date", "K/DST games so far", "games",
+         "the pool's games_to_date (K: games with a kick attempt; DST: team games)",
+         "How many games the numbers so far are based on.", "twm.modules.streamer.pool"),
+        ("kdst_points_last", "K/DST points, latest game", "points",
+         "fantasy points in the entity's most recent visible regular-season game of the "
+         "season (K: his latest game with a kick attempt, any team)",
+         "What it scored last time out.", "fact_kicker_week, fact_defense_week"),
+        ("is_team_kicker", "Team's kicker", "boolean",
+         "the kicker has a kick attempt in his as-of team's latest visible regular-season "
+         "game with one (the pool's is_team_kicker; NULL for DST rows)",
+         "Whether he is the kicker his team is using now; practice-squad and camp kickers "
+         "are in the pool but rarely kick.", "fact_kicker_week.team; twm.modules.streamer.pool"),
+    ]  # fmt: skip
+    acc = (
+        "fg_made / (fg_made + fg_missed) in the distance bucket, summed {k_per}; blocked kicks "
+        "are not in nflverse's distance buckets and are left out; NULL without an attempt there"
+    ).replace("{k_per}", k_per)
+    rows += [
+        ("k_fg_att_per_game", "Field-goal attempts per game", "attempts per game",
+         f"sum of fg_att / games, {k_per}",
+         "How often his team sends him out for field goals: the main source of kicker points.",
+         "fact_kicker_week.fg_att"),
+        ("k_pat_att_per_game", "Extra-point attempts per game", "attempts per game",
+         f"sum of pat_att / games, {k_per}",
+         "Extra points follow touchdowns, so this shows how often his offense scores.",
+         "fact_kicker_week.pat_att"),
+        ("k_fg_att_40_plus_per_game", "Long field-goal attempts per game", "attempts per game",
+         f"field goals made or missed from 40+ yards / games, {k_per} (blocked kicks have no "
+         "distance bucket)",
+         "Long kicks score more fantasy points than short ones in the default scoring.",
+         "fact_kicker_week.fg_made_40_49, fact_kicker_week.fg_missed_40_49, "
+         "fact_kicker_week.fg_made_50_59, fact_kicker_week.fg_made_60_"),
+        ("k_fg_pct_0_39", "Field-goal accuracy, 0-39 yards", "share (0-1)",
+         f"{acc} (0-19, 20-29 and 30-39 yards)",
+         "How reliable he is on short kicks this season.",
+         "fact_kicker_week.fg_made_30_39, fact_kicker_week.fg_missed_30_39"),
+        ("k_fg_pct_40_49", "Field-goal accuracy, 40-49 yards", "share (0-1)",
+         f"{acc} (40-49 yards)", "How reliable he is on medium-long kicks this season.",
+         "fact_kicker_week.fg_made_40_49, fact_kicker_week.fg_missed_40_49"),
+        ("k_fg_pct_50_plus", "Field-goal accuracy, 50+ yards", "share (0-1)",
+         f"{acc} (50-59 and 60+ yards)",
+         "How reliable he is from 50 yards and beyond; coaches trust a strong leg with more "
+         "long tries.", "fact_kicker_week.fg_made_50_59, fact_kicker_week.fg_missed_50_59"),
+        ("dst_sacks_per_game", "Sacks per game", "sacks per game",
+         f"mean def_sacks (half sacks count 0.5), {per}; NULL for K rows",
+         "How often the defense sacks the quarterback; every sack scores for a team defense.",
+         "fact_defense_week.def_sacks"),
+        ("dst_takeaways_per_game", "Takeaways per game", "takeaways per game",
+         f"mean (def_interceptions + fumble_recovery_opp), {per}; NULL for K rows",
+         "Interceptions and recovered fumbles: both score for a team defense.",
+         "fact_defense_week.def_interceptions, fact_defense_week.fumble_recovery_opp"),
+        ("dst_tds_per_game", "Defense and return touchdowns per game", "touchdowns per game",
+         "mean (kickoff, punt, interception, fumble and blocked-kick return TDs), "
+         f"{per}; NULL for K rows",
+         "Touchdowns scored by the defense or the return teams: rare, but worth a lot.",
+         "fact_defense_week.interception_return_tds, fact_defense_week.fumble_return_tds, "
+         "fact_defense_week.kickoff_return_tds, fact_defense_week.punt_return_tds, "
+         "fact_defense_week.blocked_kick_return_tds"),
+        ("dst_points_allowed_per_game", "Points allowed per game (ESPN rule)", "points per game",
+         "mean points_allowed (the opponent's score minus 6 for each touchdown the team's own "
+         f"offense gave up on an interception or fumble return), {per}; NULL for K rows",
+         "How many points the defense gives up; fewer points allowed earn more fantasy "
+         "points.", "fact_defense_week.points_allowed"),
+    ]  # fmt: skip
+    rows += [
+        ("team_points_per_game", "Team points per game", "points per game",
+         f"mean of the entity's as-of team's final scores, {per}",
+         "How much the team's offense scores: more scoring drives mean more kicks.",
+         "fact_game.home_score, fact_game.away_score"),
+        ("team_games_to_date", "Team games so far", "games",
+         "the as-of team's regular-season games of the season with a final score visible at "
+         "the as-of", "How many games the team numbers are based on.", "fact_game.result"),
+        ("team_rz_trips_per_game", "Red-zone trips per game", "trips per game",
+         f"the as-of team's red-zone trips / its games with play-by-play ({trip})",
+         "How often the offense gets inside the opponent's 20-yard line.",
+         "fact_play.yardline_100, fact_play.fixed_drive"),
+        ("team_rz_stalls_per_game", "Red-zone stalls per game", "stalls per game",
+         f"the as-of team's red-zone trips that did not end in a touchdown / its games with "
+         f"play-by-play ({trip})",
+         "Drives that reach the red zone but stall usually end in a short field goal: kicker "
+         "points.", "fact_play.fixed_drive_result"),
+        ("team_rz_stall_rate", "Red-zone stall rate", "share (0-1)",
+         f"stalls / trips of the as-of team this season ({trip}); NULL without a trip",
+         "The share of red-zone trips that end without a touchdown.",
+         "fact_play.fixed_drive_result"),
+        ("next_opp_points_allowed_per_game", "Next opponent: points allowed per game",
+         "points per game", f"mean of the scores against {nxt}, {per}",
+         "A defense that gives up many points means more scoring chances for this team.",
+         "fact_game.home_score, fact_game.away_score"),
+        ("next_opp_rz_trips_allowed_per_game", "Next opponent: red-zone trips allowed",
+         "trips per game", f"red-zone trips of offenses facing {nxt} / its games with "
+         f"play-by-play ({trip})",
+         "How often offenses reach the red zone against next week's opponent.",
+         "fact_play.yardline_100, fact_play.defteam"),
+        ("next_opp_rz_stall_rate_forced", "Next opponent: red-zone stall rate forced",
+         "share (0-1)", f"stalls / trips of offenses facing {nxt} ({trip}); NULL without a trip",
+         "A defense that holds teams to field goals in the red zone helps kickers.",
+         "fact_play.fixed_drive_result, fact_play.defteam"),
+        ("next_opp_points_per_game", "Next opponent: points per game", "points per game",
+         f"mean final score of {nxt}, {per}",
+         "A weak offense next week is a good matchup for a team defense.",
+         "fact_game.home_score, fact_game.away_score"),
+        ("next_opp_sacks_allowed_per_game", "Next opponent: sacks allowed per game",
+         "sacks per game", f"mean def_sacks of the defenses that faced {nxt}, {per}",
+         "An offense that gets sacked a lot gives a defense sack points.",
+         "fact_defense_week.def_sacks, fact_defense_week.opponent_team"),
+        ("next_opp_giveaways_per_game", "Next opponent: giveaways per game",
+         "turnovers per game",
+         f"mean (def_interceptions + fumble_recovery_opp) of the defenses that faced {nxt}, "
+         f"{per}", "An offense that throws interceptions and loses fumbles feeds a defense.",
+         "fact_defense_week.def_interceptions, fact_defense_week.fumble_recovery_opp"),
+        ("next_opp_games_to_date", "Next opponent: games so far", "games",
+         f"regular-season games with a final score of {nxt}",
+         "How many games the opponent numbers are based on.", "fact_game.result"),
+        ("next_is_home", "Home game next week", "boolean",
+         "the as-of team is the home team of its week N+1 game and the venue is not neutral "
+         "(fact_schedule.location, public from slot_available_at); NULL on a bye or while the "
+         "venue is not public", "Teams tend to score more and allow less at home.",
+         "fact_schedule.home_team, fact_schedule.location"),
+        ("next_venue_dome", "Next game under a fixed roof", "boolean",
+         "the week N+1 stadium (fact_schedule.stadium_id, used once fact_schedule.stadium is "
+         "public) has a roof value 'dome' in earlier games visible at the as-of and never "
+         "open/closed; NULL without an earlier game there",
+         "No wind or rain indoors, so kicks are easier.", "fact_game.roof, fact_game.stadium_id"),
+        ("next_venue_retractable", "Next game under a retractable roof", "boolean",
+         "an earlier visible game at the week N+1 stadium has roof 'open' or 'closed' (the "
+         "game-day state itself is never used: it is decided on game day); NULL without an "
+         "earlier game there", "A retractable roof is often closed in bad weather.",
+         "fact_game.roof, fact_schedule.stadium_id"),
+        ("weekly_ecr_rank", "Weekly expert rank", "rank (1 = best)",
+         "the entity's pos_rank on FantasyPros' latest weekly K or DST ranking of the season "
+         "visible at the as-of (the Friday before week N's games; late 2020 on); K by gsis_id, "
+         "DST by team; NULL when not listed or no page", "Where experts ranked it last week.",
+         "fact_ranking_kdst.pos_rank"),
+        ("weekly_ecr_listed", "On the weekly expert list", "boolean",
+         "a weekly K or DST page of the season is visible and lists the entity; NULL when no "
+         "page is visible (before late 2020)",
+         "Experts list only the kickers and defenses worth starting.",
+         "fact_ranking_kdst.page_kind"),
+    ]  # fmt: skip
+    return [
+        Entry(
+            name=name,
+            title=title,
+            kind="feature",
+            modules=("streamer",),
+            unit=unit,
+            formula=formula,
+            explanation=explanation,
+            source=f"{feat}; {source}",
+            step="S1c",
+        )
+        for name, title, unit, formula, explanation, source in rows
+    ] + [
+        Entry(
+            name="y_start",
+            title="Streamer label: a starter next week",
+            kind="label",
+            modules=("streamer",),
+            unit="boolean",
+            formula="the entity's week N+1 fantasy points (config/scoring.yaml kicking: / "
+            "defense:) rank in the top (teams x lineup slots) at its position among everyone "
+            f"who played that week: top {starts['K']} K and top {starts['DST']} DST in this "
+            "league (ties at the cutoff all count); NULL on a bye, after the last regular-"
+            "season week, or while week N+1 is not final; a kicker without a kick in week N+1 "
+            "is False",
+            explanation="Would the kicker or defense you pick up on Tuesday have been worth "
+            "starting in the very next game? Streaming is a one-week decision.",
+            source="twm.modules.streamer.labels (fact_kicker_week, fact_defense_week)",
+            step="S1b",
+        ),
+    ]
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
     pool = _pool_texts()
@@ -1044,6 +1264,7 @@ def _entries() -> list[Entry]:
         ),
         *_feature_entries(),
         *_regression_entries(),
+        *_streamer_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
             name="weekly_pos_rank",

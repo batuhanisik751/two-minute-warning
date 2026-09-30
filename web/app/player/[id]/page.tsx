@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ChartFigure, { type Column } from "@/components/charts/ChartFigure";
 import type { Series } from "@/components/charts/WeeklyChart";
+import { FoldTable } from "@/components/Fold";
 import Term from "@/components/Term";
 import { EmptyState, KindBadge, OutcomeBadge, PageHeader, PosBadge, TierBadge } from "@/components/ui";
 import { fmtPoints, fmtShare, outcomeOf, pct, pctRange, windowSummary } from "@/lib/format";
@@ -217,29 +218,35 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
               Waiver Radar history, {season}
             </h2>
             {seasonHistory.length ? (
-              <div className="table-scroll mt-3">
-                <table className="data-table" data-testid="radar-history">
-                  <caption className="sr-only">Waiver Radar lists with {player.name}, {season}</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Week</th>
-                      <th scope="col">List</th>
-                      <th scope="col" className="num">
-                        Rank
-                      </th>
-                      <th scope="col">
-                        <Term name="chance">Chance</Term>
-                      </th>
-                      <th scope="col">Priority</th>
-                      <th scope="col">
-                        <Term name="y_hit" showFormula>
-                          Outcome
-                        </Term>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {seasonHistory.map((h) => {
+              <FoldTable
+                label={`Waiver Radar lists with ${player.name}, ${season}`}
+                table={(body) => (
+                  <div className="table-scroll mt-3">
+                    <table className="data-table" data-testid="radar-history">
+                      <caption className="sr-only">Waiver Radar lists with {player.name}, {season}</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">Week</th>
+                          <th scope="col">List</th>
+                          <th scope="col" className="num">
+                            Rank
+                          </th>
+                          <th scope="col">
+                            <Term name="chance">Chance</Term>
+                          </th>
+                          <th scope="col">Priority</th>
+                          <th scope="col">
+                            <Term name="y_hit" showFormula>
+                              Outcome
+                            </Term>
+                          </th>
+                        </tr>
+                      </thead>
+                      {body}
+                    </table>
+                  </div>
+                )}
+                rows={seasonHistory.map((h) => {
                       const o = outcomeOf(h.outcome?.yHit ?? null, h.outcome?.status ?? null);
                       const detail =
                         h.outcome?.status === "final"
@@ -284,9 +291,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
+              />
             ) : (
               <p className="mt-2 text-muted">He is not on any published Radar list of {season}.</p>
             )}

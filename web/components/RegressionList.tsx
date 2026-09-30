@@ -2,9 +2,10 @@ import Link from "next/link";
 import { fmtPoints } from "@/lib/format";
 import { signed, statsOf, type RegressionRow } from "@/lib/regression";
 import { teamStyle } from "@/lib/team-colors";
+import { FoldList } from "./Fold";
 import { MiniLabel, PosBadge } from "./ui";
 
-// One Regression Watch table (Sell-high, Buy-low or Legit) as rows that lay out by their
+// One Regression Watch table (Sell-high or Buy-low) as rows that lay out by their
 // container's width (the Waiver Radar's approach, components/PickList.tsx): below 48rem the
 // player, then his numbers as labelled pairs, then the reason; from 48rem one column per number
 // with a header row, the reason across the row. Every cell is a grid area with a minimum width
@@ -49,11 +50,14 @@ export default function RegressionList({
           </span>
         ))}
       </div>
-      <ol aria-label={label} className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface" data-testid="rw-list">
-        {rows.map((r) => (
+      <FoldList
+        label={label}
+        className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface"
+        testId="rw-list"
+        items={rows.map((r) => (
           <Row key={r.gsisId} r={r} withGarbage={withGarbage} reasons={reasons} outcomes={outcomes} />
         ))}
-      </ol>
+      />
     </div>
   );
 }

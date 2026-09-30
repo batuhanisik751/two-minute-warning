@@ -29,6 +29,11 @@ export const MODULES_SEED = {
   ],
   kNote: "Seed note for K: the kicker model is ahead of last game's points, but not clearly.",
   rwNote: "Seed note: week 3 is earlier than the backtested weeks.",
+  /** the reconstructed week whose Buy-low table is long (its extra players 7-12 of each
+   *  position are all Buy-low): it folds after 10 rows */
+  rwLong: { season: 2025, week: 6, buyLow: 27 },
+  /** the stability study's window (regression_stability; fictional numbers) */
+  stabilityWindow: "2012-2025",
   /** the fictional league's starter cutoffs the seed glossary's y_start formula states */
   streamTop: { K: 10, DST: 10 },
 } as const;
@@ -151,11 +156,15 @@ const TAGGED: Record<string, Kind[][]> = {
 };
 const POSITIONS = ["QB", "RB", "WR", "TE"];
 
+const TITLE: Record<NonNullable<Kind>, string> = { sell_high: "Sell-high", buy_low: "Buy-low", legit: "Legit" };
+
 function rwRows(season: number, week: number, kind: "live" | "backtest") {
   const rows: (typeof s.regressionRow.$inferInsert)[] = [];
   const outcomes: (typeof s.regressionOutcome.$inferInsert)[] = [];
+  const long = season === MODULES_SEED.rwLong.season && week === MODULES_SEED.rwLong.week;
   POSITIONS.forEach((pos, pi) => {
-    TAGGED[pos].forEach((tags, i) => {
+    const tagged: Kind[][] = long ? [...TAGGED[pos], ...Array.from({ length: 6 }, (): Kind[] => ["buy_low"])] : TAGGED[pos];
+    tagged.forEach((tags, i) => {
       const gsisId = `00-${String(9000000 + 1 + pi * 12 + i).padStart(7, "0")}`;
       const first = tags[0] ?? null;
       // distinct gaps between PPG and projection, so the tables' order never rests on a float tie
@@ -168,13 +177,15 @@ function rwRows(season: number, week: number, kind: "live" | "backtest") {
         ppg: r2(ppg), ppgNg: r2(ppg - 1), xfpPg: r2(xfp), xfpPgNg: r2(xfp - 0.5), fpoePg: r2(ppg - xfp), fpoePgNg: r2(ppg - 1 - (xfp - 0.5)),
         projection: r2(projection), shrinkage: 0.1,
         tag: first, tags: tags.filter((t): t is NonNullable<Kind> => t !== null),
-        tagReason: first ? `Seed reason: ${tags.join(" and ")} for ${gsisId}.` : null,
+        // like the weekly reasons: one sentence per tag, "Buy-low: ... Legit: ..." (Legit is dropped on the site)
+        tagReason: first ? tags.map((t) => `${TITLE[t!]}: seed reason for ${gsisId}.`).join(" ") : null,
       });
       const final = season < 2026;
       outcomes.push({
         season, week, gsisId,
-        rosPpg: final ? (pi === 3 && i === 0 ? null : r2(projection + (i % 2 ? -1 : 1))) : null,
-        rosGames: final ? (pi === 3 && i === 0 ? 0 : 10) : null,
+        // the first WR (Buy-low) played no games afterwards
+        rosPpg: final ? (pi === 2 && i === 0 ? null : r2(projection + (i % 2 ? -1 : 1))) : null,
+        rosGames: final ? (pi === 2 && i === 0 ? 0 : 10) : null,
         labelStatus: final ? "final" : "pending",
       });
     });
@@ -203,6 +214,7 @@ async function seedRegression(db: Db): Promise<void> {
     await db.insert(s.regressionOutcome).values(outcomes);
   }
   await db.insert(s.regressionTrackRecord).values(rwTrack());
+  await db.insert(s.regressionStability).values(rwStability());
   // the featured running back's weeks without garbage time (the player page's toggle)
   await db
     .update(s.playerWeekSummary)
@@ -236,6 +248,47 @@ function rwTrack(): (typeof s.regressionTrackRecord.$inferInsert)[] {
   }
   for (const season of [2024, 2025]) {
     out.push({ section: "choice", method: "mean_hl8_all", metric: "validation_mae", season, value: 3.1, n: 600, detail: "seed" });
+  }
+  return out.map((r, i) => ({ ...r, line: i + 1 }));
+}
+
+/** The stability study (regression_stability), fictional: split-half r of the metrics per
+ *  position (odd/even and first/second halves), and the shrinkage rows r(g), g = 1..17. */
+function rwStability(): (typeof s.regressionStability.$inferInsert)[] {
+  const out: Omit<typeof s.regressionStability.$inferInsert, "line">[] = [];
+  const seasons = MODULES_SEED.stabilityWindow;
+  const xfp: Record<string, number> = { QB: 0.7, RB: 0.8, WR: 0.78, TE: 0.75 };
+  const fpoe: Record<string, number> = { QB: 0.05, RB: 0.12, WR: 0.08, TE: 0.09 };
+  const n: Record<string, number> = { QB: 100, RB: 240, WR: 360, TE: 180 };
+  for (const split of ["odd_even", "first_second"]) {
+    const d = split === "odd_even" ? 0 : 0.1;
+    for (const position of POSITIONS) {
+      const metrics: [string, number, number][] = [
+        ["xfp", xfp[position] - d, n[position]],
+        ["fpoe", fpoe[position], n[position]],
+        ["fantasy_points", xfp[position] - 0.1 - d, n[position]],
+        ["xfp_ng", xfp[position] - 0.03 - d, n[position]],
+        ["fpoe_ng", fpoe[position] - 0.02, n[position]],
+        ["points_ng", xfp[position] - 0.13 - d, n[position]],
+        ["td_rate_over_expected", 0.01, n[position] - 5],
+        position === "QB" ? ["completion_rate_over_expected", 0.3, n[position] - 8] : ["catch_rate_over_expected", 0.14, n[position] - 40],
+      ];
+      if (position !== "QB") metrics.push(["yac_over_expected", 0.17, n[position] - 60]);
+      for (const [metric, value, k] of metrics) {
+        out.push({ section: "split_half", seasons, split, position, metric, n: k, value, lo: value - 0.05, hi: value + 0.05 });
+      }
+    }
+  }
+  const variances: Record<string, [number, number, number]> = { QB: [0.5, 20, -0.5], RB: [0.4, 12, 0.02], WR: [0.3, 15, -0.01], TE: [0.2, 8, 0.03] };
+  for (const metric of ["fpoe", "fpoe_ng"]) {
+    for (const position of POSITIONS) {
+      const [signal, noise, prior] = variances[position].map((v, i) => (metric === "fpoe_ng" && i < 2 ? v * 0.8 : v));
+      for (let g = 1; g <= 17; g++) {
+        const r = signal / (signal + noise / g);
+        const ci = g <= 12 ? { lo: r - 0.04, hi: r + 0.04 } : {};
+        out.push({ section: "shrinkage", seasons, split: "odd_even", position, metric, g, n: n[position], value: r, ...ci, varSignal: signal, varNoise: noise, priorMean: prior });
+      }
+    }
   }
   return out.map((r, i) => ({ ...r, line: i + 1 }));
 }

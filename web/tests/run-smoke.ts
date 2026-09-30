@@ -15,7 +15,7 @@
 // server's address; DATABASE_URL is removed from their environment so a stray production
 // value can never be used. Connection strings are never printed.
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, openSync } from "node:fs";
+import { existsSync, openSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -141,6 +141,10 @@ async function main(): Promise<number> {
       fullUrl = await setupDatabase("full", server);
       emptyUrl = await setupDatabase("empty", server);
     }
+    // Next's data cache (lib/cache.ts, 1 hour, on disk under .next/cache) is keyed by the database
+    // URL, and the test databases were just recreated under the same URLs: without this a run
+    // within the hour of the last one serves the old seed's rows (seen 2026-09-30, step W3).
+    rmSync(join(web, ".next", "cache", "fetch-cache"), { recursive: true, force: true });
     const full = await startServer(fullUrl);
     servers.push(full.child);
     let emptyBase: string | undefined;

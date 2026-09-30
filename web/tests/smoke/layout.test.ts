@@ -8,17 +8,21 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { Chrome, findChrome, type Tab } from "./chrome";
-import { BASE, REQUIRE, serverUp } from "./dom";
+import { BASE, DATA, REQUIRE, serverUp } from "./dom";
 import { routeSet } from "./routes";
 
 export const WIDTHS = [320, 360, 390, 414, 600, 768, 800, 1024, 1280, 1440, 1920];
 
-type Report = { rows: number; texts: number; problems: string[] };
+type Report = { rows: number; folded: number; texts: number; problems: string[] };
+
+/** Opens every folded list and table ("Show all N", components/Fold.tsx), so the check measures
+ *  the folded rows too. Returns how many it opened. */
+export const OPEN_FOLDS = `(() => { const ds = Array.from(document.querySelectorAll("details[data-fold]")); ds.forEach((d) => { d.open = true; }); return ds.length; })()`;
 
 /** Runs in the page. Returns what it measured and every problem found. */
 export const CHECK = String.raw`(() => {
   const TOL = 1;
-  const out = { rows: 0, texts: 0, problems: [] };
+  const out = { rows: 0, folded: 0, texts: 0, problems: [] };
   const de = document.documentElement;
   if (de.scrollWidth > de.clientWidth + 1) out.problems.push("the page scrolls sideways: " + de.scrollWidth + " > " + de.clientWidth + " px");
   const clipOf = (el, stop) => {
@@ -37,6 +41,7 @@ export const CHECK = String.raw`(() => {
     const rb = row.getBoundingClientRect();
     if (rb.width === 0 || rb.height === 0) continue; // not displayed at this width
     out.rows++;
+    if (row.closest("details[data-fold]")) out.folded++;
     const label = ((row.querySelector("[data-cell=player] a") || row).textContent || "").trim().slice(0, 40);
     const boxes = [];
     for (const cell of row.querySelectorAll("[data-cell]")) {
@@ -118,21 +123,30 @@ describe("layout (headless Chrome)", () => {
     const bad: string[] = [];
     let rows = 0;
     let texts = 0;
+    let folds = 0;
+    let foldedRows = 0;
     for (const path of paths) {
       await tab.setViewport(1280);
       await tab.goto(BASE + path);
+      const opened = await tab.evaluate<number>(OPEN_FOLDS);
+      folds += opened;
       let seen = 0;
+      let folded = 0;
       for (const w of WIDTHS) {
         await tab.setViewport(w);
         const r = await tab.evaluate<Report>(CHECK);
         seen += r.rows;
+        folded += r.folded;
         rows += r.rows;
         texts += r.texts;
         for (const p of r.problems) bad.push(`${path} @ ${w}px: ${p}`);
       }
       assert.ok(seen > 0, `${path}: no rows measured`);
+      if (opened) assert.ok(folded > 0, `${path}: ${opened} folded lists opened, but none of their rows measured`);
+      foldedRows += folded;
     }
-    t.diagnostic(`${paths.length} pages x ${WIDTHS.length} widths: ${rows} rows, ${texts} text boxes measured`);
+    t.diagnostic(`${paths.length} pages x ${WIDTHS.length} widths: ${rows} rows (${foldedRows} in ${folds} opened folds), ${texts} text boxes measured`);
+    if (DATA === "seed") assert.ok(folds > 0, "the seed has folded lists, but none was checked");
     assert.deepEqual(bad.slice(0, 40), [], `${bad.length} problems`);
   });
 

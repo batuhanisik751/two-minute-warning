@@ -1,7 +1,7 @@
 import Term from "@/components/Term";
 import { fmtInt, pct, pctRange } from "@/lib/format";
 import { TRACK_INTERVAL_LEVEL } from "@/lib/method";
-import { TAGS, rwMethodName, signed, tagTitle, tagVerdict, trackRow, type RegressionTrackRow } from "@/lib/regression";
+import { TAGS, droppedRates, rwMethodName, signed, tagTitle, tagVerdict, trackRow, type RegressionTrackRow } from "@/lib/regression";
 
 const pts = (x: number) => x.toFixed(2);
 const range = (lo: number | null, hi: number | null, f: (x: number) => string) => (lo !== null && hi !== null ? `${f(lo)} to ${f(hi)}` : null);
@@ -12,10 +12,9 @@ export function testSeasons(rows: readonly RegressionTrackRow[]): { from: number
   return s.length ? { from: Math.min(...s), to: Math.max(...s) } : null;
 }
 
-const HIT_WORDS: Record<string, string> = {
+const HIT_WORDS: Record<(typeof TAGS)[number], string> = {
   sell_high: "his rest-of-season PPG was below his PPG at the list",
   buy_low: "his rest-of-season PPG was above his PPG at the list",
-  legit: "he still ranked inside the starter threshold over the rest of the season",
 };
 
 /** The honest track record: the projection's error against the two simple baselines, and each
@@ -80,7 +79,7 @@ function TagRates({ rows, position }: { rows: RegressionTrackRow[]; position: st
     base: trackRow(rows, { ...q, metric: t, rowGroup: "base" }),
   })).filter((x): x is { t: (typeof TAGS)[number]; tagged: RegressionTrackRow; base: RegressionTrackRow } => !!x.tagged && !!x.base);
   if (!tags.length) return null;
-  const legit = tags.find((x) => x.t === "legit");
+  const dropped = droppedRates(rows, position);
   return (
     <div>
       <p>When a tag came true:</p>
@@ -92,8 +91,8 @@ function TagRates({ rows, position }: { rows: RegressionTrackRow[]; position: st
         ))}
       </ul>
       <p className="mt-2">
-        The base rate is how often that happened to every comparable player (every universe player for Sell-high and
-        Buy-low, every player inside the starter threshold for Legit): a tag is only useful if it beats it.
+        The base rate is how often that happened to every comparable player (every universe player): a tag is only
+        useful if it beats it.
       </p>
       <div className="table-scroll mt-3">
         <table className="data-table" data-testid="rw-tag-table">
@@ -131,14 +130,14 @@ function TagRates({ rows, position }: { rows: RegressionTrackRow[]; position: st
           </tbody>
         </table>
       </div>
-      {legit && tagVerdict(legit.tagged, legit.base) === "same" ? (
-        <p className="mt-3" data-testid="legit-honest">
-          <strong>Legit is no better than the base rate.</strong> {pct(legit.tagged.value, 1)} of Legit tags came true,
-          against {pct(legit.base.value, 1)} for every player inside the starter threshold: the same, within the interval.
-          Legit describes a starter whose points are backed by his chances; it does not find starters who hold up better
-          than the others.
+      {dropped.map((d, i) => (
+        // keyed by position: the dropped tag's name is not shown anywhere, not even in the payload
+        <p key={i} className="mt-3" data-testid="dropped-tag">
+          A third tag was also tested and dropped: it came true for {pct(d.tagged.value, 1)} of the{" "}
+          {fmtInt(d.tagged.n)} players it tagged, against {pct(d.base.value, 1)} for every comparable player,{" "}
+          {d.verdict === "above" ? "above the base rate." : d.verdict === "below" ? "below the base rate." : "so it predicted nothing better than the base rate."}
         </p>
-      ) : null}
+      ))}
     </div>
   );
 }

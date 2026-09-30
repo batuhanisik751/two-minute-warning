@@ -6,6 +6,7 @@ import { before, describe, test } from "node:test";
 import { CREDITS, DISCLAIMER } from "../../lib/site";
 import { SEED } from "../seed";
 import { BASE, DATA, fetchPage, normalise, prose, serverUp, text, type Page } from "./dom";
+import { foldCheck } from "./fold";
 import { SERVER_RENDERED_404, routeSet, type RouteSet } from "./routes";
 
 let up = false;
@@ -367,7 +368,10 @@ describe("/regression", () => {
         continue;
       }
       assert.ok(m.querySelector("[data-testid=rw-week]"), `${r.path}: no week`);
-      for (const tag of ["sell_high", "buy_low", "legit"]) assert.ok(m.querySelector(`[data-testid=tag-${tag}]`), `${r.path}: no ${tag} table`);
+      for (const tag of ["sell_high", "buy_low"]) assert.ok(m.querySelector(`[data-testid=tag-${tag}]`), `${r.path}: no ${tag} table`);
+      // the dropped third tag appears nowhere: no table, no count, no tooltip, not even in the page's payload
+      assert.equal(m.querySelector("[data-testid=tag-legit]"), null, `${r.path}: a Legit table`);
+      assert.ok(!/legit/i.test(pages.get(r.path)!.html), `${r.path}: "Legit" in the page`);
       const toggle = Array.from(m.querySelectorAll<HTMLAnchorElement>("[data-testid=gt-toggle] a.pos-tab"));
       assert.equal(toggle.length, 2, `${r.path}: toggle links`);
       assert.equal(toggle.filter((a) => a.getAttribute("aria-current") === "page").length, 1);
@@ -396,5 +400,41 @@ describe("/methodology", () => {
       assert.equal(m.querySelectorAll("[data-testid=tier-table] tbody tr").length, 3);
       assert.match(text(m), /Seed term xfp/, "model-output features are listed");
     }
+  });
+});
+
+describe("long lists and tables fold", () => {
+  test("no list or table shows more than 10 rows before a 'Show all N' control that counts right", (t) => {
+    if (!up) return t.skip(`no server at ${BASE}`);
+    const bad: string[] = [];
+    let folds = 0;
+    for (const [path, p] of pages) {
+      const r = foldCheck(p.doc);
+      folds += r.folds.length;
+      for (const x of r.problems) bad.push(`${path}: ${x}`);
+    }
+    t.diagnostic(`${folds} folded lists or tables on ${pages.size} pages`);
+    assert.deepEqual(bad, []);
+  });
+
+  test("seed: a 12-pick reconstructed list and its 25-pick FLEX list fold; the 8-pick live list does not", (t) => {
+    if (!up || !seedOnly) return t.skip("seed only");
+    const [bt] = SEED.backtestWeeks.slice(-1);
+    const rb = foldCheck(pages.get(`/waivers?season=${bt.season}&week=${bt.week}&pos=RB`)!.doc).folds;
+    assert.deepEqual(rb.map((f) => [f.head, f.rest, f.total]), [[10, 2, 12]]);
+    // closed it says "Show all 12", open "Show the first 10 only" (CSS shows one), and names its list
+    assert.match(rb[0].summary, new RegExp(`^Show all 12 Show the first 10 only \\(RB list, ${bt.season} week ${bt.week}, `));
+    const flex = foldCheck(pages.get(`/waivers?season=${bt.season}&week=${bt.week}&pos=FLEX`)!.doc).folds;
+    assert.deepEqual(flex.map((f) => [f.head, f.rest, f.total]), [[10, 15, 25]]);
+    const live = pages.get(`/waivers?season=${SEED.liveWeek.season}&week=${SEED.liveWeek.week}&pos=RB&kind=live`)!;
+    assert.deepEqual(foldCheck(live.doc).folds, []);
+    assert.equal(live.doc.querySelectorAll("details[data-fold]").length, 0);
+  });
+});
+
+describe("the dropped tag", () => {
+  test("home: no Legit anywhere, not even in the page's payload", (t) => {
+    if (!up) return t.skip(`no server at ${BASE}`);
+    for (const r of set.routes.filter((x) => x.kind === "home")) assert.ok(!/legit/i.test(pages.get(r.path)!.html), `${r.path}: "Legit" in the page`);
   });
 });

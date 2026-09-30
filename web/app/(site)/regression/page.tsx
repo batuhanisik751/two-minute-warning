@@ -17,14 +17,12 @@ export const metadata = { title: "Regression Watch" };
 const GROUPS: ScatterGroup[] = [
   { key: "sell_high", name: "Sell-high", color: "var(--chart-b)", shape: "triangle" },
   { key: "buy_low", name: "Buy-low", color: "var(--chart-a)", shape: "diamond" },
-  { key: "legit", name: "Legit", color: "var(--chart-c)", shape: "square" },
   { key: "none", name: "No tag", color: "var(--border-strong)", shape: "circle" },
 ];
 
 const TAG_INTRO: Record<Tag, string> = {
   sell_high: "Scoring well above what his chances were worth, and the projection says it will fade.",
   buy_low: "Scoring well below what his chances were worth, and the projection says it will rise.",
-  legit: "A starter whose points are carried by his chances, not by luck.",
 };
 
 function Intro() {

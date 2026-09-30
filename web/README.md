@@ -10,9 +10,9 @@ computed from anything but that database.
 | `/` | this week: the scoreboard banner, each position's No. 1 ("top of the board"), the track-record headline, the newest live Waiver Radar list's top 5 per position plus a FLEX card, the Streamers card (the newest live K and D/ST lists' top 3) and the Regression flags card (the newest live list's top 3 Sell-high and Buy-low); an empty state until the first live list exists |
 | `/waivers` | one list: position tabs (from the data, plus FLEX), season/week picker (the time machine), live or reconstructed label, chance with its range and meter, priority, reasons, outcomes, hit-rate badges per rank bucket |
 | `/waivers?pos=K`, `?pos=DST` | the K and D/ST streamer (tabs after FLEX once `stream_list` has lists): the same row layout, next game (home/away), chance of a top-N week with its range, priority, reasons, outcome (next week's finish and points); explained once (a one-week pick, no betting lines by design, the backtest in one sentence from `stream_track_record`); its own time machine |
-| `/regression` | Regression Watch: the week's Sell-high, Buy-low and Legit tables, a with/without garbage-time toggle (links, `gt=off`), the xFP-against-PPG scatter with its data table, the track record (MAE against season PPG and last 3; tag hit rates against base rates); time machine over the published weeks |
+| `/regression` | Regression Watch: the week's Sell-high and Buy-low tables, a with/without garbage-time toggle (links, `gt=off`), the xFP-against-PPG scatter with its data table, the track record (MAE against season PPG and last 3; tag hit rates against base rates, and one sentence on the third tag that was tested and dropped); time machine over the published weeks |
 | `/player/[id]` | a player (nflverse `gsis_id`): header, weekly charts with data tables (the points/xFP chart with a garbage-time toggle), Radar history, Regression Watch history; 404 for an unknown id |
-| `/methodology` | data sources, the point-in-time rule, leakage safeguards, how the Radar works, the results, the K and D/ST streamer (results from `stream_track_record`), Regression Watch (the shrinkage table from the frozen parameters, the projection in words, the backtest results, the PROJECT_SPEC 6.3 limit), the full glossary, disclaimers |
+| `/methodology` | data sources, the point-in-time rule, leakage safeguards, how the Radar works, the results, the K and D/ST streamer (results from `stream_track_record`), Regression Watch (the stability study from `regression_stability`: split-half correlations by position with and without garbage time, the parts of efficiency, the shrinkage table r(g); the projection in words, the backtest results, the PROJECT_SPEC 6.3 limit), the full glossary, disclaimers |
 
 Every page carries the skip link, the "Data as of" line (the Tuesday as-of of the current
 week's lists, and when the data was published), the disclaimer of PROJECT_SPEC 16 and the data
@@ -59,7 +59,7 @@ Queries per page:
 | `/waivers?pos=K`/`DST` | `stream.getStreamIndex(position)` (the time machine), `stream.getStreamList`, `stream.getStreamTrack`, `glossary.getGlossary` (the top-N cutoff from `y_start`) |
 | `/regression` | `regression.getRegressionIndex`, `regression.getRegressionList`, `regression.getRegressionTrack` |
 | `/player/[id]` | `player.getPlayer`, `player.getPlayerSeasons`, `player.getPlayerWeeks(season)`, `radar.getPlayerHistory`, `regression.getPlayerRegressionHistory` |
-| `/methodology` | `track.getTrackRows(...)`, `track.getTierStats`, `radar.getRadarModel`, `glossary.getGlossary`, `stream.getStreamTrack`, `stream.getStreamModels`, `regression.getRegressionParams`, `regression.getRegressionTrack` |
+| `/methodology` | `track.getTrackRows(...)`, `track.getTierStats`, `radar.getRadarModel`, `glossary.getGlossary`, `stream.getStreamTrack`, `stream.getStreamModels`, `regression.getRegressionParams`, `regression.getRegressionTrack`, `regression.getRegressionStability` |
 
 The hit-rate badges on `/waivers` count, for the list's position, the picks and hits per rank
 in the reconstructed lists of **seasons before the list's own** with final outcomes (so a
@@ -85,12 +85,26 @@ list. A K or D/ST tab reads the streamer's tables and has its own weeks in the t
 streamer's one honest sentence compares the published method (the list's model version: the K
 model, the D/ST rule) with the best alternative of the other kind from `stream_track_record`'s
 pooled precision@5 rows and its paired `diff` row; the top-N of "a starter week" is read from the
-glossary's `y_start` formula. Regression Watch's tables list every player with the tag (a player
-can be Buy-low and Legit), in the weekly report's order; `gt=off` switches PPG, xFP/game and
-FPOE/game to the `_ng` columns (the projection is unchanged); the shrinkage table on
-/methodology is computed from the frozen parameters (`model_versions.params.shrinkage.rows`),
-r(g) for g = the backtest lists' weeks. The stability study's split-half correlations are not
-published, so the page states that finding in words only.
+glossary's `y_start` formula. Regression Watch's tables list every player with the tag, in the
+weekly report's order; `gt=off` switches PPG, xFP/game and FPOE/game to the `_ng` columns (the
+projection is unchanged). **Legit is not shown** (owner decision 2026-09-30: it predicted nothing
+better than its base rate): `lib/regression.ts` `DROPPED_TAGS`, and the queries' `toRow` drops it
+from `tags`, `tag` and the reason on every page (the frozen live 2026-W03 list still carries it);
+the track record states it in one sentence, from `regression_track_record`, without its name. The
+/methodology glossary still lists the registry's "Legit (tested, not shown)" entry. The stability
+study on /methodology reads `regression_stability` (`lib/stability.ts`, unit-tested): the
+split-half tables, one paragraph on what they mean (its numbers picked from the rows), and the
+shrinkage table with r(g) for g = the backtest lists' weeks plus the study's last g; the frozen
+parameters' window is named in one sentence.
+
+**Long lists and tables fold** (owner decision 2026-09-30; `lib/fold.ts`, `components/Fold.tsx`):
+more than 10 rows show the first 10 and a native `<details>` "Show all N" (no JavaScript,
+keyboard accessible; the words switch to "Show the first 10 only" while open). A ranked list
+continues inside the details (`<ol start="11" data-fold-rest>`); a table stays one table and its
+extra rows (`tbody[data-fold-rest]`) show while the details under it is open (CSS `:has()`). Folded:
+the Radar, FLEX, K and D/ST lists, the Regression Watch tables, the player page's two history
+tables. Not folded: the charts' data tables (folded whole already), the glossary (every tooltip
+links into it) and navigation.
 
 ## Tests
 
@@ -98,7 +112,7 @@ published, so the page states that finding in words only.
 |---|---|---|
 | types | `npm run typecheck` | nothing (`next typegen` + `tsc`) |
 | lint | `npm run lint` | nothing |
-| unit | `npm test` | nothing: formatting, rank buckets and badges, query-string parsing, track-record selection, database-URL guard rails, method constants vs the Python code, theme contrast (WCAG AA, both themes, incl. the strip, field and position colours), FLEX merge order and counts, the league shape, position tabs, team colours, the streamer's comparison sentence and cutoffs (`lib/streamer.ts`), Regression Watch's tag order, toggle, verdicts and shrinkage table (`lib/regression.ts`) |
+| unit | `npm test` | nothing: formatting, rank buckets and badges, query-string parsing, track-record selection, database-URL guard rails, method constants vs the Python code, theme contrast (WCAG AA, both themes, incl. the strip, field and position colours), FLEX merge order and counts, the league shape, position tabs, team colours, the streamer's comparison sentence and cutoffs (`lib/streamer.ts`), Regression Watch's tag order, toggle, verdicts, dropped tags and shrinkage table (`lib/regression.ts`), the stability study's tables (`lib/stability.ts`), the fold rule (`lib/fold.ts`) |
 | migrations | `npm run db:check` | nothing (never connects) |
 | build | `npm run build` | nothing (no database at build time) |
 | smoke + accessibility + layout | `npm run test:smoke:run` | a build, the local Postgres server and Google Chrome (or `CHROME_PATH`) |
@@ -127,7 +141,9 @@ position, FLEX, reconstructed lists without chances) in headless Chrome at 320, 
 column header row, the top-of-the-board cards) it measures each line of text
 (`Range.getClientRects`, clipped by any ancestor that hides overflow) and fails when two text
 boxes intersect, when text sticks out of its row, or when the page scrolls sideways; a canary
-proves it catches a broken row. Chrome is driven over the DevTools protocol with Node's
+proves it catches a broken row. It opens every "Show all N" first, so the folded rows are
+measured too (and fails when a page's folds were opened but none of their rows measured). The
+pages suite checks the fold rule on every page (`tests/smoke/fold.ts`). Chrome is driven over the DevTools protocol with Node's
 built-in WebSocket (`tests/smoke/chrome.ts`): no new dependency, no browser download. Without
 Chrome it skips loudly; with `SMOKE_REQUIRE=1` it fails.
 

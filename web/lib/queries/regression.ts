@@ -1,10 +1,11 @@
 import "server-only";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { dimPlayer, dimTeam, modelVersions, regressionList, regressionOutcome, regressionRow, regressionTrackRecord } from "@/db/schema";
+import { dimPlayer, dimTeam, modelVersions, regressionList, regressionOutcome, regressionRow, regressionStability, regressionTrackRecord } from "@/db/schema";
 import { cached } from "@/lib/cache";
 import type { ListKey } from "@/lib/params";
-import type { RegressionRow, RegressionTrackRow } from "@/lib/regression";
+import type { StabilityRow } from "@/lib/stability";
+import { dropTags, type RegressionRow, type RegressionTrackRow } from "@/lib/regression";
 
 // Regression Watch's published lists (regression_list / regression_row / regression_outcome),
 // its frozen parameters (model_versions.params) and its track record (regression_track_record).
@@ -79,9 +80,11 @@ function rowsQuery() {
 
 type Raw = Awaited<ReturnType<ReturnType<typeof rowsQuery>["execute"]>>[number];
 
+/** A row as the site shows it: tags the site dropped (lib/regression.ts DROPPED_TAGS, e.g.
+ *  legit on the frozen live 2026-W03 list) are removed here, for every page. */
 function toRow(r: Raw): RegressionRow {
   const { rosPpg, rosGames, status, ...rest } = r;
-  return { ...rest, outcome: status === null ? null : { rosPpg, rosGames, status } };
+  return dropTags({ ...rest, outcome: status === null ? null : { rosPpg, rosGames, status } });
 }
 
 const headerColumns = {
@@ -200,3 +203,27 @@ async function getPlayerRegressionHistoryRaw(gsisId: string): Promise<Regression
   return rows.map(({ season, week, kind, ...r }) => ({ ...toRow(r), season, week, kind: kindOf(kind) }));
 }
 export const getPlayerRegressionHistory = cached("regression.getPlayerRegressionHistory", getPlayerRegressionHistoryRaw);
+
+/** Every row of regression_stability (the stability study, reports/regression_watch/
+ *  stability.csv), in the CSV's order: /methodology shows its split-half and r(g) tables. */
+async function getRegressionStabilityRaw(): Promise<StabilityRow[]> {
+  return db()
+    .select({
+      section: regressionStability.section,
+      seasons: regressionStability.seasons,
+      split: regressionStability.split,
+      position: regressionStability.position,
+      metric: regressionStability.metric,
+      g: regressionStability.g,
+      n: regressionStability.n,
+      value: regressionStability.value,
+      lo: regressionStability.lo,
+      hi: regressionStability.hi,
+      varSignal: regressionStability.varSignal,
+      varNoise: regressionStability.varNoise,
+      priorMean: regressionStability.priorMean,
+    })
+    .from(regressionStability)
+    .orderBy(asc(regressionStability.line));
+}
+export const getRegressionStability = cached("regression.getRegressionStability", getRegressionStabilityRaw);

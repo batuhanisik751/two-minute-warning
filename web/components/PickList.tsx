@@ -2,6 +2,7 @@ import Link from "next/link";
 import { outcomeOf, windowSummary } from "@/lib/format";
 import type { Pick } from "@/lib/queries/radar";
 import { teamStyle } from "@/lib/team-colors";
+import { FoldList } from "./Fold";
 import { ChanceCell, MiniLabel, OutcomeBadge, PosBadge, TierBadge } from "./ui";
 
 type Props = {
@@ -60,8 +61,11 @@ export default function PickList({ picks, label, reasons = true, showOutcome = t
           </span>
         ) : null}
       </div>
-      <ol aria-label={label} className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface" data-testid="pick-list">
-        {picks.map((p) => {
+      <FoldList
+        label={label}
+        className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface"
+        testId="pick-list"
+        items={picks.map((p) => {
           const outcome = outcomeOf(p.outcome?.yHit ?? null, p.outcome?.status ?? null);
           const detail =
             p.outcome && p.outcome.status === "final"
@@ -134,7 +138,7 @@ export default function PickList({ picks, label, reasons = true, showOutcome = t
             </li>
           );
         })}
-      </ol>
+      />
     </div>
   );
 }

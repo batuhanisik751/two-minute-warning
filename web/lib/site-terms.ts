@@ -125,4 +125,19 @@ export const SITE_TERMS: Record<string, TermEntry> = {
       "Teams are shown by today's franchise code and name, also for past seasons: a " +
       "franchise that moved appears under its current name.",
   },
+  player_season: {
+    name: "player_season",
+    title: "Player-season",
+    explanation:
+      "One player's regular season. The stability study counts each season he played enough " +
+      "games in once, at the position of most of his games, and splits his games into two halves.",
+  },
+  stability_interval: {
+    name: "stability_interval",
+    title: "Interval (stability study)",
+    explanation:
+      "The range the number would plausibly move within with other players: the player-seasons " +
+      "are redrawn at random many times and the number is recomputed each time. The same player " +
+      "appears in several seasons, so the true range is a little wider.",
+  },
 };

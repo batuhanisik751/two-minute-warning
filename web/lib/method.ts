@@ -14,6 +14,13 @@ export const CHANCE_RANGE_LEVEL = 0.9;
  *  (src/twm/backtest/metrics.py LEVEL). */
 export const TRACK_INTERVAL_LEVEL = 0.95;
 
+/** Regression Watch's stability study (src/twm/modules/regression_watch/stability.py): a
+ *  player-season counts with at least MIN_GAMES games, and its intervals are 95% percentile
+ *  intervals (np.nanpercentile 2.5 and 97.5) of N_BOOT bootstrap resamples of player-seasons. */
+export const STABILITY_MIN_GAMES = 8;
+export const STABILITY_INTERVAL_LEVEL = 0.95;
+export const STABILITY_RESAMPLES = 1000;
+
 /** Rank buckets of the hit-rate badges (PROJECT_SPEC 8.1; src/twm/backtest/metrics.py
  *  DEFAULT_BUCKETS). */
 export const RANK_BUCKETS: readonly (readonly [number, number])[] = [

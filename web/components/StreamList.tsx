@@ -2,6 +2,7 @@ import { outcomeOf } from "@/lib/format";
 import type { StreamPick } from "@/lib/queries/stream";
 import { nextGame, streamResult } from "@/lib/streamer";
 import { teamStyle } from "@/lib/team-colors";
+import { FoldList } from "./Fold";
 import { HEAD_OUTCOME, HEAD_PLAIN, ROW_OUTCOME, ROW_PLAIN } from "./PickList";
 import { ChanceCell, MiniLabel, OutcomeBadge, TierBadge } from "./ui";
 
@@ -47,11 +48,14 @@ export default function StreamList({ picks, label, topN, reasons = true, showOut
           </span>
         ) : null}
       </div>
-      <ol aria-label={label} className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface" data-testid="stream-list">
-        {picks.map((p) => (
+      <FoldList
+        label={label}
+        className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface"
+        testId="stream-list"
+        items={picks.map((p) => (
           <Row key={`${p.position}-${p.rank}`} p={p} topN={topN} reasons={reasons && anyReasons} showOutcome={showOutcome} />
         ))}
-      </ol>
+      />
     </div>
   );
 }

@@ -2,10 +2,18 @@
 // Every number comes from the database (regression_row, regression_outcome,
 // regression_track_record, model_versions.params); this file only picks rows and words.
 
-export const TAGS = ["sell_high", "buy_low", "legit"] as const;
+/** The tags the site shows. A third tag (legit) was tested and dropped (owner decision,
+ *  2026-09-30: it predicted nothing better than its base rate); see DROPPED_TAGS. */
+export const TAGS = ["sell_high", "buy_low"] as const;
 export type Tag = (typeof TAGS)[number];
 
-export const TAG_TITLES: Record<Tag, string> = { sell_high: "Sell-high", buy_low: "Buy-low", legit: "Legit" };
+export const TAG_TITLES: Record<Tag, string> = { sell_high: "Sell-high", buy_low: "Buy-low" };
+
+/** Tags the pipeline may still carry (the frozen live 2026-W03 list does) that the site never
+ *  shows: the queries drop them from every row (dropTags), and the track record states them in
+ *  one sentence only. The value is the tag's title in the weekly reasons ("Legit: ..."). */
+export const DROPPED_TAGS: Record<string, string> = { legit: "Legit" };
+const isDropped = (t: string) => Object.hasOwn(DROPPED_TAGS, t);
 
 export function tagTitle(tag: string): string {
   return TAG_TITLES[tag as Tag] ?? tag;
@@ -51,18 +59,33 @@ export function statsOf(r: Pick<RegressionRow, "ppg" | "ppgNg" | "xfpPg" | "xfpP
 
 const byId = (a: RegressionRow, b: RegressionRow) => (a.gsisId < b.gsisId ? -1 : a.gsisId > b.gsisId ? 1 : 0);
 
-/** The players with a tag (a player can have two: Buy-low and Legit), in the weekly report's
- *  order (src/twm/modules/regression_watch/weekly.py _tag_lines): Sell-high by how far the
- *  projection sits below his PPG, Buy-low by how far above, Legit by position then projection. */
+/** The players with a tag, in the weekly report's order (src/twm/modules/regression_watch/
+ *  weekly.py _tag_lines): Sell-high by how far the projection sits below his PPG, Buy-low by
+ *  how far above. */
 export function tagRows(rows: readonly RegressionRow[], tag: Tag): RegressionRow[] {
   const t = rows.filter((r) => r.tags.includes(tag));
   if (tag === "sell_high") return t.sort((a, b) => b.ppg - b.projection - (a.ppg - a.projection) || byId(a, b));
-  if (tag === "buy_low") return t.sort((a, b) => b.projection - b.ppg - (a.projection - a.ppg) || byId(a, b));
-  const p = (r: RegressionRow) => {
-    const i = POSITION_ORDER.indexOf(r.position);
-    return i === -1 ? POSITION_ORDER.length : i;
-  };
-  return t.sort((a, b) => p(a) - p(b) || b.projection - a.projection || byId(a, b));
+  return t.sort((a, b) => b.projection - b.ppg - (a.projection - a.ppg) || byId(a, b));
+}
+
+/** A weekly reason without the sentences of dropped tags ("Buy-low: ... Legit: ..." keeps
+ *  "Buy-low: ..."); null when nothing is left. */
+export function reasonWithout(reason: string | null): string | null {
+  if (!reason) return reason;
+  const titles = [...Object.values(TAG_TITLES), ...Object.values(DROPPED_TAGS)].join("|");
+  const parts = reason.split(new RegExp(`(?=(?:^|\\s)(?:${titles}): )`));
+  const dropped = new RegExp(`^(?:${Object.values(DROPPED_TAGS).join("|")}): `);
+  const kept = parts.map((x) => x.trim()).filter((x) => x && !dropped.test(x));
+  return kept.length ? kept.join(" ") : null;
+}
+
+/** A row as the site shows it: dropped tags out of `tags`, `tag` the first tag left (or none),
+ *  and their sentences out of the reason. Rows without a dropped tag come back unchanged. */
+export function dropTags<T extends Pick<RegressionRow, "tag" | "tags" | "tagReason">>(r: T): T {
+  if (!r.tags.some(isDropped) && !(r.tag !== null && isDropped(r.tag))) return r;
+  const tags = r.tags.filter((t) => !isDropped(t));
+  const tag = r.tag !== null && !isDropped(r.tag) ? r.tag : (tags[0] ?? null);
+  return { ...r, tag, tags, tagReason: tag === null ? null : reasonWithout(r.tagReason) };
 }
 
 /** A /regression link (the garbage-time toggle and the time machine keep each other). */
@@ -137,6 +160,17 @@ export function tagVerdict(tagged: Pick<RegressionTrackRow, "value" | "lo" | "hi
   if (tagged.lo !== null && tagged.lo > base.value) return "above";
   if (tagged.hi !== null && tagged.hi < base.value) return "below";
   return "same";
+}
+
+/** The dropped tags' headline hit rates (tagged against base) for the track record's one
+ *  sentence: the numbers come from regression_track_record, the tag's name is never shown. */
+export function droppedRates(rows: readonly RegressionTrackRow[], position = "all") {
+  return Object.keys(DROPPED_TAGS).flatMap((t) => {
+    const q = { section: "tag", weeks: "headline", position, metric: t };
+    const tagged = trackRow(rows, { ...q, rowGroup: "tagged" });
+    const base = trackRow(rows, { ...q, rowGroup: "base" });
+    return tagged && base ? [{ tag: t, tagged, base, verdict: tagVerdict(tagged, base) }] : [];
+  });
 }
 
 /** One position's FPOE/game reliability from the frozen parameters' shrinkage rows. */

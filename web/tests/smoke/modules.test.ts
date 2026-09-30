@@ -131,15 +131,23 @@ describe("/regression (seed)", () => {
     const ids = (tag: string) => rows(m.querySelector(`[data-testid=tag-${tag}]`)!, "rw-row").map((r) => r.querySelector("a")?.getAttribute("href"));
     assert.deepEqual(ids("sell_high"), ["/player/00-9000001", "/player/00-9000014", `/player/${SEED.longName.gsisId}`]);
     assert.equal(ids("buy_low").length, 3);
-    // QB, RB, WR, TE; the player with Buy-low AND Legit is in both tables
-    assert.equal(ids("legit").length, 7);
-    assert.ok(ids("legit").includes("/player/00-9000015") && ids("buy_low").includes("/player/00-9000015"));
+    // the seed's live list carries Legit tags like the frozen live 2026-W03 list: the site drops them
+    assert.equal(m.querySelector("[data-testid=tag-legit]"), null);
+    assert.ok(!/legit/i.test(pages.get("/regression")!.html), "Legit in the page");
+    const both = rows(m.querySelector("[data-testid=tag-buy_low]")!, "rw-row").find((r) => r.querySelector("a")?.getAttribute("href") === "/player/00-9000015");
+    assert.ok(both, "the Buy-low and Legit player stays in the Buy-low table");
+    assert.equal(both.getAttribute("data-tags"), "buy_low");
+    assert.match(text(both), /Buy-low: seed reason for 00-9000015\.$/);
+    // a Legit-only player is untagged: in the scatter's "No tag" group, in no table
+    const scatter = Array.from(m.querySelectorAll("[data-testid=scatter-table] tbody tr")).map((r) => text(r));
+    assert.ok(scatter.some((r) => /No tag/.test(r)) && !scatter.some((r) => /legit/i.test(r)));
+    assert.equal(m.querySelectorAll("details[data-fold]").length, 0, "short tables do not fold");
     assert.match(text(m), new RegExp(M.rwNote));
     assert.ok(m.querySelector("[data-testid=rw-pending]"), "pending is said once");
     assert.equal(m.querySelectorAll("[data-testid=rw-outcome]").length, 0);
     const first = rows(m.querySelector("[data-testid=tag-sell_high]")!, "rw-row")[0];
     assert.match(text(first), /Games 3 PPG 20\.0 xFP\/game 13\.0 FPOE\/game \+7\.0 Projection 14\.0/);
-    assert.match(text(first), /Seed reason: sell_high for 00-9000001/);
+    assert.match(text(first), /Sell-high: seed reason for 00-9000001\./);
     assert.equal(m.querySelector("[data-testid=gt-toggle] a[aria-current=page]")?.textContent, "With garbage time");
   });
 
@@ -162,8 +170,19 @@ describe("/regression (seed)", () => {
     assert.match(text(m), /Rest of the season: \d+\.\d PPG in 10 games\./);
     assert.match(text(m), /Rest of the season: no games played\./);
     const verdicts = Array.from(m.querySelectorAll("[data-testid=rw-tag-table] tbody tr")).map((r) => r.getAttribute("data-verdict"));
-    assert.deepEqual(verdicts, ["above", "above", "same"]);
-    assert.match(prose(m.querySelector("[data-testid=legit-honest]")!), /^Legit is no better than the base rate\. 60\.5% of Legit tags came true, against 61\.0%/);
+    assert.deepEqual(verdicts, ["above", "above"], "Sell-high and Buy-low only");
+    assert.equal(
+      prose(m.querySelector("[data-testid=dropped-tag]")!),
+      "A third tag was also tested and dropped: it came true for 60.5% of the 120 players it tagged, against 61.0% for every comparable player, so it predicted nothing better than the base rate.",
+    );
+    // the long Buy-low table: 10 rows, then "Show all 27" holding the other 17
+    const bl = m.querySelector("[data-testid=tag-buy_low]")!;
+    assert.equal(rows(bl, "rw-row").length, M.rwLong.buyLow);
+    const fold = bl.querySelector("details[data-fold]")!;
+    assert.match(text(fold.querySelector("summary")!), new RegExp(`^Show all ${M.rwLong.buyLow} `));
+    assert.equal(rows(fold, "rw-row").length, M.rwLong.buyLow - 10);
+    assert.equal(bl.querySelector("ol[data-testid=rw-list]:not([data-fold-rest])")!.children.length, 10);
+    assert.equal(m.querySelector("[data-testid=tag-sell_high] details"), null, "Sell-high (3) does not fold");
     assert.match(prose(m.querySelector("[data-testid=rw-track]")!), /Graded on 900 player-weeks of the 2024–2025 test seasons, as-of weeks 4, 6/);
     const weeks = Array.from(m.querySelectorAll<HTMLOptionElement>("select[name=week] option")).map((o) => normalise(o.textContent ?? ""));
     assert.deepEqual(weeks, ["Week 4 (reconstructed)", "Week 6 (reconstructed)"]);
@@ -181,7 +200,8 @@ describe("player page and methodology (seed)", () => {
     assert.equal(off.querySelector("[data-testid=gt-toggle] a[aria-current=page]")?.textContent, "Without garbage time");
     const hist = on.querySelector("[data-testid=regression-history]")!;
     assert.equal(hist.querySelectorAll("tbody tr").length, 2, "weeks 4 and 6 of 2025");
-    assert.match(text(hist), /Legit/);
+    assert.doesNotMatch(text(hist), /Legit/, "his Legit tags are dropped");
+    assert.match(text(hist), /No tag/);
     assert.match(text(hist), /PPG in 10 games/);
     const season = Array.from(off.querySelectorAll<HTMLAnchorElement>("nav[aria-label=Season] a")).map((a) => a.getAttribute("href"));
     assert.ok(season.every((h) => h?.endsWith("gt=off")), "the season links keep the view");
@@ -195,10 +215,24 @@ describe("player page and methodology (seed)", () => {
     assert.equal(k.querySelectorAll("tbody tr").length, 6, "five methods and the base rate");
     assert.match(text(k), /our model, a logistic regression on the site 40\.0% 38\.0–42\.0%/);
     assert.match(text(k), /25\.0% \(250 of 1,000 pool picks\)/);
-    const sh = m.querySelector("[data-testid=shrink-fpoe]")!;
-    assert.deepEqual(Array.from(sh.querySelectorAll("thead th")).slice(-2).map((th) => normalise(th.textContent ?? "")), ["r(4)", "r(6)"]);
-    assert.equal(sh.querySelectorAll("tbody tr").length, 4);
-    assert.match(text(sh.querySelector("tbody tr")!), /^QB 100 0\.50 20\.0 40 0\.09 0\.13$/);
+    // the stability study from regression_stability (seed-modules.ts rwStability, fictional)
+    const st = m.querySelector("[data-testid=stability]")!;
+    const split = st.querySelector("[data-testid=split-half]")!;
+    assert.equal(split.querySelectorAll("tbody tr").length, 4);
+    assert.equal(text(split.querySelector("tbody tr")!), "QB 100 0.70 0.65 to 0.75 0.05 0.00 to 0.10 0.60 0.55 to 0.65");
+    assert.match(text(split.querySelector("caption")!), /odd against even games, every play \(2012–2025\)/);
+    assert.equal(text(st.querySelector("[data-testid=split-half-ng] tbody tr")!), "QB 100 0.67 0.62 to 0.72 0.03 -0.02 to 0.08 0.57 0.52 to 0.62");
+    const parts = Array.from(st.querySelectorAll("[data-testid=split-half-parts] tbody tr")).map((r) => text(r));
+    assert.equal(parts[0], "QB 0.01 -0.04 to 0.06 n 95 0.30 0.25 to 0.35 n 92 –", "QB: completion rate, no YAC");
+    assert.equal(parts[1], "RB 0.01 -0.04 to 0.06 n 235 0.14 0.09 to 0.19 n 200 0.17 0.12 to 0.22 n 180");
+    assert.equal(
+      prose(st.querySelector("[data-testid=stability-meaning]")!),
+      "Opportunity repeats; efficiency mostly does not. A player's xFP/game in one half of a season correlates 0.70 (QB) to 0.80 (RB) with the other half, his FPOE/game only 0.05 (QB) to 0.12 (RB). The harder test, the first half of his games against the second (roles change in between), gives xFP/game 0.60 to 0.70 and FPOE/game 0.05 to 0.12. So the projection takes his chances at face value and keeps only a share r(g) of his FPOE/game: after 17 games 0.25 to 0.36 of it, by position; the rest is expected to fade.",
+    );
+    const sh = st.querySelector("[data-testid=stability-shrink-fpoe]")!;
+    assert.deepEqual(Array.from(sh.querySelectorAll("thead th")).slice(-3).map((th) => normalise(th.textContent ?? "").replace(/ \(explain\).*/, "")), ["r(4)", "r(6)", "r(17)"]);
+    assert.equal(text(sh.querySelector("tbody tr")!), "QB 100 0.50 20.0 -0.50 40 0.09 0.05 to 0.13 0.13 0.09 to 0.17 0.30");
+    assert.ok(st.querySelector("[data-testid=stability-shrink-fpoe_ng] tbody tr"));
     assert.equal(m.querySelectorAll("[data-testid=rw-position-mae] tbody tr").length, 2);
     assert.match(text(m.querySelector("#regression")!.parentElement!), /PROJECT_SPEC 6\.3/);
     assert.match(text(m), /mean_flat_all/);

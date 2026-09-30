@@ -1,10 +1,10 @@
 import Link from "next/link";
-import ShrinkTable from "@/components/methodology/ShrinkTable";
+import StabilityStudy from "@/components/methodology/StabilityStudy";
 import RegressionTrack, { testSeasons } from "@/components/RegressionTrack";
 import Term from "@/components/Term";
 import { EmptyState } from "@/components/ui";
 import { fmtInt, pct, pctRange } from "@/lib/format";
-import { getRegressionParams, getRegressionTrack } from "@/lib/queries/regression";
+import { getRegressionParams, getRegressionStability, getRegressionTrack } from "@/lib/queries/regression";
 import { TAGS, paramNumber, shrinkRows, signed, tagTitle, trackRow, type RegressionTrackRow } from "@/lib/regression";
 
 const POS = ["QB", "RB", "WR", "TE", "all"];
@@ -121,7 +121,7 @@ function PositionTags({ rows }: { rows: RegressionTrackRow[] }) {
 /** /methodology#regression: the stability study, the projection in words, the backtest
  *  results and the limits (every number from the database). */
 export default async function RegressionSection() {
-  const [p, rows] = await Promise.all([getRegressionParams(), getRegressionTrack()]);
+  const [p, rows, stability] = await Promise.all([getRegressionParams(), getRegressionTrack(), getRegressionStability()]);
   const shrink = p ? shrinkRows(p.params) : [];
   const first = shrink.length ? Math.min(...shrink.map((r) => r.first ?? Infinity)) : null;
   const last = shrink.length ? Math.max(...shrink.map((r) => r.last ?? -Infinity)) : null;
@@ -141,31 +141,24 @@ export default async function RegressionSection() {
         would have scored from his targets and carries) and <strong>efficiency</strong> (<Term name="fpoe">FPOE</Term> = points
         minus xFP). The question is which of the two repeats.
       </p>
-      <h3 className="display mt-6 text-xl uppercase">The stability study</h3>
-      <p className="mt-2">
-        Each player-season is split into two halves (odd and even games). A number that is a real trait shows up in both
-        halves; one that was luck does not (<Term name="split_half_correlation">split-half correlation</Term>). Across every
-        position opportunity repeated far more than efficiency: a player&apos;s xFP/game in one half says a lot about the
-        other half, his FPOE/game very little. The same halves measure how much of FPOE/game is lasting: the{" "}
-        <Term name="signal_variance">signal</Term> the halves share against the <Term name="noise_variance">noise</Term> of a
-        single game. After g games his FPOE/game deserves the share r(g) = signal / (signal + noise / g) of its value (the{" "}
-        <Term name="shrinkage_factor">shrinkage factor</Term>); the rest is expected to fade.
-      </p>
-      {shrink.length ? (
-        <>
-          <ShrinkTable rows={shrink} metric="fpoe" games={games} caption={`FPOE/game, every play: estimated on ${span}, the table today's lists use`} />
-          <ShrinkTable rows={shrink} metric="fpoe_ng" games={games} caption={`FPOE/game without garbage time, ${span}`} />
-          <p className="mt-2 text-sm text-muted">
-            What it means: even after a full season&apos;s games only a small share of a player&apos;s points over expected is
-            worth keeping; <Term name="games_for_half_weight">games for half weight</Term> is how many games it would take to
-            believe half of it. Each backtest season used a table estimated only on the seasons before it.
+      <section aria-labelledby="stability" data-testid="stability-section">
+        <h3 id="stability" className="display mt-6 scroll-mt-24 text-xl uppercase">
+          The stability study
+        </h3>
+        {stability.length ? (
+          <StabilityStudy rows={stability} weeks={games} />
+        ) : (
+          <div className="mt-3">
+            <EmptyState title="The stability study is not published yet" />
+          </div>
+        )}
+        {shrink.length ? (
+          <p className="mt-3 text-sm text-muted">
+            Today&apos;s lists use the shrinkage table frozen with their parameters, estimated on {span}; each backtest season
+            used a table estimated only on the seasons before it.
           </p>
-        </>
-      ) : (
-        <div className="mt-3">
-          <EmptyState title="No Regression Watch parameters published yet" />
-        </div>
-      )}
+        ) : null}
+      </section>
       <RegressionMethod variant={variant} xs={xs} xb={xb} decile={p ? paramNumber(p.params, "decile") : null} choice={choices(rows)} />
       <h3 className="display mt-6 text-xl uppercase">Results{seasons ? `, ${seasons.from}–${seasons.to}` : ""}</h3>
       {rows.length ? (
@@ -210,12 +203,8 @@ function RegressionMethod({ variant, xs, xb, decile, choice }: { variant: Varian
           <strong>
             <Term name="buy_low">Buy-low</Term>
           </strong>
-          : the mirror image{xb !== null ? ` (projection at least ${xb} points per game above his PPG today)` : ""}.{" "}
-          <strong>
-            <Term name="legit">Legit</Term>
-          </strong>
-          : a starter by PPG whose FPOE/game is not in the {top}. The cutoffs (<Term name="tag_threshold_x">X</Term>) are
-          chosen each season on earlier seasons only.
+          : the mirror image{xb !== null ? ` (projection at least ${xb} points per game above his PPG today)` : ""}. The
+          cutoffs (<Term name="tag_threshold_x">X</Term>) are chosen each season on earlier seasons only.
         </li>
         <li>
           <strong>Garbage time</strong> (<Term name="is_garbage_time">when the game is decided</Term>): the lists can show PPG,

@@ -737,6 +737,27 @@
   transform: translateY(0);
 }
 
+/* Long lists and tables fold (components/Fold.tsx): the summary's words follow the state, and a
+   folded table's extra rows show only while its details is open (no JavaScript). */
+.fold > summary {
+  list-style: none;
+}
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+.fold-less {
+  display: none;
+}
+.fold[open] > summary .fold-more {
+  display: none;
+}
+.fold[open] > summary .fold-less {
+  display: inline;
+}
+.fold-table:has(> details.fold:not([open])) [data-fold-rest] {
+  display: none;
+}
+
 /* Tables scroll inside their own region on narrow screens, never the page. */
 .table-scroll {
   overflow-x: auto;

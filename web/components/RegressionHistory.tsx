@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FoldTable } from "@/components/Fold";
 import Term from "@/components/Term";
 import { KindBadge } from "@/components/ui";
 import { fmtPoints } from "@/lib/format";
@@ -12,38 +13,44 @@ const val = (v: number | null, f: (x: number) => string) => (v === null ? "no da
 export default function RegressionHistory({ rows, season, name, withGarbage }: { rows: RegressionHistoryRow[]; season: number; name: string; withGarbage: boolean }) {
   if (!rows.length) return <p className="mt-2 text-muted">He is not on any published Regression Watch list of {season}.</p>;
   return (
-    <div className="table-scroll mt-3">
-      <table className="data-table" data-testid="regression-history">
-        <caption className="sr-only">
-          Regression Watch lists with {name}, {season} ({withGarbage ? "with" : "without"} garbage time)
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">Week</th>
-            <th scope="col">List</th>
-            <th scope="col">Tag</th>
-            <th scope="col" className="num">
-              Games
-            </th>
-            <th scope="col" className="num">
-              PPG
-            </th>
-            <th scope="col" className="num">
-              <Term name="xfp">xFP</Term>/game
-            </th>
-            <th scope="col" className="num">
-              <Term name="fpoe">FPOE</Term>/game
-            </th>
-            <th scope="col" className="num">
-              <Term name="ppg_ros">Projection</Term>
-            </th>
-            <th scope="col">
-              <Term name="rest_of_season_ppg">Rest of season</Term>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
+    <FoldTable
+      label={`Regression Watch lists with ${name}, ${season}`}
+      table={(body) => (
+        <div className="table-scroll mt-3">
+          <table className="data-table" data-testid="regression-history">
+            <caption className="sr-only">
+              Regression Watch lists with {name}, {season} ({withGarbage ? "with" : "without"} garbage time)
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Week</th>
+                <th scope="col">List</th>
+                <th scope="col">Tag</th>
+                <th scope="col" className="num">
+                  Games
+                </th>
+                <th scope="col" className="num">
+                  PPG
+                </th>
+                <th scope="col" className="num">
+                  <Term name="xfp">xFP</Term>/game
+                </th>
+                <th scope="col" className="num">
+                  <Term name="fpoe">FPOE</Term>/game
+                </th>
+                <th scope="col" className="num">
+                  <Term name="ppg_ros">Projection</Term>
+                </th>
+                <th scope="col">
+                  <Term name="rest_of_season_ppg">Rest of season</Term>
+                </th>
+              </tr>
+            </thead>
+            {body}
+          </table>
+        </div>
+      )}
+      rows={rows.map((r) => {
             const s = statsOf(r, withGarbage);
             const o = r.outcome;
             return (
@@ -72,8 +79,6 @@ export default function RegressionHistory({ rows, season, name, withGarbage }: {
               </tr>
             );
           })}
-        </tbody>
-      </table>
-    </div>
+    />
   );
 }

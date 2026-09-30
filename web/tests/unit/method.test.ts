@@ -5,7 +5,17 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { AS_OF_TIME_UTC, AS_OF_WEEKDAY, CHANCE_RANGE_LEVEL, POSITIONS, RANK_BUCKETS, TRACK_INTERVAL_LEVEL } from "../../lib/method";
+import {
+  AS_OF_TIME_UTC,
+  AS_OF_WEEKDAY,
+  CHANCE_RANGE_LEVEL,
+  POSITIONS,
+  RANK_BUCKETS,
+  STABILITY_INTERVAL_LEVEL,
+  STABILITY_MIN_GAMES,
+  STABILITY_RESAMPLES,
+  TRACK_INTERVAL_LEVEL,
+} from "../../lib/method";
 import { GSIS_PATTERN } from "../../lib/params";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -15,6 +25,17 @@ test("the chance's range level is confidence.py's BAND_LEVEL", () => {
   const m = read("src/twm/modules/waiver_radar/confidence.py").match(/^BAND_LEVEL\s*=\s*([0-9.]+)/m);
   assert.ok(m, "BAND_LEVEL not found");
   assert.equal(Number(m[1]), CHANCE_RANGE_LEVEL);
+});
+
+test("the stability study's minimum games, resamples and interval level are stability.py's", () => {
+  const src = read("src/twm/modules/regression_watch/stability.py");
+  const games = src.match(/^MIN_GAMES\s*=\s*(\d+)/m);
+  const boot = src.match(/^N_BOOT\s*=\s*(\d+)/m);
+  const pct = src.match(/np\.nanpercentile\(rs, \[([0-9.]+), ([0-9.]+)\]\)/);
+  assert.ok(games && boot && pct, "MIN_GAMES, N_BOOT or the percentile interval not found");
+  assert.equal(Number(games[1]), STABILITY_MIN_GAMES);
+  assert.equal(Number(boot[1]), STABILITY_RESAMPLES);
+  assert.equal((Number(pct[2]) - Number(pct[1])) / 100, STABILITY_INTERVAL_LEVEL);
 });
 
 test("the track record's interval level and rank buckets are metrics.py's", () => {

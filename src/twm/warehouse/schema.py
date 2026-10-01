@@ -357,8 +357,7 @@ def fact_schedule_spec() -> Table:
 # ---- fact_play ------------------------------------------------------------------------
 
 FACT_PLAY_COLUMNS: list[str] = """
-game_id play_id season week season_type game_date posteam defteam home_team away_team home_coach
-away_coach
+game_id play_id season week season_type game_date posteam defteam home_team away_team
 qtr down ydstogo yardline_100 goal_to_go game_seconds_remaining half_seconds_remaining
 quarter_seconds_remaining game_half score_differential posteam_score defteam_score
 posteam_timeouts_remaining defteam_timeouts_remaining drive fixed_drive fixed_drive_result series
@@ -1478,9 +1477,9 @@ DIM_COACH = Table(
         ),
     ),
     doc=(
-        "One row per head coach seen in schedules (home_coach/away_coach); spellings that share "
-        "a slug are one coach. Interim coaches absent from the schedule columns (2024+) are not "
-        "here."
+        "One row per head coach of fact_game (home_coach/away_coach: the schedule's coaches "
+        "corrected by data/manual/coach_corrections.csv); spellings that share a slug are one "
+        "coach."
     ),
 )
 
@@ -1497,10 +1496,10 @@ COACH_GAME = Table(
         Column("is_home", "BOOLEAN"),
     ),
     doc=(
-        "One row per team per game: the head coach nflverse lists in the schedule for that game "
-        "(two rows per game). Upstream reflects mid-season coaching changes through 2023 but NOT "
-        "in 2024-2025 (e.g. TEN/NYG 2025, NYJ/CHI/NO 2024 list the fired coach all season), so "
-        "interim coaches are missing there. Rows exist for unplayed games too."
+        "One row per team per game: its head coach (two rows per game), from fact_game: the "
+        "coach nflverse's schedule lists, corrected by the cited data/manual/coach_corrections.csv "
+        "(in-season firings the schedule misses, 2024+ and a few earlier; misspellings; the 2026 "
+        "schedule's fired coaches). Rows exist for unplayed games too."
     ),
 )
 
@@ -1530,9 +1529,8 @@ COACH_TEAM_SEASON = Table(
         "Point-in-time since B2: a stint row appears only once the stint is over (season end, "
         "or the next coach's first kickoff), so at an in-season as-of the current coach has no "
         "row here; count coach_game rows through AsOfView for games coached to date. A team "
-        "has >1 row only when nflverse "
-        "records the change; 2024+ seasons show one coach per team even after in-season "
-        "firings. Interim flags are P2."
+        "has >1 row when the corrected schedule records an in-season change (only the cited "
+        "corrections add them from 2024 on). Interim flags are P2."
     ),
 )
 

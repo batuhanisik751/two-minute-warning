@@ -75,7 +75,9 @@ export default async function DecisionsSection() {
               anyone.
             </li>
             <li>
-              Each decision is credited to the head coach of the team with the ball. The leaderboard ranks coaches with at
+              Each decision is credited to the head coach of the team with the ball, as nflverse&apos;s schedule lists him,
+              corrected from cited public sources where the schedule is wrong (it misses some in-season firings and
+              interim coaches, and lagged behind this year&apos;s offseason changes). The leaderboard ranks coaches with at
               least {LEADERBOARD_MIN_GAMES} games in the season (early in a season: as many games as anyone has).
             </li>
             <li>

@@ -9,7 +9,7 @@ owner) confirm it by hand. This page tells you how. Budget: about 1 minute per r
 
 | File | Who writes it | What it is |
 |---|---|---|
-| `data/manual/coach_departures_candidates.csv` | the program (`uv run twm hotseat candidates`) | every head-coach change the nflverse schedules show, 2002 onward. Regenerated from the warehouse; never edit it by hand. |
+| `data/manual/coach_departures_candidates.csv` | the program (`uv run twm hotseat candidates`) | every head-coach change the nflverse schedules show (as corrected by the cited `data/manual/coach_corrections.csv`, H1b), 2002 onward. Regenerated from the warehouse; never edit it by hand. |
 | `data/manual/coach_departures.csv` | you (prefilled by research) | one row per departure: the schedule candidates plus departures the schedules miss. This is the file you check. |
 
 Every row of `coach_departures.csv` was **prefilled** from public pages (mostly each season's
@@ -24,8 +24,9 @@ pages). A prefilled value is only a suggestion (`prefill = suggested`) until you
 - `change_kind`: `in_season` (the schedule shows a new coach between two games of one season) or
   `offseason` (a different coach in week 1 of the next season). Empty on `source_only` rows.
 - `last_game_date`, `successor_name`: the departing coach's last game in the schedule and who
-  coached the next game. **From 2024 on (and in a few earlier seasons) the schedule lists a fired
-  coach for the whole season**, so these are then wrong for in-season firings: trust the source.
+  coached the next game. **From 2024 on (and in a few earlier seasons) nflverse's schedule lists
+  a fired coach for the whole season**; the warehouse corrects the cases in
+  `data/manual/coach_corrections.csv` (H1b), any other one is wrong here: trust the source.
 - `interim_suspected`: he took over during a season and left within that season.
 - `data_gap_suspected`: the schedule cannot tell whether he was fired during the season (2024+
   seasons with a losing record), or the row was added from a source (`source_only`).
@@ -116,9 +117,10 @@ The schedules miss some departures (see "Known schedule problems" below). Add on
   `data_gap_suspected`: `true`; `interim_suspected`: `true` for an interim coach.
 - `departure_type`, `announced_date`, `source_url`, then `y` in `verified_by_owner`.
 
-The prefill already added 11 such rows: interim coaches the schedule never names (2015 MIA,
-2016 LA, 2019 CAR, 2024 CHI/NO/NYJ, 2025 NYG/TEN) and three coaches fired in January 2026
-whom the 2026 schedule still lists (ARI, ATL, BUF).
+The prefill had added 11 such rows (interim coaches the schedule never names: 2015 MIA, 2016
+LA, 2019 CAR, 2024 CHI/NO/NYJ, 2025 NYG/TEN; and ARI, ATL, BUF, whose fired coaches the 2026
+schedule still lists). Since H1b the corrected schedule shows all 11, so they are now
+`schedule` rows (their suggestions, sources and notes carried over; `prefill_note` says so).
 
 ## Checking the whole file
 
@@ -148,6 +150,10 @@ do not need a row unless the coach actually left.
 
 ## Known schedule problems (why the sources win)
 
+The cases below are corrected in the warehouse by `data/manual/coach_corrections.csv` (H1b,
+every row cited; docs/warehouse.md), so the candidates already show them; any new one goes into
+that file with its page and quote, then `twm build` and `twm hotseat candidates`.
+
 - From 2024 on nflverse lists one coach per team for the whole season, so in-season firings
   appear as offseason changes (2024 CHI, NO, NYJ; 2025 NYG, TEN) and interim coaches are absent.
 - Some earlier in-season firings are missing too: 2015 MIA (Philbin) and TEN (Whisenhunt), 2016
@@ -155,6 +161,8 @@ do not need a row unless the coach actually left.
 - The 2026 schedule still lists Jonathan Gannon (ARI), Raheem Morris (ATL) and Sean McDermott
   (BUF), whom the 2026 season page reports fired in January 2026.
 - Spellings: the schedule has "Klint Kubliak" (LV 2026; the sources write Kubiak) and "Jay
-  Rosburg" (DEN 2022; the sources write Jerry Rosburg).
+  Rosburg" (DEN 2022; the sources write Jerry Rosburg), and "Jim Mora" for two men (IND
+  1999-2001 is Jim E. Mora).
+- 2007 ATL: the schedule credits Emmitt Thomas with Bobby Petrino's 13th game (12-10).
 - Medical leaves are not in the schedule (e.g. 2012 IND, 2013 DEN), which is fine: they are not
   departures.

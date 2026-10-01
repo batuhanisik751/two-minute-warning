@@ -87,7 +87,7 @@ Credited to the head coach (`fact_game.home_coach` / `away_coach`). The full coa
 | 4 | John Harbaugh | BAL | 317 | 2 | 0.63 | 3.0 |
 | 5 | Lovie Smith | CHI/HOU/TB | 166 | 2 | 1.20 | 3.0 |
 | 6 | John Fox | CAR/CHI/DEN | 200 | 2 | 1.00 | 2.0 |
-| 7 | Ken Whisenhunt | ARI/TEN | 134 | 2 | 1.49 | 2.0 |
+| 7 | Ken Whisenhunt | ARI/TEN | 125 | 2 | 1.60 | 2.0 |
 | 8 | Mike Smith | ATL | 117 | 1 | 0.85 | 3.0 |
 | 9 | Adam Gase | MIA/NYJ | 81 | 1 | 1.23 | 2.0 |
 | 10 | Brandon Staley | LAC | 49 | 1 | 2.04 | 2.0 |
@@ -103,7 +103,7 @@ Credited to the head coach (`fact_game.home_coach` / `away_coach`). The full coa
 | Rank | Coach | Teams | Games | Cases | Per 100 games | Seconds wasted |
 |---|---|---|---|---|---|---|
 | 1 | Todd Bowles | MIA/NYJ/TB | 139 | 3 | 2.16 | 99.0 |
-| 2 | Ken Whisenhunt | ARI/TEN | 134 | 2 | 1.49 | 79.0 |
+| 2 | Ken Whisenhunt | ARI/TEN | 125 | 2 | 1.60 | 79.0 |
 | 3 | John Harbaugh | BAL | 317 | 2 | 0.63 | 76.0 |
 | 4 | Lovie Smith | CHI/HOU/TB | 166 | 2 | 1.20 | 72.0 |
 | 5 | Mike Smith | ATL | 117 | 1 | 0.85 | 78.0 |

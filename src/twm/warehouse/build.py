@@ -57,6 +57,7 @@ from twm import ids as pid
 from twm.config import FANTASY_POSITIONS, STREAMER_POSITIONS, league, settings
 from twm.sources import nflverse as nv
 from twm.warehouse import available as av
+from twm.warehouse import coach_corrections as cc
 from twm.warehouse import schema as sc
 from twm.warehouse import weeks as wk
 
@@ -516,6 +517,14 @@ def _build_fact_game(
         pl.Series("availability_game_end_utc", avail_end, dtype=pl.Datetime("us")),
     )
     stats.notes["n_kickoff_estimated"] = int(sum(est))
+    # H1b: the cited head-coach corrections, before any coach table reads these columns
+    # (gameday is the US-Eastern date of the kickoff).
+    df, applied = cc.apply_corrections(df, cc.read_corrections(cc.corrections_path()))
+    stats.notes["coach_corrections"] = applied
+    stats.notes["n_coach_team_games_corrected"] = sum(a["games"] for a in applied)
+    for a in applied:
+        log.info("fact_game: coach correction line %s (%s) changed %s team-games",
+                 a["line"], a["kind"], a["games"])  # fmt: skip
     types = _register(con, "df_fact_game", df)
     sql = f"SELECT\n  {_select_list(table, types, transforms=False)}\nFROM df_fact_game"
     out = _materialize(con, table, sql, stats, arules)
@@ -757,8 +766,8 @@ def _build_coaches(
                CAST(max(week) AS INTEGER) AS last_week, CAST(count(*) AS INTEGER) AS n_games
         FROM coach_game GROUP BY coach_id, team, season"""
     _materialize(con, sc.COACH_TEAM_SEASON, cts_sql, stats["coach_team_season"], arules)
-    # How many team-seasons show more than one coach: the schedule columns record in-season
-    # changes only through 2023 (see docs/assumptions.md), so this makes the gap visible.
+    # How many team-seasons show more than one coach after the corrections (nflverse's own
+    # columns record in-season changes only through 2023: docs/assumptions.md section 10).
     stats["coach_team_season"].notes["n_team_seasons_multi_coach"] = con.execute(
         "SELECT count(*) FROM (SELECT team, season FROM coach_team_season "
         "GROUP BY team, season HAVING count(*) > 1)"

@@ -259,8 +259,15 @@ season). The report regrades 200 stored rows per season and kind on every run.
 ## Attribution and aggregates (G3: `coach.py`)
 
 - A decision is credited to the head coach of the team with the ball in that game:
-  `fact_game.home_coach` when it is the home team, else `away_coach` (verified: `fact_play`
-  carries identical names on all 963,649 rows 2006-2026; interim coaches get their games).
+  `fact_game.home_coach` when it is the home team, else `away_coach`. Since H1b these are the
+  schedule's coaches corrected by the cited `data/manual/coach_corrections.csv`
+  (docs/warehouse.md): interim coaches the schedule misses (2015 MIA/TEN, 2016 LA, 2019 CAR,
+  2024 NYJ/NO/CHI, 2025 TEN/NYG) get their games, 2007 ATL's change moves to the right game,
+  the 2026 schedule's fired coaches (ARI, ATL, BUF) give way to their successors, and three
+  names are fixed. Re-attributing changed only `coach` / `opp_coach` and coach-keyed
+  aggregates: 878 decision rows 2006-2026 (782 graded; 2007 12, 2015 222, 2016 34, 2019 37,
+  2022 23, 2024 247, 2025 187, 2026 116), every grade, WP and input identical. (`fact_play`
+  keeps the uncorrected pbp names; nothing reads them.)
 - Per coach-season and coach-week (one game): clear fourth downs and tries, toss-ups, wrong
   clear calls, WP lost (clear only), **aggressiveness** = the go rate when going for it was
   clearly best, WP lost per game (fourth downs + tries); the worst calls with context; the

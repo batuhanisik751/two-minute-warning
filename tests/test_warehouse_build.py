@@ -343,9 +343,12 @@ def test_schema_guard_rejects_unknown_snapshot_columns():
 
 def test_cache_path_with_an_apostrophe_builds(tmp_path, monkeypatch, db_path):
     from tests.conftest import RawCache
+    from twm import ids
 
     root = tmp_path / "O'Brien" / "raw"
     monkeypatch.setattr(nv, "raw_dir", lambda: root)
+    # the committed manual files (id overrides, coach corrections) are for the real schedule
+    monkeypatch.setattr(ids, "overrides_path", lambda: tmp_path / "manual" / ids.OVERRIDES_FILE)
     cache = RawCache(root)
     cache.write_globals()
     cache.write_season(2026, [game(2026, 1, "2026-09-13", "13:00", "LV", "KC")])  # daily format

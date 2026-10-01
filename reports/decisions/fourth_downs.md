@@ -129,7 +129,7 @@ Bottom five:
 | 2 | Ben Johnson | CHI | 3 | 7 | 0 | 0.00 | 0 | 0.00 | 100% | 0.00 |
 | 3 | Brian Schottenheimer | DAL | 3 | 6 | 0 | 0.00 | 0 | 0.00 | 100% | 0.00 |
 | 4 | Dan Campbell | DET | 3 | 8 | 0 | 0.00 | 0 | 0.00 | 100% | 0.00 |
-| 5 | Klint Kubliak | LV | 3 | 10 | 0 | 0.00 | 0 | 0.00 | 100% | 0.00 |
+| 5 | Joe Brady | BUF | 3 | 7 | 0 | 0.00 | 0 | 0.00 | 100% | 0.00 |
 
 Bottom five:
 
@@ -139,7 +139,7 @@ Bottom five:
 | 29 | Mike Macdonald | SEA | 3 | 10 | 3 | 6.23 | 1 | 1.52 | 50% | 2.59 |
 | 30 | Jim Harbaugh | LAC | 3 | 11 | 5 | 10.59 | 0 | 0.00 | 25% | 3.53 |
 | 31 | Sean Payton | DEN | 3 | 7 | 5 | 11.93 | 1 | 0.00 | 0% | 3.98 |
-| 32 | Jonathan Gannon | ARI | 3 | 12 | 6 | 13.26 | 0 | 0.00 | 29% | 4.42 |
+| 32 | Mike LaFleur | ARI | 3 | 12 | 6 | 13.26 | 0 | 0.00 | 29% | 4.42 |
 
 ### Worst fourth-down calls of 2025
 
@@ -243,7 +243,7 @@ Same decisions, same sub-models and inputs; only the WP model changed (73,669 gr
 - **Fourth downs in the last 2:00 of the first half** (4,881 graded): 2,456 grades changed; clear 2,266 -> 2,005; clearly 'go' 826 -> 406; WP lost on clear calls 1894 -> 688 points.
 - **All fourth downs**: 30,687 of 73,669 grades changed; clear 32,663 -> 29,008.
 - **League trend** (fourth-down WP lost per team-game, first five -> last five seasons; slope per season): before 2.66 -> 2.36 (-0.013); after 1.72 -> 1.70 (+0.003).
-- **2025 coach ranking**: rank correlation before vs after 0.70; biggest moves: Mike Macdonald 10 -> 28; Mike McDaniel 16 -> 2; DeMeco Ryans 17 -> 30.
+- **2025 coach ranking**: rank correlation before vs after 0.69; biggest moves: Mike Macdonald 10 -> 28; Mike McDaniel 16 -> 2; DeMeco Ryans 17 -> 30.
 
 | Rank now | Coach | Team | Rank before | WP lost per game now | Before |
 |---|---|---|---|---|---|
@@ -265,13 +265,12 @@ Same decisions, same sub-models and inputs; only the WP model changed (73,669 gr
 | 16 | Kellen Moore | NO | 6 | 0.83 | 1.84 |
 | 17 | John Harbaugh | BAL | 23 | 0.88 | 3.83 |
 | 18 | Mike Vrabel | NE | 20 | 0.89 | 3.46 |
-| 19 | Dave Canales | CAR | 22 | 0.94 | 3.79 |
-| 20 | Aaron Glenn | NYJ | 19 | 0.94 | 3.14 |
-| 21 | Ben Johnson | CHI | 14 | 0.98 | 2.60 |
-| 22 | Shane Steichen | IND | 21 | 1.02 | 3.59 |
-| 23 | Brian Daboll | NYG | 31 | 1.21 | 6.38 |
-| 24 | Raheem Morris | ATL | 30 | 1.32 | 5.47 |
-| 25 | Brian Callahan | TEN | 26 | 1.33 | 4.04 |
+| 20 | Dave Canales | CAR | 22 | 0.94 | 3.79 |
+| 21 | Aaron Glenn | NYJ | 19 | 0.94 | 3.14 |
+| 22 | Ben Johnson | CHI | 14 | 0.98 | 2.60 |
+| 23 | Shane Steichen | IND | 21 | 1.02 | 3.59 |
+| 24 | Brian Daboll | NYG | 31 | 1.18 | 6.38 |
+| 25 | Raheem Morris | ATL | 30 | 1.32 | 5.47 |
 | 26 | Sean Payton | DEN | 27 | 1.37 | 4.15 |
 | 27 | Kevin O'Connell | MIN | 25 | 1.42 | 4.04 |
 | 28 | Mike Macdonald | SEA | 10 | 1.44 | 2.40 |

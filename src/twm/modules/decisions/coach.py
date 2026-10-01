@@ -1,9 +1,9 @@
 """Head-coach attribution and aggregates of the G3 grades (PROJECT_SPEC 8.4 item 5, Outputs).
 
 Every graded decision is credited to the head coach of the team with the ball in that game
-(``fact_game.home_coach`` / ``away_coach``; ``fact_play`` carries the same names on every
-row 2006-2026). Only **clear** decisions count toward a coach's WP lost; toss-ups are counted
-apart. Aggregates per coach-season and coach-week (one game):
+(``fact_game.home_coach`` / ``away_coach``: the schedule's coaches corrected by the cited
+``data/manual/coach_corrections.csv``, H1b). Only **clear** decisions count toward a coach's
+WP lost; toss-ups are counted apart. Aggregates per coach-season and coach-week (one game):
 
 - ``fourth_graded`` / ``two_point_graded``: clear decisions; ``*_toss_ups``: the others;
 - ``*_wp_lost``: sum over clear decisions of WP(best) - WP(chosen) (WP points as 0-1);

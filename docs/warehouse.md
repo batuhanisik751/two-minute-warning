@@ -39,7 +39,7 @@ before it, `dim_player` stores `public_from_utc` last): see "When is a row avail
 |---|---|---|---|
 | `fact_game` | one scheduled game, played or not (`result` NULL until played), with `kickoff_utc`, `game_end_utc_est` (= kickoff + 4 h, an estimate), `home_implied_total`/`away_implied_total` from the closing line (the betting market's expected margin and combined score right before kickoff; a team's implied total is the points the market expects it to score), `season_type`, `availability_game_end_utc` (the game end the `available_at` rules use) | `game_id` | schedules |
 | `fact_schedule` | the pre-game view of one scheduled game: only what is public once the schedule is announced (teams, week, date and time, venue, rest days). No scores, lines, coaches, weather or roof state. It is nflverse's FINAL schedule; the date/time/venue columns have their own `slot_available_at` | `game_id` | fact_game |
-| `fact_play` | one play, 153 curated columns (identifiers, game state, play descriptors, main players, nflverse model columns, context) plus the `is_garbage_time` / `is_neutral` flags. All 153 names exist in `data/schemas/pbp.json`; nothing was dropped. The last 25 (D1) say who gets the play's yards, touchdowns and lost fumbles: `pass_attempt`, `rush_attempt`, `passing_yards`, `receiving_yards`, `rushing_yards`, the lateral columns (`lateral_reception`, `lateral_rush`, `lateral_receiver_player_id`, `lateral_receiving_yards`, `lateral_rusher_player_id`, `lateral_rushing_yards`), `td_team`, `td_player_id`, the fumbler and recovery columns (`fumbled_1/2_player_id`, `fumbled_1/2_team`, `fumble_recovery_1/2_player_id`, `fumble_recovery_1/2_team`) and the returners (`kickoff_returner_player_id`, `punt_returner_player_id` and their lateral columns); every yard column is integral 1999-2026 and every team column holds current codes (checked on the cache, 2026-09-29). docs/regression_watch.md uses them to score each play | `game_id, play_id` | pbp |
+| `fact_play` | one play, 151 curated columns (identifiers, game state, play descriptors, main players, nflverse model columns, context) plus the `is_garbage_time` / `is_neutral` flags. All 151 names exist in `data/schemas/pbp.json`. The play-by-play `home_coach` / `away_coach` are left out since H1b: they are nflverse's uncorrected names, and the head coach of a game comes only from `fact_game` (corrected by `data/manual/coach_corrections.csv`). The last 25 (D1) say who gets the play's yards, touchdowns and lost fumbles: `pass_attempt`, `rush_attempt`, `passing_yards`, `receiving_yards`, `rushing_yards`, the lateral columns (`lateral_reception`, `lateral_rush`, `lateral_receiver_player_id`, `lateral_receiving_yards`, `lateral_rusher_player_id`, `lateral_rushing_yards`), `td_team`, `td_player_id`, the fumbler and recovery columns (`fumbled_1/2_player_id`, `fumbled_1/2_team`, `fumble_recovery_1/2_player_id`, `fumble_recovery_1/2_team`) and the returners (`kickoff_returner_player_id`, `punt_returner_player_id` and their lateral columns); every yard column is integral 1999-2026 and every team column holds current codes (checked on the cache, 2026-09-29). docs/regression_watch.md uses them to score each play | `game_id, play_id` | pbp |
 | `fact_player_week` | one player in one game week, every weekly stat column | `player_id, season, week, season_type` | player_stats |
 | `fact_team_week` | one team in one game week | `team, season, week, season_type` | team_stats |
 | `fact_opportunity_week` | one player in one game (2006+, C3): nflverse's ffopportunity weekly file, the actual and **expected** (`*_exp`, from ffopportunity's models) passing, rushing and receiving yards, touchdowns, two-point conversions, interceptions and receptions, plus ffopportunity's own point totals (a cross-check only). xFP = the `_exp` components re-scored with config/scoring.yaml (`twm.scoring.xfp`, docs/waiver_radar.md). `season`/`week` arrive as a string and a float upstream and are cast; `posteam` is the player's team; `season_type` comes from the game's `fact_game` row; `position` (ffopportunity's) is hidden point-in-time | `game_id, player_id` | ff_opportunity |
@@ -58,17 +58,27 @@ before it, `dim_player` stores `public_from_utc` last): see "When is a row avail
 | `bridge_player_id` | one id of another system (`id_type`, `source_id`) and the `gsis_id` it belongs to, with the `method` that linked it, `n_candidates` and `is_conflict`; see "Player IDs" | `id_type, source_id` | players, rosters_weekly, ff_playerids, data/manual |
 | `report_id_coverage` | the unmatched-id report, part 1: rows and distinct ids per dataset, season, id type and scope (`all`, `fantasy` = QB/RB/WR/TE) and how many map to a `gsis_id` (bookkeeping, rebuilt on every build) | `dataset, season, id_type, scope` | the build + raw cache |
 | `report_id_unmatched` | the unmatched-id report, part 2: every unmatched id with a name, plus suspect links (usage contradicts the link), ambiguous ids, conflicts, name-pass links and players with several ids of one type (`kind`) | `kind, dataset, id_type, source_id` | the build + raw cache |
-| `dim_coach` | one head coach; `coach_id` is a slug (`mike_mccarthy`) and spellings that share a slug are merged into one row (`coach_name` = whitespace collapsed, alphabetically first spelling; merges listed in `build_manifest.notes.merged_spellings`). Interim coaches the schedule never names (2024+) are absent | `coach_id` | fact_game |
-| `coach_game` | one team in one game and the head coach the schedule lists for it (unplayed games included). The schedule columns record mid-season changes through 2023 but not in 2024-2025 (TEN/NYG 2025, NYJ/CHI/NO 2024 show the fired coach all season), so interim coaches are missing there | `game_id, team` | fact_game |
-| `coach_team_season` | one coach-team-season as listed in the schedule: first/last scheduled week and `n_games` = games scheduled (played or not, playoffs included; 17 already for every 2026 coach). Point-in-time since B2: a stint row appears only once the stint is over (season end, or the next coach's first kickoff), so at an in-season as-of the current coach has no row here; count `coach_game` rows through `AsOfView` for games coached to date. A team has more than one row only when nflverse recorded the change (2000-2023) | `coach_id, team, season` | coach_game |
+| `dim_coach` | one head coach; `coach_id` is a slug (`mike_mccarthy`) and spellings that share a slug are merged into one row (`coach_name` = whitespace collapsed, alphabetically first spelling; merges listed in `build_manifest.notes.merged_spellings`). Names are the corrected `fact_game` coaches (`data/manual/coach_corrections.csv`, below) | `coach_id` | fact_game |
+| `coach_game` | one team in one game and its head coach (unplayed games included): the schedule's coach, corrected by the cited `data/manual/coach_corrections.csv` (below) | `game_id, team` | fact_game |
+| `coach_team_season` | one coach-team-season as listed in the schedule: first/last scheduled week and `n_games` = games scheduled (played or not, playoffs included; 17 already for every 2026 coach). Point-in-time since B2: a stint row appears only once the stint is over (season end, or the next coach's first kickoff), so at an in-season as-of the current coach has no row here; count `coach_game` rows through `AsOfView` for games coached to date. A team has more than one row when the corrected schedule records an in-season change (nflverse's own columns stop doing so after 2023) | `coach_id, team, season` | coach_game |
 | `dim_week` | one (season, week, season_type) that appears in the schedule, with the official as-of timestamps (point-in-time, a week's game counts are masked until its own as-of) | `season, week, season_type` | fact_game |
 | `build_manifest` | one built table: rows, content hash, seasons, dropped-row counts, versions (bookkeeping: not part of the as-of view) | `table_name` | the build |
 
-Hot-Seat firing labels (H1/H2) must therefore combine the schedule's coach changes (reliable
-2000-2023) with an owner-verified manual file (`data/manual/coach_departures.csv`, to be created
-in the Hot-Seat step) for 2024 onward; `build_manifest.notes.n_team_seasons_multi_coach` on
-`coach_team_season` shows how many team-seasons the schedule itself splits. Evidence per season
-is in `docs/assumptions.md` section 10.
+**Coach columns are corrected (H1b).** nflverse's `home_coach` / `away_coach` are not exact:
+from 2024 they list one coach per team all season (in-season firings missing), and before 2024
+they also miss a few firings (2015 MIA/TEN, 2016 LA, 2019 CAR), move one a game early (2007 ATL)
+and misspell names; the 2026 schedule lists three coaches fired in January. The build therefore
+applies `data/manual/coach_corrections.csv` (committed; every row cites a public page with a
+quote; kinds `season`, `from_date`, `rename`; module `twm.warehouse.coach_corrections`) to
+`fact_game.home_coach` / `away_coach` BEFORE `coach_game`, `dim_coach` and `coach_team_season`,
+so every coach table, the Decision Report Card and the Hot-Seat candidates agree. A row that
+matches no game, changes nothing, names a `coach_out` the schedule does not list, or overlaps
+another row stops the build; `build_manifest.notes.coach_corrections` on `fact_game` lists each
+applied row with its team-game count (`n_coach_team_games_corrected`: 192 at H1b).
+`available_at` is unchanged. `fact_play.home_coach` / `away_coach` keep the raw pbp names
+(nothing reads them). Hot-Seat labels still come from the owner-verified
+`data/manual/coach_departures.csv`; `n_team_seasons_multi_coach` counts the corrected
+splits. Evidence per season is in `docs/assumptions.md` section 10.
 
 A schedule row mixes three availabilities: the fixture itself is known months ahead; the
 closing lines (`spread_line`, `total_line`, the implied totals) exist only just before kickoff
@@ -410,7 +420,7 @@ not treat a future week's game count, bye or split flag as known in advance for 
 on `dim_player`: draft / first_fact_row / never) and `n_available_after_week_asof`: rows not yet
 public at their own week's Tuesday as-of. On the full 1999-2026 build that is 6 games (the five
 split weeks) and their plays/stats/snaps, 16 injury rows stamped after their week's as-of, 12
-`coach_game` rows (split-week games) and 43 coaching stints that ended with a change; 0 for
+`coach_game` rows (split-week games) and 52 coaching stints that ended with a change (43 before the H1b coach corrections); 0 for
 `fact_schedule` and `fact_depth_chart`. `fact_schedule` also notes `n_schedule_exceptions`,
 `n_slot_last_two_reg_weeks`, `cancelled_games` and `schedule_exceptions_not_found` (a listed
 game the built seasons do not have: a config typo or an nflverse change).
@@ -878,7 +888,9 @@ into the new file. `twm.warehouse.connect()` opens read-only by default for that
    the Wild Card week (see `fact_depth_chart` above).
 3. **`dim_coach.coach_id` is a slug of the name** (`mike_mccarthy`): two different coaches with
    the same spelling would merge, and an upstream spelling fix changes an ID. Stable only while
-   nflverse spelling is stable; H1 may replace it with a manual coach table. Likewise team codes
+   nflverse spelling is stable. H1b fixes the known cases with `rename` rows of
+   `data/manual/coach_corrections.csv` (Kubliak, Rosburg, and IND's Jim E. Mora, who shared
+   `jim_mora` with Jim L. Mora). Likewise team codes
    follow play-by-play (LA/LAC/LV) with raw codes kept only where the source differed
    (`schema.TEAM_ALIASES`), a policy the B3 ID map and any external join must follow.
 4. **B2: `fact_game` is available as a whole at game end** and a separate `fact_schedule` holds

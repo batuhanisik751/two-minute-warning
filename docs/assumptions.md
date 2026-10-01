@@ -396,17 +396,27 @@ in step F2.
   2025 0, 2026 0 (so far). Query, per season file:
   `SELECT count(*) FROM (SELECT season, team FROM (SELECT season, home_team AS team, home_coach AS
   coach FROM s UNION ALL SELECT season, away_team, away_coach FROM s) WHERE coach IS NOT NULL
-  GROUP BY season, team HAVING count(DISTINCT coach) > 1)`. Consequence for the warehouse:
-  `coach_game` / `coach_team_season` / `dim_coach` are exact for 2000-2023 and miss interim
-  coaches from 2024 on; the Hot-Seat firing labels must combine them with an owner-verified
-  manual file (`data/manual/coach_departures.csv`, Hot-Seat step) for 2024+. The build records
-  `n_team_seasons_multi_coach` in `build_manifest.notes` so the gap stays visible.
-  **H1 correction (2026-10-01, from the Wikipedia season pages cited in
-  `data/manual/coach_departures.csv`):** 2000-2023 is not exact either: 2015 MIA (Philbin), 2015
-  TEN (Whisenhunt), 2016 LA (Fisher) and 2019 CAR (Rivera) were fired in season but are listed
-  all season; and the 2026 schedule still lists Gannon (ARI), Morris (ATL) and McDermott (BUF),
-  reported fired in January 2026 (so 2026 coach attribution for those teams is wrong). The owner
-  file, not the schedule, is the source of truth for departures (docs/labeling_coaches.md).
+  GROUP BY season, team HAVING count(DISTINCT coach) > 1)` (these are the raw schedule counts,
+  before the corrections below). The build records `n_team_seasons_multi_coach` in
+  `build_manifest.notes` (after the corrections).
+  **H1/H1b correction (2026-10-01):** the schedule is not exact before 2024 either, so the build
+  corrects it from a committed, cited file, `data/manual/coach_corrections.csv` (H1b; every row
+  has a public page and a quote of at most 25 words, `checked_by` = `claude: source`; module
+  `twm.warehouse.coach_corrections`), applied to `fact_game.home_coach` / `away_coach` before
+  `coach_game`, `dim_coach` and `coach_team_season` are built, so the Decision Report Card and
+  the Hot-Seat candidates use the corrected coaches. 16 rows: in-season firings the schedule
+  misses (2015 MIA Philbin -> Dan Campbell, 2015 TEN Whisenhunt -> Mike Mularkey, 2016 LA Fisher
+  -> John Fassel, 2019 CAR Rivera -> Perry Fewell, 2024 NYJ/NO/CHI, 2025 TEN/NYG), one change
+  the schedule records a game early (2007 ATL: Petrino coached the 12-10 game, resigned 12-11),
+  the 2026 schedule's fired coaches (ARI Gannon -> Mike LaFleur, ATL Morris -> Kevin Stefanski,
+  BUF McDermott -> Joe Brady) and three names (Klint Kubliak -> Kubiak, Jay -> Jerry Rosburg,
+  and IND 1999-2001 Jim Mora -> Jim E. Mora, a different man from Jim L. Mora of ATL/SEA who
+  shared the slug `jim_mora`); 192 team-games change. Every other in-season change in the owner
+  file was checked against the pages: the schedule's week is right. NOT corrected (not
+  departures, not checked game by game): stand-ins during a medical leave (e.g. 2012 IND
+  Arians, 2013 DEN Del Rio; the schedule keeps the head coach, but switches 2005 LA Martz ->
+  Vitt at his leave). A row the schedule no longer needs stops the build (remove it). The owner
+  file, not the schedule, stays the source of truth for departures (docs/labeling_coaches.md).
 - **End-of-regular-season as-of vs Sunday-evening announcements.** `dim_week.
   asof_end_of_regular_season_utc` is the morning after the last REG game date (12:00 UTC), per
   config and spec 6.1. Some departures are announced on the Sunday evening of the finale (New

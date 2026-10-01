@@ -18,6 +18,15 @@ pages). A prefilled value is only a suggestion (`prefill = suggested`) until you
 `verified_by_owner`. When the research could not settle a value it is left empty and
 `prefill_note` says why.
 
+## How to edit the file
+
+Any spreadsheet app works; on a Mac, Numbers: open `coach_departures.csv`, edit, then
+**File > Export To > CSV...** and save it over the same file (Numbers does not save CSV with a
+plain Save). Spreadsheet apps like to rewrite dates (`2003-12-17` becomes `12/17/2003`): if a
+date you did not touch changes, type it back as `YYYY-MM-DD`. Do not sort away or delete
+columns. After every session run `uv run twm hotseat check-labels`: it reports any date in the
+wrong form, an unknown type or a verified row without a URL, so nothing breaks silently.
+
 ## Columns you will look at
 
 - `team`, `coach_name`, `last_season`: who left, and the last season he coached there.

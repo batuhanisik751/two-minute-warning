@@ -1327,6 +1327,124 @@ def _grade_entries() -> list[Entry]:
     ]  # fmt: skip
 
 
+def _hot_seat_entries() -> list[Entry]:
+    """H3a: the Hot-Seat features (twm.modules.hot_seat.features; docs/hot_seat.md). One row per
+    head coach x team x as-of; "to date" = the team's regular-season games of the season whose
+    rows are public at the as-of (Tuesday 14:00 UTC after week N, or the end-of-season one)."""
+    hs = "twm.modules.hot_seat.features"
+    feats = [
+        ("reg_games_played", "Games played to date", "games",
+         "the team's played regular-season games of the season visible at the as-of (fact_game)",
+         "How many games the team has played so far this season."),
+        ("reg_wins", "Wins to date", "wins", "regular-season wins to date, a tie = 0.5",
+         "The team's wins so far, ties counting as half a win."),
+        ("expected_wins", "Market-expected wins to date", "wins",
+         "sum over the games to date of the team's pregame win probability: de-vigged closing "
+         "moneylines p = (1/o_team) / (1/o_team + 1/o_opp) on decimal odds (American +150 -> "
+         "2.5, -200 -> 1.5); a game without both moneylines uses 1 / (1 + exp(-k x spread_line)) "
+         "(home side; k fit by maximum likelihood on every played game of the seasons before, "
+         "ties out); NULL if a game has neither",
+         "How many games the betting market expected the team to have won by now."),
+        ("wins_vs_expected", "Wins vs market expectation", "wins",
+         "reg_wins - expected_wins",
+         "Positive: the team has won more than the market expected; negative: fewer."),
+        ("point_diff_per_game", "Point differential per game", "points per game",
+         "(points scored - points allowed) / games, regular season to date",
+         "By how much the team outscores (or is outscored by) its opponents on average."),
+        ("pythagorean_wins", "Pythagorean wins", "wins",
+         "games x PF^e / (PF^e + PA^e), e = hot_seat.pythagorean_exponent (2.37, the NFL "
+         "exponent Football Outsiders uses); NULL when PF + PA = 0",
+         "The wins a team 'deserves' from its points scored and allowed."),
+        ("pythag_minus_wins", "Pythagorean wins minus wins", "wins",
+         "pythagorean_wins - reg_wins",
+         "Positive: the team has been unlucky in close games; negative: lucky."),
+        ("off_epa_neutral", "Offensive EPA per play (neutral)", "points per play",
+         "sum(epa) / plays over the team's run and pass plays (no two-point tries) in neutral "
+         "situations (fact_play.is_neutral), games to date; plays weighted equally",
+         "How efficient the offense is when the score does not force its hand."),
+        ("def_epa_neutral", "Defensive EPA per play allowed (neutral)", "points per play",
+         "as off_epa_neutral for the opponents' plays against the team (defteam); higher = worse",
+         "How efficient opponents are against this defense; lower is better."),
+        ("off_epa_neutral_trend", "Offensive EPA trend", "points per play",
+         "off_epa_neutral over the team's last hot_seat.trend_games (4) games minus the season "
+         "to date; NULL until the team has played more than 4 games",
+         "Positive: the offense has been better lately than over the whole season."),
+        ("def_epa_neutral_trend", "Defensive EPA trend", "points per play",
+         "def_epa_neutral over the last 4 games minus the season to date (NULL until more than 4 "
+         "games); positive = the defense has been worse lately",
+         "Positive: the defense has been allowing more lately than over the whole season."),
+    ]  # fmt: skip
+    feats += [
+        ("tenure_seasons", "Coach tenure", "seasons",
+         "seasons of the coach's current stint with the team, this one included: consecutive "
+         "seasons back from this one in which he coached it a game (coach_game, kickoff <= as-of)",
+         "How long the coach has been in charge of this team."),
+        ("is_first_year_coach", "First-year coach", "boolean", "tenure_seasons = 1",
+         "The coach is in his first season with this team."),
+        ("is_second_year_coach", "Second-year coach", "boolean", "tenure_seasons = 2",
+         "The coach is in his second season with this team."),
+        ("tenure_censored", "Tenure starts before the data", "boolean",
+         "the current stint reaches the warehouse's first season (1999), so the true tenure "
+         "may be longer than tenure_seasons",
+         "The coach was already in charge when our data begins; his tenure is a minimum."),
+        ("prev_season_wins", "Previous season wins", "wins",
+         "the team's regular-season wins last season (ties 0.5), whoever coached; NULL for a "
+         "team without games last season",
+         "How the team did last year."),
+        ("prev_playoff_round", "Previous season playoff result", "round (0-5)",
+         "last season: 0 no playoffs, 1 lost wild card, 2 lost divisional, 3 lost conference, "
+         "4 lost Super Bowl, 5 won it (text in prev_playoff_result)",
+         "How far the team went in last season's playoffs."),
+        ("consecutive_losing_seasons", "Consecutive losing seasons", "seasons",
+         "seasons right before this one, counted back until one is not losing or not coached by "
+         "him, in which the coach coached the team and its regular-season win share (ties 0.5) "
+         "was < 0.5",
+         "How many losing seasons in a row the coach has had with this team before this one."),
+        ("division_rank", "Division rank", "rank (1 = best)",
+         "rank in the division (dim_team.team_division) by win share (wins + 0.5 ties) / games "
+         "to date among the division's teams with a game; tied teams share the better rank",
+         "Where the team stands in its division right now."),
+        ("games_remaining", "Games remaining", "games",
+         "season length (the most regular-season games any team has in the visible schedule) - "
+         "games played - a listed cancelled game once gone (2022 BUF/CIN after week 17)",
+         "How many regular-season games the team still has to play."),
+        ("starting_qb_changes", "Starting-QB changes", "changes",
+         "distinct starting QBs (fact_game home/away_qb_id) in the games to date minus 1",
+         "How many different quarterbacks beyond the first have started this season."),
+        ("rookie_r1_qb_on_roster", "Rookie first-round QB", "boolean",
+         "a QB (fact_roster_week.position) on the team's latest visible weekly roster of the "
+         "season (status not CUT/RET/UFA/TRD) was a first-round pick of this year's draft "
+         "(dim_player draft_round = 1, draft_year = season); NULL without a visible roster",
+         "The team drafted its quarterback of the future: owners tend to be patient."),
+        ("took_over_mid_season", "Took over mid-season", "boolean",
+         "the team's first played regular-season game this season had another coach",
+         "The coach replaced someone during this season (usually an interim coach)."),
+        ("fourth_down_wp_lost_per_game", "Fourth-down WP lost per game", "probability (0-1)",
+         "sum of wp_lost on the team's clear (graded) fourth downs in its games to date / games "
+         "to date, from the stored Decision Report Card grades (never regraded); NULL before "
+         "2006 or when one of the games has no grades",
+         "How much win probability the coach's fourth-down calls have cost per game."),
+    ]  # fmt: skip
+    out = [Entry(name=n, title=t, kind="feature", modules=("hot_seat",), unit=u, formula=f,
+                 explanation=e, source=hs, step="H3a") for n, t, u, f, e in feats]  # fmt: skip
+    out += [
+        Entry(name="is_interim", title="Interim coach (row flag)", kind="concept",
+              modules=("hot_seat",), unit="boolean",
+              formula="took_over_mid_season OR the owner's data/manual/coach_departures.csv says "
+              "the coach-team-season was interim (departure_type interim_not_retained or "
+              "interim_suspected true)",
+              explanation="Interim coaches are left out of training (spec 8.5). Uses the owner's "
+              "hindsight file, so it selects rows and is never a model feature.",
+              source=hs, step="H3a"),
+        Entry(name="prev_playoff_result", title="Previous playoff result (text)", kind="concept",
+              modules=("hot_seat",), unit="text",
+              formula="prev_playoff_round as text: none, lost_wc, lost_div, lost_conf, lost_sb, "
+              "won_sb",
+              explanation="Last season's playoff exit, spelled out.", source=hs, step="H3a"),
+    ]  # fmt: skip
+    return out
+
+
 def _clock_entries() -> list[Entry]:
     """G4: the clock-management metrics (twm.modules.decisions.clock; definitions in
     docs/decision_metrics.md, "Clock management"; thresholds in settings decisions.clock)."""
@@ -1775,6 +1893,7 @@ def _entries() -> list[Entry]:
         *_submodel_entries(),
         *_grade_entries(),
         *_clock_entries(),
+        *_hot_seat_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
             name="weekly_pos_rank",

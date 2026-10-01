@@ -197,3 +197,16 @@ decisions:
     # ... and attacking worth >= this many net points (G1b half_value; 1.0 = a third of a field
     # goal, >= 4.5 standard errors of the table's cells there; never the usual touchback kneel)
     passivity_min_ep: 1.0
+
+# The Hot-Seat Meter's features (step H3a; definitions in docs/hot_seat.md).
+hot_seat:
+  # end-of-regular-season snapshot: `asof` = dim_week.asof_end_of_regular_season_utc (the Monday
+  # 12:00 UTC after the last regular-season game day; spec 6.1 default) or `last_game_end` = each
+  # team's own last regular-season game, once that game's rows are public. Owner decision
+  # 2026-10-01: last_game_end (a firing announced the evening of the finale counts).
+  end_of_season_anchor: last_game_end
+  # Pythagorean wins exponent: 2.37, the NFL value Football Outsiders uses
+  # (https://en.wikipedia.org/wiki/Pythagorean_expectation, "American football")
+  pythagorean_exponent: 2.37
+  # neutral EPA trend = the last <trend_games> games minus the season to date
+  trend_games: 4

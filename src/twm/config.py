@@ -455,6 +455,36 @@ class DecisionsConfig(BaseModel):
         return v
 
 
+class HotSeatConfig(BaseModel):
+    """``hot_seat:`` in settings.yaml: the Hot-Seat features (H3a, docs/hot_seat.md)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # The end-of-regular-season snapshot's as-of: ``asof`` = dim_week's
+    # asof_end_of_regular_season_utc (spec 6.1, the default); ``last_game_end`` = each team's own
+    # last regular-season game, at the moment that game's rows are public (owner decides at H3).
+    end_of_season_anchor: Literal["asof", "last_game_end"] = "asof"
+    # Pythagorean wins = games x PF^e / (PF^e + PA^e); 2.37 = the NFL exponent Football Outsiders
+    # uses (en.wikipedia.org/wiki/Pythagorean_expectation, American football section).
+    pythagorean_exponent: float = 2.37
+    # The EPA trend compares the team's last this-many games with its season to date.
+    trend_games: int = 4
+
+    @field_validator("pythagorean_exponent")
+    @classmethod
+    def _exponent(cls, v: float) -> float:
+        if not 1 <= v <= 5:
+            raise ValueError(f"hot_seat.pythagorean_exponent = {v}: must be 1-5")
+        return v
+
+    @field_validator("trend_games")
+    @classmethod
+    def _trend(cls, v: int) -> int:
+        if not 2 <= v <= 8:
+            raise ValueError(f"hot_seat.trend_games = {v}: must be 2-8")
+        return v
+
+
 class Settings(BaseModel):
     project_name: str
     current_season: int
@@ -468,6 +498,7 @@ class Settings(BaseModel):
     pipeline: PipelineConfig = PipelineConfig()
     publish: PublishConfig = PublishConfig()
     decisions: DecisionsConfig = DecisionsConfig()
+    hot_seat: HotSeatConfig = HotSeatConfig()
 
     def path(self, key: str) -> Path:
         return ROOT / getattr(self.paths, key)

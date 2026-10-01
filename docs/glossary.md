@@ -764,6 +764,22 @@ The share of his team's runs he got last game.
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.carries, fact_team_week.carries
 - **Waiver Radar reason:** "Got {value:.0%} of his team's carries last game"
 
+### Coach tenure
+
+How long the coach has been in charge of this team.
+
+- **Name:** `tenure_seasons`; **unit:** seasons; **used by:** hot_seat
+- **Formula:** seasons of the coach's current stint with the team, this one included: consecutive seasons back from this one in which he coached it a game (coach_game, kickoff <= as-of)
+- **Source:** twm.modules.hot_seat.features
+
+### Consecutive losing seasons
+
+How many losing seasons in a row the coach has had with this team before this one.
+
+- **Name:** `consecutive_losing_seasons`; **unit:** seasons; **used by:** hot_seat
+- **Formula:** seasons right before this one, counted back until one is not losing or not coached by him, in which the coach coached the team and its regular-season win share (ties 0.5) was < 0.5
+- **Source:** twm.modules.hot_seat.features
+
 ### Defense and return touchdowns per game
 
 Touchdowns scored by the defense or the return teams: rare, but worth a lot.
@@ -780,6 +796,22 @@ The other team's timeouts: they can stop the clock to get the ball back.
 - **Name:** `defteam_timeouts_remaining`; **unit:** 0-3; **used by:** decisions
 - **Formula:** the defense's timeouts left in the half, before the snap
 - **Source:** fact_play.defteam_timeouts_remaining; twm.modules.decisions.wp_data
+
+### Defensive EPA per play allowed (neutral)
+
+How efficient opponents are against this defense; lower is better.
+
+- **Name:** `def_epa_neutral`; **unit:** points per play; **used by:** hot_seat
+- **Formula:** as off_epa_neutral for the opponents' plays against the team (defteam); higher = worse
+- **Source:** twm.modules.hot_seat.features
+
+### Defensive EPA trend
+
+Positive: the defense has been allowing more lately than over the whole season.
+
+- **Name:** `def_epa_neutral_trend`; **unit:** points per play; **used by:** hot_seat
+- **Formula:** def_epa_neutral over the last 4 games minus the season to date (NULL until more than 4 games); positive = the defense has been worse lately
+- **Source:** twm.modules.hot_seat.features
 
 ### Depth-chart move
 
@@ -807,6 +839,14 @@ Where the team lists him at his position: 1 is the starter.
 - **Formula:** on his team's depth chart in force at the as-of (daily charts 2025+: the team's latest snapshot with dt <= as-of; weekly charts: the latest visible week's chart), 1 + the number of players of his position group with a better (lower) depth rank in any offensive slot of the group; ties share the better rank. Slots map to groups by twm.modules.waiver_radar.features.slot_group (QB; RB, HB, FB, J; WR, LWR, RWR, SWR, WR1/WR2, WRE, WE; TE, LTE, RTE, H-B, F and combined slots with TE). NULL when he is not in a slot of his group
 - **Source:** twm.modules.waiver_radar.features; fact_depth_chart.position, depth_rank
 - **Waiver Radar reason:** "Is No. {value:.0f} at {pos} on his team's depth chart"
+
+### Division rank
+
+Where the team stands in its division right now.
+
+- **Name:** `division_rank`; **unit:** rank (1 = best); **used by:** hot_seat
+- **Formula:** rank in the division (dim_team.team_division) by win share (wins + 0.5 ties) / games to date among the division's teams with a game; tied teams share the better rank
+- **Source:** twm.modules.hot_seat.features
 
 ### Down
 
@@ -929,6 +969,14 @@ How long the kick would be, known before the snap.
 - **Formula:** yardline_100 + 18 (10 yards of end zone + the hold about 8 yards behind the line; fact_play.kick_distance - yardline_100 is 18 on 88% of 2023-2025 kicks, 19 on 12%)
 - **Source:** fact_play.yardline_100; twm.modules.decisions.fieldgoal
 
+### First-year coach
+
+The coach is in his first season with this team.
+
+- **Name:** `is_first_year_coach`; **unit:** boolean; **used by:** hot_seat
+- **Formula:** tenure_seasons = 1
+- **Source:** twm.modules.hot_seat.features
+
 ### Fourth down
 
 Separates fourth-down tries (a chosen gamble) from third downs (which add sample).
@@ -936,6 +984,14 @@ Separates fourth-down tries (a chosen gamble) from third downs (which add sample
 - **Name:** `is_fourth_down`; **unit:** boolean (0/1); **used by:** decisions
 - **Formula:** 1 when down = 4, 0 on third down
 - **Source:** fact_play.down; twm.modules.decisions.conversion
+
+### Fourth-down WP lost per game
+
+How much win probability the coach's fourth-down calls have cost per game.
+
+- **Name:** `fourth_down_wp_lost_per_game`; **unit:** probability (0-1); **used by:** hot_seat
+- **Formula:** sum of wp_lost on the team's clear (graded) fourth downs in its games to date / games to date, from the stored Decision Report Card grades (never regraded); NULL before 2006 or when one of the games has no grades
+- **Source:** twm.modules.hot_seat.features
 
 ### Games played this season
 
@@ -946,6 +1002,14 @@ How many games he has a stat line in so far.
 - **Source:** twm.modules.waiver_radar.features; twm.modules.waiver_radar.pool
 - **Waiver Radar reason:** "Has played in {value:.0f} games this season"
 
+### Games played to date
+
+How many games the team has played so far this season.
+
+- **Name:** `reg_games_played`; **unit:** games; **used by:** hot_seat
+- **Formula:** the team's played regular-season games of the season visible at the as-of (fact_game)
+- **Source:** twm.modules.hot_seat.features
+
 ### Games remaining
 
 How much season is left to use him.
@@ -954,6 +1018,14 @@ How much season is left to use him.
 - **Formula:** his team's regular-season fixtures after week N (fact_schedule, plus listed cancelled games)
 - **Source:** twm.modules.waiver_radar.features; fact_schedule
 - **Waiver Radar reason:** "His team has {value:.0f} games left this season"
+
+### Games remaining
+
+How many regular-season games the team still has to play.
+
+- **Name:** `games_remaining`; **unit:** games; **used by:** hot_seat
+- **Formula:** season length (the most regular-season games any team has in the visible schedule) - games played - a listed cancelled game once gone (2022 BUF/CIN after week 17)
+- **Source:** twm.modules.hot_seat.features
 
 ### Gets the ball after halftime
 
@@ -1082,6 +1154,14 @@ Long kicks score more fantasy points than short ones in the default scoring.
 - **Source:** twm.modules.streamer.features; fact_kicker_week.fg_made_40_49, fact_kicker_week.fg_missed_40_49, fact_kicker_week.fg_made_50_59, fact_kicker_week.fg_made_60_
 - **Streamer reason:** "Tries {value:.1f} field goals of 40+ yards per game (long kicks score more)"
 
+### Market-expected wins to date
+
+How many games the betting market expected the team to have won by now.
+
+- **Name:** `expected_wins`; **unit:** wins; **used by:** hot_seat
+- **Formula:** sum over the games to date of the team's pregame win probability: de-vigged closing moneylines p = (1/o_team) / (1/o_team + 1/o_opp) on decimal odds (American +150 -> 2.5, -200 -> 1.5); a game without both moneylines uses 1 / (1 + exp(-k x spread_line)) (home side; k fit by maximum likelihood on every played game of the seasons before, ties out); NULL if a game has neither
+- **Source:** twm.modules.hot_seat.features
+
 ### New team this season
 
 He changed teams during the season (trade or signing).
@@ -1196,6 +1276,22 @@ Timeouts stop the clock: a trailing team with timeouts has more time to come bac
 - **Formula:** the possession team's timeouts left in the half, before the snap
 - **Source:** fact_play.posteam_timeouts_remaining; twm.modules.decisions.wp_data
 
+### Offensive EPA per play (neutral)
+
+How efficient the offense is when the score does not force its hand.
+
+- **Name:** `off_epa_neutral`; **unit:** points per play; **used by:** hot_seat
+- **Formula:** sum(epa) / plays over the team's run and pass plays (no two-point tries) in neutral situations (fact_play.is_neutral), games to date; plays weighted equally
+- **Source:** twm.modules.hot_seat.features
+
+### Offensive EPA trend
+
+Positive: the offense has been better lately than over the whole season.
+
+- **Name:** `off_epa_neutral_trend`; **unit:** points per play; **used by:** hot_seat
+- **Formula:** off_epa_neutral over the team's last hot_seat.trend_games (4) games minus the season to date; NULL until the team has played more than 4 games
+- **Source:** twm.modules.hot_seat.features
+
 ### On the depth chart
 
 Whether the team lists him at all.
@@ -1230,6 +1326,14 @@ Where his points per game rank at his position so far.
 - **Formula:** rank of ppg_to_date within his roster position among roster players with a game (ties share the better rank; the candidate pool's ppg_pos_rank)
 - **Source:** twm.modules.waiver_radar.features; twm.modules.waiver_radar.pool
 - **Waiver Radar reason:** "Ranks No. {value:.0f} among {pos}s in points per game this season"
+
+### Point differential per game
+
+By how much the team outscores (or is outscored by) its opponents on average.
+
+- **Name:** `point_diff_per_game`; **unit:** points per game; **used by:** hot_seat
+- **Formula:** (points scored - points allowed) / games, regular season to date
+- **Source:** twm.modules.hot_seat.features
 
 ### Points allowed per game (ESPN rule)
 
@@ -1273,6 +1377,38 @@ Where the player stood before the season: experts' consensus ranking (ECR) when 
 - **Formula:** 2020 on (method ecr): the player's rank among his position's players on FantasyPros' last August/September redraft cheat sheet of that position before the season's first game (fact_ranking.pos_rank, page_kind preseason); not on his roster position's sheet: his rank on his own FantasyPros position's sheet, judged against that position's cutoff. 2013-2019 (method prior_ppg): his rank by last season's regular-season PPG among players of his current roster position with at least 4 games; ties share the better rank
 - **Source:** fact_ranking.pos_rank; fact_player_week for last season's PPG
 - **Waiver Radar reason:** "Was ranked No. {value:.0f} among {pos}s before the season"
+
+### Previous season playoff result
+
+How far the team went in last season's playoffs.
+
+- **Name:** `prev_playoff_round`; **unit:** round (0-5); **used by:** hot_seat
+- **Formula:** last season: 0 no playoffs, 1 lost wild card, 2 lost divisional, 3 lost conference, 4 lost Super Bowl, 5 won it (text in prev_playoff_result)
+- **Source:** twm.modules.hot_seat.features
+
+### Previous season wins
+
+How the team did last year.
+
+- **Name:** `prev_season_wins`; **unit:** wins; **used by:** hot_seat
+- **Formula:** the team's regular-season wins last season (ties 0.5), whoever coached; NULL for a team without games last season
+- **Source:** twm.modules.hot_seat.features
+
+### Pythagorean wins
+
+The wins a team 'deserves' from its points scored and allowed.
+
+- **Name:** `pythagorean_wins`; **unit:** wins; **used by:** hot_seat
+- **Formula:** games x PF^e / (PF^e + PA^e), e = hot_seat.pythagorean_exponent (2.37, the NFL exponent Football Outsiders uses); NULL when PF + PA = 0
+- **Source:** twm.modules.hot_seat.features
+
+### Pythagorean wins minus wins
+
+Positive: the team has been unlucky in close games; negative: lucky.
+
+- **Name:** `pythag_minus_wins`; **unit:** wins; **used by:** hot_seat
+- **Formula:** pythagorean_wins - reg_wins
+- **Source:** twm.modules.hot_seat.features
 
 ### Ranked before the season
 
@@ -1337,6 +1473,14 @@ First-year players often earn more snaps as the season goes on.
 - **Source:** twm.modules.waiver_radar.features; fact_roster_week.entry_year
 - **Waiver Radar reason:** "Is a rookie: first-year players often earn more snaps as the season goes on"
 
+### Rookie first-round QB
+
+The team drafted its quarterback of the future: owners tend to be patient.
+
+- **Name:** `rookie_r1_qb_on_roster`; **unit:** boolean; **used by:** hot_seat
+- **Formula:** a QB (fact_roster_week.position) on the team's latest visible weekly roster of the season (status not CUT/RET/UFA/TRD) was a first-round pick of this year's draft (dim_player draft_round = 1, draft_year = season); NULL without a visible roster
+- **Source:** twm.modules.hot_seat.features
+
 ### Routes proxy
 
 About how many pass plays he was on the field for: a stand-in for routes run, which nflverse does not publish.
@@ -1362,6 +1506,14 @@ How far ahead (positive) or behind (negative) the team with the ball is.
 - **Name:** `score_differential`; **unit:** points; **used by:** decisions
 - **Formula:** possession team's score minus the defense's, before the snap
 - **Source:** fact_play.score_differential; twm.modules.decisions.wp_data
+
+### Second-year coach
+
+The coach is in his second season with this team.
+
+- **Name:** `is_second_year_coach`; **unit:** boolean; **used by:** hot_seat
+- **Formula:** tenure_seasons = 2
+- **Source:** twm.modules.hot_seat.features
 
 ### Seconds left in the game
 
@@ -1431,6 +1583,14 @@ The pregame expectation fades as the game goes on; this lets the model weigh it 
 - **Name:** `spread_time`; **unit:** points; **used by:** decisions
 - **Formula:** posteam_spread x exp(-4 x elapsed share of regulation; overtime = 1)
 - **Source:** fact_game.spread_line, fact_play.game_seconds_remaining; twm.modules.decisions.wp_data
+
+### Starting-QB changes
+
+How many different quarterbacks beyond the first have started this season.
+
+- **Name:** `starting_qb_changes`; **unit:** changes; **used by:** hot_seat
+- **Formula:** distinct starting QBs (fact_game home/away_qb_id) in the games to date minus 1
+- **Source:** twm.modules.hot_seat.features
 
 ### Takeaways per game
 
@@ -1548,6 +1708,22 @@ Cold air and a hard ball make long kicks shorter.
 - **Formula:** fact_game.temp, else the 'Temp: N' in fact_play.weather; indoors = 70; still unknown outdoors -> NULL, filled with the median of the training rows' outdoor games
 - **Source:** fact_game.temp, fact_play.weather; twm.modules.decisions.fieldgoal
 
+### Tenure starts before the data
+
+The coach was already in charge when our data begins; his tenure is a minimum.
+
+- **Name:** `tenure_censored`; **unit:** boolean; **used by:** hot_seat
+- **Formula:** the current stint reaches the warehouse's first season (1999), so the true tenure may be longer than tenure_seasons
+- **Source:** twm.modules.hot_seat.features
+
+### Took over mid-season
+
+The coach replaced someone during this season (usually an interim coach).
+
+- **Name:** `took_over_mid_season`; **unit:** boolean; **used by:** hot_seat
+- **Formula:** the team's first played regular-season game this season had another coach
+- **Source:** twm.modules.hot_seat.features
+
 ### Undrafted
 
 He was not drafted.
@@ -1643,6 +1819,22 @@ Wind pushes long kicks off line.
 - **Name:** `wind_mph`; **unit:** mph; **used by:** decisions
 - **Formula:** fact_game.wind, else the 'Wind: ... N mph' in fact_play.weather ('calm' = 0); indoors = 0; still unknown outdoors -> NULL, filled with the training median
 - **Source:** fact_game.wind, fact_play.weather; twm.modules.decisions.fieldgoal
+
+### Wins to date
+
+The team's wins so far, ties counting as half a win.
+
+- **Name:** `reg_wins`; **unit:** wins; **used by:** hot_seat
+- **Formula:** regular-season wins to date, a tie = 0.5
+- **Source:** twm.modules.hot_seat.features
+
+### Wins vs market expectation
+
+Positive: the team has won more than the market expected; negative: fewer.
+
+- **Name:** `wins_vs_expected`; **unit:** wins; **used by:** hot_seat
+- **Formula:** reg_wins - expected_wins
+- **Source:** twm.modules.hot_seat.features
 
 ### Yards to go
 
@@ -1860,6 +2052,14 @@ When a row of data became public. A prediction at an as-of time sees only rows w
 - **Formula:** per table rule in twm.warehouse.available (e.g. game data: estimated game end + 6 h); later when unsure
 - **Source:** every event table's available_at column
 
+### Interim coach (row flag)
+
+Interim coaches are left out of training (spec 8.5). Uses the owner's hindsight file, so it selects rows and is never a model feature.
+
+- **Name:** `is_interim`; **unit:** boolean; **used by:** hot_seat
+- **Formula:** took_over_mid_season OR the owner's data/manual/coach_departures.csv says the coach-team-season was interim (departure_type interim_not_retained or interim_suspected true)
+- **Source:** twm.modules.hot_seat.features
+
 ### Kneel-out seconds K(d, t)
 
 The most clock an offense can burn by kneeling from this down; if it is at least the time left, the game is over unless the defense's timeouts cut it.
@@ -1874,6 +2074,14 @@ A scoring format that gives a point for every catch, on top of yards and touchdo
 
 - **Name:** `ppr`; **unit:** points per catch; **used by:** shared
 - **Formula:** config/scoring.yaml receiving.receptions (1 = full PPR, 0.5 = half, 0 = standard)
+
+### Previous playoff result (text)
+
+Last season's playoff exit, spelled out.
+
+- **Name:** `prev_playoff_result`; **unit:** text; **used by:** hot_seat
+- **Formula:** prev_playoff_round as text: none, lost_wc, lost_div, lost_conf, lost_sb, won_sb
+- **Source:** twm.modules.hot_seat.features
 
 ### Regression Watch universe
 

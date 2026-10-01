@@ -800,6 +800,11 @@ def model_versions(store: Path, versions: Sequence[str]) -> pl.DataFrame:
     return version_rows(df)
 
 
+# Modules with registry entries but no page on the site yet: their terms stay out of the published
+# glossary until the module ships (the Hot-Seat page is step H4).
+UNPUBLISHED_MODULES = frozenset({"hot_seat"})
+
+
 def glossary() -> pl.DataFrame:
     from twm import registry
 
@@ -808,6 +813,7 @@ def glossary() -> pl.DataFrame:
          "formula": e.formula, "explanation": e.explanation, "verified": e.verified or None,
          "modules": list(e.modules), "model_output": e.model_output}
         for e in sorted(registry.entries(), key=lambda e: e.name)
+        if not (e.modules and set(e.modules) <= UNPUBLISHED_MODULES)
     ]  # fmt: skip
     return pl.DataFrame(
         rows,

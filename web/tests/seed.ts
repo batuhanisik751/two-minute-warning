@@ -6,11 +6,13 @@
 // - "full": everything the pages read, incl. a live week (2026 W3), a reconstructed week with
 //   chances and reasons (2026 W2), and two walk-forward backtest weeks without them
 //   (2024 W5, 2025 W6), outcomes final / pending, a player with weekly rows.
-//   The K and D/ST streamer and Regression Watch tables come from tests/seed-modules.ts.
+//   The K and D/ST streamer and Regression Watch tables come from tests/seed-modules.ts, the
+//   Decision Report Card's from tests/seed-decisions.ts.
 // - "empty": a first-publish state: site_meta and the glossary only (no lists, no track
 //   record), for the empty states.
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as s from "../db/schema";
+import { seedDecisions } from "./seed-decisions";
 import { MODULES_SEED, seedModules } from "./seed-modules";
 
 export type SeedVariant = "full" | "empty";
@@ -291,6 +293,8 @@ export async function seed(db: Db, variant: SeedVariant): Promise<void> {
   );
   // the K and D/ST streamer and Regression Watch (tests/seed-modules.ts)
   await seedModules(db);
+  // the Decision Report Card (tests/seed-decisions.ts)
+  await seedDecisions(db);
 }
 
 function rotateFeatured<T extends { gsisId: string }>(pool: T[], at: number): T[] {

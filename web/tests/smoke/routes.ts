@@ -2,12 +2,13 @@
 // fixed; against a real publish they are discovered from the pages themselves.
 import { POSITIONS } from "../../lib/method";
 import { SEED } from "../seed";
+import { DECISIONS_SEED } from "../seed-decisions";
 import { MODULES_SEED } from "../seed-modules";
 import { DATA, fetchPage } from "./dom";
 
 export type Route = {
   path: string;
-  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology";
+  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach";
 };
 
 export type RouteSet = {
@@ -23,7 +24,7 @@ export type RouteSet = {
  *  answers with its error shell (<html id="__next_error__">, empty body) and the browser
  *  renders the same not-found page from the payload once the scripts run (checked in a real
  *  browser). */
-export const MISSING = ["/player/00-0000000", "/player/not-a-player-id", "/no-such-page"];
+export const MISSING = ["/player/00-0000000", "/player/not-a-player-id", "/coach/no-such-coach", "/coach/Not_A_Coach", "/no-such-page"];
 export const SERVER_RENDERED_404 = new Set(["/no-such-page"]);
 
 function seedRoutes(): RouteSet {
@@ -55,6 +56,12 @@ function seedRoutes(): RouteSet {
       { path: `/regression?season=${rb.season}&week=${rb.week}`, kind: "regression" },
       { path: `/regression?season=${rb.season}&week=${rb.week}&gt=off`, kind: "regression" },
       { path: "/methodology", kind: "methodology" },
+      // the Decision Report Card: the season being graded, the complete season (long lists that
+      // fold), the oldest; a coach with every kind of row, one with clock cases, the long name
+      { path: "/decisions", kind: "decisions" },
+      { path: `/decisions?season=${DECISIONS_SEED.past}`, kind: "decisions" },
+      { path: "/decisions?season=2024", kind: "decisions" },
+      ...[DECISIONS_SEED.featured, "avery-o-hollis", DECISIONS_SEED.coaches[3].id].map((id) => ({ path: `/coach/${id}`, kind: "coach" as const })),
     ],
     missing: MISSING,
     notes: [],
@@ -109,6 +116,20 @@ async function realRoutes(): Promise<RouteSet> {
   if (rs.length > 1) routes.push({ path: `/regression?season=${rs[rs.length - 1]}`, kind: "regression" });
   if (player) routes.push({ path: `${player}${player.includes("?") ? "&" : "?"}gt=off`, kind: "player" });
   routes.push({ path: "/methodology", kind: "methodology" });
+  // the Decision Report Card: the newest season, the oldest, the first coaches it links
+  const dd = (await fetchPage("/decisions")).doc;
+  const ds = Array.from(dd.querySelectorAll<HTMLOptionElement>("form[action='/decisions'] select[name=season] option")).map((o) => o.value);
+  if (ds.length) {
+    routes.push({ path: "/decisions", kind: "decisions" });
+    const prev = ds[1];
+    if (prev) routes.push({ path: `/decisions?season=${prev}`, kind: "decisions" });
+    if (ds.length > 2) routes.push({ path: `/decisions?season=${ds[ds.length - 1]}`, kind: "decisions" });
+    const coaches = [...new Set(Array.from(dd.querySelectorAll<HTMLAnchorElement>("[data-testid=leaderboard] a[href^='/coach/']")).map((a) => a.getAttribute("href")!))];
+    for (const c of coaches.slice(0, 2)) routes.push({ path: c, kind: "coach" });
+    if (!coaches.length) notes.push("no coach link on /decisions: no coach page was checked");
+  } else {
+    notes.push("no Decision Report Card season: /decisions and the coach pages were not checked");
+  }
   return { routes, missing: MISSING, notes };
 }
 

@@ -9,11 +9,15 @@ import {
   AS_OF_TIME_UTC,
   AS_OF_WEEKDAY,
   CHANCE_RANGE_LEVEL,
+  CLOCK,
+  END_OF_HALF_SECONDS,
+  LEADERBOARD_MIN_GAMES,
   POSITIONS,
   RANK_BUCKETS,
   STABILITY_INTERVAL_LEVEL,
   STABILITY_MIN_GAMES,
   STABILITY_RESAMPLES,
+  TOSS_UP_MARGIN,
   TRACK_INTERVAL_LEVEL,
 } from "../../lib/method";
 import { GSIS_PATTERN } from "../../lib/params";
@@ -71,4 +75,29 @@ test("the streamer's chance range uses the Radar's BAND_LEVEL (the K and D/ST pa
   const src = read("src/twm/modules/streamer/confidence.py");
   assert.match(src, /from twm\.modules\.waiver_radar import confidence as cf/);
   assert.match(src, /"level": cf\.BAND_LEVEL/);
+});
+
+test("the Decision Report Card's margin, exclusions, leaderboard and clock thresholds are config/settings.yaml's", () => {
+  const src = read("config/settings.yaml");
+  const start = src.search(/^decisions:\s*$/m);
+  assert.ok(start >= 0, "decisions: not found");
+  const rest = src.slice(start + "decisions:".length);
+  const end = rest.search(/^\S/m);
+  const block = end >= 0 ? rest.slice(0, end) : rest;
+  const num = (key: string) => {
+    const m = block.match(new RegExp(`^\\s+${key}:\\s*([0-9.]+)\\s*$`, "m"));
+    assert.ok(m, `decisions ${key} not found`);
+    return Number(m[1]);
+  };
+  assert.equal(num("toss_up_margin"), TOSS_UP_MARGIN);
+  assert.equal(num("end_of_half_seconds"), END_OF_HALF_SECONDS);
+  assert.equal(num("leaderboard_min_games"), LEADERBOARD_MIN_GAMES);
+  assert.equal(num("one_score_margin"), CLOCK.oneScoreMargin);
+  assert.equal(num("final_window_seconds"), CLOCK.finalWindowSeconds);
+  assert.equal(num("clock_ran_min_seconds"), CLOCK.clockRanMinSeconds);
+  assert.equal(num("passivity_min_seconds"), CLOCK.passivityMinSeconds);
+  assert.equal(num("passivity_min_timeouts"), CLOCK.passivityMinTimeouts);
+  assert.equal(num("passivity_min_ep"), CLOCK.passivityMinEp);
+  const report = read("src/twm/modules/decisions/decisions_report.py");
+  assert.match(report, /need = min\(int\(c\["cfg"\]\.leaderboard_min_games\), int\(games\.max\(\) or 0\)\)/);
 });

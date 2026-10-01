@@ -140,4 +140,55 @@ export const SITE_TERMS: Record<string, TermEntry> = {
       "are redrawn at random many times and the number is recomputed each time. The same player " +
       "appears in several seasons, so the true range is a little wider.",
   },
+  // The Decision Report Card (docs/decision_metrics.md). The margin and thresholds are stated on
+  // the Methodology page (lib/method.ts, checked against config/settings.yaml).
+  decisions_graded: {
+    name: "decisions_graded",
+    title: "Decisions",
+    explanation:
+      "Every fourth down and every try after a touchdown the Report Card priced: clear calls and " +
+      "toss-ups together. Kneels, the half's last seconds and snaps wiped out by a penalty are left out.",
+  },
+  clear_call: {
+    name: "clear_call",
+    title: "Clear call",
+    explanation:
+      "A decision where one option's win probability beat the next best by more than the toss-up " +
+      "margin (Methodology page). Only clear calls are graded: a wrong one counts against the coach.",
+  },
+  toss_up: {
+    name: "toss_up",
+    title: "Toss-up",
+    explanation:
+      "A decision whose best two options were within the toss-up margin of each other: the model " +
+      "cannot tell them apart with confidence, so it is counted but never graded, whatever the coach chose.",
+  },
+  wrong_call: {
+    name: "wrong_call",
+    title: "Wrong call",
+    explanation: "A clear call where the coach did not choose the option with the highest win probability.",
+  },
+  clock_case: {
+    name: "clock_case",
+    title: "Clock case",
+    explanation:
+      "A game where one of the three clock-management metrics applies: timeouts unused in a lost " +
+      "one-score game, a passive end of the first half, or seconds wasted late while trailing with " +
+      "timeouts in hand. Each has an exact written definition; situations outside them are never graded.",
+  },
+  against_convention: {
+    name: "against_convention",
+    title: "Against convention",
+    explanation:
+      "A clear call where the aggressive option was best and the coach took it: he went for it on " +
+      "fourth down, or went for two. The number is how much win probability that gained over the " +
+      "best kicking option, by the model.",
+  },
+  wp_points: {
+    name: "wp_points",
+    title: "WP points",
+    explanation:
+      "Win probability in percentage points: one WP point is one percentage point of the team's " +
+      "chance to win, by our win-probability model.",
+  },
 };

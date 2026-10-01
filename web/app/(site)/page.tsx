@@ -3,6 +3,7 @@ import FlexNote from "@/components/FlexNote";
 import PickList from "@/components/PickList";
 import Term from "@/components/Term";
 import TopBoard from "@/components/TopBoard";
+import CoachOfWeekCard from "@/components/home/CoachOfWeekCard";
 import RegressionFlagsCard from "@/components/home/RegressionFlagsCard";
 import StreamersCard from "@/components/home/StreamersCard";
 import { EmptyState, KindBadge, Note, PosBadge } from "@/components/ui";
@@ -248,6 +249,8 @@ export default async function HomePage() {
         <StreamersCard />
         <RegressionFlagsCard />
       </div>
+
+      <CoachOfWeekCard />
     </>
   );
 }

@@ -53,3 +53,22 @@ export const LABEL_NAMES: Record<string, string> = {
 /** The weekly as-of: Tuesday 14:00 UTC (config/settings.yaml as_of.weekly). */
 export const AS_OF_WEEKDAY = "Tuesday";
 export const AS_OF_TIME_UTC = "14:00";
+
+/** The Decision Report Card (config/settings.yaml `decisions:`; docs/decision_metrics.md). A
+ *  decision is graded ("clear") when the best option's WP beats the second best by more than
+ *  TOSS_UP_MARGIN (0-1 units: 0.015 = 1.5 WP points); otherwise it is a toss-up. */
+export const TOSS_UP_MARGIN = 0.015;
+/** Fourth downs with at most this many seconds left in the half are not graded. */
+export const END_OF_HALF_SECONDS = 10;
+/** The coach leaderboard ranks coaches with at least this many games in the season (or, early
+ *  in a season, the most games any coach has: src/twm/modules/decisions/decisions_report.py). */
+export const LEADERBOARD_MIN_GAMES = 8;
+/** The clock-management metrics' thresholds (decisions.clock), fixed before any grading. */
+export const CLOCK = {
+  oneScoreMargin: 8,
+  finalWindowSeconds: 120,
+  clockRanMinSeconds: 10,
+  passivityMinSeconds: 40,
+  passivityMinTimeouts: 1,
+  passivityMinEp: 1.0,
+} as const;

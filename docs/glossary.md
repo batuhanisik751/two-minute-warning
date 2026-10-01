@@ -63,6 +63,14 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Formula:** fact_opportunity_week.pass_completions, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
 
+### Conversion probability
+
+The chance that going for it on this down and distance works.
+
+- **Name:** `p_convert`; **unit:** probability (0-1); **used by:** decisions
+- **Formula:** LightGBM on the go-for-it features, trained walk-forward (seasons < S)
+- **Source:** twm.modules.decisions.conversion
+
 ### EPA (expected points added) \*
 
 How much a single play helped or hurt the offense's scoring chances. A 30-yard catch on 3rd and 10 adds a lot; a sack on 1st down costs points.
@@ -70,6 +78,14 @@ How much a single play helped or hurt the offense's scoring chances. A 30-yard c
 - **Name:** `epa`; **unit:** points per play; **used by:** shared, decisions, hot_seat
 - **Formula:** nflfastR's expected points after the play minus before it, for the offense
 - **Source:** fact_play.epa
+
+### Expected WP after a punt
+
+How good punting is, as a win chance, averaged over where punts from this spot really end up.
+
+- **Name:** `punt_expected_wp`; **unit:** probability (0-1); **used by:** decisions
+- **Formula:** sum over the smoothed empirical distribution of punt results (receiving team's spot, kicking team recovers, return touchdown) of the kicking team's own WP (G1) in the resulting state
+- **Source:** twm.modules.decisions.punt
 
 ### Expected completions \*
 
@@ -183,6 +199,14 @@ Whether the experts' ranking existed at that moment; the expert baseline is only
 - **Formula:** a rest-of-season or weekly FantasyPros page of the player's roster position of this season is public at the as-of (the archive starts in December 2019)
 - **Source:** fact_ranking
 
+### Extra-point rate
+
+How often the kick after a touchdown is good.
+
+- **Name:** `pat_rate`; **unit:** share (0-1); **used by:** decisions
+- **Formula:** made extra points / attempts in the last 5 seasons before S within the same rule era (2015+: from the 15)
+- **Source:** twm.modules.decisions.tries
+
 ### FLEX-worthy finish
 
 The running back or receiver scored well enough to fill a FLEX slot that week. Informative only; it is not a label.
@@ -232,6 +256,14 @@ The points he scored while the game was still in doubt. Late points in a blowout
 - **Name:** `points_ng`; **unit:** points; **used by:** regression_watch
 - **Formula:** fantasy_points - points_garbage: the weekly stat line's points minus those scored on his garbage-time plays (fact_play.is_garbage_time)
 - **Source:** twm.modules.regression_watch.player_week
+
+### Field-goal probability
+
+The chance the kick is good from here, in these conditions.
+
+- **Name:** `p_fg_make`; **unit:** probability (0-1); **used by:** decisions
+- **Formula:** LightGBM on distance, roof, wind, temperature, surface and era, walk-forward
+- **Source:** twm.modules.decisions.fieldgoal
 
 ### Games for half weight \*
 
@@ -457,6 +489,14 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Name:** `targets`; **unit:** targets; **used by:** regression_watch
 - **Formula:** fact_opportunity_week.rec_attempt: passes thrown to him (two-point tries excluded), from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Two-point rate
+
+How often a two-point try succeeds.
+
+- **Name:** `two_point_rate`; **unit:** share (0-1); **used by:** decisions
+- **Formula:** successful two-point tries / tries in the last 5 seasons before S
+- **Source:** twm.modules.decisions.tries
 
 ### WPA (win probability added) \*
 
@@ -761,6 +801,22 @@ How often his team sends him out for field goals: the main source of kicker poin
 - **Source:** twm.modules.streamer.features; fact_kicker_week.fg_att
 - **Streamer reason:** "Tries {value:.1f} field goals per game"
 
+### Field-goal distance
+
+How long the kick would be, known before the snap.
+
+- **Name:** `fg_distance`; **unit:** yards; **used by:** decisions
+- **Formula:** yardline_100 + 18 (10 yards of end zone + the hold about 8 yards behind the line; fact_play.kick_distance - yardline_100 is 18 on 88% of 2023-2025 kicks, 19 on 12%)
+- **Source:** fact_play.yardline_100; twm.modules.decisions.fieldgoal
+
+### Fourth down
+
+Separates fourth-down tries (a chosen gamble) from third downs (which add sample).
+
+- **Name:** `is_fourth_down`; **unit:** boolean (0/1); **used by:** decisions
+- **Formula:** 1 when down = 4, 0 on third down
+- **Source:** fact_play.down; twm.modules.decisions.conversion
+
 ### Games played this season
 
 How many games he has a stat line in so far.
@@ -787,6 +843,14 @@ In the first half, knowing you get the ball back after halftime is worth a littl
 - **Formula:** first half only: 1 when the possession team kicked the opening kickoff (it receives the second-half kickoff); 0 in the second half and overtime
 - **Source:** fact_play.kickoff_attempt, fact_play.defteam (the game's first kickoff); twm.modules.decisions.wp_data
 
+### Goal to go
+
+Near the goal line a first down is a touchdown, and the defense has less field to cover.
+
+- **Name:** `goal_to_go`; **unit:** boolean (0/1); **used by:** decisions
+- **Formula:** 1 when the line to gain is the goal line (fact_play.goal_to_go; for a hypothetical state: ydstogo >= yardline_100)
+- **Source:** fact_play.goal_to_go; twm.modules.decisions.conversion
+
 ### Goal-line opportunities per game
 
 Chances inside the 10-yard line: the most valuable touches in fantasy.
@@ -795,6 +859,14 @@ Chances inside the 10-yard line: the most valuable touches in fantasy.
 - **Formula:** mean over the team's last 3 games of his targets plus carries (as above) with yardline_100 <= 10 (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_play
 - **Waiver Radar reason:** "Had {value:.1f} chances per game inside the opponent's 10-yard line over the last {weeks} games"
+
+### Grass field
+
+Kicking footing differs a little between grass and turf.
+
+- **Name:** `surface_grass`; **unit:** boolean (0/1); **used by:** decisions
+- **Formula:** 1 for grass or dessograss, 0 for artificial turf; unknown -> NULL, filled with the training median
+- **Source:** fact_game.surface; twm.modules.decisions.fieldgoal
 
 ### Half
 
@@ -812,6 +884,14 @@ Teams tend to score more and allow less at home.
 - **Formula:** the as-of team is the home team of its week N+1 game and the venue is not neutral (fact_schedule.location, public from slot_available_at); NULL on a bye or while the venue is not public
 - **Source:** twm.modules.streamer.features; fact_schedule.home_team, fact_schedule.location
 - **Streamer reason:** "Plays at home next week"
+
+### Indoors
+
+No wind or cold indoors.
+
+- **Name:** `roof_closed`; **unit:** boolean (0/1); **used by:** decisions
+- **Formula:** 1 when fact_game.roof is dome or closed; 0 for outdoors, open or unknown
+- **Source:** fact_game.roof; twm.modules.decisions.fieldgoal
 
 ### K/DST games so far
 
@@ -1332,6 +1412,14 @@ How many players at his position are out.
 - **Source:** twm.modules.waiver_radar.features; as vacated_target_share
 - **Waiver Radar reason:** "{value:.0f} {pos} teammate(s) are out: {teammate}"
 
+### Temperature
+
+Cold air and a hard ball make long kicks shorter.
+
+- **Name:** `temp_f`; **unit:** degrees F; **used by:** decisions
+- **Formula:** fact_game.temp, else the 'Temp: N' in fact_play.weather; indoors = 70; still unknown outdoors -> NULL, filled with the median of the training rows' outdoor games
+- **Source:** fact_game.temp, fact_play.weather; twm.modules.decisions.fieldgoal
+
 ### Undrafted
 
 He was not drafted.
@@ -1395,6 +1483,14 @@ One number for a receiver's recent opportunity.
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.wopr
 - **Waiver Radar reason:** "Receiving workload (WOPR: targets and air yards combined) of {value:.2f} over the last {weeks} games"
 
+### Weather unknown
+
+Flags the games whose weather was filled in, so the model can treat them apart.
+
+- **Name:** `weather_missing`; **unit:** boolean (0/1); **used by:** decisions
+- **Formula:** 1 for an outdoor game whose temperature or wind is unknown even after the weather text (then imputed)
+- **Source:** fact_game.temp/wind, fact_play.weather; twm.modules.decisions.fieldgoal
+
 ### Weekly expert rank
 
 Where experts ranked it last week.
@@ -1403,6 +1499,14 @@ Where experts ranked it last week.
 - **Formula:** the entity's pos_rank on FantasyPros' latest weekly K or DST ranking of the season visible at the as-of (the Friday before week N's games; late 2020 on); K by gsis_id, DST by team; NULL when not listed or no page
 - **Source:** twm.modules.streamer.features; fact_ranking_kdst.pos_rank
 - **Streamer reason:** "Experts ranked {player} #{value:.0f} at {pos} last week"
+
+### Wind
+
+Wind pushes long kicks off line.
+
+- **Name:** `wind_mph`; **unit:** mph; **used by:** decisions
+- **Formula:** fact_game.wind, else the 'Wind: ... N mph' in fact_play.weather ('calm' = 0); indoors = 0; still unknown outdoors -> NULL, filled with the training median
+- **Source:** fact_game.wind, fact_play.weather; twm.modules.decisions.fieldgoal
 
 ### Yards to go
 
@@ -1466,6 +1570,14 @@ His best week at his position in the window. A label detail: never a model featu
 - **Formula:** min(weekly_pos_rank) over the window weeks (NULL if never ranked)
 - **Source:** twm.modules.waiver_radar.labels.label_rows
 
+### FG label: the kick was good
+
+Whether the field goal went through.
+
+- **Name:** `fg_made`; **unit:** boolean; **used by:** decisions
+- **Formula:** fact_play.field_goal_result = 'made' (missed and blocked = 0)
+- **Source:** twm.modules.decisions.fieldgoal
+
 ### FLEX-worthy finishes in the window
 
 Informative: how often he was worth a FLEX start. A label detail: never a model feature.
@@ -1481,6 +1593,14 @@ How many games the player's team has in the window. A label detail: never a mode
 - **Name:** `window_games`; **unit:** games; **used by:** waiver_radar
 - **Formula:** len(window_weeks): 3, fewer in the last weeks of a season
 - **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Go label: the try converted
+
+Whether going for it worked: the offense kept the ball with a new set of downs.
+
+- **Name:** `converted`; **unit:** boolean; **used by:** decisions
+- **Formula:** third or fourth down pass/run: first_down = 1 or the offense's touchdown, and no interception or lost fumble (defensive penalties that give a first down count)
+- **Source:** twm.modules.decisions.conversion
 
 ### Label status
 

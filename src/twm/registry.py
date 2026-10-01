@@ -1173,6 +1173,83 @@ def _decisions_entries() -> list[Entry]:
     ]  # fmt: skip
 
 
+def _submodel_entries() -> list[Entry]:
+    """G2: the features, labels and outputs of the fourth-down sub-models
+    (twm.modules.decisions.conversion, fieldgoal, punt, tries)."""
+    conv, fg = "twm.modules.decisions.conversion", "twm.modules.decisions.fieldgoal"
+    rows = [
+        ("goal_to_go", "Goal to go", "boolean (0/1)",
+         "1 when the line to gain is the goal line (fact_play.goal_to_go; for a hypothetical "
+         "state: ydstogo >= yardline_100)",
+         "Near the goal line a first down is a touchdown, and the defense has less field to "
+         "cover.", f"fact_play.goal_to_go; {conv}"),
+        ("is_fourth_down", "Fourth down", "boolean (0/1)", "1 when down = 4, 0 on third down",
+         "Separates fourth-down tries (a chosen gamble) from third downs (which add sample).",
+         f"fact_play.down; {conv}"),
+        ("fg_distance", "Field-goal distance", "yards",
+         "yardline_100 + 18 (10 yards of end zone + the hold about 8 yards behind the line; "
+         "fact_play.kick_distance - yardline_100 is 18 on 88% of 2023-2025 kicks, 19 on 12%)",
+         "How long the kick would be, known before the snap.", f"fact_play.yardline_100; {fg}"),
+        ("roof_closed", "Indoors", "boolean (0/1)",
+         "1 when fact_game.roof is dome or closed; 0 for outdoors, open or unknown",
+         "No wind or cold indoors.", f"fact_game.roof; {fg}"),
+        ("temp_f", "Temperature", "degrees F",
+         "fact_game.temp, else the 'Temp: N' in fact_play.weather; indoors = 70; still unknown "
+         "outdoors -> NULL, filled with the median of the training rows' outdoor games",
+         "Cold air and a hard ball make long kicks shorter.",
+         f"fact_game.temp, fact_play.weather; {fg}"),
+        ("wind_mph", "Wind", "mph",
+         "fact_game.wind, else the 'Wind: ... N mph' in fact_play.weather ('calm' = 0); "
+         "indoors = 0; still unknown outdoors -> NULL, filled with the training median",
+         "Wind pushes long kicks off line.", f"fact_game.wind, fact_play.weather; {fg}"),
+        ("surface_grass", "Grass field", "boolean (0/1)",
+         "1 for grass or dessograss, 0 for artificial turf; unknown -> NULL, filled with the "
+         "training median", "Kicking footing differs a little between grass and turf.",
+         f"fact_game.surface; {fg}"),
+        ("weather_missing", "Weather unknown", "boolean (0/1)",
+         "1 for an outdoor game whose temperature or wind is unknown even after the weather "
+         "text (then imputed)", "Flags the games whose weather was filled in, so the model "
+         "can treat them apart.", f"fact_game.temp/wind, fact_play.weather; {fg}"),
+    ]  # fmt: skip
+    out = [
+        Entry(name=name, title=title, kind="feature", modules=("decisions",), unit=unit,
+              formula=formula, explanation=explanation, source=source, step="G2")
+        for name, title, unit, formula, explanation, source in rows
+    ]  # fmt: skip
+    labels = [
+        ("converted", "Go label: the try converted", "label", "boolean",
+         "third or fourth down pass/run: first_down = 1 or the offense's touchdown, and no "
+         "interception or lost fumble (defensive penalties that give a first down count)",
+         "Whether going for it worked: the offense kept the ball with a new set of downs.", conv),
+        ("fg_made", "FG label: the kick was good", "label", "boolean",
+         "fact_play.field_goal_result = 'made' (missed and blocked = 0)",
+         "Whether the field goal went through.", fg),
+        ("p_convert", "Conversion probability", "metric", "probability (0-1)",
+         "LightGBM on the go-for-it features, trained walk-forward (seasons < S)",
+         "The chance that going for it on this down and distance works.", conv),
+        ("p_fg_make", "Field-goal probability", "metric", "probability (0-1)",
+         "LightGBM on distance, roof, wind, temperature, surface and era, walk-forward",
+         "The chance the kick is good from here, in these conditions.", fg),
+        ("punt_expected_wp", "Expected WP after a punt", "metric", "probability (0-1)",
+         "sum over the smoothed empirical distribution of punt results (receiving team's "
+         "spot, kicking team recovers, return touchdown) of the kicking team's own WP (G1) "
+         "in the resulting state", "How good punting is, as a win chance, averaged over "
+         "where punts from this spot really end up.", "twm.modules.decisions.punt"),
+        ("pat_rate", "Extra-point rate", "metric", "share (0-1)",
+         "made extra points / attempts in the last 5 seasons before S within the same rule "
+         "era (2015+: from the 15)", "How often the kick after a touchdown is good.",
+         "twm.modules.decisions.tries"),
+        ("two_point_rate", "Two-point rate", "metric", "share (0-1)",
+         "successful two-point tries / tries in the last 5 seasons before S",
+         "How often a two-point try succeeds.", "twm.modules.decisions.tries"),
+    ]  # fmt: skip
+    return out + [
+        Entry(name=n, title=t, kind=k, modules=("decisions",), unit=u, formula=f,
+              explanation=e, source=src, step="G2")
+        for n, t, k, u, f, e, src in labels
+    ]  # fmt: skip
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
     pool = _pool_texts()
@@ -1568,6 +1645,7 @@ def _entries() -> list[Entry]:
         *_projection_entries(),
         *_streamer_entries(),
         *_decisions_entries(),
+        *_submodel_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
             name="weekly_pos_rank",

@@ -1,0 +1,438 @@
+table,scope,subset,method,metric,value,lo,hi,n_plays,n_blocks
+conversion,down 4,2006-2025,model,brier,0.225068,0.222164,0.227852,12066,20
+conversion,down 4,2006-2025,model,log_loss,0.640993,0.634372,0.647352,12066,20
+conversion,down 4,2006-2025,model,ece,0.011305,0.008203,0.021336,12066,20
+conversion,down 4,2006-2025,lookup,brier,0.227834,0.225210,0.230398,12066,20
+conversion,down 4,2006-2025,lookup,log_loss,0.647016,0.641260,0.652569,12066,20
+conversion,down 4,2006-2025,lookup,ece,0.016577,0.010506,0.027922,12066,20
+conversion,down 4,2006-2025,model - lookup,brier,-0.002766,-0.003522,-0.002037,12066,20
+conversion,down 4,2006-2025,model - lookup,log_loss,-0.006024,-0.007776,-0.004272,12066,20
+conversion,down 4,2006-2014,model,brier,0.223730,0.219166,0.229067,4506,9
+conversion,down 4,2006-2014,model,log_loss,0.638091,0.627661,0.650217,4506,9
+conversion,down 4,2006-2014,model,ece,0.014891,0.008351,0.036065,4506,9
+conversion,down 4,2006-2014,lookup,brier,0.227515,0.223704,0.232374,4506,9
+conversion,down 4,2006-2014,lookup,log_loss,0.646175,0.637873,0.656660,4506,9
+conversion,down 4,2006-2014,lookup,ece,0.016558,0.010104,0.030022,4506,9
+conversion,down 4,2006-2014,model - lookup,brier,-0.003785,-0.005064,-0.002558,4506,9
+conversion,down 4,2006-2014,model - lookup,log_loss,-0.008083,-0.011341,-0.004704,4506,9
+conversion,down 4,2015-2022,model,brier,0.228511,0.226573,0.231518,4981,8
+conversion,down 4,2015-2022,model,log_loss,0.648766,0.644586,0.655169,4981,8
+conversion,down 4,2015-2022,model,ece,0.020210,0.017023,0.033773,4981,8
+conversion,down 4,2015-2022,lookup,brier,0.230331,0.228534,0.232697,4981,8
+conversion,down 4,2015-2022,lookup,log_loss,0.652493,0.648555,0.657794,4981,8
+conversion,down 4,2015-2022,lookup,ece,0.019433,0.011512,0.037848,4981,8
+conversion,down 4,2015-2022,model - lookup,brier,-0.001820,-0.002723,-0.000933,4981,8
+conversion,down 4,2015-2022,model - lookup,log_loss,-0.003726,-0.005673,-0.001973,4981,8
+conversion,down 4,2023-2025,model,brier,0.220755,0.213627,0.227248,2579,3
+conversion,down 4,2023-2025,model,log_loss,0.631048,0.614117,0.646482,2579,3
+conversion,down 4,2023-2025,model,ece,0.019278,0.019278,0.038053,2579,3
+conversion,down 4,2023-2025,lookup,brier,0.223570,0.216064,0.230799,2579,3
+conversion,down 4,2023-2025,lookup,log_loss,0.637910,0.621059,0.654013,2579,3
+conversion,down 4,2023-2025,lookup,ece,0.044225,0.035709,0.057001,2579,3
+conversion,down 4,2023-2025,model - lookup,brier,-0.002815,-0.003552,-0.002360,2579,3
+conversion,down 4,2023-2025,model - lookup,log_loss,-0.006862,-0.007531,-0.006017,2579,3
+conversion,down 3,2006-2025,model,brier,0.213277,0.212401,0.214121,141357,20
+conversion,down 3,2006-2025,model,log_loss,0.613231,0.611198,0.615209,141357,20
+conversion,down 3,2006-2025,model,ece,0.005501,0.004056,0.008491,141357,20
+conversion,down 3,2006-2025,lookup,brier,0.215064,0.214147,0.215964,141357,20
+conversion,down 3,2006-2025,lookup,log_loss,0.617795,0.615698,0.619821,141357,20
+conversion,down 3,2006-2025,lookup,ece,0.006899,0.004615,0.009430,141357,20
+conversion,down 3,2006-2025,model - lookup,brier,-0.001787,-0.001980,-0.001601,141357,20
+conversion,down 3,2006-2025,model - lookup,log_loss,-0.004564,-0.005040,-0.004069,141357,20
+conversion,down 3,2006-2014,model,brier,0.214742,0.213952,0.215488,63694,9
+conversion,down 3,2006-2014,model,log_loss,0.616751,0.614937,0.618277,63694,9
+conversion,down 3,2006-2014,model,ece,0.007571,0.005666,0.012060,63694,9
+conversion,down 3,2006-2014,lookup,brier,0.216586,0.215768,0.217357,63694,9
+conversion,down 3,2006-2014,lookup,log_loss,0.621257,0.619375,0.623046,63694,9
+conversion,down 3,2006-2014,lookup,ece,0.007744,0.006017,0.011510,63694,9
+conversion,down 3,2006-2014,model - lookup,brier,-0.001843,-0.002168,-0.001515,63694,9
+conversion,down 3,2006-2014,model - lookup,log_loss,-0.004506,-0.005324,-0.003689,63694,9
+conversion,down 3,2015-2022,model,brier,0.212529,0.211536,0.213563,55897,8
+conversion,down 3,2015-2022,model,log_loss,0.611379,0.609169,0.613692,55897,8
+conversion,down 3,2015-2022,model,ece,0.006392,0.005350,0.011314,55897,8
+conversion,down 3,2015-2022,lookup,brier,0.214205,0.213178,0.215351,55897,8
+conversion,down 3,2015-2022,lookup,log_loss,0.615886,0.613596,0.618405,55897,8
+conversion,down 3,2015-2022,lookup,ece,0.009227,0.006949,0.013441,55897,8
+conversion,down 3,2015-2022,model - lookup,brier,-0.001676,-0.001967,-0.001379,55897,8
+conversion,down 3,2015-2022,model - lookup,log_loss,-0.004507,-0.005252,-0.003684,55897,8
+conversion,down 3,2023-2025,model,brier,0.210908,0.210078,0.211980,21766,3
+conversion,down 3,2023-2025,model,log_loss,0.607683,0.605913,0.610475,21766,3
+conversion,down 3,2023-2025,model,ece,0.006909,0.006580,0.018219,21766,3
+conversion,down 3,2023-2025,lookup,brier,0.212817,0.211909,0.213926,21766,3
+conversion,down 3,2023-2025,lookup,log_loss,0.612566,0.610814,0.615431,21766,3
+conversion,down 3,2023-2025,lookup,ece,0.008117,0.006672,0.013508,21766,3
+conversion,down 3,2023-2025,model - lookup,brier,-0.001909,-0.001955,-0.001831,21766,3
+conversion,down 3,2023-2025,model - lookup,log_loss,-0.004884,-0.004956,-0.004793,21766,3
+conversion,reliability,0.0-0.1,model,mean_predicted,0.071593,,,207,20
+conversion,reliability,0.0-0.1,model,observed,0.096618,0.057969,0.140273,207,20
+conversion,reliability,0.1-0.2,model,mean_predicted,0.156020,,,522,20
+conversion,reliability,0.1-0.2,model,observed,0.183908,0.154290,0.210042,522,20
+conversion,reliability,0.2-0.3,model,mean_predicted,0.253338,,,840,20
+conversion,reliability,0.2-0.3,model,observed,0.292857,0.258444,0.326712,840,20
+conversion,reliability,0.3-0.4,model,mean_predicted,0.349782,,,1567,20
+conversion,reliability,0.3-0.4,model,observed,0.363114,0.342509,0.383369,1567,20
+conversion,reliability,0.4-0.5,model,mean_predicted,0.454184,,,2088,20
+conversion,reliability,0.4-0.5,model,observed,0.463602,0.439694,0.486661,2088,20
+conversion,reliability,0.5-0.6,model,mean_predicted,0.550505,,,2691,20
+conversion,reliability,0.5-0.6,model,observed,0.560758,0.541617,0.579339,2691,20
+conversion,reliability,0.6-0.7,model,mean_predicted,0.658718,,,2863,20
+conversion,reliability,0.6-0.7,model,observed,0.656305,0.635271,0.675811,2863,20
+conversion,reliability,0.7-0.8,model,mean_predicted,0.721598,,,1288,20
+conversion,reliability,0.7-0.8,model,observed,0.715062,0.686178,0.741419,1288,20
+conversion,by distance,"4th and 1, 2006-2025",observed,rate,0.663102,0.646055,0.678643,4675,20
+conversion,by distance,"4th and 1, 2006-2025",model,mean_predicted,0.662464,0.654940,0.669348,4675,20
+conversion,by distance,"4th and 1, 2006-2014",observed,rate,0.651069,0.620568,0.671382,1731,9
+conversion,by distance,"4th and 1, 2006-2014",model,mean_predicted,0.649979,0.646540,0.653620,1731,9
+conversion,by distance,"4th and 1, 2015-2022",observed,rate,0.657704,0.633188,0.679649,1934,8
+conversion,by distance,"4th and 1, 2015-2022",model,mean_predicted,0.662734,0.654081,0.671679,1934,8
+conversion,by distance,"4th and 1, 2023-2025",observed,rate,0.694059,0.662269,0.725552,1010,3
+conversion,by distance,"4th and 1, 2023-2025",model,mean_predicted,0.683346,0.677343,0.686848,1010,3
+conversion,by distance,"4th and 2-3, 2006-2025",observed,rate,0.534848,0.508236,0.556859,2597,20
+conversion,by distance,"4th and 2-3, 2006-2025",model,mean_predicted,0.529606,0.522476,0.535734,2597,20
+conversion,by distance,"4th and 2-3, 2006-2014",observed,rate,0.505214,0.466893,0.540946,863,9
+conversion,by distance,"4th and 2-3, 2006-2014",model,mean_predicted,0.515822,0.512294,0.519350,863,9
+conversion,by distance,"4th and 2-3, 2015-2022",observed,rate,0.535278,0.498774,0.571733,1063,8
+conversion,by distance,"4th and 2-3, 2015-2022",model,mean_predicted,0.532825,0.522435,0.541873,1063,8
+conversion,by distance,"4th and 2-3, 2023-2025",observed,rate,0.572280,0.565217,0.579832,671,3
+conversion,by distance,"4th and 2-3, 2023-2025",model,mean_predicted,0.542235,0.538401,0.544924,671,3
+conversion,by distance,"4th and 4-6, 2006-2025",observed,rate,0.448694,0.426999,0.467594,2144,20
+conversion,by distance,"4th and 4-6, 2006-2025",model,mean_predicted,0.435017,0.428994,0.440655,2144,20
+conversion,by distance,"4th and 4-6, 2006-2014",observed,rate,0.413665,0.386700,0.440678,805,9
+conversion,by distance,"4th and 4-6, 2006-2014",model,mean_predicted,0.420809,0.416742,0.424136,805,9
+conversion,by distance,"4th and 4-6, 2015-2022",observed,rate,0.465769,0.436534,0.489107,891,8
+conversion,by distance,"4th and 4-6, 2015-2022",model,mean_predicted,0.442334,0.436580,0.447327,891,8
+conversion,by distance,"4th and 4-6, 2023-2025",observed,rate,0.477679,0.434483,0.500000,448,3
+conversion,by distance,"4th and 4-6, 2023-2025",model,mean_predicted,0.445992,0.439591,0.452935,448,3
+conversion,by distance,"4th and 7+, 2006-2025",observed,rate,0.285660,0.267289,0.303892,2650,20
+conversion,by distance,"4th and 7+, 2006-2025",model,mean_predicted,0.263080,0.258357,0.267573,2650,20
+conversion,by distance,"4th and 7+, 2006-2014",observed,rate,0.286360,0.257112,0.312984,1107,9
+conversion,by distance,"4th and 7+, 2006-2014",model,mean_predicted,0.255062,0.249525,0.260835,1107,9
+conversion,by distance,"4th and 7+, 2015-2022",observed,rate,0.299177,0.280372,0.322805,1093,8
+conversion,by distance,"4th and 7+, 2015-2022",model,mean_predicted,0.269266,0.263564,0.274118,1093,8
+conversion,by distance,"4th and 7+, 2023-2025",observed,rate,0.251111,0.197605,0.287770,450,3
+conversion,by distance,"4th and 7+, 2023-2025",model,mean_predicted,0.267779,0.266844,0.269349,450,3
+conversion,after a conversion,"touchdown share, 2006-2025",observed,rate,0.168170,0.158854,0.177327,6208,20
+conversion,after a conversion,"touchdown share, 2006-2025",model,mean_predicted,0.182974,0.177061,0.189218,6208,20
+conversion,after a conversion,"new spot (yards from own goal), 2006-2025",observed,rate,67.800118,67.135133,68.594050,5068,20
+conversion,after a conversion,"new spot (yards from own goal), 2006-2025",model,mean_predicted,67.245696,66.653878,67.926035,5068,20
+conversion,after a failure,"opponent touchdown share, 2006-2025",observed,rate,0.008706,0.006524,0.010852,5858,20
+conversion,after a failure,"opponent touchdown share, 2006-2025",model,mean_predicted,0.009387,0.008873,0.009892,5858,20
+conversion,after a failure,"opponent spot (its yardline_100), 2006-2025",observed,rate,63.003225,62.343538,63.692736,5581,20
+conversion,after a failure,"opponent spot (its yardline_100), 2006-2025",model,mean_predicted,62.901561,62.269817,63.566323,5581,20
+fieldgoal,all kicks,2006-2025,model,brier,0.118518,0.115368,0.121909,20918,20
+fieldgoal,all kicks,2006-2025,model,log_loss,0.379775,0.371284,0.388790,20918,20
+fieldgoal,all kicks,2006-2025,model,ece,0.016410,0.009677,0.024083,20918,20
+fieldgoal,all kicks,2006-2025,lookup,brier,0.120672,0.117949,0.123710,20918,20
+fieldgoal,all kicks,2006-2025,lookup,log_loss,0.386928,0.379812,0.394837,20918,20
+fieldgoal,all kicks,2006-2025,lookup,ece,0.046640,0.039414,0.053473,20918,20
+fieldgoal,all kicks,2006-2025,model - lookup,brier,-0.002154,-0.002972,-0.001325,20918,20
+fieldgoal,all kicks,2006-2025,model - lookup,log_loss,-0.007152,-0.009310,-0.005086,20918,20
+fieldgoal,all kicks,2006-2014,model,brier,0.122589,0.117263,0.127630,9154,9
+fieldgoal,all kicks,2006-2014,model,log_loss,0.392180,0.378885,0.404901,9154,9
+fieldgoal,all kicks,2006-2014,model,ece,0.027042,0.016508,0.037247,9154,9
+fieldgoal,all kicks,2006-2014,lookup,brier,0.124666,0.120137,0.129085,9154,9
+fieldgoal,all kicks,2006-2014,lookup,log_loss,0.397897,0.386363,0.409003,9154,9
+fieldgoal,all kicks,2006-2014,lookup,ece,0.041524,0.029638,0.052737,9154,9
+fieldgoal,all kicks,2006-2014,model - lookup,brier,-0.002077,-0.003100,-0.001010,9154,9
+fieldgoal,all kicks,2006-2014,model - lookup,log_loss,-0.005717,-0.008534,-0.003025,9154,9
+fieldgoal,all kicks,2015-2022,model,brier,0.116458,0.113144,0.120915,8351,8
+fieldgoal,all kicks,2015-2022,model,log_loss,0.373427,0.364992,0.383703,8351,8
+fieldgoal,all kicks,2015-2022,model,ece,0.007648,0.005959,0.017916,8351,8
+fieldgoal,all kicks,2015-2022,lookup,brier,0.117990,0.114917,0.121719,8351,8
+fieldgoal,all kicks,2015-2022,lookup,log_loss,0.379665,0.372127,0.388235,8351,8
+fieldgoal,all kicks,2015-2022,lookup,ece,0.046973,0.036135,0.054433,8351,8
+fieldgoal,all kicks,2015-2022,model - lookup,brier,-0.001532,-0.002570,-0.000254,8351,8
+fieldgoal,all kicks,2015-2022,model - lookup,log_loss,-0.006237,-0.008406,-0.003414,8351,8
+fieldgoal,all kicks,2023-2025,model,brier,0.112640,0.107866,0.118561,3413,3
+fieldgoal,all kicks,2023-2025,model,log_loss,0.362036,0.347040,0.377547,3413,3
+fieldgoal,all kicks,2023-2025,model,ece,0.014874,0.014874,0.029203,3413,3
+fieldgoal,all kicks,2023-2025,lookup,brier,0.116524,0.111362,0.120626,3413,3
+fieldgoal,all kicks,2023-2025,lookup,log_loss,0.375277,0.360143,0.386161,3413,3
+fieldgoal,all kicks,2023-2025,lookup,ece,0.059646,0.051939,0.070564,3413,3
+fieldgoal,all kicks,2023-2025,model - lookup,brier,-0.003884,-0.006120,-0.002065,3413,3
+fieldgoal,all kicks,2023-2025,model - lookup,log_loss,-0.013240,-0.018106,-0.008614,3413,3
+fieldgoal,50+ yards,2006-2025,model,brier,0.224734,0.218916,0.231970,3285,20
+fieldgoal,50+ yards,2006-2025,model,log_loss,0.641412,0.629100,0.656480,3285,20
+fieldgoal,50+ yards,2006-2025,model,ece,0.031225,0.020641,0.049415,3285,20
+fieldgoal,50+ yards,2006-2025,lookup,brier,0.230356,0.225656,0.235854,3285,20
+fieldgoal,50+ yards,2006-2025,lookup,log_loss,0.653999,0.644165,0.665502,3285,20
+fieldgoal,50+ yards,2006-2025,lookup,ece,0.081687,0.061073,0.098379,3285,20
+fieldgoal,50+ yards,2006-2025,model - lookup,brier,-0.005623,-0.009030,-0.001633,3285,20
+fieldgoal,50+ yards,2006-2025,model - lookup,log_loss,-0.012587,-0.020058,-0.003949,3285,20
+fieldgoal,reliability,0.1-0.2,model,mean_predicted,0.176292,,,26,6
+fieldgoal,reliability,0.1-0.2,model,observed,0.307692,0.142857,0.352941,26,6
+fieldgoal,reliability,0.2-0.3,model,mean_predicted,0.256987,,,34,9
+fieldgoal,reliability,0.2-0.3,model,observed,0.294118,0.055556,0.436364,34,9
+fieldgoal,reliability,0.3-0.4,model,mean_predicted,0.367493,,,117,16
+fieldgoal,reliability,0.3-0.4,model,observed,0.487179,0.415094,0.554709,117,16
+fieldgoal,reliability,0.4-0.5,model,mean_predicted,0.457353,,,385,20
+fieldgoal,reliability,0.4-0.5,model,observed,0.483117,0.438775,0.525060,385,20
+fieldgoal,reliability,0.5-0.6,model,mean_predicted,0.556560,,,943,20
+fieldgoal,reliability,0.5-0.6,model,observed,0.624602,0.594469,0.655776,943,20
+fieldgoal,reliability,0.6-0.7,model,mean_predicted,0.656239,,,2349,20
+fieldgoal,reliability,0.6-0.7,model,observed,0.690932,0.676827,0.706425,2349,20
+fieldgoal,reliability,0.7-0.8,model,mean_predicted,0.750694,,,4026,20
+fieldgoal,reliability,0.7-0.8,model,observed,0.765524,0.748562,0.781595,4026,20
+fieldgoal,reliability,0.8-0.9,model,mean_predicted,0.848668,,,4938,20
+fieldgoal,reliability,0.8-0.9,model,observed,0.863102,0.849416,0.874873,4938,20
+fieldgoal,reliability,0.9-1.0,model,mean_predicted,0.955059,,,8100,20
+fieldgoal,reliability,0.9-1.0,model,observed,0.959753,0.955282,0.964235,8100,20
+fieldgoal,by distance,"under 30 yd, 2006-2025",observed,rate,0.971615,0.967425,0.975914,5355,20
+fieldgoal,by distance,"under 30 yd, 2006-2025",model,mean_predicted,0.964529,0.959574,0.969493,5355,20
+fieldgoal,by distance,"under 30 yd, 2006-2014",observed,rate,0.966284,0.960923,0.972456,2610,9
+fieldgoal,by distance,"under 30 yd, 2006-2014",model,mean_predicted,0.954784,0.950987,0.959007,2610,9
+fieldgoal,by distance,"under 30 yd, 2015-2022",observed,rate,0.976012,0.970803,0.982084,2001,8
+fieldgoal,by distance,"under 30 yd, 2015-2022",model,mean_predicted,0.972248,0.966471,0.976488,2001,8
+fieldgoal,by distance,"under 30 yd, 2023-2025",observed,rate,0.978495,0.972222,0.982301,744,3
+fieldgoal,by distance,"under 30 yd, 2023-2025",model,mean_predicted,0.977958,0.974519,0.980324,744,3
+fieldgoal,by distance,"30-39 yd, 2006-2025",observed,rate,0.906585,0.891767,0.919875,6059,20
+fieldgoal,by distance,"30-39 yd, 2006-2025",model,mean_predicted,0.888656,0.873760,0.903068,6059,20
+fieldgoal,by distance,"30-39 yd, 2006-2014",observed,rate,0.881875,0.865353,0.894855,2709,9
+fieldgoal,by distance,"30-39 yd, 2006-2014",model,mean_predicted,0.855331,0.844675,0.865659,2709,9
+fieldgoal,by distance,"30-39 yd, 2015-2022",observed,rate,0.921830,0.904235,0.935477,2405,8
+fieldgoal,by distance,"30-39 yd, 2015-2022",model,mean_predicted,0.910021,0.900028,0.918426,2405,8
+fieldgoal,by distance,"30-39 yd, 2023-2025",observed,rate,0.938624,0.932692,0.946032,945,3
+fieldgoal,by distance,"30-39 yd, 2023-2025",model,mean_predicted,0.929813,0.915969,0.937377,945,3
+fieldgoal,by distance,"40-49 yd, 2006-2025",observed,rate,0.773115,0.759088,0.787705,6219,20
+fieldgoal,by distance,"40-49 yd, 2006-2025",model,mean_predicted,0.756894,0.740686,0.771747,6219,20
+fieldgoal,by distance,"40-49 yd, 2006-2014",observed,rate,0.760294,0.739949,0.781917,2720,9
+fieldgoal,by distance,"40-49 yd, 2006-2014",model,mean_predicted,0.723448,0.704246,0.743027,2720,9
+fieldgoal,by distance,"40-49 yd, 2015-2022",observed,rate,0.777735,0.756693,0.794247,2569,8
+fieldgoal,by distance,"40-49 yd, 2015-2022",model,mean_predicted,0.779279,0.776286,0.782631,2569,8
+fieldgoal,by distance,"40-49 yd, 2023-2025",observed,rate,0.797849,0.774744,0.840000,930,3
+fieldgoal,by distance,"40-49 yd, 2023-2025",model,mean_predicted,0.792878,0.784230,0.799290,930,3
+fieldgoal,by distance,"50-54 yd, 2006-2025",observed,rate,0.672050,0.640174,0.697850,2415,20
+fieldgoal,by distance,"50-54 yd, 2006-2025",model,mean_predicted,0.643837,0.617834,0.666863,2415,20
+fieldgoal,by distance,"50-54 yd, 2006-2014",observed,rate,0.616667,0.566210,0.658368,900,9
+fieldgoal,by distance,"50-54 yd, 2006-2014",model,mean_predicted,0.582022,0.556126,0.608418,900,9
+fieldgoal,by distance,"50-54 yd, 2015-2022",observed,rate,0.686939,0.657327,0.711541,1003,8
+fieldgoal,by distance,"50-54 yd, 2015-2022",model,mean_predicted,0.667936,0.657220,0.680366,1003,8
+fieldgoal,by distance,"50-54 yd, 2023-2025",observed,rate,0.740234,0.711656,0.759494,512,3
+fieldgoal,by distance,"50-54 yd, 2023-2025",model,mean_predicted,0.705284,0.681511,0.718848,512,3
+fieldgoal,by distance,"55+ yd, 2006-2025",observed,rate,0.533333,0.479344,0.572313,870,20
+fieldgoal,by distance,"55+ yd, 2006-2025",model,mean_predicted,0.501527,0.468295,0.523942,870,20
+fieldgoal,by distance,"55+ yd, 2006-2014",observed,rate,0.441860,0.376680,0.489583,215,9
+fieldgoal,by distance,"55+ yd, 2006-2014",model,mean_predicted,0.421102,0.369366,0.464987,215,9
+fieldgoal,by distance,"55+ yd, 2015-2022",observed,rate,0.528150,0.474118,0.573840,373,8
+fieldgoal,by distance,"55+ yd, 2015-2022",model,mean_predicted,0.510196,0.491793,0.528484,373,8
+fieldgoal,by distance,"55+ yd, 2023-2025",observed,rate,0.609929,0.580645,0.649123,282,3
+fieldgoal,by distance,"55+ yd, 2023-2025",model,mean_predicted,0.551378,0.547185,0.556818,282,3
+punt,log score,2006-2025,model,log_score,-2.122209,-2.138795,-2.103741,47765,20
+punt,log score,2006-2025,raw same-yardline history,log_score,-2.167517,-2.187683,-2.145757,47765,20
+punt,log score,2006-2025,model - raw,log_score,0.045308,0.040381,0.050035,47765,20
+punt,starts at its own 20,"all punts, 2006-2025",observed,rate,0.095153,0.090461,0.099754,47765,20
+punt,starts at its own 20,"all punts, 2006-2025",model,mean_predicted,0.094945,0.091370,0.098566,47765,20
+punt,return touchdown,"all punts, 2006-2025",observed,rate,0.006616,0.005701,0.007569,47765,20
+punt,return touchdown,"all punts, 2006-2025",model,mean_predicted,0.007095,0.006428,0.007748,47765,20
+punt,kicking team keeps the ball,"all punts, 2006-2025",observed,rate,0.011850,0.011073,0.012667,47765,20
+punt,kicking team keeps the ball,"all punts, 2006-2025",model,mean_predicted,0.012218,0.012012,0.012433,47765,20
+punt,receiving spot (its yardline_100),"all punts, 2006-2025",observed,rate,74.727556,74.335825,75.143980,46883,20
+punt,receiving spot (its yardline_100),"all punts, 2006-2025",model,mean_predicted,74.113761,73.595090,74.672357,46883,20
+punt,starts at its own 20,opp 30-49 (yardline_100 30-49),observed,rate,0.195463,0.182307,0.208244,7715,20
+punt,starts at its own 20,opp 30-49 (yardline_100 30-49),model,mean_predicted,0.209384,0.191985,0.226071,7715,20
+punt,return touchdown,opp 30-49 (yardline_100 30-49),observed,rate,0.000907,0.000364,0.001597,7715,20
+punt,return touchdown,opp 30-49 (yardline_100 30-49),model,mean_predicted,0.001210,0.000922,0.001464,7715,20
+punt,kicking team keeps the ball,opp 30-49 (yardline_100 30-49),observed,rate,0.006092,0.004392,0.007977,7715,20
+punt,kicking team keeps the ball,opp 30-49 (yardline_100 30-49),model,mean_predicted,0.007361,0.006562,0.008200,7715,20
+punt,receiving spot (its yardline_100),opp 30-49 (yardline_100 30-49),observed,rate,87.680198,87.373863,88.002234,7661,20
+punt,receiving spot (its yardline_100),opp 30-49 (yardline_100 30-49),model,mean_predicted,87.133303,86.798504,87.498137,7661,20
+punt,starts at its own 20,50-59,observed,rate,0.180448,0.166537,0.194548,8889,20
+punt,starts at its own 20,50-59,model,mean_predicted,0.178018,0.169460,0.186273,8889,20
+punt,return touchdown,50-59,observed,rate,0.003487,0.002238,0.004978,8889,20
+punt,return touchdown,50-59,model,mean_predicted,0.003982,0.003167,0.004783,8889,20
+punt,kicking team keeps the ball,50-59,observed,rate,0.009787,0.007735,0.012156,8889,20
+punt,kicking team keeps the ball,50-59,model,mean_predicted,0.010093,0.009567,0.010643,8889,20
+punt,receiving spot (its yardline_100),50-59,observed,rate,83.958044,83.579356,84.355748,8771,20
+punt,receiving spot (its yardline_100),50-59,model,mean_predicted,83.244871,82.774552,83.699968,8771,20
+punt,starts at its own 20,60-69,observed,rate,0.095357,0.087760,0.102745,10854,20
+punt,starts at its own 20,60-69,model,mean_predicted,0.087918,0.082150,0.093181,10854,20
+punt,return touchdown,60-69,observed,rate,0.006541,0.005074,0.007958,10854,20
+punt,return touchdown,60-69,model,mean_predicted,0.007167,0.006103,0.008223,10854,20
+punt,kicking team keeps the ball,60-69,observed,rate,0.015939,0.013755,0.018228,10854,20
+punt,kicking team keeps the ball,60-69,model,mean_predicted,0.015134,0.014597,0.015698,10854,20
+punt,receiving spot (its yardline_100),60-69,observed,rate,77.954194,77.354627,78.504414,10610,20
+punt,receiving spot (its yardline_100),60-69,model,mean_predicted,76.829578,76.140941,77.478226,10610,20
+punt,starts at its own 20,70-79,observed,rate,0.029450,0.025275,0.033713,11647,20
+punt,starts at its own 20,70-79,model,mean_predicted,0.027799,0.024793,0.031104,11647,20
+punt,return touchdown,70-79,observed,rate,0.009359,0.007461,0.011441,11647,20
+punt,return touchdown,70-79,model,mean_predicted,0.009882,0.009053,0.010710,11647,20
+punt,kicking team keeps the ball,70-79,observed,rate,0.012707,0.011165,0.014208,11647,20
+punt,kicking team keeps the ball,70-79,model,mean_predicted,0.013600,0.013220,0.013998,11647,20
+punt,receiving spot (its yardline_100),70-79,observed,rate,68.901054,68.228960,69.524480,11390,20
+punt,receiving spot (its yardline_100),70-79,model,mean_predicted,68.290365,67.529369,69.054907,11390,20
+punt,starts at its own 20,own 1-20 (80-99),observed,rate,0.006009,0.004382,0.007660,8654,20
+punt,starts at its own 20,own 1-20 (80-99),model,mean_predicted,0.006633,0.006003,0.007229,8654,20
+punt,return touchdown,own 1-20 (80-99),observed,rate,0.011324,0.009146,0.013422,8654,20
+punt,return touchdown,own 1-20 (80-99),model,mean_predicted,0.011704,0.011109,0.012246,8654,20
+punt,kicking team keeps the ball,own 1-20 (80-99),observed,rate,0.012826,0.010830,0.014943,8654,20
+punt,kicking team keeps the ball,own 1-20 (80-99),model,mean_predicted,0.013217,0.012490,0.013957,8654,20
+punt,receiving spot (its yardline_100),own 1-20 (80-99),observed,rate,57.189224,56.598521,57.717947,8445,20
+punt,receiving spot (its yardline_100),own 1-20 (80-99),model,mean_predicted,57.251992,56.519475,57.940428,8445,20
+punt,expected WP,"all punts, 2006-2025",model,exp_wp,0.471454,0.469358,0.473525,47765,20
+punt,expected WP,"all punts, 2006-2025",model,real_wp,0.472279,0.470100,0.474389,47765,20
+punt,expected WP,"all punts, 2006-2025",model,bias,-0.000825,-0.001111,-0.000533,47765,20
+punt,expected WP,"all punts, 2006-2025",model,abs_err,0.011115,0.010524,0.011692,47765,20
+punt,expected WP,opp 30-49 (yardline_100 30-49),model,exp_wp,0.548230,0.540415,0.557243,7715,20
+punt,expected WP,opp 30-49 (yardline_100 30-49),model,real_wp,0.548666,0.540780,0.557647,7715,20
+punt,expected WP,opp 30-49 (yardline_100 30-49),model,bias,-0.000436,-0.000722,-0.000131,7715,20
+punt,expected WP,opp 30-49 (yardline_100 30-49),model,abs_err,0.007219,0.006415,0.007963,7715,20
+punt,expected WP,50-59,model,exp_wp,0.501356,0.493570,0.509499,8889,20
+punt,expected WP,50-59,model,real_wp,0.502393,0.494634,0.510385,8889,20
+punt,expected WP,50-59,model,bias,-0.001037,-0.001505,-0.000554,8889,20
+punt,expected WP,50-59,model,abs_err,0.009141,0.008225,0.010048,8889,20
+punt,expected WP,60-69,model,exp_wp,0.468505,0.463695,0.473516,10854,20
+punt,expected WP,60-69,model,real_wp,0.470134,0.465187,0.475322,10854,20
+punt,expected WP,60-69,model,bias,-0.001629,-0.002128,-0.001152,10854,20
+punt,expected WP,60-69,model,abs_err,0.012173,0.011291,0.013044,10854,20
+punt,expected WP,70-79,model,exp_wp,0.433668,0.426424,0.439627,11647,20
+punt,expected WP,70-79,model,real_wp,0.434309,0.426965,0.440323,11647,20
+punt,expected WP,70-79,model,bias,-0.000641,-0.001155,-0.000106,11647,20
+punt,expected WP,70-79,model,abs_err,0.013146,0.012542,0.013758,11647,20
+punt,expected WP,own 1-20 (80-99),model,exp_wp,0.426560,0.417562,0.436124,8654,20
+punt,expected WP,own 1-20 (80-99),model,real_wp,0.426759,0.417549,0.436507,8654,20
+punt,expected WP,own 1-20 (80-99),model,bias,-0.000200,-0.000846,0.000402,8654,20
+punt,expected WP,own 1-20 (80-99),model,abs_err,0.012556,0.011956,0.013179,8654,20
+tries,pat,2006-2025,model,brier,0.033602,0.023830,0.043437,25429,20
+tries,pat,2006-2025,model,log_loss,0.144120,0.107012,0.180905,25429,20
+tries,pat,2006-2025,model,ece,0.004571,0.001045,0.008199,25429,20
+tries,pat,2006-2025,naive,brier,0.034250,0.024211,0.044361,25429,20
+tries,pat,2006-2025,naive,log_loss,0.156126,0.114593,0.198330,25429,20
+tries,pat,2006-2025,naive,ece,0.016852,0.007751,0.025992,25429,20
+tries,pat,2006-2025,model - naive,brier,-0.000648,-0.001031,-0.000290,25429,20
+tries,pat,2006-2025,model - naive,log_loss,-0.012006,-0.019160,-0.005642,25429,20
+tries,pat,2006-2014,model,brier,0.009509,0.006882,0.012467,11356,9
+tries,pat,2006-2014,model,log_loss,0.054250,0.042250,0.067654,11356,9
+tries,pat,2006-2014,model,ece,0.002921,0.000572,0.004953,11356,9
+tries,pat,2006-2014,naive,brier,0.009517,0.006894,0.012467,11356,9
+tries,pat,2006-2014,naive,log_loss,0.054619,0.042993,0.067692,11356,9
+tries,pat,2006-2014,naive,ece,0.003777,0.001164,0.006187,11356,9
+tries,pat,2006-2014,model - naive,brier,-0.000008,-0.000018,0.000002,11356,9
+tries,pat,2006-2014,model - naive,log_loss,-0.000368,-0.000814,0.000046,11356,9
+tries,pat,2015-2022,model,brier,0.057638,0.054919,0.060471,10209,8
+tries,pat,2015-2022,model,log_loss,0.231173,0.222777,0.239933,10209,8
+tries,pat,2015-2022,model,ece,0.002094,0.000129,0.009250,10209,8
+tries,pat,2015-2022,naive,brier,0.059276,0.056226,0.062429,10209,8
+tries,pat,2015-2022,naive,log_loss,0.260631,0.245998,0.274334,10209,8
+tries,pat,2015-2022,naive,ece,0.041175,0.036115,0.045557,10209,8
+tries,pat,2015-2022,model - naive,brier,-0.001638,-0.001985,-0.001293,10209,8
+tries,pat,2015-2022,model - naive,log_loss,-0.029458,-0.037376,-0.021203,10209,8
+tries,pat,2023-2025,model,brier,0.040904,0.039907,0.042081,3864,3
+tries,pat,2023-2025,model,log_loss,0.178238,0.175707,0.181934,3864,3
+tries,pat,2023-2025,model,ece,0.015967,0.013166,0.020211,3864,3
+tries,pat,2023-2025,naive,brier,0.040816,0.039655,0.042075,3864,3
+tries,pat,2023-2025,naive,log_loss,0.178337,0.174205,0.183039,3864,3
+tries,pat,2023-2025,naive,ece,0.013211,0.012507,0.014588,3864,3
+tries,pat,2023-2025,model - naive,brier,0.000088,0.000006,0.000252,3864,3
+tries,pat,2023-2025,model - naive,log_loss,-0.000100,-0.001104,0.001502,3864,3
+tries,two_point,2006-2025,model,brier,0.249731,0.248976,0.250535,1893,20
+tries,two_point,2006-2025,model,log_loss,0.692610,0.691098,0.694221,1893,20
+tries,two_point,2006-2025,model,ece,0.003040,0.001154,0.026283,1893,20
+tries,two_point,2006-2025,naive,brier,0.249529,0.248230,0.250840,1893,20
+tries,two_point,2006-2025,naive,log_loss,0.692208,0.689604,0.694834,1893,20
+tries,two_point,2006-2025,naive,ece,0.009702,0.000581,0.028550,1893,20
+tries,two_point,2006-2025,model - naive,brier,0.000202,-0.000503,0.000979,1893,20
+tries,two_point,2006-2025,model - naive,log_loss,0.000402,-0.001012,0.001961,1893,20
+tries,two_point,2006-2014,model,brier,0.250353,0.249366,0.251396,518,9
+tries,two_point,2006-2014,model,log_loss,0.693856,0.691878,0.695942,518,9
+tries,two_point,2006-2014,model,ece,0.013649,0.002529,0.047185,518,9
+tries,two_point,2006-2014,naive,brier,0.250242,0.247773,0.253008,518,9
+tries,two_point,2006-2014,naive,log_loss,0.693640,0.688687,0.699189,518,9
+tries,two_point,2006-2014,naive,ece,0.021119,0.001033,0.053226,518,9
+tries,two_point,2006-2014,model - naive,brier,0.000111,-0.001951,0.002040,518,9
+tries,two_point,2006-2014,model - naive,log_loss,0.000216,-0.003921,0.004085,518,9
+tries,two_point,2015-2022,model,brier,0.249569,0.248386,0.250647,971,8
+tries,two_point,2015-2022,model,log_loss,0.692287,0.689917,0.694448,971,8
+tries,two_point,2015-2022,model,ece,0.003045,0.000398,0.023780,971,8
+tries,two_point,2015-2022,naive,brier,0.249370,0.247924,0.250526,971,8
+tries,two_point,2015-2022,naive,log_loss,0.691887,0.688991,0.694204,971,8
+tries,two_point,2015-2022,naive,ece,0.009128,0.000581,0.025064,971,8
+tries,two_point,2015-2022,model - naive,brier,0.000199,-0.000034,0.000600,971,8
+tries,two_point,2015-2022,model - naive,log_loss,0.000400,-0.000068,0.001204,971,8
+tries,two_point,2023-2025,model,brier,0.249323,0.247758,0.251800,404,3
+tries,two_point,2023-2025,model,log_loss,0.691792,0.688662,0.696749,404,3
+tries,two_point,2023-2025,model,ece,0.016224,0.006299,0.081889,404,3
+tries,two_point,2023-2025,naive,brier,0.248999,0.245428,0.253653,404,3
+tries,two_point,2023-2025,naive,log_loss,0.691145,0.683995,0.700465,404,3
+tries,two_point,2023-2025,naive,ece,0.003556,0.003556,0.072302,404,3
+tries,two_point,2023-2025,model - naive,brier,0.000323,-0.001853,0.002329,404,3
+tries,two_point,2023-2025,model - naive,log_loss,0.000647,-0.003716,0.004667,404,3
+tries,pat,2006,model,rate,0.984311,0.980887,0.987258,5864,5
+tries,pat,2006,observed,rate,0.987352,0.979749,0.992588,1186,1
+tries,two_point,2006,model,rate,0.480620,0.431142,0.530387,387,5
+tries,two_point,2006,observed,rate,0.560976,0.409253,0.704420,41,1
+tries,pat,2007,model,rate,0.985439,0.982162,0.988246,5975,5
+tries,pat,2007,observed,rate,0.986257,0.978583,0.991665,1237,1
+tries,two_point,2007,model,rate,0.500000,0.446571,0.553429,334,5
+tries,two_point,2007,observed,rate,0.508772,0.381256,0.635422,57,1
+tries,pat,2008,model,rate,0.986299,0.983114,0.989014,5985,5
+tries,pat,2008,observed,rate,0.990244,0.983536,0.994656,1230,1
+tries,two_point,2008,model,rate,0.501730,0.444308,0.559118,289,5
+tries,two_point,2008,observed,rate,0.424242,0.310370,0.544598,66,1
+tries,pat,2009,model,rate,0.987785,0.984781,0.990323,6058,5
+tries,pat,2009,observed,rate,0.982400,0.973953,0.988620,1250,1
+tries,two_point,2009,model,rate,0.496528,0.439060,0.554065,288,5
+tries,two_point,2009,observed,rate,0.416667,0.298263,0.542896,60,1
+tries,pat,2010,model,rate,0.986155,0.982978,0.988868,6067,5
+tries,pat,2010,observed,rate,0.989071,0.982219,0.993723,1281,1
+tries,two_point,2010,model,rate,0.481884,0.423381,0.540765,276,5
+tries,two_point,2010,observed,rate,0.518519,0.387208,0.647902,54,1
+tries,pat,2011,model,rate,0.987063,0.984014,0.989657,6184,5
+tries,pat,2011,observed,rate,0.994453,0.989140,0.997516,1262,1
+tries,two_point,2011,model,rate,0.478417,0.420174,0.537107,278,5
+tries,two_point,2011,observed,rate,0.452830,0.324297,0.586361,53,1
+tries,pat,2012,model,rate,0.988498,0.985626,0.990919,6260,5
+tries,pat,2012,observed,rate,0.993851,0.988431,0.997089,1301,1
+tries,two_point,2012,model,rate,0.462069,0.405303,0.519588,290,5
+tries,two_point,2012,observed,rate,0.525424,0.399351,0.649069,59,1
+tries,pat,2013,model,rate,0.990038,0.987361,0.992267,6324,5
+tries,pat,2013,observed,rate,0.996215,0.991724,0.998554,1321,1
+tries,two_point,2013,model,rate,0.465753,0.409112,0.523070,292,5
+tries,two_point,2013,observed,rate,0.486111,0.373118,0.600196,72,1
+tries,pat,2014,model,rate,0.991270,0.988767,0.993331,6415,5
+tries,pat,2014,observed,rate,0.993012,0.987286,0.996537,1288,1
+tries,two_point,2014,model,rate,0.479866,0.423567,0.536554,298,5
+tries,two_point,2014,observed,rate,0.446429,0.321655,0.576582,56,1
+tries,pat,2015,model,rate,0.917568,0.896116,0.935762,740,5
+tries,pat,2015,observed,rate,0.941833,0.927855,0.953776,1255,1
+tries,two_point,2015,model,rate,0.486395,0.429629,0.543426,294,5
+tries,two_point,2015,observed,rate,0.474747,0.378294,0.572653,99,1
+tries,pat,2016,model,rate,0.941833,0.927855,0.953776,1255,1
+tries,pat,2016,observed,rate,0.934295,0.919535,0.947044,1248,1
+tries,two_point,2016,model,rate,0.477876,0.425080,0.531048,339,5
+tries,two_point,2016,observed,rate,0.467290,0.374681,0.561642,107,1
+tries,pat,2017,model,rate,0.938074,0.928123,0.947014,2503,2
+tries,pat,2017,observed,rate,0.940436,0.925921,0.952816,1192,1
+tries,two_point,2017,model,rate,0.478372,0.429294,0.527766,393,5
+tries,two_point,2017,observed,rate,0.406977,0.307633,0.512465,86,1
+tries,pat,2018,model,rate,0.938836,0.930764,0.946221,3695,3
+tries,pat,2018,observed,rate,0.943750,0.930114,0.955382,1280,1
+tries,two_point,2018,model,rate,0.457143,0.409931,0.504943,420,5
+tries,two_point,2018,observed,rate,0.507353,0.423916,0.590481,136,1
+tries,pat,2019,model,rate,0.940101,0.933249,0.946440,4975,4
+tries,pat,2019,observed,rate,0.940711,0.926680,0.952730,1265,1
+tries,two_point,2019,model,rate,0.466942,0.422803,0.511476,484,5
+tries,two_point,2019,observed,rate,0.456897,0.368239,0.547675,116,1
+tries,pat,2020,model,rate,0.940224,0.934137,0.945903,6240,5
+tries,pat,2020,observed,rate,0.930466,0.916220,0.942928,1395,1
+tries,two_point,2020,model,rate,0.466912,0.425256,0.508919,544,5
+tries,two_point,2020,observed,rate,0.461538,0.381284,0.543332,143,1
+tries,pat,2021,model,rate,0.937774,0.931647,0.943504,6380,5
+tries,pat,2021,observed,rate,0.934898,0.920635,0.947258,1321,1
+tries,two_point,2021,model,rate,0.464286,0.424233,0.504689,588,5
+tries,two_point,2021,observed,rate,0.487342,0.410225,0.564917,158,1
+tries,pat,2022,model,rate,0.937858,0.931771,0.943553,6453,5
+tries,pat,2022,observed,rate,0.944134,0.930381,0.955839,1253,1
+tries,two_point,2022,model,rate,0.469484,0.430999,0.508244,639,5
+tries,two_point,2022,observed,rate,0.492063,0.405781,0.578706,126,1
+tries,pat,2023,model,rate,0.938594,0.932568,0.944230,6514,5
+tries,pat,2023,observed,rate,0.958805,0.946643,0.968825,1238,1
+tries,two_point,2023,model,rate,0.481591,0.444153,0.519185,679,5
+tries,two_point,2023,observed,rate,0.539683,0.452580,0.624986,126,1
+tries,pat,2024,model,rate,0.941440,0.935521,0.946964,6472,5
+tries,pat,2024,observed,rate,0.956221,0.944078,0.966340,1302,1
+tries,two_point,2024,model,rate,0.487294,0.449542,0.525157,669,5
+tries,two_point,2024,observed,rate,0.405405,0.328765,0.485706,148,1
+tries,pat,2025,model,rate,0.944538,0.938779,0.949902,6509,5
+tries,pat,2025,observed,rate,0.957704,0.945847,0.967564,1324,1
+tries,two_point,2025,model,rate,0.475036,0.438235,0.512042,701,5
+tries,two_point,2025,observed,rate,0.461538,0.377477,0.547292,130,1

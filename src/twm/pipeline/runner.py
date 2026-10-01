@@ -4,8 +4,8 @@ The stages, in order (each ``twm`` command runs as its own process, with the sam
 same exit codes and the same files as when the owner types it):
 
 1. **preflight** (here): the approved models load (``config/production_models.yaml``: file,
-   sha256 and version checked; the Radar's, the streamer's, Regression Watch's and the
-   decisions' grading with its fold models); where the
+   sha256 and version checked; the Radar's, the streamer's, Regression Watch's parameters with
+   its own xFP live models and the decisions' grading with its fold models); where the
    publish goes and, for Neon, which CA bundle checks its certificate.
 2. **gate** (here, :func:`twm.pipeline.schedule.gate`): offseason days without a run stop here.
 3. **ingest**: ``twm ingest --start <season> --force`` (the nightly refresh: the current season
@@ -33,7 +33,8 @@ same exit codes and the same files as when the owner types it):
     their frozen backtest lists (sha256, rows, ``reports/regression_watch/backtest.csv``). The
     publish reads the lists in place; nothing is recomputed on the runner.
     **regression_score** / **regression_export** (only when a list is due): ``twm regression
-    score`` with the approved frozen parameters, the same rules.
+    score`` with the approved frozen parameters and the pinned own xFP live models (the
+    season's plays scored, never fitted), the same rules.
 14. **decisions_backtest** (step P3): ``twm model check decisions``: the approved grading (spec,
     the five fold models: sha256 before anything is opened) and its frozen 2006-2025 history
     (sha256, rows, ``reports/decisions/{fourth_downs,clock}.csv`` reproduced). History is never
@@ -326,12 +327,14 @@ def default_hooks() -> Hooks:
         frames = pins.load_backtest(pin)  # sha256 and rows of the snapshot, before any work
         n = frames["predictions"].height
         # step P2: the streamer's K model and D/ST rule and Regression Watch's parameters load
-        # too (sha256 checked), so a broken pin stops the run before any download
-        from twm.modules.regression_watch.production import load_pinned_params
+        # too (sha256 checked), so a broken pin stops the run before any download; step H6-b2:
+        # with them Regression Watch's own xFP live models (every file's sha256, then opened)
+        from twm.modules.regression_watch.production import load_pinned_xfp
         from twm.modules.streamer.production import load_pinned_k, load_pinned_rule
 
         k, rule = load_pinned_k(season)[0], load_pinned_rule(season)[0]
-        params = load_pinned_params(season)[0]
+        live, params, _ = load_pinned_xfp(season)
+        xfp = f"own xFP {live.version}" if live is not None else "ffopportunity xFP"
         # step P3: the decisions' grading spec and its five fold models (sha256 first)
         from twm.modules.decisions.production import load_pinned as load_pinned_grading
 
@@ -339,7 +342,7 @@ def default_hooks() -> Hooks:
         return (f"approved model {pm.model_version} ({pin.file}, sha256 {pin.sha256[:12]}...) "
                 f"and its backtest {pin.backtest_seasons} ({n:,} predictions); streamer "
                 f"{k.model_version} and {rule.model_version}; Regression Watch "
-                f"{params.model_version}; decisions {grading.model_version}")  # fmt: skip
+                f"{params.model_version} ({xfp}); decisions {grading.model_version}")  # fmt: skip
 
     return Hooks(
         check_model=check_model,

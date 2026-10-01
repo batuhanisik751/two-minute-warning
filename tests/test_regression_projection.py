@@ -366,14 +366,15 @@ def test_acceptance_verdict_reads_the_pooled_difference():
 
 def test_cli_backtest(base, tmp_path, monkeypatch):
     f, _ = base
-    monkeypatch.setattr(bt, "load_inputs", lambda db, last: (f, asofs(SEASONS, WEEKS)))
+    monkeypatch.setattr(bt, "load_inputs", lambda db, last, xfp=None: (f, asofs(SEASONS, WEEKS)))
     monkeypatch.setattr(sr, "_built_at", lambda db: "2026-01-01 00:00:00")
     db = tmp_path / "warehouse.duckdb"
     db.write_bytes(b"")
     out = tmp_path / "rw" / "backtest.md"
     runner = CliRunner()
     res = runner.invoke(app, ["regression", "backtest", "--db", str(db), "--end", "2012",
-                              "--out", str(out), "--boot", "20"])  # fmt: skip
+                              "--out", str(out), "--boot", "20",
+                              "--xfp", "ffopportunity"])  # fmt: skip
     assert res.exit_code == 0, res.output
     assert "P1 acceptance" in res.output and "season 2012" in res.output  # progress too
     assert out.exists() and out.with_suffix(".csv").exists()
@@ -393,18 +394,19 @@ def test_cli_project(base, tmp_path, monkeypatch):
     table = uni.with_columns(*tg.tag_exprs(_league(), ch.sell.x, ch.buy.x),
                              pl.col("gsis_id").alias("name"))  # fmt: skip
     wp = bt.WeekProjection(2012, 6, asof(2012, 6), ch, table)
-    monkeypatch.setattr(bt, "project_week", lambda db, season, week, league: wp)
+    monkeypatch.setattr(bt, "project_week", lambda db, season, week, league, xfp=None: wp)
     db = tmp_path / "warehouse.duckdb"
     db.write_bytes(b"")
     out = tmp_path / "p.csv"
-    args = ["regression", "project", "2012", "6", "--db", str(db), "--position", "wr"]
+    args = ["regression", "project", "2012", "6", "--db", str(db), "--position", "wr",
+            "--xfp", "ffopportunity"]  # fmt: skip
     res = CliRunner().invoke(app, [*args, "--top", "3", "--csv", str(out)])
     assert res.exit_code == 0, res.output
     assert ch.variant.name in res.output and "\nWR  name" in res.output
     assert "\nQB  name" not in res.output
     assert pl.read_csv(out).height == table.height
     res = CliRunner().invoke(app, ["regression", "project", "2012", "6", "--db", str(db),
-                                   "--position", "K"])  # fmt: skip
+                                   "--position", "K", "--xfp", "ffopportunity"])  # fmt: skip
     assert res.exit_code != 0
 
 
@@ -461,8 +463,10 @@ def test_real_backtest_matches_the_committed_report():
     import csv
 
     from twm.config import league
+    from twm.modules.regression_watch import xfp_source as xs
 
-    frame, a = bt.load_inputs(_real_db(), 2025)
+    db = _real_db()  # the committed report uses the pinned source (own xFP since H6-b2)
+    frame, a = bt.load_inputs(db, 2025, xfp=xs.history(db, 2025, xs.pinned_source()))
     b = bt.run_backtest(frame, a, league(), last_season=2025, n_boot=10)
     with REPORT.with_suffix(".csv").open(encoding="utf-8") as fh:
         committed = {

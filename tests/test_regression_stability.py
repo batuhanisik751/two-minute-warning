@@ -310,14 +310,15 @@ def test_windows_cover_blocks_and_growing_windows():
 
 
 def test_cli_stability(tmp_path, monkeypatch):
-    monkeypatch.setattr(st, "load_frame", lambda db, seasons: _two_positions())
+    monkeypatch.setattr(st, "load_frame", lambda db, seasons, xfp=None: _two_positions())
     monkeypatch.setattr(sr, "_built_at", lambda db: "2026-01-01 00:00:00")
     db = tmp_path / "warehouse.duckdb"
     db.write_bytes(b"")
     out = tmp_path / "rw" / "stability.md"
     runner = CliRunner()
     res = runner.invoke(app, ["regression", "stability", "--db", str(db), "--start", "2010",
-                              "--end", "2012", "--out", str(out), "--boot", "20"])  # fmt: skip
+                              "--end", "2012", "--out", str(out), "--boot", "20",
+                              "--xfp", "ffopportunity"])  # fmt: skip
     assert res.exit_code == 0, res.output
     assert "WR FPOE/game shrinkage: r(4)" in res.output
     assert out.exists() and out.with_suffix(".csv").exists()
@@ -408,7 +409,10 @@ def _real_db() -> Path:
 
 @pytest.mark.realdata
 def test_real_study_matches_the_expected_shape():
-    frame = st.load_frame(_real_db(), range(2009, 2026))
+    from twm.modules.regression_watch import xfp_source as xs
+
+    db = _real_db()  # the committed report uses the pinned source (own xFP since H6-b2)
+    frame = st.load_frame(db, range(2009, 2026), xfp=xs.history(db, 2025, xs.pinned_source()))
     sh = st.split_half(frame, range(2009, 2026), n_boot=100)
     oe = sh.filter(pl.col("split") == "odd_even")
     for pos in pw.FANTASY_POSITIONS:

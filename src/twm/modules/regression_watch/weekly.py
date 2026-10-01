@@ -198,16 +198,26 @@ def run_week(
     now: datetime,
     allow_incomplete: bool = False,
     real_clock: bool = True,
+    live: Any = None,
 ) -> WeeklyRun:
     """Check the week's data and make the list (nothing is stored here);
     :class:`~twm.modules.waiver_radar.weekly.NotReadyError` when data is missing and
     ``allow_incomplete`` is False. Unless ``now`` is the real clock (``real_clock``), the run is
-    never 'live'. Everything the list reads goes through one view at the week's as-of."""
+    never 'live'. Everything the list reads goes through one view at the week's as-of.
+
+    ``live``: the approved own xFP models (:func:`.production.load_pinned_xfp`), required when
+    the parameters were made with the own xFP (step H6-b2): the season's plays public at the
+    as-of are scored with them (nothing is fit) and replace ffopportunity's expected points in
+    the frame (:func:`.player_week.with_xfp`)."""
     from twm.asof import AsOfView, weekly_as_of
-    from twm.modules.regression_watch.player_week import player_games_for
+    from twm.modules.regression_watch.player_week import player_games_for, with_xfp
 
     if int(season) != int(params.season):
         raise ValueError(f"the approved parameters score {params.season}, not {season}")
+    if (params.xfp_source == "own") != (live is not None):
+        raise ValueError(f"the approved parameters use the {params.xfp_source} xFP: "
+                         + ("the pinned live models are needed" if live is None
+                            else "live models do not apply"))  # fmt: skip
     last = rw.last_reg_week(db, season)
     if last is not None and week >= last:
         raise ValueError(
@@ -222,6 +232,10 @@ def run_week(
     kind = rw.run_kind(as_of, kickoff, now) if real_clock else "backtest"
     with AsOfView(db, as_of) as view:
         std = player_games_for(view, season)
+        if live is not None:
+            from twm.modules.regression_watch.own_xfp import live_player_games
+
+            std = with_xfp(std, live_player_games(view, season, live))
         names = view.sql("SELECT gsis_id, display_name AS name FROM dim_player")
     table = score_week(std, names, params, league, week)
     horizon = (last - week) if last is not None else 0

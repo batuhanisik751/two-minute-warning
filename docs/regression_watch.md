@@ -11,10 +11,15 @@ is a prediction yet.
   (`config/scoring.yaml`, full PPR by default; docs/scoring.md).
 - **xFP (expected fantasy points)**: what an *average* player would have scored from the same
   chances. Every target and carry has a value that depends on where on the field it happened,
-  how deep the pass was, the down and distance and so on. nflverse's **ffopportunity** models
-  estimate, for each target, the chance it is caught, the yards it is worth and the chance it
-  is a touchdown (for each carry the same for rushing). We add those expectations up and score
-  them with the same weights as real points.
+  how deep the pass was, the down and distance and so on. A model estimates, for each target,
+  the chance it is caught, the yards it is worth and the chance it is a touchdown (for each
+  carry the same for rushing). We add those expectations up and score them with the same
+  weights as real points. **Since 2026-10-01 (step H6-b2, the owner's decision) the weekly
+  list, the stability study and the backtest use our own walk-forward models**: a play of
+  season S is valued by models trained only on seasons before S (section "Our own expected
+  points" below). D1 built the frame with nflverse's **ffopportunity** models, which saw later
+  seasons too; the frame (`twm regression player`, the player pages' xFP and FPOE) and the
+  Waiver Radar still use those.
 - **FPOE (fantasy points over expected)** = points - xFP. Positive: he did more with his
   chances than an average player would have. Opportunity (xFP) tends to repeat from week to
   week; FPOE is partly skill but largely luck, so it tends to shrink back toward zero
@@ -161,11 +166,12 @@ reads the raw warehouse fails it (tests/test_regression_watch.py).
 
 ## Known gaps and limits
 
-- **Model outputs (PROJECT_SPEC 6.3).** The expected values come from ffopportunity's models
-  and the garbage-time flag from nflfastR's win-probability model. Both were trained on many
-  seasons, including seasons after some of the weeks shown here, so an old week's xFP "knows"
-  a little about the future. P1 uses them as they are; P2 re-estimates xFP walk-forward and
-  compares.
+- **Model outputs (PROJECT_SPEC 6.3).** The frame's expected values come from ffopportunity's
+  models and the garbage-time flag from nflfastR's win-probability model. Both were trained on
+  many seasons, including seasons after some of the weeks shown here, so an old week's xFP
+  "knows" a little about the future. H6-b re-estimated xFP walk-forward and compared; since
+  H6-b2 (2026-10-01) the weekly list, D2 and D3 use the walk-forward xFP, so only the
+  garbage-time flag still carries this leak there.
 - **Receivers in 2006-2008: xFP too low.** In those seasons the play-by-play, and so
   ffopportunity, names the target of almost no incomplete pass (1.1%, 7.6% and 9.0% of
   incompletions, against 86-97% from 2009; nflverse's weekly `targets` is empty for
@@ -204,14 +210,21 @@ player-seasons.
 **What is measured** (per half): xFP, FPOE and points per game, each also without garbage time;
 and the parts of efficiency as rates over expected per chance: TD rate ((touchdowns - expected)
 per pass, carry or target), catch rate ((catches - expected) per target; for QBs completions
-per pass, CPOE) and YAC over expected per catch (ffopportunity has a YAC expectation for every
-catch from 2006, so it is studied on every season of the study). A rate needs 10 chances in each
-half.
+per pass, CPOE) and YAC over expected per catch (every catch has a YAC expectation, so it is
+studied on every season of the study). A rate needs 10 chances in each half.
 
-**What the data says** (2009-2025, odd against even games): opportunity is far stickier than
-efficiency at every position (xFP/game r 0.76 QB to 0.88 RB; FPOE/game 0.10 QB to 0.16 RB).
-Touchdowns over expected barely repeat (r about 0); catch rate, completion rate (QB 0.33) and
-YAC (WR, TE about 0.2) repeat a little. Without garbage time neither number gets stickier.
+**The xFP it uses** is the pinned source (`config/production_models.yaml`, `xfp:`): since
+2026-10-01 (step H6-b2) the own walk-forward xFP, each season valued by models trained on the
+seasons before it (`uv run twm regression stability --xfp ffopportunity` reruns it with
+ffopportunity's, for research).
+
+**What the data says** (2009-2025, odd against even games, own xFP): opportunity is far
+stickier than efficiency at every position (xFP/game r 0.72 QB to 0.89 RB; FPOE/game 0.17 TE
+to 0.28 QB). Touchdowns over expected barely repeat (r 0.02-0.07); catch rate, completion rate
+(QB 0.44) and YAC (WR, TE about 0.2) repeat a little. Without garbage time neither number gets
+stickier. With ffopportunity's xFP (the approved study until 2026-10-01) FPOE/game repeated
+less (0.10 QB to 0.16 RB) and QB completion rate 0.33: its models saw later seasons, so their
+expectations already absorb some of what is skill.
 
 **Shrinkage.** Each game's FPOE = the player's true level + luck. The covariance of the odd and
 even halves estimates how much true levels differ (`signal_variance`); the variance of their
@@ -221,9 +234,10 @@ difference, divided by the average of 1/g_a + 1/g_b, estimates the luck of one g
     r(g) = signal_variance / (signal_variance + noise_variance / g)
 
 of its value: the **shrinkage factor** for the rest-of-season projection (D3: xFP/game + r(g)
-x FPOE/game). On 2009-2025, r(8) is 0.12 QB, 0.20 RB, 0.13 WR, 0.15 TE; half weight takes
-30-60 games, i.e. several seasons. The estimates move between season windows (RB r(8) 0.33 on
-2009-2014, 0.10 on 2020-2025), which the report shows.
+x FPOE/game). On 2009-2025 (own xFP), r(8) is 0.32 QB, 0.27 RB, 0.24 WR, 0.22 TE; half weight
+takes 17-29 games, about one to two seasons (with ffopportunity's xFP: 0.12, 0.20, 0.13, 0.15
+and 30-60 games). The estimates move between season windows (RB r(8) 0.36 on 2009-2014, 0.16
+on 2020-2025), which the report shows.
 
 **Point in time.** `stability.shrinkage(seasons)` reads only the seasons it is given (and,
 with `as_of`, only rows public then), so D3's walk-forward backtest for season S passes the
@@ -231,9 +245,11 @@ seasons before S; a later season can never change the estimate (tested).
 
 **Limits.** One noise size per position (a high-volume player's FPOE swings more); backups are
 in the study, which widens opportunity's spread; the parts of efficiency have no garbage-time
-split (ffopportunity's weekly rows); the bootstrap treats player-seasons as independent; the
-FPOE average of QB player-seasons is below zero (-0.8 per game: lost fumbles have no expected
-value), so shrinking toward 0 or toward the position average is a D3 choice (`prior_mean`).
+split; the bootstrap treats player-seasons as independent; the FPOE average of a position is
+not zero (own xFP: QB +0.51, RB +0.21, WR +0.27, TE +0.47 per game, since the own models
+expect a little less than players scored; with ffopportunity's, QB -0.8: lost fumbles have no
+expected value), so shrinking toward 0 or toward the position average is a D3 choice
+(`prior_mean`).
 
 ## The rest-of-season projection and the tags (step D3)
 
@@ -251,78 +267,101 @@ of `config/league.yaml` that is QB 18, RB 54, WR 54, TE 36; the numbers follow t
     his xFP per game (recent games count a little more) + r(g) x his FPOE per game
 
 His opportunity carries over; of his points over expected only the share r(g) that repeats
-(D2's shrinkage factor after his g games, about 0.1-0.2 after 8 games) is kept. For season S,
-r(g) comes only from the seasons 2009 to S-1. Example (`twm regression project 2026 3`): Jaxon
-Smith-Njigba scored 34.7 points per game on 22.2 xFP (+12.5 over expected): projection 22.9.
+(D2's shrinkage factor after his g games, about 0.2-0.3 after 8 games) is kept. For season S,
+r(g) comes only from the seasons 2009 to S-1. Example (`twm regression project 2026 3`, own
+xFP): Jaxon Smith-Njigba scored 34.7 points per game on 22.5 xFP (+12.2 over expected):
+projection 23.8.
 
 **What the backtest chose (never looking at the season it tests).** 24 variants were
-compared: shrink toward 0 (the spec's formula) or toward the position's average FPOE (QBs
-average about -0.8 a game); recent games weighted with a half-life of 8, 4 or 2 games, or not
-at all; garbage time kept, left out of the efficiency, or left out of both parts. For test
-season S the variant with the smallest error on the earlier seasons 2010 to S-1 is used. The
-choice: toward the position average, with a half-life of 4 games (2011-2013), then 8 games
-(2014-2025). Leaving garbage time out never helped (as D2 found, it does not make FPOE
-stickier). The spec's formula as written is only 0.03 points per game behind.
+compared: shrink toward 0 (the spec's formula) or toward the position's average FPOE;
+recent games weighted with a half-life of 8, 4 or 2 games, or not at all; garbage time kept,
+left out of the efficiency, or left out of both parts. For test season S the variant with the
+smallest error on the earlier seasons 2010 to S-1 is used. With the own xFP (since H6-b2) the
+choice is toward 0 every season, with a half-life of 4 games (2011-2013), 8 games (2014-2019),
+then no recency weight (2020-2025, and 2026): the spec's formula as written. Leaving garbage
+time out never helped (as D2 found, it does not make FPOE stickier). With ffopportunity's xFP
+the rule had picked the position average (half-life 4, then 8 games), 0.03 points per game
+ahead of the spec's formula.
 
-**How good is it?** Tested on 2011-2025 at the as-ofs after weeks 4, 6, 8 and 10 (9,985
+**How good is it?** Tested on 2011-2025 at the as-ofs after weeks 4, 6, 8 and 10 (10,013
 player-weeks), against what each player really scored per game afterwards (players with fewer
 than 3 games left are not graded; the report counts them). Mean absolute error, points per
-game (95% intervals from resampling whole seasons):
+game (95% intervals from resampling whole seasons), own xFP:
 
 | | projection | season-to-date PPG | last-3 PPG | projection - PPG |
 |---|---|---|---|---|
-| all positions | 3.21 | 3.41 | 4.02 | -0.19 (-0.25 to -0.13) |
-| QB / RB / WR / TE | 3.38 / 3.47 / 3.40 / 2.49 | 3.50 / 3.58 / 3.64 / 2.75 | 4.18 / 4.20 / 4.33 / 3.23 | QB -0.11 (-0.31 to 0.09); RB, WR, TE clearly better |
+| all positions | 3.12 | 3.41 | 4.02 | -0.28 (-0.36 to -0.21) |
+| QB / RB / WR / TE | 3.12 / 3.40 / 3.34 / 2.41 | 3.51 / 3.58 / 3.65 / 2.75 | 4.17 / 4.20 / 4.32 / 3.23 | QB -0.38 (-0.62 to -0.16); every position clearly better |
 
 The P1 target ("beats season-to-date PPG on MAE") is **met**. The gain is largest early (week
-4: 3.16 against 3.48) and small late (week 14: 3.85 against 3.92). For QBs the interval
-includes 0. The *order* of the players is no better than PPG's (Spearman 0.525 against 0.516,
-difference within noise): the projection mostly corrects each player's level toward his
-opportunity.
+4: 3.04 against 3.49) and small late (week 14: 3.85 against 3.93). With ffopportunity's xFP
+(the approved backtest until 2026-10-01) the projection's MAE was 3.21 (-0.19, -0.25 to -0.13)
+and the QB interval included 0 (-0.11, -0.31 to 0.09). The *order* of the players is no better
+than PPG's (Spearman 0.528 against 0.518, difference within noise): the projection mostly
+corrects each player's level toward his opportunity.
 
 **The tags** (per position, at each as-of; X chosen on the earlier seasons as the most accurate
-value that still tags at least 3 players a week):
+value that still tags at least 3 players a week; own xFP, ffopportunity's in brackets):
 
 - **Sell-high**: FPOE per game in the top tenth of his position AND a projection at least X
-  (4.5-5.5) points per game below his PPG. 92% of 237 tags came true (he scored less per game
-  afterwards), against 60% for any universe player and 82% for the top tenth alone.
-- **Buy-low**: the mirror (bottom tenth, projection at least X, usually 3, above his PPG). 62%
-  came true against 39% for anyone, but 61% for the bottom tenth alone: the X adds little.
+  (4.5-5.5) points per game below his PPG. 94% of 262 tags came true (he scored less per game
+  afterwards; [92% of 237]), against 60% for any universe player and 82% for the top tenth
+  alone.
+- **Buy-low**: the mirror (bottom tenth, projection at least X, usually 3, above his PPG). 59%
+  came true [62%] against 39% for anyone, but 60% for the bottom tenth alone [61%]: the X
+  adds little.
 - **Legit**: a starter by PPG (QB top 12, RB 24, WR 24, TE 12) whose FPOE is NOT in the top
-  tenth: his points come from his role. 61% were still starters for the rest of the season,
-  the same as all starters (61%); starters with top-tenth FPOE stayed 63% of the time (they rank
-  higher, so they have further to fall). Read Legit as a description, not a forecast.
-  **Tested, not shown (owner, 2026-09-30):** Legit had no forecast value (60.6% of the 3,195
-  tagged player-as-ofs stayed starters against the 61.1% base rate of every starter), so the
-  product dropped it: the weekly list assigns only Sell-high and Buy-low (step R1). This
-  backtest, its report and its CSV stay as they were run (Legit included: the finding is
-  history), and so does the frozen backtest snapshot; `twm publish` strips Legit from every
-  list it writes.
+  tenth: his points come from his role. 59% were still starters for the rest of the season
+  [61%], against 61% of all starters; starters with top-tenth FPOE stayed 68% of the time
+  [63%] (they rank higher, so they have further to fall). Read Legit as a description, not a
+  forecast. **Tested, not shown (owner, 2026-09-30):** Legit had no forecast value (with
+  ffopportunity's xFP 60.6% of the 3,195 tagged player-as-ofs stayed starters against the
+  61.1% base rate of every starter; with the own xFP 59.0% of 3,132), so the product dropped
+  it: the weekly list assigns only Sell-high and Buy-low (step R1). The backtest, its report
+  and its CSV keep Legit as tested (the finding is history; the report says so in a note), and
+  so does the frozen backtest snapshot; `twm publish` strips Legit from every list it writes.
 
 **Point in time.** Each projection of season S uses only S's games public at the as-of and the
 seasons before S; the variant and X for S are chosen on seasons before S. Tests change season S
 (its shrinkage and choices stay the same) and season S+1 (nothing of S changes); the live
 command reads the warehouse through an as-of view and matches the backtest to the bit.
 
-**Limits.** xFP and the garbage-time flag come from nflverse models trained on later seasons
-too (PROJECT_SPEC 6.3); a player is graded on the games he played; one variant serves all
-positions; the season-block intervals treat seasons as independent.
+**Limits.** The garbage-time flag comes from nflfastR's win probability, trained on later
+seasons too (PROJECT_SPEC 6.3; xFP no longer does since H6-b2: each season's xFP comes from
+models trained on the seasons before it); a player is graded on the games he played; one
+variant serves all positions; the season-block intervals treat seasons as independent.
 
 ## The weekly list (step D4a)
 
 **One frozen, approved configuration.** The weekly job never estimates anything. The owner
 approved ONE parameters file, `artifacts/production_models/regression_watch/<version>.json`
 (4 KB), pinned with its sha256 in `config/production_models.yaml` (`regression_watch`,
-`model: params`, like the streamer's D/ST rule). For 2026 it holds what D3's rule picks for
-2026: the variant `mean_flat_all` (shrink toward the position's average FPOE, no recency
-weight, garbage time kept; lowest validation MAE on 2010-2025, 3.200 against 3.229 for the spec
-formula), the shrinkage table estimated on 2009-2025 (per position, with and without garbage
-time: the signal and noise variances behind r(g) and the prior mean), and the X of Sell-high
-(4.5 points/game) and Buy-low (3.5). It also holds the record of 2025 (the same run's choice
-for the last backtest season: `mean_hl8_all`, X 4.5 and 3.0), which must equal the committed
-`reports/regression_watch/backtest.csv` rows for 2025: `uv run twm model check` checks the
-sha256, the version (a hash of the content) and that record. `uv run twm regression pin`
-recomputes the file from the warehouse (about 10 s) and refuses when the record disagrees.
+`model: params`, like the streamer's D/ST rule). Since 2026-10-01 (step H6-b2, own xFP) it is
+`zero_flat_all-9d98d6f251ee054c`; for 2026 it holds what D3's rule picks for 2026: the
+variant `zero_flat_all` (shrink toward 0, no recency weight, garbage time kept: the spec's
+formula; lowest validation MAE on 2010-2025, 3.112), the shrinkage table estimated on
+2009-2025 (per position, with and without garbage time: the signal and noise variances behind
+r(g) and the prior mean), the X of Sell-high (5 points/game) and Buy-low (3), and its xFP
+source (`xfp_source: own`, part of the version). It also holds the record of 2025 (the same
+run's choice for the last backtest season: `zero_flat_all`, X 5 and 3), which must equal the
+committed `reports/regression_watch/backtest.csv` rows for 2025: `uv run twm model check`
+checks the sha256, the version (a hash of the content) and that record. (The parameters
+approved on 2026-09-30 with ffopportunity's xFP were `mean_flat_all-77146b2e5d2169fc`:
+toward the position average, X 4.5 and 3.5.)
+
+**The own xFP's live models are pinned too** (the pin's `xfp:` entry: `source: own`, `fold:
+2026`, `version: own_xfp-2026-8577dfffe4683678`, trained on 2006-2025): the 2026 fold of
+`own_xfp.py`, eight files `artifacts/production_models/regression_watch/<version>/<component>.joblib`
+(catch, YAC, pass TD, interception, rush yards, rush TD and the two two-point rates; 3.1 MB),
+each with its sha256. Every file's hash is checked before it is opened (a pickle), the files
+must be the season's fold with every component and the parameters' source must be the pin's:
+anything else is an error, never a fallback to ffopportunity. The scheduled job's preflight
+loads them before any download; the weekly list only predicts with them, it never fits.
+`uv run twm regression pin` (`--xfp own|ffopportunity`, default: the pinned source)
+recomputes the parameters from the warehouse with that source (the own walk-forward history
+comes from the folds in `data/regression_watch/own_xfp/`), fits the live models (about 45 s,
+byte-identical on a rerun), refuses when the record disagrees with the backtest CSV, then
+freezes the backtest lists; review and commit everything together.
 
 **Each week** (`uv run twm regression score`, also part of `uv run twm score`):
 
@@ -331,8 +370,11 @@ recomputes the file from the warehouse (about 10 s) and refuses when the record 
   (the garbage-time split). Missing data: exit code 3, nothing stored (`--allow-incomplete`
   scores anyway and marks the list).
 - **The list**: the universe at the week's official as-of (read through one as-of view), the
-  projection and the tags with the frozen parameters. It equals D3's `regression project` of the
-  same week. Weeks 1-2: nobody has 3 games yet, so there is no list (exit 0, nothing stored).
+  projection and the tags with the frozen parameters. With the own xFP the season's plays
+  public at the as-of (ffopportunity's per-play rows give the play list and the garbage-time
+  flag) are valued by the pinned live models and summed with D1's own SQL, and
+  those expected points replace ffopportunity's in the frame (`player_week.with_xfp`). It
+  equals D3's `regression project` of the same week. Weeks 1-2: nobody has 3 games yet, so there is no list (exit 0, nothing stored).
 - **Live or reconstructed** by the Radar's rule: 'live' only when run on the real clock after
   the as-of and before week N+1's first kickoff; any other run is stored as 'backtest'. A stored
   live week is never overwritten.
@@ -367,7 +409,7 @@ recomputes the file from the warehouse (about 10 s) and refuses when the record 
   whose tag was Legit has none); live lists already published are frozen and keep their rows
   (2026 week 3), so the site hides 'legit'.
 
-## Our own expected points, without hindsight (step H6-b, report only)
+## Our own expected points, without hindsight (step H6-b; live since H6-b2)
 
 ffopportunity's models were trained on many seasons, including seasons after some of the plays
 they score (PROJECT_SPEC 6.3). `src/twm/modules/regression_watch/own_xfp.py` re-estimates the
@@ -395,8 +437,16 @@ loaders take an `xfp=` source, `player_week.with_xfp`). Headline (2,000 season-b
   -0.062); Sell-high and Buy-low hit rates do not differ beyond noise. The leakage did not
   flatter the published backtest.
 
-Nothing switches automatically: the pinned parameters, the weekly list and the site still use
-ffopportunity. Switching is the owner's decision (then rerun D2/D3 and pin as usual).
+**Switched (owner, 2026-10-01; step H6-b2).** D2 and D3 were rerun with the own xFP exactly
+as approved before (seasons 2009-2025, test seasons 2011-2025, every choice walk-forward), the
+parameters re-approved and their backtest lists re-frozen, and the 2026 fold's models pinned
+(section "The weekly list" above). The live list of 2026 week 3, published before the switch,
+stays as it was (frozen, ffopportunity's xFP); the lists from week 4 on use the own xFP.
+ffopportunity stays in the project: its per-play rows are still the play list the own models
+value (each with its garbage-time flag), D1's frame and `twm regression player`, the player
+pages' xFP and FPOE (`player_week_summary`) and the Waiver Radar's features still use its
+expectations, and `twm regression own-xfp` / `--xfp ffopportunity` keep the comparison
+runnable for research.
 
 ## Commands
 
@@ -404,13 +454,13 @@ ffopportunity. Switching is the owner's decision (then rerun D2/D3 and pin as us
 uv run twm regression player "CeeDee Lamb" --season 2023   # weekly points, xFP, FPOE, with and without garbage time
 uv run twm regression player 00-0036358 --as-of 2026-W3     # as it looked at week 3's Tuesday as-of
 uv run twm regression xfp-report                            # reports/regression_watch/xfp.md (+ .csv)
-uv run twm regression stability                             # reports/regression_watch/stability.md (+ .csv), 2009 to last season
+uv run twm regression stability                             # reports/regression_watch/stability.md (+ .csv), 2009 to last season, pinned xFP source (--xfp own|ffopportunity)
 uv run twm regression project 2026 3 --position WR          # projections and tags at week 3's as-of (--csv to save)
-uv run twm regression backtest                              # reports/regression_watch/backtest.md (+ .csv), about 20 s (= twm backtest regression_watch)
-uv run twm regression score                                 # the weekly list with the approved parameters (exit 3: data not ready)
-uv run twm regression pin                                   # approve the season's parameters (review, then commit)
+uv run twm regression backtest                              # reports/regression_watch/backtest.md (+ .csv), about 3 min with the own xFP (= twm backtest regression_watch; --xfp)
+uv run twm regression score                                 # the weekly list with the approved parameters and pinned xFP models (exit 3: data not ready)
+uv run twm regression pin                                   # approve the season's parameters + own xFP live models (--xfp; review, then commit)
 uv run twm regression own-xfp                               # own walk-forward xFP vs ffopportunity + D2/D3 reruns (reports/regression_watch/own_xfp.md; about 3 min the first time)
 uv run twm regression outcomes                              # grade stored lists of finished seasons
-uv run pytest tests/test_regression_watch.py tests/test_regression_stability.py tests/test_regression_projection.py tests/test_regression_weekly.py tests/test_regression_own_xfp.py   # offline tests
+uv run pytest tests/test_regression_watch.py tests/test_regression_stability.py tests/test_regression_projection.py tests/test_regression_weekly.py tests/test_regression_own_xfp.py tests/test_regression_xfp_switch.py   # offline tests
 uv run pytest -m realdata -k regression                     # the checks on the real cache
 ```

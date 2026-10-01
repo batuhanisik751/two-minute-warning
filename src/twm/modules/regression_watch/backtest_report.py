@@ -322,21 +322,60 @@ def _tag_sentences(t: list[dict[str, object]]) -> list[str]:
     return out
 
 
+OWN_XFP_LIMIT = (
+    "- xFP is Regression Watch's own walk-forward xFP (step H6-b2): each season's expectations "
+    "come from models trained on the seasons before it only (PROJECT_SPEC 6.3). The "
+    "garbage-time flag still comes from nflfastR's win probability, trained on many seasons, "
+    "including later ones: a mild, known leak."
+)
+
+
+def limits(xfp_source: str) -> list[str]:
+    """The Limits section for the xFP source ('ffopportunity': :data:`LIMITS` as written)."""
+    if xfp_source == "ffopportunity":
+        return list(LIMITS)
+    return [OWN_XFP_LIMIT if t.startswith("- xFP and the garbage-time flag") else t
+            for t in LIMITS]  # fmt: skip
+
+
+def legit_note(tags: list[dict[str, object]]) -> list[str]:
+    """The product dropped Legit (owner, 2026-09-30): one note with this run's pooled headline
+    rates (the report keeps the tag as tested; written by hand on 2026-09-30, generated since
+    H6-b2)."""
+    key = ("headline", bt.POOLED, "legit")
+    got = {r["group"]: r for r in tags if (r["weeks"], r["position"], r["tag"]) == key}
+    t, b = got.get("tagged"), got.get("base")
+    if not (t and b) or t.get("value") is None or b.get("value") is None:
+        return []
+    return [
+        f"**Two tags in the product.** Legit was tested here and dropped from the product "
+        f"(owner, 2026-09-30) because it predicted nothing: {float(t['value']):.1%} of its "
+        f"{int(t['n']):,} players stayed starters, against {float(b['value']):.1%} of every "
+        "starter. It stays in this report as tested (docs/regression_watch.md).",
+        "",
+    ]
+
+
 def build_backtest_report(
-    b: bt.Backtest, league: League, built_at: str = "unknown"
+    b: bt.Backtest, league: League, built_at: str = "unknown", xfp_source: str = "ffopportunity"
 ) -> BacktestReport:
-    """The markdown, the CSV rows and a short summary of a :class:`backtest.Backtest`."""
+    """The markdown, the CSV rows and a short summary of a :class:`backtest.Backtest` (whose
+    frame's xFP came from ``xfp_source``)."""
+    from twm.modules.regression_watch.production import XFP_TITLES
+
     test = list(b.test_seasons)
     ok, verdict = accepted(b.metrics)
     variants = sorted({ch.variant.name for ch in b.choices.values()})
     md = [
         "# Regression Watch backtest: rest-of-season projection and tags (step D3)",
         "",
-        f"`uv run twm regression backtest` on the warehouse built {built_at}. Walk-forward "
+        f"`uv run twm regression backtest` on the warehouse built {built_at}; xFP: "
+        f"{XFP_TITLES[xfp_source]}. Walk-forward "
         f"test seasons {test[0]}-{test[-1]}, headline as-of weeks "
         f"{', '.join(map(str, bt.HEADLINE_WEEKS))}; all weeks 4-14 as a secondary table. "
         "Points per game, full PPR (config/scoring.yaml). Glossary: `twm glossary ppg_ros`.",
         "",
+        *legit_note(b.tags),
         verdict,
         "",
         f"Variants chosen (on earlier seasons only): {', '.join(f'`{v}`' for v in variants)} "
@@ -386,7 +425,7 @@ def build_backtest_report(
         "",
         *_priors_table(b),
         "",
-        *LIMITS,
+        *limits(xfp_source),
     ]
     summary = [verdict.replace("**", ""), *[s.replace("**", "") for s in _tag_sentences(b.tags)]]
     return BacktestReport("\n".join(md), csv_rows(b), summary, ok)

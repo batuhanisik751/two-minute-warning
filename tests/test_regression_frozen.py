@@ -34,7 +34,8 @@ def test_the_committed_snapshot_is_pinned_small_and_matches_the_report(committed
     assert pin.backtest_seasons == "2011-2025" and set(pin.backtest) == set(fz.TABLES)
     sizes = {t: pin.backtest[t].path().stat().st_size for t in fz.TABLES}
     assert sum(sizes.values()) < 1_000_000, sizes  # the Radar's snapshot is 0.89 MB
-    assert frames["predictions"].height == frames["outcomes"].height == 10_787
+    # 10,826 rows since the own walk-forward xFP (H6-b2; 10,787 with ffopportunity's)
+    assert frames["predictions"].height == frames["outcomes"].height == 10_826
     assert sorted(frames["predictions"].get_column("week").unique()) == [4, 6, 8, 10]
     assert frames["model_versions"].height == 15
     assert frames["predictions"].get_column("team").null_count() == 0
@@ -148,10 +149,12 @@ def test_real_rebuild_equals_the_committed_snapshot_and_d3s_rows(committed) -> N
     if not db.exists():
         pytest.skip("run `uv run twm build` first")
     _, _, frames = committed
-    rebuilt = fz.build_snapshot(db, 2026, league())
+    from twm.modules.regression_watch import xfp_source as xs
+
+    rebuilt = fz.build_snapshot(db, 2026, league(), xfp_source="own")
     for t in fz.TABLES:
         assert rebuilt[t].equals(frames[t]), t
-    hist, asofs = bt.load_inputs(db, 2025, bt.HEADLINE_WEEKS)
+    hist, asofs = bt.load_inputs(db, 2025, bt.HEADLINE_WEEKS, xfp=xs.history(db, 2025, "own"))
     d3, _ = bt.build_rows(hist, asofs, league(), range(2010, 2026))
     graded = bt.graded_rows(d3, {s: bt.choose(d3, s) for s in range(2011, 2026)}, league())
     p = frames["predictions"]

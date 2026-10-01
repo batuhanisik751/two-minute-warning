@@ -3,21 +3,21 @@
     "buy_low": {
       "fallback": false,
       "n_asofs": 64,
-      "n_tags": 283,
-      "precision": 0.6466431095406361,
-      "x": 3.5
+      "n_tags": 275,
+      "precision": 0.6145454545454545,
+      "x": 3.0
     },
-    "n_validation_rows": 10659,
+    "n_validation_rows": 10682,
     "season": 2026,
     "sell_high": {
       "fallback": false,
       "n_asofs": 64,
-      "n_tags": 291,
-      "precision": 0.8831615120274914,
-      "x": 4.5
+      "n_tags": 205,
+      "precision": 0.9463414634146341,
+      "x": 5.0
     },
-    "spec_validation_mae": 3.22892,
-    "validation_mae": 3.19963,
+    "spec_validation_mae": 3.112259,
+    "validation_mae": 3.112259,
     "validation_seasons": [
       2010,
       2011,
@@ -36,41 +36,41 @@
       2024,
       2025
     ],
-    "variant": "mean_flat_all"
+    "variant": "zero_flat_all"
   },
   "decile": 0.1,
-  "description": "shrink toward the position's average, no recency weight, garbage time kept",
-  "format": 1,
+  "description": "shrink toward 0, no recency weight, garbage time kept",
+  "format": 2,
   "label": "ppg_ros",
   "min_games": 3,
   "model": "params",
-  "model_version": "mean_flat_all-77146b2e5d2169fc",
+  "model_version": "zero_flat_all-9d98d6f251ee054c",
   "module": "regression_watch",
   "ng_scale": {
-    "QB": 1.181467,
-    "RB": 1.195639,
-    "TE": 1.179033,
-    "WR": 1.18324
+    "QB": 1.18177,
+    "RB": 1.19424,
+    "TE": 1.182415,
+    "WR": 1.183767
   },
   "record": {
     "buy_low": {
       "fallback": false,
       "n_asofs": 60,
-      "n_tags": 427,
-      "precision": 0.6206088992974239,
+      "n_tags": 260,
+      "precision": 0.6076923076923076,
       "x": 3.0
     },
-    "n_validation_rows": 10003,
+    "n_validation_rows": 10029,
     "season": 2025,
     "sell_high": {
       "fallback": false,
       "n_asofs": 60,
-      "n_tags": 279,
-      "precision": 0.9032258064516129,
-      "x": 4.5
+      "n_tags": 191,
+      "precision": 0.9424083769633508,
+      "x": 5.0
     },
-    "spec_validation_mae": 3.22966,
-    "validation_mae": 3.199463,
+    "spec_validation_mae": 3.11317,
+    "validation_mae": 3.11317,
     "validation_seasons": [
       2010,
       2011,
@@ -88,7 +88,7 @@
       2023,
       2024
     ],
-    "variant": "mean_hl8_all"
+    "variant": "zero_flat_all"
   },
   "season": 2026,
   "shrinkage": {
@@ -99,9 +99,9 @@
         "metric": "fpoe",
         "n": 607,
         "position": "QB",
-        "prior_mean": -0.7849056017347308,
-        "var_noise": 34.90407580172894,
-        "var_signal": 0.5880763660017907
+        "prior_mean": 0.5107658959161546,
+        "var_noise": 35.17853794579365,
+        "var_signal": 2.092478990959501
       },
       {
         "first_season": 2009,
@@ -109,9 +109,9 @@
         "metric": "fpoe_ng",
         "n": 607,
         "position": "QB",
-        "prior_mean": -0.6653559148295386,
-        "var_noise": 28.876653477378156,
-        "var_signal": 0.43246822345752783
+        "prior_mean": 0.4440724591013131,
+        "var_noise": 29.251225673058904,
+        "var_signal": 1.5607749602463723
       },
       {
         "first_season": 2009,
@@ -119,9 +119,9 @@
         "metric": "fpoe",
         "n": 1476,
         "position": "RB",
-        "prior_mean": 0.009827842370614273,
-        "var_noise": 17.249546838060365,
-        "var_signal": 0.5367815403009079
+        "prior_mean": 0.2131454091984772,
+        "var_noise": 17.69857240349671,
+        "var_signal": 0.8329859259542209
       },
       {
         "first_season": 2009,
@@ -129,9 +129,9 @@
         "metric": "fpoe_ng",
         "n": 1476,
         "position": "RB",
-        "prior_mean": 0.016415635199094565,
-        "var_noise": 14.682293163989296,
-        "var_signal": 0.3450806454657488
+        "prior_mean": 0.17572209465994443,
+        "var_noise": 15.039868270270494,
+        "var_signal": 0.5717145402110219
       },
       {
         "first_season": 2009,
@@ -139,9 +139,9 @@
         "metric": "fpoe",
         "n": 1098,
         "position": "TE",
-        "prior_mean": 0.042211880054390624,
-        "var_noise": 12.454074543657294,
-        "var_signal": 0.2737534780206965
+        "prior_mean": 0.47028514112932085,
+        "var_noise": 12.898624463085689,
+        "var_signal": 0.44774174793232513
       },
       {
         "first_season": 2009,
@@ -149,9 +149,9 @@
         "metric": "fpoe_ng",
         "n": 1098,
         "position": "TE",
-        "prior_mean": 0.03520202547770702,
-        "var_noise": 10.517937322366633,
-        "var_signal": 0.22667509904336888
+        "prior_mean": 0.41338833879625,
+        "var_noise": 10.890298394862585,
+        "var_signal": 0.3615062092351123
       },
       {
         "first_season": 2009,
@@ -159,9 +159,9 @@
         "metric": "fpoe",
         "n": 2240,
         "position": "WR",
-        "prior_mean": -0.011204694488347851,
-        "var_noise": 22.120546728047685,
-        "var_signal": 0.4262107962375638
+        "prior_mean": 0.2724409306587753,
+        "var_noise": 22.419537869605865,
+        "var_signal": 0.9021718258812014
       },
       {
         "first_season": 2009,
@@ -169,9 +169,9 @@
         "metric": "fpoe_ng",
         "n": 2240,
         "position": "WR",
-        "prior_mean": -0.0046845786394054565,
-        "var_noise": 19.032758595897977,
-        "var_signal": 0.25073576171269796
+        "prior_mean": 0.2387023941218011,
+        "var_noise": 19.190051784501932,
+        "var_signal": 0.6205196696613883
       }
     ],
     "seasons": [
@@ -197,9 +197,10 @@
   "variant": {
     "garbage": "all",
     "half_life": null,
-    "name": "mean_flat_all",
-    "target": "mean"
+    "name": "zero_flat_all",
+    "target": "zero"
   },
-  "x_buy": 3.5,
-  "x_sell": 4.5
+  "x_buy": 3.0,
+  "x_sell": 5.0,
+  "xfp_source": "own"
 }

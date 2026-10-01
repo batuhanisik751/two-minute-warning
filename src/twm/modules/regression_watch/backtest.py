@@ -484,26 +484,33 @@ class WeekProjection:
 
 
 def project_week(
-    db: Path | str, season: int, week: int, league: League, *, progress: Progress | None = None
-) -> WeekProjection:
+    db: Path | str, season: int, week: int, league: League, *, progress: Progress | None = None,
+    xfp: pl.DataFrame | None = None,
+) -> WeekProjection:  # fmt: skip
     """The universe at (season, week)'s official as-of, read through an AsOfView AT that
     as-of, projected with shrinkage from 2009 .. season-1 and the variant and X chosen on the
-    validation seasons 2010 .. season-1 (exactly what the backtest does for a test season)."""
+    validation seasons 2010 .. season-1 (exactly what the backtest does for a test season).
+    ``xfp``: another expected-points source for every season up to ``season``
+    (:func:`.player_week.with_xfp`); None = ffopportunity's."""
     from twm.asof import AsOfView, weekly_as_of
-    from twm.modules.regression_watch.player_week import player_games_for, player_games_history
+    from twm.modules.regression_watch.player_week import (
+        player_games_for,
+        player_games_history,
+        with_xfp,
+    )
 
     if season < FIRST_TEST_SEASON:
         raise ValueError(f"projections need two earlier seasons of 2009+ data: {season}")
     as_of = weekly_as_of(db, season, week)
     earlier = list(range(pj.FIRST_DATA_SEASON, season))
-    history = player_games_history(db, earlier)
+    history = player_games_history(db, earlier, xfp=xfp)
     asofs = asof_table(db, earlier, HEADLINE_WEEKS)
     val_seasons = list(range(FIRST_VALIDATION_SEASON, season))
     rows, _ = build_rows(history, asofs, league, val_seasons, progress=progress)
     choice = choose(rows, season)
     priors = pj.estimate_priors(history, earlier)
     with AsOfView(db, as_of) as view:
-        std = player_games_for(view, season)
+        std = with_xfp(player_games_for(view, season), xfp)
         names = view.sql("SELECT gsis_id, display_name AS name FROM dim_player")
     if std.height == 0:
         raise LookupError(f"no games of {season} are public at week {week}'s as-of ({as_of})")

@@ -146,7 +146,7 @@ SELECT o.season, o.week, o.season_type, o.game_id, o.play_id, o.posteam,
        o.is_garbage_time, o.available_at,
        p.yardline_100, p.down, p.ydstogo, p.pass_location, p.qtr, p.score_differential,
        {exp}
-FROM w.fact_opportunity_pass o LEFT JOIN w.fact_play p USING (game_id, play_id)
+FROM {src}fact_opportunity_pass o LEFT JOIN {src}fact_play p USING (game_id, play_id)
 WHERE o.season IN ({seasons}) ORDER BY o.game_id, o.play_id"""
 _RUSH_SQL = """
 SELECT o.season, o.week, o.season_type, o.game_id, o.play_id, o.posteam, o.rusher_player_id,
@@ -159,7 +159,7 @@ SELECT o.season, o.week, o.season_type, o.game_id, o.play_id, o.posteam, o.rushe
        p.yardline_100, p.down, p.ydstogo, p.run_location, p.run_gap, p.qtr,
        p.score_differential, p.qb_scramble,
        {exp}
-FROM w.fact_opportunity_rush o LEFT JOIN w.fact_play p USING (game_id, play_id)
+FROM {src}fact_opportunity_rush o LEFT JOIN {src}fact_play p USING (game_id, play_id)
 WHERE o.season IN ({seasons}) ORDER BY o.game_id, o.play_id"""
 
 
@@ -177,9 +177,20 @@ def load_plays(db: Path | str, seasons: Sequence[int]) -> dict[str, pl.DataFrame
         out = {}
         for kind, sql in (("pass", _PASS_SQL), ("rush", _RUSH_SQL)):
             exp = ", ".join(f"o.{c}" for c in EXPECTED_COLUMNS[kind])
-            out[kind] = con.sql(sql.format(exp=exp, seasons=ss)).pl()
+            out[kind] = con.sql(sql.format(src="w.", exp=exp, seasons=ss)).pl()
     finally:
         con.close()
+    return out
+
+
+def load_plays_asof(view: Any, season: int) -> dict[str, pl.DataFrame]:
+    """:func:`load_plays` of one ``season`` read through an
+    :class:`~twm.asof.AsOfView` (point in time: only the plays public at its as-of): what the
+    weekly list scores with the approved live models."""
+    out = {}
+    for kind, sql in (("pass", _PASS_SQL), ("rush", _RUSH_SQL)):
+        exp = ", ".join(f"o.{c}" for c in EXPECTED_COLUMNS[kind])
+        out[kind] = view.sql(sql.format(src="", exp=exp, seasons=str(int(season))))
     return out
 
 
@@ -359,38 +370,67 @@ def fit_component(c: Component, plays: pl.DataFrame, fold: Any) -> tuple[Fitted,
     return fitted, info
 
 
+# The fitting order: the pass components, then the run components (each fit is independent).
+FIT_ORDER = tuple(c for kind in ("pass", "rush") for c in COMPONENTS if c.kind == kind)
+
+
+def fit_fold(
+    plays: dict[str, pl.DataFrame], test_season: int, data_seasons: Sequence[int]
+) -> tuple[dict[str, Fitted], list[ComponentFold]]:
+    """Every component's model for ``test_season``, trained on the seasons before it only (the
+    fold of :func:`twm.backtest.walkforward.production_fold`): {component name: model} and one
+    :class:`ComponentFold` per component (``n_predicted`` is filled by :func:`predict_season`).
+    The 2026 fold is the live model (:func:`fit_live`)."""
+    from twm.backtest.walkforward import production_fold
+
+    fold = production_fold(data_seasons, test_season)
+    models, infos = {}, []
+    for c in FIT_ORDER:
+        models[c.name], info = fit_component(c, plays[c.kind], fold)
+        infos.append(info)
+    return models, infos
+
+
+def predict_season(
+    plays: dict[str, pl.DataFrame],
+    season: int,
+    models: dict[str, Fitted],
+    infos: Sequence[ComponentFold] = (),
+) -> dict[str, pl.DataFrame]:
+    """Every component's expectations for the plays of ``season`` from ``models`` (fitted
+    earlier: nothing is fit here): {'pass': keys + flags + expected columns +
+    '<component>_family', 'rush': ...}; fills the ``n_predicted`` of ``infos``."""
+    by_name = {i.component: i for i in infos}
+    out = {}
+    for kind in ("pass", "rush"):
+        frame = plays[kind].filter(pl.col("season") == season)
+        flags = ("is_2pt", "is_fixed", *(("is_kneel",) if kind == "rush" else ()))
+        test = frame.select(*KEYS, *flags)
+        cols: dict[str, pl.Series] = {}
+        for c in (c for c in COMPONENTS if c.kind == kind):
+            fitted = models[c.name]
+            mask = test.select(predict_mask(c)).to_series().to_numpy()
+            pred = np.full(test.height, np.nan)
+            if mask.any():
+                pred[mask] = fitted.predict(frame.filter(predict_mask(c)))
+            if c.name in by_name:
+                by_name[c.name].n_predicted = int(mask.sum())
+            cols[c.column] = pl.Series(c.column, pred).fill_nan(None)
+            cols[f"{c.name}_family"] = pl.Series(f"{c.name}_family", [fitted.family] * test.height)
+        out[kind] = test.with_columns(**cols)
+        if kind == "rush":
+            out[kind] = fixed_values(out[kind])
+    return out
+
+
 def predict_fold(
     plays: dict[str, pl.DataFrame], test_season: int, data_seasons: Sequence[int]
 ) -> tuple[dict[str, pl.DataFrame], list[ComponentFold]]:
     """Every component's expectations for the plays of ``test_season`` from models trained on
-    the seasons before it: {'pass': keys + expected columns + '<component>_family', 'rush':
-    ...} and one :class:`ComponentFold` per component."""
-    from twm.backtest.walkforward import production_fold
-
-    fold = production_fold(data_seasons, test_season)
-    out, infos = {}, []
-    for kind in ("pass", "rush"):
-        frame = plays[kind]
-        flags = ("is_2pt", "is_fixed", *(("is_kneel",) if kind == "rush" else ()))
-        test = frame.filter(pl.col("season") == test_season).select(*KEYS, *flags)
-        cols: dict[str, pl.Series] = {}
-        for c in (c for c in COMPONENTS if c.kind == kind):
-            fitted, info = fit_component(c, frame, fold)
-            mask = test.select(predict_mask(c)).to_series().to_numpy()
-            pred = np.full(test.height, np.nan)
-            sub = frame.filter(pl.col("season") == test_season).filter(predict_mask(c))
-            if mask.any():
-                pred[mask] = fitted.predict(sub)
-            info.n_predicted = int(mask.sum())
-            cols[c.column] = pl.Series(c.column, pred).fill_nan(None)
-            cols[f"{c.name}_family"] = pl.Series(f"{c.name}_family", [info.family] * test.height)
-            infos.append(info)
-        out[kind] = (
-            fixed_values(test.with_columns(**cols))
-            if kind == "rush"
-            else (test.with_columns(**cols))
-        )
-    return out, infos
+    the seasons before it (:func:`fit_fold`, :func:`predict_season`) and one
+    :class:`ComponentFold` per component."""
+    models, infos = fit_fold(plays, test_season, data_seasons)
+    return predict_season(plays, test_season, models, infos), infos
 
 
 def fixed_values(rush: pl.DataFrame) -> pl.DataFrame:
@@ -594,3 +634,138 @@ def player_game_xfp(
         return con.sql(sql).pl()
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------------------
+# The live models (step H6-b2): the current season's fold, approved and pinned
+# --------------------------------------------------------------------------------------
+
+LIVE_FORMAT = 1
+
+
+@dataclass(frozen=True)
+class LiveModels:
+    """The fold that scores ``fold`` live: every component's model, trained on
+    ``train_seasons`` (2006 .. fold-1) exactly as :func:`fit_fold` trains the walk-forward
+    fold of that season. ``version`` = ``own_xfp-<fold>-<16 hex>`` (the settings and every
+    training season's inputs, :func:`live_version`)."""
+
+    fold: int
+    train_seasons: tuple[int, ...]
+    version: str
+    models: dict[str, Fitted]
+
+
+def live_version(fold: int, hashes: dict[int, str]) -> str:
+    import hashlib
+
+    blob = settings_fingerprint() + "".join(
+        f"{s}:{h};" for s, h in sorted(hashes.items()) if s < fold
+    )
+    return f"own_xfp-{int(fold)}-{hashlib.sha256(blob.encode()).hexdigest()[:16]}"
+
+
+def fit_live(
+    db: Path | str, fold: int, *, progress: Progress | None = None
+) -> tuple[LiveModels, list[ComponentFold]]:
+    """Fit the live models of season ``fold`` from the warehouse: only the plays of 2006 ..
+    fold-1 are read (the live season's plays never are). The owner's Mac only (approving, `twm
+    regression pin`); the weekly job loads the pinned files and never fits."""
+    from threadpoolctl import threadpool_limits
+
+    say = progress or (lambda _m: None)
+    plays = load_plays(db, range(FIRST_SEASON, int(fold)))
+    hashes = season_hashes(plays)
+    say(f"own xFP live models for {fold}: fitting on {min(hashes)}-{max(hashes)} ...")
+    with threadpool_limits(limits=1):  # one BLAS thread, as the walk-forward folds
+        models, infos = fit_fold(plays, int(fold), sorted(hashes))
+    live = LiveModels(int(fold), tuple(sorted(hashes)), live_version(int(fold), hashes), models)
+    return live, infos
+
+
+def _bundle(live: LiveModels, name: str) -> dict[str, Any]:
+    c = COMPONENT_BY_NAME[name]
+    return {"format": LIVE_FORMAT, "version": live.version, "fold": live.fold,
+            "train_seasons": list(live.train_seasons), "component": name,
+            "features": list(FEATURES[c.kind]), "categories": CATEGORIES,
+            "fitted": live.models[name]}  # fmt: skip
+
+
+def save_live(live: LiveModels, out_dir: Path) -> dict[str, Path]:
+    """Write ``<out_dir>/<version>/<component>.joblib`` for every component (atomic; the same
+    models always give the same bytes). Returns {component: path}."""
+    import joblib
+
+    d = out_dir / live.version
+    d.mkdir(parents=True, exist_ok=True)
+    paths = {}
+    for c in COMPONENTS:
+        path = d / f"{c.name}.joblib"
+        tmp = path.with_name(path.name + ".tmp")
+        joblib.dump(_bundle(live, c.name), tmp)
+        tmp.replace(path)
+        paths[c.name] = path
+    return paths
+
+
+class LiveModelError(ValueError):
+    """A live model file is not what the pin says (wrong format, version, fold, component, or
+    inputs that differ from the code's)."""
+
+
+def load_live(files: dict[str, Path], *, version: str, fold: int) -> LiveModels:
+    """The live models from ``files`` ({component: path}, every component once). Pickles:
+    open only files whose sha256 the pin checked first (:mod:`.production`)."""
+    import joblib
+
+    if set(files) != set(COMPONENT_BY_NAME):
+        raise LiveModelError(f"the live models must be exactly {sorted(COMPONENT_BY_NAME)}, "
+                             f"not {sorted(files)}")  # fmt: skip
+    models, seasons = {}, set()
+    for name, path in files.items():
+        b = joblib.load(path)
+        c = COMPONENT_BY_NAME[name]
+        if not isinstance(b, dict) or b.get("format") != LIVE_FORMAT:
+            raise LiveModelError(f"{path} is not an own xFP live model of this code")
+        if (b.get("version"), b.get("fold"), b.get("component")) != (version, int(fold), name):
+            raise LiveModelError(f"{path} holds {b.get('component')} of {b.get('version')} "
+                                 f"(fold {b.get('fold')}), not {name} of {version}")  # fmt: skip
+        if b.get("features") != list(FEATURES[c.kind]) or b.get("categories") != CATEGORIES:
+            raise LiveModelError(f"{path} was fit on other inputs than this code's {c.kind} "
+                                 "features: approve new live models")  # fmt: skip
+        fitted = b.get("fitted")
+        if not isinstance(fitted, Fitted):
+            raise LiveModelError(f"{path} holds no fitted model")
+        models[name], seasons = fitted, seasons | {tuple(b.get("train_seasons") or ())}
+    if len(seasons) != 1 or max(next(iter(seasons)), default=fold) >= int(fold):
+        raise LiveModelError(f"the live models of {version} were not all trained on the "
+                             f"seasons before {fold}")  # fmt: skip
+    return LiveModels(int(fold), next(iter(seasons)), version, models)
+
+
+def live_player_games(view: Any, season: int, live: LiveModels, rules: Any = None):
+    """Per player-game own xFP of ``season`` as public at the view's as-of (:func:`load_plays_asof`
+    scored with the live models, then D1's own SQL; :data:`.player_week.XFP_SOURCE_COLUMNS`).
+    Nothing is fit."""
+    if int(season) != live.fold:
+        raise LiveModelError(f"the live models score {live.fold}, not {season}")
+    plays = load_plays_asof(view, int(season))
+    return player_game_xfp(own_tables(plays, predict_season(plays, int(season), live.models)),
+                           rules)  # fmt: skip
+
+
+def history_player_games(
+    db: Path | str, last_season: int, *, out_dir: Path | None = None, workers: int = 4,
+    progress: Progress | None = None,
+) -> pl.DataFrame:  # fmt: skip
+    """Per player-game own walk-forward xFP of 2007 .. ``last_season``: each season from the
+    fold trained on the seasons before it (:func:`run_folds`: folds not current on disk are
+    fit, the others reused; ``data/regression_watch/own_xfp/``). The owner's Mac only
+    (approving and the studies); the weekly job never calls it."""
+    from twm.config import ROOT
+
+    out = out_dir if out_dir is not None else ROOT / OUT_DIR
+    run_folds(db, int(last_season), out, workers=workers, progress=progress)
+    plays = {k: pl.read_parquet(_inputs_path(out, k)) for k in ("pass", "rush")}
+    preds = load_predictions(out, range(FIRST_TEST_SEASON, int(last_season) + 1))
+    return player_game_xfp(own_tables(plays, preds))

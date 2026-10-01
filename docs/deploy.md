@@ -325,7 +325,7 @@ it; the run's log shows every one):
 | streamer_backtest | `twm model check streamer`: the approved K model and D/ST rule and their frozen backtest (sha256, rows, and `reports/streamer/backtest.csv` reproduced). Nothing is restored: the weekly list and the publish read the snapshot in place |
 | regression_backtest | `twm model check regression_watch`: the approved parameters and their frozen backtest lists (sha256, rows, and `reports/regression_watch/backtest.csv` reproduced). Nothing is recomputed on the runner (a Linux rebuild could flip a near-tie of the variant choice, and it would need the warehouse from 2006) |
 | streamer_score, streamer_export | only when a list is due: `twm streamer score` with the approved methods; the same not-ready rules as the Radar (exit 3: a warning on an early attempt, `late` from the last one) |
-| regression_score, regression_export | only when a list is due: `twm regression score` with the approved frozen parameters; the same rules. Weeks 1-2 store nothing (nobody has 3 games) |
+| regression_score, regression_export | only when a list is due: `twm regression score` with the approved frozen parameters and the pinned own xFP live models (step H6-b2: the season's plays are valued with them; nothing is fitted); the same rules. Weeks 1-2 store nothing (nobody has 3 games) |
 | decisions_backtest | `twm model check decisions` (step P3): the approved grading (spec and fold models, sha256 before anything is opened) and its frozen 2006-2025 history (sha256, rows, `reports/decisions/fourth_downs.csv` and `clock.csv` reproduced). History is never regraded on the runner |
 | decisions | `twm decisions grade-pinned`: every fourth down, try and clock case of the season so far graded with the pinned models and inputs (nothing trained; nothing measured on earlier seasons: the runner's warehouse starts in 2012). Every run, whether or not a list is due (games of the weekend get graded the next night); the job summary's "Decisions" line counts them |
 | publish | ONE `twm publish --target remote` for every module when the `DATABASE_URL` secret exists, otherwise skipped with a warning (so the pipeline can be rehearsed before Neon exists); it also runs after a not-ready score, so outcomes and player pages stay fresh |
@@ -512,26 +512,34 @@ entries and files stay byte-identical):
 
 - `regression_watch` (`model: params`): `artifacts/production_models/regression_watch/
   <version>.json` (4 KB: the variant, the shrinkage table estimated on the seasons before the
-  pinned one, the Sell-high / Buy-low X, and the record of the last backtest season). The
-  version is a hash of the file's content, and the record must equal the committed
+  pinned one, the Sell-high / Buy-low X, the xFP source, and the record of the last backtest
+  season). The version is a hash of the file's content, and the record must equal the committed
   `reports/regression_watch/backtest.csv` rows of that season.
+- its **xFP source** (step H6-b2, owner 2026-10-01; the pin's `xfp:`): `source: own` with the
+  live fold of the own walk-forward xFP (`fold`, `version`, `train_seasons`) and its eight model
+  files `<xfp version>/<component>.joblib` (3.1 MB), each with its sha256, checked before the
+  file is opened. A pin without `xfp:`, a wrong hash, a missing component, another fold or a
+  source that is not the parameters' stops the run (no fallback to ffopportunity).
 - its **frozen backtest lists** (step P2, the pin's `backtest:`; like the Radar's and the
   streamer's snapshots): `backtest-<version>/predictions.parquet` (every universe player of the
   as-of weeks 4, 6, 8 and 10 of 2011-2025 with his projection, tag, the numbers behind them and
-  his team: 10,787 rows, 648 KB), `outcomes.parquet` (his rest-of-season PPG, games and PPG
+  his team: 10,826 rows, 649 KB), `outcomes.parquet` (his rest-of-season PPG, games and PPG
   rank: 60 KB) and `model_versions.parquet` (each season's parameters and D3's choice: 15 rows,
-  8 KB), zstd level 19, 716 KB in all (`src/twm/modules/regression_watch/frozen.py`). The
+  8 KB), zstd level 19, 718 KB in all (`src/twm/modules/regression_watch/frozen.py`). The
   publish reads them for the time machine; the job never rebuilds them.
 
-`uv run twm regression score` loads only the parameters file (sha256 first, then the version
-and the season). `uv run twm model check` (no argument, or `regression_watch`) checks the file
-and the record, then the frozen lists: each file's sha256 before it is read and its rows, every
+`uv run twm regression score` loads only the parameters file and the pinned xFP models
+(sha256 first, then the version and the season; it never fits). `uv run twm model check` (no
+argument, or `regression_watch`) checks the file, the xFP models and the record, then the
+frozen lists: each file's sha256 before it is read and its rows, every
 season's variant, validation MAE and X, the headline MAE of the projection per position and
 pooled, the tags' hit rates (graded, rate, not graded) against the committed report, and the
 parameters' record against the lists' last season. To approve for a new season, on your Mac
-with the full warehouse (the lists need 2006 onwards): `uv run twm regression backtest` (the
-committed report), then `uv run twm regression pin` (it recomputes the choice from the
-warehouse, refuses when its record disagrees with the report, and freezes the backtest lists:
+with the full warehouse (the lists need 2006 onwards): `uv run twm regression stability` and
+`uv run twm regression backtest` (the committed reports; both use the pinned xFP source, or
+`--xfp own|ffopportunity`), then `uv run twm regression pin` (it recomputes the choice from the
+warehouse with the same source, fits and writes the season's own xFP live models, refuses when
+its record disagrees with the report, and freezes the backtest lists:
 `uv run twm regression freeze` does only that step), `uv run twm model check`, review, commit
 the pin, the files and `reports/regression_watch/` together. The scheduled job checks them
 (`regression_backtest`) and scores with them (`regression_score`), as `uv run twm score` does.

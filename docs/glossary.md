@@ -340,7 +340,7 @@ Where the other team starts after a score (the kickoff rules changed in 2024 and
 
 ### Legit (tested, not shown) \*
 
-Tested, not shown: a starter whose production is carried by his opportunity, not by luck. It predicted nothing (in the backtest 60.6% of the players it tagged stayed starters, and so did 61.1% of every starter), so the lists do not carry it.
+Tested, not shown: a starter whose production is carried by his opportunity, not by luck. It predicted nothing (in the backtest 59.0% of the players it tagged stayed starters, and so did 61.1% of every starter), so the lists do not carry it.
 
 - **Name:** `legit`; **unit:** yes/no; **used by:** regression_watch
 - **Formula:** tested, not shown: PPG rank inside the starter threshold (QB top 12, RB top 24, WR top 24, TE top 12) AND FPOE/game not in the top decile of his position's universe; D3's backtest only, dropped from the product on 2026-09-30
@@ -895,7 +895,7 @@ Extra points follow touchdowns, so this shows how often his offense scores.
 Points above or below what his chances were worth: partly skill, largely luck, and it tends to shrink toward zero.
 
 - **Name:** `fpoe`; **unit:** points; **used by:** regression_watch, waiver_radar
-- **Formula:** fantasy_points - xfp (the same player-game; a lost fumble or a return touchdown counts fully, having no expected value)
+- **Formula:** fantasy_points - xfp (the same player-game; a lost fumble or a return touchdown counts fully, having no expected value); in Regression Watch since H6-b2 the xfp is the own walk-forward xFP (own_xfp)
 - **Source:** twm.scoring.score_sql - twm.scoring.xfp_sql
 
 ### FPOE, last 3 games \*
@@ -1866,7 +1866,7 @@ Seasons in the league before this one.
 What an average player would have scored from the same chances (where he was targeted, where he carried the ball). Opportunity is sticky week to week.
 
 - **Name:** `xfp`; **unit:** points; **used by:** regression_watch, waiver_radar
-- **Formula:** sum over stats of (expected stat x points per unit in config/scoring.yaml): the ffopportunity model's expected passing, rushing and receiving yards, touchdowns, two-point conversions, interceptions and receptions of a player-game (fact_opportunity_week *_exp columns); fumbles and return or fumble-recovery touchdowns have no expected value and add 0
+- **Formula:** sum over stats of (expected stat x points per unit in config/scoring.yaml): the ffopportunity model's expected passing, rushing and receiving yards, touchdowns, two-point conversions, interceptions and receptions of a player-game (fact_opportunity_week *_exp columns); fumbles and return or fumble-recovery touchdowns have no expected value and add 0. Regression Watch's lists, stability study and backtest (since 2026-10-01, step H6-b2) score the same per-play expectations from its own walk-forward models instead (own_xfp)
 - **Source:** twm.scoring.xfp / xfp_sql on fact_opportunity_week
 - **Verified:** with nflverse-PPR weights it reproduces ffopportunity's total_fantasy_points_exp within the rounding of its 2-decimal columns on every row except rushing two-point tries, whose expected yards ffopportunity adds to the points but not to rush_yards_gained_exp (docs/waiver_radar.md)
 
@@ -2067,6 +2067,14 @@ The most clock an offense can burn by kneeling from this down; if it is at least
 - **Name:** `kneel_out_seconds`; **unit:** seconds; **used by:** decisions
 - **Formula:** n x p + max(0, n - 1 - t) x (g - p), n = 5 - down kneels, t = the defense's timeouts; p (kneel_play) and g (kneel_cycle) = median seconds from a kneel to the next snap with / without a defensive timeout between, measured on the 5 seasons before S
 - **Source:** twm.modules.decisions.clock
+
+### Own walk-forward xFP
+
+Regression Watch's expected points since 2026-10-01: the same idea as nflverse's ffopportunity, but each season is valued by models that never saw it or any later season, so a backtest cannot borrow from the future.
+
+- **Name:** `own_xfp`; **unit:** points; **used by:** regression_watch
+- **Formula:** xfp from the project's own per-play models (catch chance, yards after the catch, pass touchdown and interception chances per target; yards and touchdown chance per carry; two-point success rates), LightGBM or a spline GLM per part, for a play of season S trained only on seasons 2006 to S-1; inputs are the situation before the snap (air yards, field position, down and distance, direction, quarter, score), never an nflfastR model column; scored with D1's per-play rules and config/scoring.yaml. The current season's models are pinned with their sha256 (config/production_models.yaml) and only loaded by the weekly job
+- **Source:** twm.modules.regression_watch.own_xfp
 
 ### PPR (points per reception)
 

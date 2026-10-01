@@ -200,7 +200,7 @@ def test_the_published_lists_carry_no_legit_tag() -> None:
     teams = snap["predictions"].select("season", "week", pl.col("entity_id").alias("gsis_id"),
                                        "team")  # fmt: skip
     lists, out = rl.regression_lists(rows, teams)
-    assert out.height == rows.height == 10_787 and lists.height == 60
+    assert out.height == rows.height == 10_826 and lists.height == 60  # own xFP (H6-b2)
     bands = rows.get_column("band").value_counts().rows()
     assert dict(bands)["legit"] > 3000  # the snapshot as frozen
     assert {t for ts in out.get_column("tags").to_list() for t in ts} == {"sell_high", "buy_low"}

@@ -139,7 +139,8 @@ export default async function RegressionSection() {
       <p className="mt-3">
         A player&apos;s points split into <strong>opportunity</strong> (<Term name="xfp">xFP</Term>: what an average player
         would have scored from his targets and carries) and <strong>efficiency</strong> (<Term name="fpoe">FPOE</Term> = points
-        minus xFP). The question is which of the two repeats.
+        minus xFP). The question is which of the two repeats. Since October 1, 2026 its xFP comes from our own
+        walk-forward models: each season&apos;s plays are valued by models trained only on the seasons before it.
       </p>
       <section aria-labelledby="stability" data-testid="stability-section">
         <h3 id="stability" className="display mt-6 scroll-mt-24 text-xl uppercase">
@@ -224,10 +225,11 @@ function RegressionLimits() {
       <h3 className="display mt-8 text-xl uppercase">Limitations</h3>
       <ul className="mt-2 list-disc space-y-1.5 pl-5">
         <li>
-          <strong>xFP is another model&apos;s output (PROJECT_SPEC 6.3).</strong> Expected points come from ffopportunity&apos;s
-          models, trained across many seasons, later ones included, and the garbage-time flag from nflfastR&apos;s win
-          probability model: an old week&apos;s xFP knows a little about the future. A mild, known leak; the entries marked
-          model output in the glossary are these.
+          <strong>Model outputs (PROJECT_SPEC 6.3).</strong> Expected points come from our own walk-forward models
+          (since October 1, 2026; the 2026 week 3 list, published before, used ffopportunity&apos;s models, which were
+          trained across many seasons, later ones included). The garbage-time flag still comes from nflfastR&apos;s win
+          probability model, trained across many seasons: a mild, known leak; the entries marked model output in the
+          glossary carry it.
         </li>
         <li>The outcome counts games played: a player who gets hurt is graded on the games he played; one with too few games left is not graded.</li>
         <li>One set of parameters for every position each season, and one noise size per position: a player with many chances a game swings more than one with few.</li>

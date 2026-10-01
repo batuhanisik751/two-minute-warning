@@ -1339,6 +1339,12 @@ def regression_xfp_report(
     typer.echo(f"wrote {csv_path}")
 
 
+XFP_OPTION_HELP = (
+    "Expected points: 'own' (the walk-forward xFP, step H6-b2) or 'ffopportunity'; default: "
+    "the source pinned in config/production_models.yaml."
+)
+
+
 @regression_app.command("stability")
 def regression_stability(
     db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
@@ -1353,9 +1359,11 @@ def regression_stability(
         None, "--end", help="Last season (default: the last complete one, current - 1)."
     ),
     n_boot: int = typer.Option(1000, "--boot", help="Bootstrap resamples for the intervals."),
+    xfp: str | None = typer.Option(None, "--xfp", help=XFP_OPTION_HELP),
 ) -> None:
     """Write the stability study (step D2): split-half correlations of xFP, FPOE, points and
-    the parts of efficiency by position, and the FPOE shrinkage table (markdown + CSV)."""
+    the parts of efficiency by position, and the FPOE shrinkage table (markdown + CSV), with
+    the pinned xFP source unless --xfp names one."""
     import duckdb
 
     from twm.asof import WarehouseTooOldError
@@ -1369,8 +1377,12 @@ def regression_stability(
     last = end if end is not None else settings().current_season - 1
     if start > last:
         raise typer.BadParameter(f"--start {start} is after --end {last}")
+    source = _regression_xfp(xfp)
     try:
-        report = build_stability_report(path, list(range(start, last + 1)), n_boot=n_boot)
+        report = build_stability_report(
+            path, list(range(start, last + 1)), n_boot=n_boot,
+            xfp=_regression_history(path, last, source), xfp_source=source,
+        )  # fmt: skip
     except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
         typer.echo(f"cannot build the report: {e}", err=True)
         raise typer.Exit(code=1) from e
@@ -1395,11 +1407,12 @@ def regression_backtest(
         None, "--end", help="Last test season (default: the last complete one, current - 1)."
     ),
     n_boot: int = typer.Option(2000, "--boot", help="Bootstrap resamples for the intervals."),
+    xfp: str | None = typer.Option(None, "--xfp", help=XFP_OPTION_HELP),
 ) -> None:
     """Walk-forward backtest of the rest-of-season projection and the Sell-high / Buy-low /
     Legit tags (step D3): MAE and rank correlation against season-to-date PPG and last-3 PPG,
-    tag hit rates, the variant and thresholds chosen per season (markdown + CSV). Writes
-    nothing else (no predictions store)."""
+    tag hit rates, the variant and thresholds chosen per season (markdown + CSV), with the
+    pinned xFP source unless --xfp names one. Writes nothing else (no predictions store)."""
     import duckdb
 
     from twm.asof import WarehouseTooOldError
@@ -1415,13 +1428,14 @@ def regression_backtest(
     last = end if end is not None else settings().current_season - 1
     if last < bt.FIRST_TEST_SEASON:
         raise typer.BadParameter(f"--end must be {bt.FIRST_TEST_SEASON} or later")
+    source = _regression_xfp(xfp)
     try:
-        frame, asofs = bt.load_inputs(path, last)
+        frame, asofs = bt.load_inputs(path, last, xfp=_regression_history(path, last, source))
         result = bt.run_backtest(
             frame, asofs, league(), last_season=last, n_boot=n_boot,
             progress=lambda m: typer.echo(m, err=True),
         )  # fmt: skip
-        report = build_backtest_report(result, league(), _built_at(path))
+        report = build_backtest_report(result, league(), _built_at(path), source)
     except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
         typer.echo(f"cannot run the backtest: {e}", err=True)
         raise typer.Exit(code=1) from e
@@ -1504,10 +1518,12 @@ def regression_project(
     csv_out: Path | None = typer.Option(
         None, "--csv", help="Also write every universe player to this CSV file."
     ),
+    xfp: str | None = typer.Option(None, "--xfp", help=XFP_OPTION_HELP),
 ) -> None:
     """Rest-of-season projection and Sell-high / Buy-low / Legit tags at a week's as-of (step
     D3), with the variant and thresholds the backtest would use for that season (chosen on the
-    seasons before it). Prints a table; writes nothing unless --csv is given."""
+    seasons before it) and the pinned xFP source unless --xfp names one. Prints a table; writes
+    nothing unless --csv is given."""
     import duckdb
     import polars as pl
 
@@ -1520,8 +1536,10 @@ def regression_project(
     pos = position.upper() if position else None
     if pos is not None and pos not in ("QB", "RB", "WR", "TE"):
         raise typer.BadParameter(f"--position {position}: QB, RB, WR or TE")
+    source = _regression_xfp(xfp)
     try:
-        wp = bt.project_week(path, season, week, league())
+        hist = _regression_history(path, season, source)
+        wp = bt.project_week(path, season, week, league(), xfp=hist)
     except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
         typer.echo(f"cannot project: {e}", err=True)
         raise typer.Exit(code=1) from e
@@ -1555,10 +1573,37 @@ def regression_project(
 
 
 def _regression_approved(season: int):
-    """The approved Regression Watch parameters (sha256 checked before the file is read)."""
+    """(the approved own xFP live models or None, the approved Regression Watch parameters):
+    every file's sha256 checked before it is read; nothing is fit."""
     from twm.modules.regression_watch import production as rprod
 
-    return rprod.load_pinned_params(season)[0]
+    live, params, _ = rprod.load_pinned_xfp(season)
+    return live, params
+
+
+def _regression_xfp(xfp: str | None) -> str:
+    """--xfp, else the pinned source (exit 1 when the pin names none: never a default)."""
+    from twm import pins
+    from twm.modules.regression_watch import xfp_source as xs
+
+    if xfp is not None:
+        try:
+            return xs.check(xfp)
+        except ValueError as e:
+            raise typer.BadParameter(str(e)) from e
+    try:
+        return xs.pinned_source()
+    except pins.PinError as e:
+        typer.echo(f"no xFP source: {e} (or pass --xfp own|ffopportunity)", err=True)
+        raise typer.Exit(code=1) from e
+
+
+def _regression_history(path: Path, last: int, source: str):
+    """The expected points of the seasons up to ``last`` for ``source`` (own: the walk-forward
+    folds, fitted on this Mac when not current; ffopportunity: None)."""
+    from twm.modules.regression_watch import xfp_source as xs
+
+    return xs.history(path, last, source, progress=lambda m: typer.echo(m, err=True))
 
 
 @regression_app.command("score")
@@ -1623,9 +1668,10 @@ def regression_score(
         raise typer.Exit(code=rwk.EXIT_NOT_READY)
     store_path = _project_path(store if store is not None else pr.default_path())
     try:
-        params = _regression_approved(chosen)
+        live, params = _regression_approved(chosen)
         run = rwk.run_week(path, chosen, wk, params=params, league=league(), now=clock,
-                           allow_incomplete=allow_incomplete, real_clock=now is None)  # fmt: skip
+                           allow_incomplete=allow_incomplete, real_clock=now is None,
+                           live=live)  # fmt: skip
     except rwk.rw.NotReadyError as e:  # pragma: no cover - checked above; data changed meanwhile
         typer.echo(str(e), err=True)
         raise typer.Exit(code=rwk.EXIT_NOT_READY) from e
@@ -1652,6 +1698,10 @@ def regression_score(
     typer.echo(f"{chosen} week {wk}, as-of {as_of:%a %Y-%m-%d %H:%M} UTC: stored as '{run.kind}'"
                + (" (INCOMPLETE DATA)" if run.incomplete else ""))  # fmt: skip
     typer.echo(f"approved parameters: {params.describe()}")
+    if live is not None:
+        span = f"{live.train_seasons[0]}-{live.train_seasons[-1]}"
+        typer.echo(f"own xFP: the pinned {live.fold} models {live.version} (trained on {span}; "
+                   "nothing fitted)")  # fmt: skip
     t = run.table
     for tag, gap in (("sell_high", pl.col("ppg") - pl.col("ppg_ros")),
                      ("buy_low", pl.col("ppg_ros") - pl.col("ppg"))):  # fmt: skip
@@ -1676,26 +1726,39 @@ def regression_pin(
         "--backtest-csv",
         help="The committed backtest the parameters' record must reproduce.",
     ),  # fmt: skip
+    xfp: str | None = typer.Option(None, "--xfp", help=XFP_OPTION_HELP),
 ) -> None:
     """Approve the season's Regression Watch parameters: recompute D3's choice for it (variant,
-    X, shrinkage estimated on the seasons before it) from the warehouse, refuse unless the same
-    run reproduces the committed backtest's rows of the season before, then write
+    X, shrinkage estimated on the seasons before it) from the warehouse with the xFP source
+    (--xfp, else the pinned one), refuse unless the same run reproduces the committed
+    backtest's rows of the season before, then write
     artifacts/production_models/regression_watch/<version>.json and pin it in
-    config/production_models.yaml (the other pins keep theirs). Review, then commit."""
+    config/production_models.yaml (the other pins keep theirs). With the own xFP, the
+    season's live models (the fold trained on 2006 .. season-1, about 45 s) are written next
+    to it and pinned file by file with their sha256. Review, then commit."""
     from twm import pins
     from twm.config import ROOT, league, settings
     from twm.modules.regression_watch import production as rprod
 
     path = _warehouse_or_exit(db)
     chosen = season if season is not None else settings().current_season
+    source = _regression_xfp(xfp)
+    say = lambda m: typer.echo(m, err=True)  # noqa: E731
     try:
-        params = rprod.build_params(path, chosen, league(),
-                                    progress=lambda m: typer.echo(m, err=True))  # fmt: skip
-        pin = rprod.approve(params, csv_path=_project_path(backtest_csv))
+        params = rprod.build_params(path, chosen, league(), xfp_source=source, progress=say)
+        live = None
+        if source == "own":
+            from twm.modules.regression_watch import own_xfp as ox
+
+            live, _ = ox.fit_live(path, chosen, progress=say)
+        pin = rprod.approve(params, csv_path=_project_path(backtest_csv), live=live)
     except (rprod.RegressionProductionError, LookupError, ValueError) as e:
         typer.echo(f"cannot approve: {e}", err=True)
         raise typer.Exit(code=1) from e
     typer.echo(f"approved {params.describe()}")
+    if pin.xfp is not None and pin.xfp.source == "own":
+        for name, m in pin.xfp.models.items():
+            typer.echo(f"wrote {m.file} ({name}, sha256 {m.sha256[:12]}...)")
     typer.echo(f"wrote {pin.file} (sha256 {pin.sha256[:12]}...) and pinned it in "
                f"{_display_path(pins.default_pin_path(), ROOT)}")  # fmt: skip
     _freeze_regression(path, chosen, backtest_csv)  # P2: its frozen backtest lists too
@@ -1770,21 +1833,28 @@ def check_regression_pin(
 ) -> None:
     """`twm model check` for Regression Watch (exit 1 on any problem): the pin present, the
     parameters file as pinned (sha256 before it is read, version = the hash of its content,
-    season), and its record of the last backtest season reproduces the committed backtest
-    CSV's rows (the variant, validation MAE and both X); the frozen backtest lists (P2) as
+    season), its xFP source as pinned (own: every live model file's sha256 before it is
+    opened, the fold of the season, each file the component it names), and its record of
+    the last backtest season reproduces the committed backtest CSV's rows (the variant,
+    validation MAE and both X); the frozen backtest lists (P2) as
     pinned, every season's choice, the headline MAE and tag hit rates equal to the CSV's, and
     the parameters' record equal to the lists' last season. Changes nothing."""
     from twm import pins
     from twm.modules.regression_watch import production as rprod
 
     try:
-        params, pin = rprod.load_pinned_params(season)
+        live, params, pin = rprod.load_pinned_xfp(season)
     except pins.PinError as e:
         typer.echo(f"not usable: {e}", err=True)
         raise typer.Exit(code=1) from None
     typer.echo(f"{pin.module} {season}: approved {pin.model} {pin.model_version} ({pin.file}, "
                f"sha256 {pin.sha256[:12]}..., approved {pin.approved or '?'})")  # fmt: skip
     typer.echo(f"  {params.describe()}")
+    if live is not None:
+        typer.echo(f"  own xFP live models {live.version}: {len(live.models)} files, sha256 "
+                   f"checked before opening, trained on {pin.xfp.train_seasons}")  # fmt: skip
+    else:
+        typer.echo("  xFP source: ffopportunity (nflverse's per-play expectations)")
     problems = rprod.record_mismatches(params, _project_path(backtest_csv))
     if problems:
         typer.echo(
@@ -1944,7 +2014,11 @@ def backtest(
         if extra:
             raise typer.BadParameter(f"{', '.join(extra)} do not apply to regression_watch")
         regression_backtest(
-            db=db, out=out or Path("reports/regression_watch/backtest.md"), end=end, n_boot=2000
+            db=db,
+            out=out or Path("reports/regression_watch/backtest.md"),
+            end=end,
+            n_boot=2000,
+            xfp=None,
         )
         return
     radar_backtest(

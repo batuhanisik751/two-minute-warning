@@ -21,6 +21,7 @@ import polars as pl
 
 from twm.config import FANTASY_POSITIONS
 from twm.modules.regression_watch import stability as st
+from twm.modules.regression_watch.production import XFP_TITLES
 
 GS = (4, 8, 12)  # the games shown in the shrinkage tables
 CSV_COLUMNS = (
@@ -212,6 +213,27 @@ LIMITS = [
 ]
 
 
+# With the own walk-forward xFP (step H6-b2) two limits read differently.
+OWN_LIMITS = {
+    "- **No garbage-time split for the parts.**": (
+        "- **No garbage-time split for the parts.** The parts (touchdowns, catches, YAC) are "
+        "summed per game without separating garbage time; only xFP, FPOE and points have a "
+        "no-garbage-time version."),
+    "- **Model outputs (PROJECT_SPEC 6.3).**": (
+        "- **Model outputs (PROJECT_SPEC 6.3).** xFP is Regression Watch's own walk-forward "
+        "xFP (step H6-b2): every season's expectations come from models trained on the seasons "
+        "before it only, so no week's xFP knows the future. The garbage-time flag still comes "
+        "from nflfastR's win probability, trained on many seasons: a mild, known leak."),
+}  # fmt: skip
+
+
+def limits(xfp_source: str) -> list[str]:
+    """The report's limits for the xFP source ('ffopportunity': :data:`LIMITS` as written)."""
+    if xfp_source == "ffopportunity":
+        return list(LIMITS)
+    return [next((v for k, v in OWN_LIMITS.items() if t.startswith(k)), t) for t in LIMITS]
+
+
 def _built_at(db: Path | str) -> str:
     from twm.warehouse.build import connect
 
@@ -264,15 +286,18 @@ def build_stability_report(
     frame: pl.DataFrame | None = None,
     n_boot: int = st.N_BOOT,
     seed: int = st.SEED,
+    xfp: pl.DataFrame | None = None,
+    xfp_source: str = "ffopportunity",
 ) -> StabilityReport:
     """Build the report for ``seasons`` (2009 on) from the warehouse ``db`` (or a given D1
-    ``frame``, e.g. synthetic in tests)."""
+    ``frame``, e.g. synthetic in tests). ``xfp``/``xfp_source``: the expected points the frame
+    is read with (:func:`.player_week.with_xfp`; None = ffopportunity's) and its name."""
     seasons = sorted({int(s) for s in seasons if int(s) >= st.FIRST_STUDY_SEASON})
     if not seasons:
         raise ValueError(f"no season from {st.FIRST_STUDY_SEASON} on (the study starts then)")
     first, last = seasons[0], seasons[-1]
     if frame is None:
-        frame = st.load_frame(db, seasons)
+        frame = st.load_frame(db, seasons, xfp=xfp)
     built = _built_at(db) if db is not None else "unknown"
     sh = st.split_half(frame, seasons, n_boot=n_boot, seed=seed)
     if sh.filter(pl.col("n") >= 3).is_empty():
@@ -291,7 +316,8 @@ def build_stability_report(
     md = [
         "# Regression Watch: stability study and shrinkage (step D2)",
         "",
-        f"Seasons {_label(first, last)}, regular season, QB/RB/WR/TE. Warehouse built {built} "
+        f"Seasons {_label(first, last)}, regular season, QB/RB/WR/TE; xFP: "
+        f"{XFP_TITLES[xfp_source]}. Warehouse built {built} "
         "UTC. Regenerate with `uv run twm regression stability` (docs/regression_watch.md "
         "explains every number; notebooks/02_regression_stability.ipynb walks through it).",
         "",
@@ -319,7 +345,7 @@ def build_stability_report(
         "",
         *_md_headline(sh, "odd_even"),
     ]
-    md += _md_rest(sh, frame, seasons, tables, intervals, full)
+    md += _md_rest(sh, frame, seasons, tables, intervals, full, xfp_source)
     rows = csv_rows(sh, tables, pl.concat(list(intervals.values())), full)
     return StabilityReport("\n".join(md), rows, _summary(sh, tables[full]), sh, tables[full])
 
@@ -331,6 +357,7 @@ def _md_rest(
     tables: dict[tuple[int, int], pl.DataFrame],
     intervals: dict[str, pl.DataFrame],
     full: tuple[int, int],
+    xfp_source: str = "ffopportunity",
 ) -> list[str]:
     """Sections 3-7 of the markdown."""
     yac_first, yac_share = _yac_coverage(frame, seasons)
@@ -351,7 +378,8 @@ def _md_rest(
         "chances.",
         "",
         *_md_components(sh),
-        f"YAC over expected needs ffopportunity's per-catch YAC expectation: {yac_text}, so it "
+        f"YAC over expected needs a per-catch YAC expectation ({XFP_TITLES[xfp_source]}): "
+        f"{yac_text}, so it "
         "is studied on every season of the study.",
         "",
         "## 4. A harder test: first half against second half of his games",
@@ -397,7 +425,7 @@ def _md_rest(
         *_md_windows(tables, "fpoe", 8),
         "## 7. Limits",
         "",
-        *LIMITS,
+        *limits(xfp_source),
         "",
     ]
     return md

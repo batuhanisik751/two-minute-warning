@@ -438,7 +438,8 @@ export default async function MethodologyPage() {
             </li>
             <li>
               ffverse&apos;s <a href="https://github.com/ffverse/ffopportunity">ffopportunity</a> (through nflreadpy):
-              the expected fantasy points (xFP) behind the player pages&apos; charts and several Radar features.
+              the expected fantasy points (xFP) behind the player pages&apos; charts and several Radar features, and the
+              per-play rows Regression Watch values with its own walk-forward models.
             </li>
             <li>
               <a href="https://github.com/dynastyprocess/data">DynastyProcess</a>: the cross-platform player id map and
@@ -504,8 +505,9 @@ export default async function MethodologyPage() {
             <li>
               <strong>Model-derived source columns.</strong> Some inputs are themselves outputs of models that were
               trained on many seasons, including seasons after some backtest weeks: a mild, known leak that the backtest
-              cannot remove. It is allowed in this first version and stated here; a later phase is planned to
-              re-estimate them walk-forward and report the difference.
+              cannot remove. It is allowed in this first version and stated here. Regression Watch re-estimates its
+              expected points walk-forward since October 1, 2026 (its lists, stability study and backtest); the
+              Radar&apos;s features still use the model columns.
               {modelOutputs.length ? (
                 <>
                   {" "}

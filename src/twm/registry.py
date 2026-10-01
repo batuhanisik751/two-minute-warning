@@ -767,7 +767,7 @@ def _projection_entries() -> list[Entry]:
          "not in the top decile of his position's universe; D3's backtest only, dropped from "
          "the product on 2026-09-30",
          "Tested, not shown: a starter whose production is carried by his opportunity, not by "
-         "luck. It predicted nothing (in the backtest 60.6% of the players it tagged stayed "
+         "luck. It predicted nothing (in the backtest 59.0% of the players it tagged stayed "
          "starters, and so did 61.1% of every starter), so the lists do not carry it.", True),
         ("tag_threshold_x", "Tag threshold X", "concept", "points per game",
          f"per season, the X in 0, 0.5 .. 6 with the best Sell-high (Buy-low) precision on "
@@ -1848,7 +1848,9 @@ def _entries() -> list[Entry]:
             ": the ffopportunity model's expected passing, rushing and receiving yards, "
             "touchdowns, two-point conversions, interceptions and receptions of a player-game "
             "(fact_opportunity_week *_exp columns); fumbles and return or fumble-recovery "
-            "touchdowns have no expected value and add 0",
+            "touchdowns have no expected value and add 0. Regression Watch's lists, stability "
+            "study and backtest (since 2026-10-01, step H6-b2) score the same per-play "
+            "expectations from its own walk-forward models instead (own_xfp)",
             explanation="What an average player would have scored from the same chances "
             "(where he was targeted, where he carried the ball). Opportunity is sticky week to "
             "week.",
@@ -1867,12 +1869,33 @@ def _entries() -> list[Entry]:
             modules=("regression_watch", "waiver_radar"),
             unit="points",
             formula="fantasy_points - xfp (the same player-game; a lost fumble or a return "
-            "touchdown counts fully, having no expected value)",
+            "touchdown counts fully, having no expected value); in Regression Watch since "
+            "H6-b2 the xfp is the own walk-forward xFP (own_xfp)",
             explanation="Points above or below what his chances were worth: partly skill, "
             "largely luck, and it tends to shrink toward zero.",
             source="twm.scoring.score_sql - twm.scoring.xfp_sql",
             step="C3",
             model_output=True,
+        ),
+        Entry(
+            name="own_xfp",
+            title="Own walk-forward xFP",
+            kind="concept",
+            modules=("regression_watch",),
+            unit="points",
+            formula="xfp from the project's own per-play models (catch chance, yards after the "
+            "catch, pass touchdown and interception chances per target; yards and touchdown "
+            "chance per carry; two-point success rates), LightGBM or a spline GLM per part, for "
+            "a play of season S trained only on seasons 2006 to S-1; inputs are the situation "
+            "before the snap (air yards, field position, down and distance, direction, quarter, "
+            "score), never an nflfastR model column; scored with D1's per-play rules and "
+            "config/scoring.yaml. The current season's models are pinned with their sha256 "
+            "(config/production_models.yaml) and only loaded by the weekly job",
+            explanation="Regression Watch's expected points since 2026-10-01: the same idea as "
+            "nflverse's ffopportunity, but each season is valued by models that never saw it or "
+            "any later season, so a backtest cannot borrow from the future.",
+            source="twm.modules.regression_watch.own_xfp",
+            step="H6-b2",
         ),
         Entry(
             name="regression_to_the_mean",

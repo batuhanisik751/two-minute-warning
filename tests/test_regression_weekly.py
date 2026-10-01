@@ -128,9 +128,11 @@ def toy_choice(season: int, *, x_sell: float = 1.0, x_buy: float = 1.0,
                      tg.Threshold("buy_low", x_buy, 0.6, 30, 8, val))  # fmt: skip
 
 
-def toy_params(season: int = SEASON, **kw) -> rp.ProductionParams:
+def toy_params(season: int = SEASON, xfp_source: str = "ffopportunity", **kw):
+    """Toy parameters; the toy world has ffopportunity's expectations only (the own xFP path
+    is tested in tests/test_regression_xfp_switch.py)."""
     return rp.make_params(season, toy_choice(season, **kw), toy_choice(season - 1),
-                          toy_priors(tuple(range(2009, season))))  # fmt: skip
+                          toy_priors(tuple(range(2009, season))), xfp_source)  # fmt: skip
 
 
 def toy_csv(path: Path, params: rp.ProductionParams, *, seasons: range = range(2011, 2025)) -> Path:
@@ -238,7 +240,7 @@ def test_the_record_must_reproduce_the_backtest_csv(tmp_path):
     other = toy_params(x_sell=2.0)  # same record, different production X: still consistent
     assert rp.record_mismatches(other, good) == []
     shifted = rp.make_params(SEASON, toy_choice(SEASON), toy_choice(SEASON - 1, x_buy=1.5),
-                             toy_priors(tuple(range(2009, SEASON))))  # fmt: skip
+                             toy_priors(tuple(range(2009, SEASON))), "ffopportunity")  # fmt: skip
     assert any("buy_low: value" in p for p in rp.record_mismatches(shifted, good))
     with pytest.raises(rp.RegressionProductionError, match="disagree"):
         rp.approve(shifted, csv_path=good, root=tmp_path, path=tmp_path / "pins.yaml")
@@ -251,15 +253,18 @@ def test_the_record_must_reproduce_the_backtest_csv(tmp_path):
 def test_the_committed_parameters_reproduce_the_committed_2025_rows():
     """`twm model check regression_watch` on the committed pin, file and backtest CSV."""
     params, pin = rp.load_pinned_params(2026)
-    assert pin.model == "params" and params.variant.name == "mean_flat_all"
-    assert (params.x_sell, params.x_buy) == (4.5, 3.5)
+    # re-approved with the own walk-forward xFP (H6-b2, owner 2026-10-01)
+    assert pin.model == "params" and params.variant.name == "zero_flat_all"
+    assert params.xfp_source == "own" and pin.xfp.source == "own" and pin.xfp.fold == 2026
+    assert (params.x_sell, params.x_buy) == (5.0, 3.0)
     assert params.shrinkage_seasons == tuple(range(2009, 2026))
-    assert params.record["season"] == 2025 and params.record["variant"] == "mean_hl8_all"
+    assert params.record["season"] == 2025 and params.record["variant"] == "zero_flat_all"
     csv_path = ROOT / "reports" / "regression_watch" / "backtest.csv"
     assert rp.record_mismatches(params, csv_path) == []
     out = runner.invoke(app, ["model", "check", "regression_watch", "--season", "2026"])
     assert out.exit_code == 0, out.output
     assert "matches reports/regression_watch/backtest.csv (season 2025" in out.output
+    assert f"own xFP live models {pin.xfp.version}: 8 files" in out.output
     assert (ROOT / pin.file).stat().st_size < 10_000
 
 
@@ -466,7 +471,7 @@ def test_a_list_before_week_4_says_it_is_earlier_than_the_backtested_weeks(world
 def test_cli_scores_stores_and_writes_the_report(world, tmp_path, monkeypatch):
     from twm import cli
 
-    monkeypatch.setattr(cli, "_regression_approved", lambda season: toy_params(season))
+    monkeypatch.setattr(cli, "_regression_approved", lambda season: (None, toy_params(season)))
     store, out = tmp_path / "s.duckdb", tmp_path / "w.md"
     args = ["regression", "score", "--season", "2025", "--week", "4", "--db", str(world),
             "--store", str(store), "--out", str(out), "--now", "2026-02-01T00:00"]  # fmt: skip
@@ -517,7 +522,7 @@ def test_real_parameters_are_reproduced_from_the_warehouse():
     """Recomputing D3's 2026 choice from the warehouse gives the committed file byte for byte
     (and so its 2025 record, which `twm model check` compares with the committed CSV)."""
     params, pin = rp.load_pinned_params(2026)
-    fresh = rp.build_params(_real_db(), 2026, league())
+    fresh = rp.build_params(_real_db(), 2026, league(), xfp_source=params.xfp_source)
     assert rp.params_json(fresh) == (ROOT / pin.file).read_text()
 
 
@@ -555,7 +560,9 @@ def test_real_2026_week_3_reconstructed_into_a_scratch_store(tmp_path):
     params, _ = rp.load_pinned_params(2026)
     assert set(got["kind"]) == {"backtest"} and set(got["horizon"]) == {15}
     assert set(got["model_version"]) == {params.model_version}
-    wp = bt.project_week(db, 2026, 3, league())
+    from twm.modules.regression_watch import xfp_source as xs
+
+    wp = bt.project_week(db, 2026, 3, league(), xfp=xs.history(db, 2026, params.xfp_source))
     assert wp.choice.variant == params.variant and wp.choice.sell.x == params.x_sell
     want = wp.table.select("gsis_id", "ppg_ros", "sell_high", "buy_low").sort("gsis_id")
     mine = got.select(
@@ -568,7 +575,7 @@ def test_real_2026_week_3_reconstructed_into_a_scratch_store(tmp_path):
     tags = {t for r in got.get_column("reasons_json") for t in json.loads(r)["tags"]}
     assert tags == {"sell_high", "buy_low"} and set(got["band"].drop_nulls()) == tags
     text = out.read_text()
-    assert "## Sell-high" in text and "## Legit" not in text and "60.6%" in text
+    assert "## Sell-high" in text and "## Legit" not in text and "59.0%" in text  # own xFP
     if owner.exists():
         assert pins.sha256_of(owner) == before  # the owner's store is untouched
 
@@ -577,9 +584,9 @@ def test_real_2026_week_3_reconstructed_into_a_scratch_store(tmp_path):
 def test_real_2025_week_6_list_and_its_final_outcomes_match_the_backtest(tmp_path):
     """2025's parameters (built, not approved) list 2025 week 6 through the as-of view exactly
     as the batch backtest projects it, and the final outcomes are the backtest's
-    rest-of-season points per game."""
+    rest-of-season points per game. ffopportunity's xFP: the research path stays usable."""
     db = _real_db()
-    p25 = rp.build_params(db, 2025, league())
+    p25 = rp.build_params(db, 2025, league(), xfp_source="ffopportunity")
     assert p25.variant.name == "mean_hl8_all" and (p25.x_sell, p25.x_buy) == (4.5, 3.0)
     run = rwk.run_week(db, 2025, 6, params=p25, league=league(), now=SEASON_OVER,
                        real_clock=False)  # fmt: skip

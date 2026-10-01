@@ -352,7 +352,12 @@ in step F2.
   `player_stats.targets` is empty for 2006-2008 (67, 14 and 17 player-weeks with a target). So
   receivers' expected points of 2006-2008 count little more than their catches (WR xFP = 60% of
   WR points, 101% from 2009): Regression Watch flags these seasons (docs/regression_watch.md).
-- Section 6.3 caveat applies (model trained across seasons).
+- Section 6.3 caveat applies (model trained across seasons) wherever ffopportunity's
+  expectations are used: the Waiver Radar's features, the D1 frame and the player pages' xFP and
+  FPOE. Regression Watch's list, stability study and backtest no longer use them (step H6-b2,
+  owner 2026-10-01): they value the same per-play rows with the project's own walk-forward
+  models (`own_xfp.py`: a play of season S from models trained on seasons before S only; the
+  live 2026 models are pinned in `config/production_models.yaml`).
 
 ## 10. Other observations
 
@@ -574,7 +579,8 @@ dataset in the run log (`pipeline_runs`, step E4) so the estimates can be checke
   (`offense_pct` in snap counts): opportunity before production.
 - **xFP / ffopportunity** — expected fantasy points: what an average player would have scored
   from the same opportunities (targets, carries, field position), from the ffopportunity
-  model; **FPOE** is actual minus expected.
+  model (Regression Watch since H6-b2: from its own walk-forward models of the same per-play
+  expectations); **FPOE** is actual minus expected.
 - **EPA / WP** — expected points added per play / win probability, nflfastR model outputs used
   as features (Section 6.3 caveat).
 - **Closing line / spread / total / moneyline** — the betting market right before kickoff:

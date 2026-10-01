@@ -91,6 +91,42 @@ class SnapshotFile:
 
 
 @dataclass(frozen=True)
+class ModelFile:
+    file: str  # relative to the project root
+    sha256: str
+
+    def path(self, root: Path | None = None) -> Path:
+        return _resolve(self.file, root)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"file": self.file, "sha256": self.sha256}
+
+
+XFP_SOURCES = ("own", "ffopportunity")
+
+
+@dataclass(frozen=True)
+class XfpPin:
+    """Where a pin's expected points (xFP) come from (step H6-b2, Regression Watch):
+    ``source`` 'own' (the live fold ``fold`` of the own walk-forward xFP, ``version``, trained
+    on ``train_seasons``; every model file with its sha256) or 'ffopportunity' (nflverse's
+    per-play expectations: no files)."""
+
+    source: str
+    fold: int | None = None
+    version: str = ""
+    train_seasons: str = ""  # e.g. "2006-2025"
+    models: dict[str, ModelFile] = field(default_factory=dict)  # component -> file
+
+    def as_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"source": self.source}
+        if self.source == "own":
+            out.update(fold=self.fold, version=self.version, train_seasons=self.train_seasons,
+                       models={k: m.as_dict() for k, m in self.models.items()})  # fmt: skip
+        return out
+
+
+@dataclass(frozen=True)
 class Pin:
     module: str
     season: int
@@ -103,6 +139,8 @@ class Pin:
     # what the file holds when it is not the Radar's pickled model (S2a streamer pins):
     # 'logit' (a pickled model) or 'rule' (a ranking rule's definition, JSON); "" = the Radar's
     model: str = ""
+    # where the expected points come from (step H6-b2, Regression Watch only): XfpPin or None
+    xfp: XfpPin | None = None
 
     def path(self, root: Path | None = None) -> Path:
         return _resolve(self.file, root)
@@ -116,6 +154,8 @@ class Pin:
             out["model"] = self.model
         if self.approved:
             out["approved"] = self.approved
+        if self.xfp is not None:
+            out["xfp"] = self.xfp.as_dict()
         if self.backtest:
             out["backtest"] = {
                 "seasons": self.backtest_seasons,
@@ -151,13 +191,40 @@ def sha256_of(path: Path) -> str:
 # The pin file
 # --------------------------------------------------------------------------------------
 
-_PIN_KEYS = {"season", "model_version", "file", "sha256", "approved", "backtest", "model"}
+_PIN_KEYS = {"season", "model_version", "file", "sha256", "approved", "backtest", "model", "xfp"}
+_XFP_KEYS = {"source", "fold", "version", "train_seasons", "models"}
 
 
 def _snapshot(module: str, table: str, entry: Any, where: Path) -> SnapshotFile:
     if not isinstance(entry, dict) or {"file", "sha256", "rows"} - set(entry):
         raise PinError(f"{where}: backtest {table} of {module} needs file, sha256 and rows")
     return SnapshotFile(str(entry["file"]), str(entry["sha256"]).lower(), int(entry["rows"]))
+
+
+def _xfp(module: str, entry: Any, where: Path) -> XfpPin:
+    """The ``xfp`` entry of a pin: 'ffopportunity' alone, or 'own' with its fold, version and
+    every model file with its sha256 (anything else: PinError, never a default)."""
+    if not isinstance(entry, dict) or set(entry) - _XFP_KEYS:
+        raise PinError(f"{where}: the xfp of {module} must map only {sorted(_XFP_KEYS)}")
+    source = entry.get("source")
+    if source not in XFP_SOURCES:
+        raise PinError(f"{where}: the xfp source of {module} must be one of {XFP_SOURCES}, "
+                       f"not {source!r}")  # fmt: skip
+    if source == "ffopportunity":
+        if set(entry) != {"source"}:
+            raise PinError(f"{where}: an ffopportunity xfp of {module} names no models")
+        return XfpPin("ffopportunity")
+    models = entry.get("models")
+    if not entry.get("fold") or not entry.get("version") or not isinstance(models, dict) \
+            or not models:  # fmt: skip
+        raise PinError(f"{where}: the own xfp of {module} needs fold, version and models")
+    files = {}
+    for name, m in models.items():
+        if not isinstance(m, dict) or set(m) != {"file", "sha256"}:
+            raise PinError(f"{where}: xfp model {name} of {module} needs file and sha256")
+        files[str(name)] = ModelFile(str(m["file"]), str(m["sha256"]).lower())
+    return XfpPin("own", int(entry["fold"]), str(entry["version"]),
+                  str(entry.get("train_seasons") or ""), files)  # fmt: skip
 
 
 def read_pins(path: Path | None = None) -> dict[str, Pin]:
@@ -187,6 +254,7 @@ def read_pins(path: Path | None = None) -> dict[str, Pin]:
             backtest={t: _snapshot(str(module), t, bt[t], path) for t in SNAPSHOT_TABLES
                       if t in bt},
             model=str(entry.get("model") or ""),
+            xfp=_xfp(str(module), entry["xfp"], path) if "xfp" in entry else None,
         )  # fmt: skip
     return pins
 

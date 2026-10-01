@@ -35,24 +35,54 @@ decisions:
       rows: 20
 regression_watch:
   season: 2026
-  model_version: mean_flat_all-77146b2e5d2169fc
-  file: artifacts/production_models/regression_watch/mean_flat_all-77146b2e5d2169fc.json
-  sha256: 7e3e2773e7ab0689792dfb20405c6101520bd715c2e321453662e362339c2be1
+  model_version: zero_flat_all-9d98d6f251ee054c
+  file: artifacts/production_models/regression_watch/zero_flat_all-9d98d6f251ee054c.json
+  sha256: 89a00f2413f73f15ec6843121ea21eb1934aa2e4bf3ae93a34b204766ccd5bf1
   model: params
-  approved: '2026-09-30'
+  approved: '2026-10-01'
+  xfp:
+    source: own
+    fold: 2026
+    version: own_xfp-2026-8577dfffe4683678
+    train_seasons: 2006-2025
+    models:
+      completion:
+        file: artifacts/production_models/regression_watch/own_xfp-2026-8577dfffe4683678/completion.joblib
+        sha256: 68e9a598799f8bdf2614ffa2fed1806b0f81f5f33831787fe4981b0fcc5e1197
+      yac:
+        file: artifacts/production_models/regression_watch/own_xfp-2026-8577dfffe4683678/yac.joblib
+        sha256: 2ec9fcab611e7c3ff8f6c51e7b243f1e43ff54fea72741dd6233cf2b2134b856
+      pass_td:
+        file: artifacts/production_models/regression_watch/own_xfp-2026-8577dfffe4683678/pass_td.joblib
+        sha256: 7ca2c89b7e84b36cbaf98b3b2f5ece33c828fd7fd0da3e252fcfbd6126060fac
+      interception:
+        file: artifacts/production_models/regression_watch/own_xfp-2026-8577dfffe4683678/interception.joblib
+        sha256: b84140ebfbd3ace2225c22e20fbd9be65b37ec9df83b1a47b434e0ac6f1e00be
+      rush_yards:
+        file: artifacts/production_models/regression_watch/own_xfp-2026-8577dfffe4683678/rush_yards.joblib
+        sha256: 0011f740db9d079d6fbed5fbf3f1fac79541f2cf089720e283ed0a4a7b539a1b
+      rush_td:
+        file: artifacts/production_models/regression_watch/own_xfp-2026-8577dfffe4683678/rush_td.joblib
+        sha256: 281b0be44559f0ca8100d9a4b1164f785803ab26a1792d99ceace75657ea8f99
+      pass_2pt:
+        file: artifacts/production_models/regression_watch/own_xfp-2026-8577dfffe4683678/pass_2pt.joblib
+        sha256: 9e2a0cd1f647246462f96009aa6f598977e720be49b89f71a411577f98f3a54f
+      rush_2pt:
+        file: artifacts/production_models/regression_watch/own_xfp-2026-8577dfffe4683678/rush_2pt.joblib
+        sha256: 977d6d0d7ac8f8c79480aadf5bddceaf1e6aba264a5e7d207185205efca106d9
   backtest:
     seasons: 2011-2025
     predictions:
-      file: artifacts/production_models/regression_watch/backtest-mean_flat_all-77146b2e5d2169fc/predictions.parquet
-      sha256: 99daf5cfc006ef73054731ed0aae6c3bec4f77fd24bc85a70454143c587dfb9f
-      rows: 10787
+      file: artifacts/production_models/regression_watch/backtest-zero_flat_all-9d98d6f251ee054c/predictions.parquet
+      sha256: 89d55523e4d1b350b1a9d00be2354b1d4397c7e787e8463931396b8223b51b21
+      rows: 10826
     outcomes:
-      file: artifacts/production_models/regression_watch/backtest-mean_flat_all-77146b2e5d2169fc/outcomes.parquet
-      sha256: dd3b214bf785ab3e4cf987746bffcff171017e305e0a824061f58e2a3a97952e
-      rows: 10787
+      file: artifacts/production_models/regression_watch/backtest-zero_flat_all-9d98d6f251ee054c/outcomes.parquet
+      sha256: 1036cbdca57d3acd74df32ec9a140eb0095a9a94d3f0d9a9d5002cd559ee1a63
+      rows: 10826
     model_versions:
-      file: artifacts/production_models/regression_watch/backtest-mean_flat_all-77146b2e5d2169fc/model_versions.parquet
-      sha256: 20359f343cf5a98e7e3ed7966563945a3ed3c5c6f510bc89183eace50bc4b194
+      file: artifacts/production_models/regression_watch/backtest-zero_flat_all-9d98d6f251ee054c/model_versions.parquet
+      sha256: 4678dc545886149778c943fff840e563193ecadcb50dffcb5ee471d30d68b2b9
       rows: 15
 streamer_dst:
   season: 2026

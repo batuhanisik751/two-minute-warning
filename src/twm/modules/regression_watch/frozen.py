@@ -115,19 +115,23 @@ def rest_of_season_at(frame: pl.DataFrame, keys: pl.DataFrame) -> pl.DataFrame:
 
 
 def build_snapshot(
-    db: Path | str, season: int, league: League, *, progress: Progress | None = None
-) -> dict[str, pl.DataFrame]:
+    db: Path | str, season: int, league: League, *, xfp_source: str,
+    progress: Progress | None = None,
+) -> dict[str, pl.DataFrame]:  # fmt: skip
     """The snapshot of the approved ``season`` (module docstring) from the warehouse, which must
-    reach back to 2006 (the owner's Mac; never the scheduled job). Deterministic."""
+    reach back to 2006 (the owner's Mac; never the scheduled job), with the xFP of
+    ``xfp_source`` (own: each season's walk-forward fold). Deterministic."""
     from twm.modules.regression_watch import backtest as bt
     from twm.modules.regression_watch import production as rprod
     from twm.modules.regression_watch import projection as pj
     from twm.modules.regression_watch import weekly as rwk
+    from twm.modules.regression_watch import xfp_source as xs
     from twm.modules.regression_watch.player_week import player_games_history, visible
     from twm.modules.waiver_radar.weekly import last_reg_week
 
     last = int(season) - 1
-    frame = player_games_history(db, list(range(pj.FIRST_DATA_SEASON, last + 1)))
+    xfp = xs.history(db, last, xfp_source, progress=progress)
+    frame = player_games_history(db, list(range(pj.FIRST_DATA_SEASON, last + 1)), xfp=xfp)
     if pj.FIRST_DATA_SEASON not in set(frame.get_column("season").unique().to_list()):
         raise rprod.RegressionProductionError(
             f"the warehouse has no {pj.FIRST_DATA_SEASON} games: build it from 2006 first"
@@ -142,7 +146,7 @@ def build_snapshot(
     lists, versions = [], []
     for s in tests:
         record = choices[s - 1] if s - 1 in choices else choices[s]
-        params = rprod.make_params(s, choices[s], record, priors[s])
+        params = rprod.make_params(s, choices[s], record, priors[s], xfp_source)
         versions.append(rprod.version_frame(params))
         sf, end = frame.filter(pl.col("season") == s), last_reg_week(db, s) or 0
         for week, as_of in asofs.filter(pl.col("season") == s).select("week", "as_of").iter_rows():
@@ -325,7 +329,7 @@ def freeze(
     from twm.modules.regression_watch import production as rprod
 
     params, pin = rprod.load_pinned_params(season, path=path, root=root)
-    frames = build_snapshot(db, season, league, progress=progress)
+    frames = build_snapshot(db, season, league, xfp_source=params.xfp_source, progress=progress)
     problems = snapshot_mismatches(frames, csv_path, league, params)
     if problems:
         raise rprod.RegressionProductionError(

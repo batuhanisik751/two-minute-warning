@@ -124,7 +124,11 @@ def _row_errors(r: dict) -> list[str]:
     if flag not in ("", "y"):
         out.append(f"verified_by_owner {flag!r}: write y or leave it empty")
     if flag == "y":
-        missing = [c for c in ("departure_type", "announced_date", "source_url") if not r[c]]
+        # a blank announced_date is allowed (no source gives the day): the model then uses the
+        # coach's last_game_date (docs/hot_seat.md), so one of the two is needed
+        missing = [c for c in ("departure_type", "source_url") if not r[c]]
+        if not (r["announced_date"] or r["last_game_date"]):
+            missing.append("announced_date (or last_game_date)")
         if missing:
             out.append(f"verified row without {', '.join(missing)}")
     return [f"{rid}: {m}" for m in out]
@@ -183,6 +187,7 @@ def check_labels(df: pl.DataFrame, candidates: pl.DataFrame | None = None) -> La
             ((df["verified_by_owner"] != "y") & (df["prefill"] == "suggested")).sum()
         ),
         positive_verified=int(verified["departure_type"].is_in(POSITIVE_TYPES).sum()),
+        verified_blank_date=int((verified["announced_date"] == "").sum()),
     )
     counts = verified.group_by("departure_type").len().sort("departure_type")
     rep.by_type = {r["departure_type"]: r["len"] for r in counts.to_dicts()}
@@ -202,6 +207,10 @@ def summary_text(rep: LabelReport, *, limit: int = 25) -> str:
             lines.append(f"schedule candidates without a row: {c['candidates_missing']}")
         types = ", ".join(f"{k} {v}" for k, v in rep.by_type.items()) or "none"
         lines.append(f"verified by type: {types}; positive (spec 8.5): {c['positive_verified']}")
+        lines.append(
+            f"verified with a blank announced_date (the model uses last_game_date): "
+            f"{c['verified_blank_date']}"
+        )
     for kind, items in (("ERROR", rep.errors), ("warning", rep.warnings)):
         lines += [f"{kind}: {m}" for m in items[:limit]]
         if len(items) > limit:

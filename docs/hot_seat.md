@@ -1,6 +1,7 @@
-# Hot-Seat Meter: point-in-time features (step H3a)
+# Hot-Seat Meter: point-in-time features (step H3a), labels and models (step H3b)
 
-PROJECT_SPEC 8.5 "Features". This step builds the features only: no labels, no models (H3b).
+PROJECT_SPEC 8.5. The features (H3a) come first; the labels and the models (H3b) are in the last
+two sections.
 Labels come from the owner-verified `data/manual/coach_departures.csv` (docs/labeling_coaches.md).
 
 - Code: `src/twm/modules/hot_seat/features.py`; config: `hot_seat:` in `config/settings.yaml`.
@@ -160,3 +161,79 @@ NULL shares: `off_/def_epa_neutral_trend` 0.191 (weeks 2-4 and teams with 4 game
 - The 2026 grades come from `data/decisions/graded/` (the regrade output); the publish reads
   `data/decisions/season/graded/` (the scheduled job's `grade-pinned` output). The two files were
   byte-identical on 2026-10-01.
+
+## Labels (step H3b)
+
+Code: `src/twm/modules/hot_seat/targets.py`. The owner's departures
+(`data/manual/coach_departures.csv`) join the feature rows by coach x team x season: a schedule
+row through `candidate_id` (the candidates file gives its `coach_id`), a `source_only` row through
+team + season + the coach's name (`dim_coach`). Every date is a US-Eastern calendar day: a weekly
+row's day is its as-of's Eastern date; the end-of-season row's day is the team's last
+regular-season game day (`fact_game.gameday`; the `last_game_end` anchor above). The window ends
+30 days after the team's final game, playoffs included (inclusive). For a row of day `d` and the
+coach's departure from that team announced on day `a`:
+
+| case | label |
+|---|---|
+| `a < d` | row dropped (he is gone) |
+| weekly row of the last regular-season week | dropped (after Black Monday; the end-of-season row covers it) |
+| positive (`fired_in_season`, `fired_after_season`, `mutual_parting`) and `d <= a <= window end` | `y = 1` |
+| any other type in that span (incl. `resigned_under_pressure`, owner 2026-10-01) | `y = 0`, `censored = True` |
+| positive, announced after the window | `y = 0` (counted) |
+| blank `departure_type` | the coach-season's rows dropped (counted) |
+| interim (`took_over_mid_season`, or the owner file says interim) | kept, `is_interim`: never trained on, scored and reported apart |
+
+Hazard label: `event = 1` when a positive departure is announced in `[d, next row's day)`, or
+`[d, window end]` on the coach's last row of the season (one event per positive coach-season).
+
+`--labels verified` uses only rows with `verified_by_owner = y` and refuses to run while any
+departure a feature row needs is unverified. `--labels suggested` uses the research prefill and
+writes only to `data/hot_seat/provisional/` (git-ignored) with a PROVISIONAL banner;
+`reports/hot_seat/` is written only from verified labels.
+
+**Blank `announced_date` (both modes, H3b-2).** The owner may verify a row and leave the date
+blank when no source gives the day (docs/labeling_coaches.md); a suggested row may be blank too.
+Either way the model uses the coach's `last_game_date` (the earliest day it can be announced;
+for an in-season firing his last game's Tuesday row is then dropped). The rows are counted
+(`departures_date_imputed`), printed by `twm hotseat backtest` and stated in the report's Labels
+section; `twm hotseat check-labels` counts the verified ones. A verified row needs a date or a
+`last_game_date`.
+
+## Models and backtest (step H3b)
+
+Code: `models.py`, `backtest.py`, `evaluation.py`, `backtest_report.py`; command
+`uv run twm hotseat backtest --labels verified|suggested` (about 2 min); notebook
+`notebooks/04_hot_seat.ipynb` (reads the outputs only).
+
+- Walk-forward through the shared harness (`twm.backtest.walkforward`): test seasons 2006-2025,
+  each trained on every earlier season from 2002.
+- Penalty (H3b-2; `models.InnerCvLogit`, for `logit`, `hazard` and both baselines): L2 only. C
+  (grid 0.01, 0.1, 1, the Radar's L2 grid) is chosen inside each fit by an inner walk-forward
+  on the training rows alone: for each C and each inner season v (the last 4 training seasons
+  that have an earlier one), fit on the training seasons before v and take the log loss on v;
+  the C with the smallest sum over the v's wins (ties: the smaller C) and is refit on every
+  training season. Fewer than 2 inner seasons: C = 0.1 (the Radar's default). The harness sees a
+  one-point grid (no outer tuning); its tuning fit (validation season held out, for the isotonic
+  calibration) makes its own inner choice without that season. Before H3b-2 the harness chose C
+  and L1/L2 on one validation season, and the choice swung (C = 0.01 L1 <-> C = 1 L2) from fold
+  to fold. Chosen C per fold: the report's Penalty section and `backtest_penalties.csv` (every
+  candidate's summed log loss). The harness gives a fit feature columns only, so the backtest
+  binds the training frame to the estimator, which reads each row's season from it only when
+  the rows are exactly a season prefix of it (else the default C, recorded as such).
+- 18 features (`models.FEATURES`): all H3a features except the levels that grow with the week
+  (`reg_games_played`, `reg_wins`, `expected_wins`, `pythagorean_wins`; their differences are
+  in), `tenure_censored` (coverage flag) and `took_over_mid_season` (constant on training rows).
+  Missing values: median + missing indicator (decision grades before 2006; the 2006 fold has no
+  graded training season, so it cannot use that feature).
+- `logit`: the Waiver Radar's penalized logistic regression on `y`. `hazard`: the same on
+  `event`, plus a derived final-interval indicator (`games_remaining = 0`); season risk at an
+  as-of with g games left = 1 - prod(1 - h) over intervals g, g-1, ..., 1 and the final one, the
+  features held at their current values (one interval per game left: a bye week's extra interval
+  is not counted). `lgbm`: the Radar's LightGBM (single-threaded), used only
+  if it beats both on all test rows (lower Brier and higher PR-AUC, paired intervals excluding 0).
+  Baselines: one-feature logistic regressions on win% to date and on `wins_vs_expected`.
+- Primary probabilities are the models' own; the harness's isotonic calibration (fit on one
+  validation season) is reported beside them. Metrics per as-of week, end of season and all rows
+  (ROC-AUC, PR-AUC, Brier, season-block bootstrap intervals with per-row season weights), top-5
+  hit rate at week 12 and season end, firings per season, interims and censored rows apart, the
+  two sensitivity runs (censored dropped; `resigned_under_pressure` positive), coefficients per fold.

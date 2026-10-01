@@ -286,3 +286,16 @@ def test_in_season_change_announced_after_the_successor_took_over_is_a_warning()
         "2010-10-12 (a leave first?)"
     ]
     assert hl.date_window(2010) == (dt.date(2010, 6, 1), dt.date(2011, 9, 30))
+
+
+def test_check_labels_verified_row_may_leave_the_date_blank():
+    # H3b-2: no source gives the day -> blank; the model uses the coach's last_game_date
+    ok = hl.check_labels(_labels(_label_row(verified_by_owner="y", announced_date="")))
+    assert ok.errors == [] and ok.counts["verified_blank_date"] == 1
+    assert "blank announced_date (the model uses last_game_date): 1" in hl.summary_text(ok)
+    bad = hl.check_labels(
+        _labels(_label_row(verified_by_owner="y", announced_date="", last_game_date=""))
+    )
+    assert bad.errors == [
+        "2010_AAA_w16_ann_old: verified row without announced_date (or last_game_date)"
+    ]

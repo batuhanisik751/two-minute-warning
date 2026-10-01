@@ -8,8 +8,8 @@ import typer
 
 hotseat_app = typer.Typer(
     help="Hot-Seat Meter: candidate head-coach departures from the schedules, the check of "
-    "the owner-verified labels (docs/labeling_coaches.md) and the point-in-time features "
-    "(docs/hot_seat.md)."
+    "the owner-verified labels (docs/labeling_coaches.md), the point-in-time features and the "
+    "walk-forward backtest (docs/hot_seat.md)."
 )
 
 CANDIDATES_CSV = "coach_departures_candidates.csv"
@@ -123,3 +123,87 @@ def features_cmd(
         typer.echo(hf.null_rates(df))
     typer.echo(f"{df.height} rows ({full.height} in the file) in {time.perf_counter() - t0:.1f} s")
     typer.echo(f"wrote {path}")
+
+
+PROVISIONAL_DIR = Path("data/hot_seat/provisional")
+REPORT_DIR = Path("reports/hot_seat")
+
+
+@hotseat_app.command("backtest")
+def backtest_cmd(
+    labels_mode: str = typer.Option(
+        ..., "--labels", help="verified (owner-checked rows only) or suggested (provisional)."
+    ),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse (default: config paths)."),
+    features: Path | None = typer.Option(None, "--features", help=f"Default {FEATURES_PATH}."),
+    n_boot: int = typer.Option(2000, "--n-boot", help="Season-bootstrap resamples."),
+) -> None:
+    """Walk-forward backtest 2006-2025 (spec 8.5). Suggested labels write ONLY to
+    data/hot_seat/provisional/ with a PROVISIONAL banner; reports/hot_seat/ needs verified."""
+    import time
+
+    import polars as pl
+
+    from twm.cli import _warehouse_or_exit
+    from twm.config import ROOT
+    from twm.modules.hot_seat import backtest as hb
+    from twm.modules.hot_seat import backtest_report as hr
+    from twm.modules.hot_seat import labels as hl
+    from twm.modules.hot_seat import targets as ht
+
+    if labels_mode not in ht.LABEL_MODES:
+        raise typer.BadParameter(f"--labels must be one of {', '.join(ht.LABEL_MODES)}")
+    t0 = time.perf_counter()
+    path = _warehouse_or_exit(db)
+    fpath = features or ROOT / FEATURES_PATH
+    lpath, cpath = _manual(LABELS_CSV), _manual(CANDIDATES_CSV)
+    for p, how in (
+        (fpath, "twm hotseat features"),
+        (lpath, "H1"),
+        (cpath, "twm hotseat candidates"),
+    ):
+        if not p.exists():
+            typer.echo(f"not found: {p} (run {how})", err=True)
+            raise typer.Exit(code=1)
+    labels, cands = hl.read_labels(lpath), hl.read_candidates(cpath)
+    assert cands is not None
+    used = (
+        labels if labels_mode == "suggested" else labels.filter(pl.col("verified_by_owner") == "y")
+    )
+    deps, unresolved = ht.resolve_departures(labels, cands, ht.load_coach_names(path))
+    if unresolved.height:
+        typer.echo(f"{unresolved.height} departure(s) without a coach_id: "
+                   f"{unresolved['candidate_id'].to_list()}", err=True)  # fmt: skip
+        raise typer.Exit(code=1)
+    feats = ht.refresh_interim(pl.read_parquet(fpath), used, cands)
+    last = max(hb.TEST_SEASONS)
+    feats = feats.filter(pl.col("season").is_between(hb.FIRST_SEASON, last))
+    team_dates = ht.load_team_dates(path, hb.FIRST_SEASON, last)
+    try:
+        rows, counts = ht.build_targets(feats, deps, team_dates, mode=labels_mode)
+    except ht.UnverifiedLabelsError as e:
+        typer.echo(f"refused: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    rup, _ = ht.build_targets(
+        feats, deps, team_dates, mode=labels_mode, positive_types=ht.POSITIVE_SETS["rup_positive"]
+    )
+    typer.echo(", ".join(f"{k} {v}" for k, v in counts.items()))
+    typer.echo(f"{counts['departures_date_imputed']} departure(s) with a blank announced_date: "
+               "the coach's last_game_date used (docs/hot_seat.md)")  # fmt: skip
+    res = hb.run_backtest(
+        rows,
+        rup,
+        n_boot=n_boot,
+        progress=lambda m: typer.echo(f"{m} ({time.perf_counter() - t0:.0f} s)"),
+    )
+    if labels_mode == "verified":
+        out_dir, data_dir = ROOT / REPORT_DIR, ROOT / FEATURES_PATH.parent
+    else:
+        out_dir = data_dir = ROOT / PROVISIONAL_DIR
+        typer.echo("PROVISIONAL: suggested labels; outputs only in " + str(out_dir))
+    paths = hr.write_outputs(res, counts, labels_mode, out_dir, data_dir)
+    rows.write_parquet(data_dir / "targets.parquet", compression="zstd", statistics=False)
+    typer.echo(res.lgbm_text)
+    for p in paths.values():
+        typer.echo(f"wrote {p}")
+    typer.echo(f"done in {time.perf_counter() - t0:.0f} s")

@@ -98,6 +98,10 @@ confirmed that day. Not the day of his last game, not the day his successor was 
 - If a source gives only "January 4" under a heading for the 2010-11 offseason, the year comes
   from that context (`prefill_note` says "year from context" in that case).
 
+If no source gives the day, leave `announced_date` blank and still verify the row (type and URL);
+the model then uses his last game's date (`last_game_date`). The checker and the backtest count
+these rows.
+
 Why it matters: the model's label (spec 8.5) is "a firing announced after the as-of date and no
 later than 30 days after the team's final game". A wrong date can move a firing into or out of
 that window. Whether the window is anchored on the Monday after the season or on the last
@@ -111,7 +115,8 @@ kickoff is decided in H3 (some firings are announced on the Sunday evening of th
 3. Confirm or correct `announced_date` (format `YYYY-MM-DD`). If it is empty, a quick web search
    for "<coach> fired <year>" usually finds it in a news story; put that story's link in
    `source_url` (or add it to `notes` if the first page still settles the type).
-4. Write `y` in `verified_by_owner`. A verified row needs a type, a date and a URL.
+4. Write `y` in `verified_by_owner`. A verified row needs a type and a URL, and a date unless no
+   source gives the day (see "What announced means").
 
 If you cannot settle a row, leave `verified_by_owner` empty and write why in `notes`.
 

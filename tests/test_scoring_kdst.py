@@ -23,6 +23,10 @@ ESPN_DEFENSE = {
     "fumble_return_tds": 6, "blocked_kick_return_tds": 6,
 }  # fmt: skip
 ESPN_PA_TIERS = [(0, 5), (6, 4), (13, 3), (17, 1), (27, 0), (34, -1), (45, -3), (None, -5)]
+# Yards allowed: the owner's ESPN league settings, synced 2026-09-30 (C1); ESPN's categories are
+# 0-99, 100-199, 200-299, 300-349, 350-399, 400-449, 450-499, 500-549 and 550+ yards.
+LEAGUE_YA_TIERS = [(99, 5), (199, 3), (299, 2), (349, 0), (399, -1), (449, -3), (499, -5),
+                   (549, -6), (None, -7)]  # fmt: skip
 
 K_COLS = sorted({c for cs in sk.KICKING_COLUMNS.values() for c in cs})
 D_COLS = sorted({c for cs in sk.DEFENSE_COLUMNS.values() for c in cs})
@@ -65,7 +69,7 @@ def test_shipped_config_is_espn_default():
     assert sc.kicking.points() == ESPN_KICKING
     assert sc.defense.points() == ESPN_DEFENSE
     assert sc.defense.points_allowed_tiers == ESPN_PA_TIERS
-    assert sc.defense.yards_allowed_tiers == []  # off by default (the two ESPN pages disagree)
+    assert sc.defense.yards_allowed_tiers == LEAGUE_YA_TIERS  # the owner's league (C1)
 
 
 # ---- kickers: one test per rule ------------------------------------------------------------
@@ -173,15 +177,39 @@ def test_hand_computed_dst_game():
     assert bd.select(pl.sum_horizontal(parts))[0, 0] == bd["fantasy_points"][0]
 
 
-def test_yards_allowed_tiers_are_off_by_default_and_scored_when_set():
-    default = sk.DefenseRules.from_config()
-    assert "yards_allowed" not in default.required_columns()
-    assert d_points(defense(NEUTRAL_PA, yards_allowed=50)) == 0
+def test_yards_allowed_tiers_are_off_when_empty_and_scored_when_set():
+    off = sk.DefenseRules(ESPN_DEFENSE, tuple(ESPN_PA_TIERS), ())
+    assert "yards_allowed" not in off.required_columns()
+    assert d_points(defense(NEUTRAL_PA, yards_allowed=50), off) == 0
+    assert "yards_allowed" in sk.DefenseRules.from_config().required_columns()  # the league's
     rules = sk.DefenseRules(ESPN_DEFENSE, tuple(ESPN_PA_TIERS), ((99, 5), (299, 2), (None, -1)))
     assert "yards_allowed" in rules.required_columns()
     assert d_points(defense(NEUTRAL_PA, yards_allowed=99), rules) == 5
     assert d_points(defense(NEUTRAL_PA, yards_allowed=100), rules) == 2
     assert d_points(defense(NEUTRAL_PA, yards_allowed=300), rules) == -1
+
+
+# ESPN's yards-allowed categories (espn-api football/constant.py, stats 128-136): "Less than 100
+# total yards allowed", "100-199 total yards allowed", ... "550+": every upper bound inclusive.
+@pytest.mark.parametrize(
+    ("yards", "points"),
+    [
+        (-12, 5), (0, 5), (99, 5), (100, 3), (199, 3), (200, 2), (299, 2), (300, 0), (349, 0),
+        (350, -1), (399, -1), (400, -3), (449, -3), (450, -5), (499, -5), (500, -6), (549, -6),
+        (550, -7), (812, -7),
+    ],
+)  # fmt: skip
+def test_every_league_yards_allowed_tier_boundary(yards, points):
+    # the shipped config (the owner's league): polars and SQL agree inside d_points
+    assert d_points(defense(NEUTRAL_PA, yards_allowed=yards)) == points
+    assert sk.tier_points(yards, LEAGUE_YA_TIERS) == points
+
+
+def test_league_yards_tiers_use_espns_category_bounds():
+    from twm.league.settings_diff import YA
+
+    assert [b for b, _ in YA] == [b for b, _ in LEAGUE_YA_TIERS]
+    assert d_points(defense(NEUTRAL_PA, yards_allowed=None)) == 0  # no opponent row: no tier
 
 
 # ---- config validation, errors, SQL = polars ------------------------------------------------

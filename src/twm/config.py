@@ -581,6 +581,9 @@ class PoolConfig(BaseModel):
 # ---- League shape (PROJECT_SPEC 7.2) --------------------------------------------------------
 # Lineup slots that never score: the bench and injured reserve.
 BENCH_SLOTS = ("bench", "BE", "IR")
+# ... of which the reserve slots hold players who cannot play (ESPN's IR): they are not even
+# bench, so no derived number (bench count, thresholds, pool cutoffs) ever counts them.
+RESERVE_SLOTS = ("IR",)
 # Positions the app does not rank (kickers, team defenses, individual defensive players, punters,
 # head coaches): a lineup may have slots for them (ESPN leagues usually have K and D/ST); they are
 # accepted and ignored, like any multi-position slot that holds none of FANTASY_POSITIONS.
@@ -631,6 +634,8 @@ class LeagueShape:
       could start. Informative only (``is_flex_finish``), never a label.
     - ``pool_cutoffs``: starter threshold x ``candidate_pool_multiplier``, rounded half up: the
       Waiver Radar treats players ranked inside it as rostered.
+    - ``bench_slots``: bench slots per team; reserve slots (IR, ``RESERVE_SLOTS``) are not
+      counted anywhere.
     - ``overridden``: which numbers came from explicit overrides in league.yaml.
     """
 
@@ -785,7 +790,7 @@ def _derive_shape(lg: League) -> LeagueShape:
             problems.append(f"lineup.{slot} = {count}: a slot count must be a whole number >= 0")
             continue
         if slot in BENCH_SLOTS:
-            bench += count
+            bench += 0 if slot in RESERVE_SLOTS else count
             continue
         if slot in in_scope:
             dedicated[slot] += count

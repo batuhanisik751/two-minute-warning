@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -511,20 +512,36 @@ def approve(
     root: Path | None = None,
     path: Path | None = None,
     today: Any = None,
+    positions: Sequence[str] = ("K", "DST"),
 ) -> dict[str, Any]:
     """Approve the K model and the D/ST rule for ``season`` with the store's backtest (opened
     read-only) and the dataset's labels: train the K fold (an existing file of the same version
     is kept byte for byte: pickling is not byte-stable), write the rule file, export both
     snapshots, refuse unless they reproduce ``csv_path`` (reports/streamer/backtest.csv), and
-    pin both in config/production_models.yaml (other pins keep theirs). {position: Pin}."""
+    pin both in config/production_models.yaml (other pins keep theirs). {position: Pin}.
+
+    ``positions`` re-approves only those (e.g. ``("DST",)`` after a D/ST scoring change): the
+    other position's pin, file and snapshot are left byte for byte, and its PINNED snapshot
+    (sha256-checked) must reproduce ``csv_path`` together with the new one."""
     from datetime import UTC, datetime
 
     from twm import pins
     from twm.config import ROOT
 
+    chosen = tuple(dict.fromkeys(p.upper() for p in positions))
+    if not chosen or set(chosen) - set(PIN_KEYS):
+        raise StreamerProductionError(f"positions {list(positions)}: choose from {list(PIN_KEYS)}")
     base = root if root is not None else ROOT
-    k_frames, k_span = k_snapshot(store, dataset, season)
-    d_frames, d_span = dst_snapshot(store, dataset, season)
+    if "K" in chosen:
+        k_frames, k_span = k_snapshot(store, dataset, season)
+    else:
+        k_frames = load_k_snapshot(load_pinned_k(season, path=path, root=root)[1], root)
+    if "DST" in chosen:
+        d_frames, d_span = dst_snapshot(store, dataset, season)
+    else:
+        d_frames = {
+            "hit_rates": load_hit_rates(load_pinned_rule(season, path=path, root=root)[1], root)
+        }
     problems = track_record_mismatches(k_frames, d_frames["hit_rates"], csv_path)
     if problems:
         raise StreamerProductionError(
@@ -532,26 +549,29 @@ def approve(
             f"{problems[0]}): run `uv run twm streamer backtest --store <this store>` so the "
             "report and the lists agree"
         )
-    pm, rule = train_k(dataset, season), rule_definition(season)
-    target = rprod.model_path(pm.model_version, artifact_dir(base))
-    keep = False
-    if target.exists():
-        try:
-            keep = rprod.load_model(target).model_version == pm.model_version
-        except rprod.ProductionModelError:
-            keep = False
-    k_file = target if keep else rprod.save_model(pm, target.parent)
-    r_file = artifact_dir(base) / f"{rule.model_version}.json"
-    r_file.write_text(rule_json(rule))
     day = (today or datetime.now(UTC)).astimezone(UTC).date().isoformat()
-    made = {
-        "K": pins.Pin(PIN_KEYS["K"], int(season), pm.model_version, _rel(k_file, base),
-                      pins.sha256_of(k_file), day, k_span,
-                      _write_snapshot(k_frames, pm.model_version, base), MODEL_K),
-        "DST": pins.Pin(PIN_KEYS["DST"], int(season), rule.model_version, _rel(r_file, base),
-                        pins.sha256_of(r_file), day, d_span,
-                        _write_snapshot(d_frames, rule.model_version, base), "rule"),
-    }  # fmt: skip
+    made = {}
+    if "K" in chosen:
+        pm = train_k(dataset, season)
+        target = rprod.model_path(pm.model_version, artifact_dir(base))
+        keep = False
+        if target.exists():
+            try:
+                keep = rprod.load_model(target).model_version == pm.model_version
+            except rprod.ProductionModelError:
+                keep = False
+        k_file = target if keep else rprod.save_model(pm, target.parent)
+        k_snap = _write_snapshot(k_frames, pm.model_version, base)
+        made["K"] = pins.Pin(PIN_KEYS["K"], int(season), pm.model_version, _rel(k_file, base),
+                             pins.sha256_of(k_file), day, k_span, k_snap, MODEL_K)  # fmt: skip
+    if "DST" in chosen:
+        rule = rule_definition(season)
+        r_file = artifact_dir(base) / f"{rule.model_version}.json"
+        r_file.write_text(rule_json(rule))
+        d_snap = _write_snapshot(d_frames, rule.model_version, base)
+        made["DST"] = pins.Pin(PIN_KEYS["DST"], int(season), rule.model_version,
+                               _rel(r_file, base), pins.sha256_of(r_file), day, d_span, d_snap,
+                               "rule")  # fmt: skip
     current = pins.read_pins(path)
     current.update({p.module: p for p in made.values()})
     pins.write_pins(current, path)

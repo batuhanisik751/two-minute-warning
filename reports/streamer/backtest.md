@@ -1,6 +1,6 @@
 # K and D/ST streamer: walk-forward backtest
 
-Created 2026-09-30 00:49 UTC in 32 s. Command: `uv run twm streamer backtest`; dataset `data/streamer/dataset.parquet`; test seasons 2013-2025; models trained on pool rows. docs/streamer.md explains it in plain words.
+Created 2026-10-01 01:36 UTC in 34 s. Command: `uv run twm streamer backtest`; dataset `data/streamer/dataset.parquet`; test seasons 2013-2025; models trained on pool rows. docs/streamer.md explains it in plain words.
 
 - **What is graded**: at every regular-season Tuesday as-of of a test season, each method ranks the pool of its position (kickers or D/STs probably on waivers, reports/streamer/pool_labels.md). A pick is a hit when he finishes in the top 12 of the position the next week (`y_start`); byes and the last week have no label and are left out. precision@k = hits among the top k of a list (a list shorter than k divides by its length); `#1 pick started` = precision@1. Pooled = the mean over lists.
 - **Walk-forward**: the model graded on season S learns only from seasons before S AND only from labels public by S's first Tuesday as-of (the training cutoff; any later training row is refused), is tuned on the last training season (pooled precision@5) and calibrated there (isotonic); one model per position; no refit during the season. 2013 is a thin fold: trained on one season, no tuning, cross-fitted calibration.
@@ -11,7 +11,7 @@ Created 2026-09-30 00:49 UTC in 32 s. Command: `uv run twm streamer backtest`; d
 ## Verdict
 
 - **K**: the kept model, logistic regression (precision@5 38.4%), is ahead of every baseline, but not clearly (an interval includes zero). Model minus baseline, precision@5 points: last game's points +1.4 (-0.2 to +3.0); points per game +1.6 (-0.5 to +3.7); next opponent +10.4 (+6.2 to +14.6).
-- **DST**: the kept model, logistic regression (precision@5 39.1%), does NOT beat every baseline. Model minus baseline, precision@5 points: last game's points +1.2 (-0.5 to +2.9); points per game +1.8 (+0.2 to +3.4); next opponent -1.1 (-2.5 to +0.2).
+- **DST**: the kept model, logistic regression (precision@5 36.9%), does NOT beat every baseline. Model minus baseline, precision@5 points: last game's points +2.4 (+0.5 to +4.6); points per game +2.6 (+0.6 to +5.0); next opponent -0.4 (-2.2 to +1.2).
 
 ## Results
 
@@ -42,26 +42,26 @@ Pool kickers who did not kick in their team's latest game (practice squad, camp,
 
 ### DST
 
-213 weekly lists (2013-2025), 1424 pool rows, 532 of them started (base rate 37.4%); average list 6.7 rows, 14 lists shorter than 5.
+213 weekly lists (2013-2025), 1491 pool rows, 513 of them started (base rate 34.4%); average list 7.0 rows, 10 lists shorter than 5.
 
 | method | precision@3 | precision@5 | #1 pick started |
 |---|---|---|---|
-| logistic regression | 42.6% (39.6% to 46.1%) | 39.1% (36.1% to 42.2%) | 46.5% (39.4% to 53.0%) |
-| LightGBM | 39.2% (35.8% to 42.5%) | 38.5% (35.1% to 41.7%) | 40.4% (32.7% to 46.7%) |
-| baseline: last game's points | 37.3% (33.4% to 41.4%) | 37.9% (34.6% to 41.3%) | 39.0% (31.3% to 47.4%) |
-| baseline: points per game | 38.7% (35.4% to 42.3%) | 37.3% (34.3% to 40.6%) | 38.0% (32.7% to 44.4%) |
-| baseline: next opponent | 43.4% (40.5% to 46.1%) | 40.3% (36.8% to 43.2%) | 49.8% (44.8% to 55.4%) |
+| logistic regression | 40.2% (36.0% to 44.1%) | 36.9% (33.9% to 40.0%) | 49.3% (40.6% to 57.1%) |
+| LightGBM | 39.0% (36.8% to 41.1%) | 36.6% (34.1% to 38.8%) | 45.5% (38.9% to 51.6%) |
+| baseline: last game's points | 36.3% (32.7% to 39.8%) | 34.5% (31.3% to 37.7%) | 36.2% (31.0% to 41.5%) |
+| baseline: points per game | 36.8% (34.1% to 39.3%) | 34.3% (31.9% to 36.3%) | 39.0% (34.7% to 42.9%) |
+| baseline: next opponent | 41.9% (39.3% to 44.4%) | 37.3% (35.0% to 40.0%) | 52.1% (47.9% to 56.1%) |
 
 #### DST: model minus baseline (percentage points, 95% interval, share of resamples above zero)
 
 | model | baseline | precision@3 | precision@5 | #1 pick started |
 |---|---|---|---|---|
-| logistic regression | last game's points | +5.3 (+1.7 to +9.3), 100% | +1.2 (-0.5 to +2.9), 92% | +7.5 (+1.4 to +13.3), 99% |
-| logistic regression | points per game | +3.9 (+0.2 to +7.8), 98% | +1.8 (+0.2 to +3.4), 98% | +8.5 (+1.4 to +15.6), 99% |
-| logistic regression | next opponent | -0.8 (-2.6 to +1.0), 22% | -1.1 (-2.5 to +0.2), 5% | -3.3 (-9.7 to +3.3), 17% |
-| LightGBM | last game's points | +1.9 (-1.6 to +5.6), 84% | +0.6 (-1.4 to +2.5), 71% | +1.4 (-5.7 to +7.9), 64% |
-| LightGBM | points per game | +0.5 (-3.5 to +4.8), 56% | +1.1 (-0.6 to +2.8), 91% | +2.3 (-5.7 to +9.1), 71% |
-| LightGBM | next opponent | -4.2 (-6.6 to -1.9), 0% | -1.8 (-3.6 to -0.2), 1% | -9.4 (-17.4 to -1.4), 1% |
+| logistic regression | last game's points | +3.9 (+1.0 to +6.6), 100% | +2.4 (+0.5 to +4.6), 99% | +13.1 (+3.3 to +22.1), 99% |
+| logistic regression | points per game | +3.4 (-0.5 to +7.7), 96% | +2.6 (+0.6 to +5.0), 100% | +10.3 (-1.4 to +21.6), 95% |
+| logistic regression | next opponent | -1.7 (-4.9 to +0.9), 12% | -0.4 (-2.2 to +1.2), 34% | -2.8 (-12.9 to +6.1), 27% |
+| LightGBM | last game's points | +2.7 (-0.5 to +5.7), 94% | +2.2 (+0.1 to +4.7), 98% | +9.4 (-0.5 to +18.7), 97% |
+| LightGBM | points per game | +2.2 (-0.2 to +4.8), 97% | +2.3 (+0.6 to +4.2), 99% | +6.6 (-0.9 to +14.4), 95% |
+| LightGBM | next opponent | -3.0 (-5.8 to -0.2), 2% | -0.7 (-2.7 to +1.3), 27% | -6.6 (-14.7 to +0.9), 4% |
 
 ## By season
 
@@ -87,19 +87,19 @@ Pool kickers who did not kick in their team's latest game (practice squad, camp,
 
 | season | lists | base rate | logistic regression | LightGBM | last game's points | points per game | next opponent |
 |---|---|---|---|---|---|---|---|
-| 2013 | 16 | 48% | 49% | 49% | 49% | 48% | 48% |
-| 2014 | 16 | 32% | 31% | 30% | 34% | 32% | 37% |
-| 2015 | 16 | 41% | 43% | 44% | 43% | 42% | 42% |
-| 2016 | 16 | 37% | 36% | 34% | 39% | 35% | 40% |
-| 2017 | 16 | 45% | 49% | 48% | 45% | 44% | 48% |
-| 2018 | 16 | 39% | 40% | 41% | 40% | 43% | 44% |
-| 2019 | 16 | 36% | 38% | 37% | 36% | 34% | 41% |
-| 2020 | 16 | 33% | 38% | 38% | 30% | 30% | 39% |
-| 2021 | 17 | 30% | 31% | 28% | 28% | 29% | 27% |
-| 2022 | 17 | 40% | 44% | 44% | 41% | 41% | 44% |
-| 2023 | 17 | 40% | 38% | 36% | 42% | 41% | 40% |
-| 2024 | 17 | 32% | 32% | 33% | 29% | 31% | 32% |
-| 2025 | 17 | 38% | 41% | 38% | 37% | 36% | 43% |
+| 2013 | 16 | 38% | 36% | 35% | 35% | 38% | 38% |
+| 2014 | 16 | 35% | 36% | 36% | 33% | 38% | 36% |
+| 2015 | 16 | 39% | 40% | 40% | 44% | 38% | 43% |
+| 2016 | 16 | 34% | 38% | 38% | 38% | 39% | 34% |
+| 2017 | 16 | 33% | 33% | 36% | 31% | 31% | 33% |
+| 2018 | 16 | 34% | 38% | 38% | 31% | 34% | 35% |
+| 2019 | 16 | 29% | 31% | 34% | 33% | 30% | 33% |
+| 2020 | 16 | 27% | 25% | 26% | 25% | 24% | 34% |
+| 2021 | 17 | 31% | 33% | 38% | 24% | 31% | 32% |
+| 2022 | 17 | 38% | 42% | 41% | 44% | 36% | 46% |
+| 2023 | 17 | 41% | 49% | 44% | 40% | 36% | 46% |
+| 2024 | 17 | 33% | 36% | 32% | 33% | 34% | 36% |
+| 2025 | 17 | 35% | 42% | 39% | 38% | 36% | 39% |
 
 ## Probabilities
 
@@ -124,33 +124,33 @@ Calibration of the kept model (logistic regression), fixed 10-point bins:
 
 #### DST: probabilities
 
-Brier score (lower is better): constant forecast (the training seasons' start rate) 0.2350; logistic regression 0.2498; LightGBM 0.2667.
+Brier score (lower is better): constant forecast (the training seasons' start rate) 0.2262; logistic regression 0.2306; LightGBM 0.2368.
 
 Calibration of the kept model (logistic regression), fixed 10-point bins:
 
 | predicted | rows | mean predicted | observed start rate |
 |---|---|---|---|
-| 0%-10% | 39 | 1.1% | 30.8% |
-| 10%-20% | 40 | 16.1% | 20.0% |
-| 20%-30% | 293 | 25.7% | 30.7% |
-| 30%-40% | 410 | 34.3% | 44.1% |
-| 40%-50% | 447 | 43.3% | 37.4% |
-| 50%-60% | 118 | 51.9% | 39.0% |
-| 60%-70% | 25 | 65.7% | 48.0% |
-| 70%-80% | 30 | 76.3% | 30.0% |
-| 80%-90% | 15 | 83.9% | 26.7% |
-| 90%-100% | 7 | 96.6% | 42.9% |
+| 0%-10% | 46 | 0.1% | 21.7% |
+| 10%-20% | 144 | 16.0% | 25.7% |
+| 20%-30% | 412 | 25.7% | 30.1% |
+| 30%-40% | 351 | 33.2% | 35.3% |
+| 40%-50% | 283 | 43.7% | 37.5% |
+| 50%-60% | 165 | 53.4% | 38.8% |
+| 60%-70% | 39 | 64.0% | 43.6% |
+| 70%-80% | 23 | 75.0% | 65.2% |
+| 80%-90% | 11 | 82.3% | 63.6% |
+| 90%-100% | 17 | 100.0% | 52.9% |
 
 ## Sensitivity: models trained on every universe row
 
-The same walk-forward, but each model also learns from the kickers and D/STs that were NOT in the pool (rostered in most leagues): 14,686 final rows instead of 3,974 (all seasons, both positions). Graded on the same pool lists; in brackets the change against training on pool rows only (percentage points, 95% season-block interval).
+The same walk-forward, but each model also learns from the kickers and D/STs that were NOT in the pool (rostered in most leagues): 14,686 final rows instead of 4,032 (all seasons, both positions). Graded on the same pool lists; in brackets the change against training on pool rows only (percentage points, 95% season-block interval).
 
 | position | model | precision@3 | precision@5 | #1 pick started |
 |---|---|---|---|---|
 | K | logistic regression | 37.6% (-3.0 (-7.0 to +1.1)) | 36.7% (-1.6 (-3.7 to +0.2)) | 38.1% (-4.3 (-12.1 to +2.4)) |
 | K | LightGBM | 39.2% (+0.6 (-2.3 to +3.6)) | 38.4% (+1.3 (-0.4 to +3.0)) | 41.4% (+1.9 (-3.3 to +6.6)) |
-| DST | logistic regression | 40.8% (-1.9 (-4.8 to +0.9)) | 39.2% (+0.1 (-1.4 to +1.6)) | 47.9% (+1.4 (-5.2 to +8.0)) |
-| DST | LightGBM | 42.3% (+3.1 (+0.0 to +6.2)) | 39.4% (+0.9 (-0.6 to +2.5)) | 52.1% (+11.7 (+4.3 to +20.2)) |
+| DST | logistic regression | 42.3% (+2.0 (-0.9 to +5.1)) | 37.6% (+0.7 (-0.4 to +1.7)) | 55.9% (+6.6 (-0.9 to +15.6)) |
+| DST | LightGBM | 42.4% (+3.4 (+0.9 to +6.0)) | 37.8% (+1.2 (-0.8 to +3.2)) | 50.7% (+5.2 (-1.9 to +11.4)) |
 
 ## Folds
 
@@ -194,34 +194,34 @@ The same walk-forward, but each model also learns from the kickers and D/STs tha
 
 | test | trained on | validation | training rows (starts) | chosen settings | top 3 features |
 |---|---|---|---|---|---|
-| 2013 | 2012 | thin | 116 (39) | C=0.1, l1_ratio=0 | next_opp_sacks_allowed_per_game 10%, next_opp_rz_trips_allowed_per_game 7%, dst_points_allowed_per_game 7% |
-| 2014 | 2012-2013 | 2013 | 200 (79) | C=0.01, l1_ratio=0 | next_opp_sacks_allowed_per_game 13%, dst_sacks_per_game 11%, next_opp_points_allowed_per_game 9% |
-| 2015 | 2012-2014 | 2014 | 311 (114) | C=0.1, l1_ratio=1 | next_opp_sacks_allowed_per_game 56%, next_opp_points_allowed_per_game 31%, kdst_preseason_rank 12% (dominant) |
-| 2016 | 2012-2015 | 2015 | 410 (155) | C=0.1, l1_ratio=0 | next_opp_points_allowed_per_game 12%, next_opp_sacks_allowed_per_game 10%, team_points_per_game 9% |
-| 2017 | 2012-2016 | 2016 | 519 (195) | C=0.01, l1_ratio=0 | next_opp_sacks_allowed_per_game 13%, next_opp_points_per_game 10%, next_opp_points_allowed_per_game 9% |
-| 2018 | 2012-2017 | 2017 | 617 (239) | C=1, l1_ratio=0 | next_opp_games_to_date 16%, team_points_per_game 9%, dst_points_allowed_per_game 8% |
-| 2019 | 2012-2018 | 2018 | 709 (275) | C=0.1, l1_ratio=1 | next_opp_points_per_game 36%, next_opp_sacks_allowed_per_game 19%, team_points_per_game 15% |
-| 2020 | 2012-2019 | 2019 | 820 (315) | C=0.1, l1_ratio=1 | next_opp_points_per_game 29%, next_opp_sacks_allowed_per_game 17%, team_points_per_game 15% |
-| 2021 | 2012-2020 | 2020 | 958 (360) | C=1, l1_ratio=0 | next_opp_games_to_date 10%, next_opp_points_per_game 8%, next_opp_points_allowed_per_game 8% |
-| 2022 | 2012-2021 | 2021 | 1073 (395) | C=0.1, l1_ratio=1 | next_opp_sacks_allowed_per_game 16%, next_opp_points_per_game 15%, weekly_ecr_listed 14% |
-| 2023 | 2012-2022 | 2022 | 1175 (436) | C=1, l1_ratio=0 | next_opp_games_to_date 12%, team_rz_trips_per_game 6%, next_opp_sacks_allowed_per_game 6% |
-| 2024 | 2012-2023 | 2023 | 1317 (493) | C=0.1, l1_ratio=0 | kdst_points_per_game 9%, next_opp_points_per_game 9%, next_opp_points_allowed_per_game 8% |
-| 2025 | 2012-2024 | 2024 | 1428 (528) | C=0.01, l1_ratio=0 | next_opp_sacks_allowed_per_game 13%, next_opp_points_per_game 12%, weekly_ecr_listed 8% |
+| 2013 | 2012 | thin | 106 (32) | C=0.1, l1_ratio=0 | next_opp_sacks_allowed_per_game 10%, dst_tds_per_game 9%, next_is_home 8% |
+| 2014 | 2012-2013 | 2013 | 200 (68) | C=0.01, l1_ratio=0 | next_opp_sacks_allowed_per_game 11%, next_opp_points_per_game 9%, next_opp_rz_stall_rate_forced 8% |
+| 2015 | 2012-2014 | 2014 | 292 (100) | C=1, l1_ratio=0 | kdst_points_per_game 13%, dst_points_allowed_per_game 10%, kdst_ppg_rank 7% |
+| 2016 | 2012-2015 | 2015 | 397 (141) | C=0.1, l1_ratio=1 | next_opp_points_allowed_per_game 20%, next_opp_points_per_game 20%, next_opp_sacks_allowed_per_game 19% |
+| 2017 | 2012-2016 | 2016 | 505 (178) | C=0.1, l1_ratio=1 | dst_points_allowed_per_game 24%, next_opp_rz_stall_rate_forced 18%, next_opp_points_per_game 16% |
+| 2018 | 2012-2017 | 2017 | 615 (214) | C=0.1, l1_ratio=1 | next_opp_points_per_game 17%, next_opp_rz_stall_rate_forced 17%, next_is_home 15% |
+| 2019 | 2012-2018 | 2018 | 726 (252) | C=0.1, l1_ratio=1 | next_is_home 22%, next_opp_points_per_game 20%, next_opp_rz_stall_rate_forced 11% |
+| 2020 | 2012-2019 | 2019 | 849 (288) | C=0.1, l1_ratio=0 | next_is_home 11%, next_opp_points_per_game 11%, dst_takeaways_per_game 8% |
+| 2021 | 2012-2020 | 2020 | 980 (323) | C=0.01, l1_ratio=0 | next_opp_points_per_game 14%, next_opp_sacks_allowed_per_game 10%, next_is_home 8% |
+| 2022 | 2012-2021 | 2021 | 1101 (360) | C=0.1, l1_ratio=0 | next_opp_points_per_game 13%, next_opp_sacks_allowed_per_game 8%, next_is_home 7% |
+| 2023 | 2012-2022 | 2022 | 1234 (411) | C=0.1, l1_ratio=1 | next_opp_points_per_game 30%, next_opp_sacks_allowed_per_game 20%, next_is_home 10% |
+| 2024 | 2012-2023 | 2023 | 1372 (468) | C=0.1, l1_ratio=1 | next_opp_points_per_game 28%, next_opp_sacks_allowed_per_game 18%, next_is_home 13% |
+| 2025 | 2012-2024 | 2024 | 1480 (504) | C=0.1, l1_ratio=1 | next_opp_points_per_game 25%, next_opp_sacks_allowed_per_game 19%, next_is_home 14% |
 
 #### DST: LightGBM folds (importance: gain)
 
 | test | trained on | validation | training rows (starts) | chosen settings | top 3 features |
 |---|---|---|---|---|---|
-| 2013 | 2012 | thin | 116 (39) | num_leaves=15, min_child_samples=100, colsample_bytree=0.8, n_estimators=300 | dst_points_allowed_per_game 0%, dst_sacks_per_game 0%, dst_takeaways_per_game 0% (constant model: ranked by the tie-breakers) |
-| 2014 | 2012-2013 | 2013 | 200 (79) | num_leaves=15, min_child_samples=50, colsample_bytree=0.7, n_estimators=29 | dst_points_allowed_per_game 36%, next_opp_rz_trips_allowed_per_game 26%, dst_sacks_per_game 9% |
-| 2015 | 2012-2014 | 2014 | 311 (114) | num_leaves=15, min_child_samples=50, colsample_bytree=0.7, n_estimators=2 | next_opp_points_allowed_per_game 25%, kdst_preseason_rank 24%, next_opp_points_per_game 16% |
-| 2016 | 2012-2015 | 2015 | 410 (155) | num_leaves=15, min_child_samples=50, colsample_bytree=1, n_estimators=14 | next_opp_sacks_allowed_per_game 17%, team_rz_stall_rate 17%, next_opp_points_allowed_per_game 16% |
-| 2017 | 2012-2016 | 2016 | 519 (195) | num_leaves=15, min_child_samples=50, colsample_bytree=0.7, n_estimators=18 | next_opp_sacks_allowed_per_game 14%, team_rz_stall_rate 9%, next_opp_points_allowed_per_game 9% |
-| 2018 | 2012-2017 | 2017 | 617 (239) | num_leaves=15, min_child_samples=200, colsample_bytree=1, n_estimators=394 | next_opp_points_per_game 13%, team_points_per_game 13%, dst_points_allowed_per_game 11% |
-| 2019 | 2012-2018 | 2018 | 709 (275) | num_leaves=15, min_child_samples=50, colsample_bytree=0.7, n_estimators=28 | next_opp_sacks_allowed_per_game 12%, team_points_per_game 11%, next_opp_points_per_game 10% |
-| 2020 | 2012-2019 | 2019 | 820 (315) | num_leaves=15, min_child_samples=50, colsample_bytree=1, n_estimators=44 | team_rz_stall_rate 11%, next_opp_sacks_allowed_per_game 9%, team_points_per_game 9% |
-| 2021 | 2012-2020 | 2020 | 958 (360) | num_leaves=15, min_child_samples=200, colsample_bytree=1, n_estimators=32 | next_opp_sacks_allowed_per_game 26%, next_opp_points_per_game 19%, next_opp_points_allowed_per_game 18% |
-| 2022 | 2012-2021 | 2021 | 1073 (395) | num_leaves=31, min_child_samples=50, colsample_bytree=1, n_estimators=19 | next_opp_sacks_allowed_per_game 13%, next_opp_points_allowed_per_game 9%, kdst_points_per_game 9% |
-| 2023 | 2012-2022 | 2022 | 1175 (436) | num_leaves=15, min_child_samples=200, colsample_bytree=1, n_estimators=45 | next_opp_sacks_allowed_per_game 23%, next_opp_points_per_game 14%, kdst_points_per_game 10% |
-| 2024 | 2012-2023 | 2023 | 1317 (493) | num_leaves=15, min_child_samples=200, colsample_bytree=1, n_estimators=4 | next_opp_points_per_game 32%, next_opp_sacks_allowed_per_game 25%, kdst_preseason_rank 11% |
-| 2025 | 2012-2024 | 2024 | 1428 (528) | num_leaves=31, min_child_samples=50, colsample_bytree=1, n_estimators=3 | next_opp_sacks_allowed_per_game 16%, next_opp_points_allowed_per_game 13%, team_points_per_game 13% |
+| 2013 | 2012 | thin | 106 (32) | num_leaves=15, min_child_samples=100, colsample_bytree=0.8, n_estimators=300 | dst_points_allowed_per_game 0%, dst_sacks_per_game 0%, dst_takeaways_per_game 0% (constant model: ranked by the tie-breakers) |
+| 2014 | 2012-2013 | 2013 | 200 (68) | num_leaves=15, min_child_samples=50, colsample_bytree=0.7, n_estimators=61 | team_rz_stall_rate 18%, next_opp_points_allowed_per_game 16%, next_opp_points_per_game 15% |
+| 2015 | 2012-2014 | 2014 | 292 (100) | num_leaves=15, min_child_samples=50, colsample_bytree=1, n_estimators=93 | team_rz_stall_rate 19%, team_points_per_game 12%, next_opp_points_per_game 12% |
+| 2016 | 2012-2015 | 2015 | 397 (141) | num_leaves=15, min_child_samples=50, colsample_bytree=0.7, n_estimators=41 | next_opp_points_per_game 18%, team_points_per_game 18%, next_opp_points_allowed_per_game 13% |
+| 2017 | 2012-2016 | 2016 | 505 (178) | num_leaves=15, min_child_samples=50, colsample_bytree=0.7, n_estimators=13 | dst_points_allowed_per_game 19%, next_opp_points_per_game 16%, team_rz_stall_rate 13% |
+| 2018 | 2012-2017 | 2017 | 615 (214) | num_leaves=15, min_child_samples=50, colsample_bytree=0.7, n_estimators=6 | next_opp_points_per_game 24%, team_rz_stall_rate 15%, team_points_per_game 14% |
+| 2019 | 2012-2018 | 2018 | 726 (252) | num_leaves=15, min_child_samples=200, colsample_bytree=0.7, n_estimators=168 | next_opp_points_per_game 20%, team_points_per_game 16%, next_is_home 12% |
+| 2020 | 2012-2019 | 2019 | 849 (288) | num_leaves=15, min_child_samples=50, colsample_bytree=0.7, n_estimators=40 | next_opp_points_per_game 16%, team_points_per_game 11%, team_rz_stall_rate 9% |
+| 2021 | 2012-2020 | 2020 | 980 (323) | num_leaves=15, min_child_samples=50, colsample_bytree=0.7, n_estimators=19 | next_opp_points_per_game 16%, team_rz_stall_rate 11%, next_opp_points_allowed_per_game 10% |
+| 2022 | 2012-2021 | 2021 | 1101 (360) | num_leaves=31, min_child_samples=50, colsample_bytree=0.7, n_estimators=20 | next_opp_points_per_game 15%, next_opp_rz_stall_rate_forced 11%, team_rz_stall_rate 10% |
+| 2023 | 2012-2022 | 2022 | 1234 (411) | num_leaves=15, min_child_samples=200, colsample_bytree=1, n_estimators=72 | next_opp_points_per_game 30%, next_opp_sacks_allowed_per_game 14%, team_points_per_game 8% |
+| 2024 | 2012-2023 | 2023 | 1372 (468) | num_leaves=15, min_child_samples=50, colsample_bytree=1, n_estimators=11 | next_opp_points_per_game 26%, next_opp_sacks_allowed_per_game 11%, dst_takeaways_per_game 7% |
+| 2025 | 2012-2024 | 2024 | 1480 (504) | num_leaves=15, min_child_samples=200, colsample_bytree=0.7, n_estimators=105 | next_opp_points_per_game 23%, next_opp_sacks_allowed_per_game 12%, dst_points_allowed_per_game 8% |

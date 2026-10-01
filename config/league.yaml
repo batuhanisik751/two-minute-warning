@@ -5,7 +5,8 @@
 # lineup changes every number below by itself. `uv run twm doctor` prints the derived numbers.
 teams: 12
 # Lineup slots per team. A slot named after a position holds only that position; a slot listed
-# under slot_eligibility can hold any of its positions; bench (and IR) slots never score.
+# under slot_eligibility can hold any of its positions; bench (and IR) slots never score, and
+# IR (reserve) slots are not even bench: no derived number moves with them (`twm doctor`).
 # K and DST (D/ST) slots are accepted and ignored: the app ranks QB, RB, WR and TE only.
 lineup:
   QB: 1
@@ -16,6 +17,7 @@ lineup:
   K: 1
   DST: 1
   bench: 7
+  IR: 1          # injured reserve (the owner's ESPN league, synced 2026-09-30): never counts
 # Which positions each multi-position slot can hold. A superflex league adds `SUPERFLEX: 1` to
 # the lineup and `SUPERFLEX: [QB, RB, WR, TE]` here.
 slot_eligibility:

@@ -133,12 +133,13 @@ def test_defense_rows_classify_touchdowns_and_points_allowed_the_espn_way(kdst_d
                offense_giveaway_tds, points_allowed, yards_allowed, {score_defense_sql()}
         FROM fact_defense_week ORDER BY week, team""")  # fmt: skip
     assert got == [
-        # 1 sack + INT (2) + pick-six (6); PHI scored 24 -> 0; yards: 250 - 10 + 100
+        # 1 sack + INT (2) + pick-six (6); PHI scored 24 -> 0; yards: 250 - 10 + 100 = 340
+        # -> 0 (the league's yards tiers, C1: 300-349 = 0)
         ("DAL", 1.0, 0, 0, 1, 0, 0, 24, 0, 24, 340, 9.0),
         # 2.5 sacks + blocked punt (2) + KR TD (6) + blocked-punt TD (6); DAL scored 20, 6 of
-        # them on PHI's pick-six: 14 allowed -> 1
-        ("PHI", 2.5, 1, 0, 0, 0, 1, 20, 1, 14, 225, 17.5),
-        # no opponent team-stats row: yards_allowed is NULL (and unscored by default)
+        # them on PHI's pick-six: 14 allowed -> 1; 225 yards allowed -> 2 (200-299)
+        ("PHI", 2.5, 1, 0, 0, 0, 1, 20, 1, 14, 225, 19.5),
+        # no opponent team-stats row: yards_allowed is NULL (no yards tier scored)
         ("KC", 3.0, 0, 0, 0, 0, 0, 20, 0, 20, None, 3.0),
     ]
 
@@ -178,7 +179,7 @@ def dst_to_date(v: AsOfView) -> pl.DataFrame:
 def test_asof_view_hides_later_weeks_and_the_harness_passes(kdst_db):
     asof = weekly_as_of(kdst_db, 2025, 1)
     out = assert_future_invariant(dst_to_date, kdst_db, asof, key=["team"])
-    assert sorted(out.rows()) == [("DAL", 9.0, 1), ("PHI", 17.5, 1)]  # KC's week 2 is hidden
+    assert sorted(out.rows()) == [("DAL", 9.0, 1), ("PHI", 19.5, 1)]  # KC's week 2 is hidden
     with AsOfView(kdst_db, asof) as v:
         assert v.sql("SELECT player_id FROM fact_kicker_week")["player_id"].to_list() == ["k_phi"]
 
@@ -213,11 +214,22 @@ HAND_SCORED = {
 
 @pytest.mark.realdata
 def test_hand_scored_dst_games(real_full_db):
+    """Hand-scored without yards allowed (S1); since C1 the config adds the owner's league's
+    yards tiers on top, which must add exactly the tier of the game's yards allowed."""
+    from dataclasses import replace
+
+    from twm.scoring_kdst import DefenseRules, tier_points
+
     path, _ = real_full_db
+    rules = DefenseRules.from_config()
+    no_yards = score_defense_sql(replace(rules, yards_allowed_tiers=()))
     for (game, team), (allowed, points) in HAND_SCORED.items():
-        got = rows(path, f"SELECT points_allowed, {score_defense_sql()} FROM fact_defense_week "
+        got = rows(path, f"SELECT points_allowed, {no_yards}, yards_allowed, "
+                   f"{score_defense_sql()} FROM fact_defense_week "
                    f"WHERE game_id = '{game}' AND team = '{team}'")  # fmt: skip
-        assert got == [(allowed, points)], (game, team)
+        assert got[0][:2] == (allowed, points), (game, team)
+        yards, full = got[0][2:]
+        assert full == points + tier_points(yards, rules.yards_allowed_tiers), (game, team)
 
 
 @pytest.mark.realdata

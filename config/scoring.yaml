@@ -64,8 +64,18 @@ defense:
     - [34, -1]
     - [45, -3]
     - [null, -5]
-  # Yards allowed: OFF by default. The Scoring Formats page lists "yards allowed" only as an
-  # optional category with no values, while ESPN's D/ST article
-  # (https://support.espn.com/hc/en-us/articles/115003847231) implies yards tiers in standard
-  # leagues. The owner's league settings decide (phase F); same format as points_allowed_tiers.
-  yards_allowed_tiers: []
+  # Yards allowed (the opponent's net offensive yards: passing + rushing, sack yards taken off):
+  # the owner's ESPN league settings, synced 2026-09-30 (`twm league settings-diff`; owner's
+  # decision 2026-09-30). Same format as points_allowed_tiers, upper bounds inclusive like
+  # ESPN's categories: 0-99 = 5, 100-199 = 3, 200-299 = 2, 300-349 = 0, 350-399 = -1,
+  # 400-449 = -3, 450-499 = -5, 500-549 = -6, 550 or more = -7. ([] turns the category off.)
+  yards_allowed_tiers:
+    - [99, 5]
+    - [199, 3]
+    - [299, 2]
+    - [349, 0]
+    - [399, -1]
+    - [449, -3]
+    - [499, -5]
+    - [549, -6]
+    - [null, -7]

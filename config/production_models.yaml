@@ -31,13 +31,13 @@ streamer_dst:
   file: artifacts/production_models/streamer/baseline_opponent_dst-e76f31d80f3a905e.json
   sha256: d4d693be7cfc58d03fbd012481a0fe2816a4e31471a4e1a3c59dee0041b16683
   model: rule
-  approved: '2026-09-30'
+  approved: '2026-10-01'
   backtest:
     seasons: 2013-2025
     hit_rates:
       file: artifacts/production_models/streamer/backtest-baseline_opponent_dst-e76f31d80f3a905e/hit_rates.parquet
-      sha256: ac03b79748e4d7291c57026e66bf9bcd27e3ad5c388338d8a0a63f02132f4374
-      rows: 407
+      sha256: 6fd3097ad82b67d881bc2af152bf459cdeff7d733cb76854466af4c4f0a9c959
+      rows: 434
 streamer_k:
   season: 2026
   model_version: logit_k-dd21dd427fddf989

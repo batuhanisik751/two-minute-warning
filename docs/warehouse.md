@@ -189,8 +189,8 @@ and the made-distance buckets sum to `fg_made`.
   TDs it files elsewhere or kick-return fumbles it calls special-teams TDs (6 points either way).
 - `yards_allowed`: the opponent's total net yards, `passing_yards + sack_yards_lost +
   rushing_yards` of its row (nflverse stores `sack_yards_lost` as a negative number); within
-  5 yards of the play-by-play sum on 534 of 544 2023 team-games. Scored only when
-  `defense.yards_allowed_tiers` is set (off by default).
+  5 yards of the play-by-play sum on 534 of 544 2023 team-games. Scored by
+  `defense.yards_allowed_tiers` (the owner's league tiers since step C1; `[]` = off).
 
 Reconciliation (S1; tests/test_kdst_warehouse.py, `-m realdata`): no upstream kicker or D/ST
 fantasy points exist (nflverse's `fantasy_points` on every kicker row are exactly its

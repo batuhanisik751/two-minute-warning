@@ -85,6 +85,10 @@ DPA = (
 YA = ((99, 128), (199, 129), (299, 130), (349, 131), (399, 132), (449, 133), (499, 134),
       (549, 135), (None, 136))  # fmt: skip
 FUMBLES_LOST_PARTS = (69, 70, 71)  # passing / rushing / receiving fumbles lost
+# Bonus categories of the owner's league the app does not score ON PURPOSE (the owner's decision
+# of 2026-09-30, docs/scoring.md "Known, deliberate differences"): 400+ yard passing game,
+# 200+ yard rushing / receiving game, D/ST 2-point return, 1-point safety.
+DELIBERATE_UNSCORED = frozenset({18, 38, 57, 206, 209})
 FG_MISSED_BY_DISTANCE = (82, 79, 76, 200, 203)
 FG_TOTAL_MADE = 83  # "Total FG Made": adds to every distance bucket
 DEF_RETURN_TD = 94  # "Fumble or INT Return for TD"
@@ -211,8 +215,10 @@ def scoring_diffs(e: Espn, sc: Scoring) -> tuple[list[Diff], list[str]]:
     for sid, (pts, over) in sorted(e.items.items()):
         if sid not in used and not (_same(pts, 0) and (over is None or _same(over, 0))):
             extra = "" if over is None else f" (D/ST {over:g})"
+            why = (" on purpose (a known, deliberate difference: docs/scoring.md)"
+                   if sid in DELIBERATE_UNSCORED else "")  # fmt: skip
             notes[f"stat {sid}"] = (f"the league scores {e.labels.get(sid, 'stat')} "
-                                    f"{pts:g}{extra}; the app does not score it")  # fmt: skip
+                                    f"{pts:g}{extra}; the app does not score it{why}")  # fmt: skip
     return diffs, [f"{k}: {v}" for k, v in notes.items()]
 
 

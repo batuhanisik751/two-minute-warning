@@ -115,6 +115,20 @@ def test_league_shapes_derive_thresholds_and_cutoffs(change, thresholds, flex, c
     assert f"{lg.teams} teams" in text and "12-team" not in text
 
 
+def test_reserve_slots_change_no_derived_number():
+    """IR (the owner's league has 1, C1) is neither a starting slot nor bench: the whole shape,
+    and so every doctor line and pool cutoff, is the same with 0, 1 or 3 IR slots."""
+    shipped = league()
+    assert shipped.lineup["IR"] == 1 and shipped.shape.bench_slots == shipped.lineup["bench"]
+    without = _league(lineup={k: v for k, v in shipped.lineup.items() if k != "IR"})
+    for n in (0, 1, 3):
+        lg = _league(lineup={**shipped.lineup, "IR": n})
+        assert lg.shape == without.shape
+        assert lg.shape.describe() == without.shape.describe()
+    # an ordinary bench slot does count (ESPN's "BE" spelling too)
+    assert _league(lineup={**shipped.lineup, "BE": 2}).shape.bench_slots == 9
+
+
 def test_league_overrides_are_optional_and_reported():
     lg = _league(starter_rank_threshold={"QB": 24}, flex_worthy_rank=40)
     assert lg.starter_thresholds() == {"QB": 24, "RB": 24, "WR": 24, "TE": 12}

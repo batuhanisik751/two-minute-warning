@@ -498,6 +498,13 @@ def streamer_pin(
         "--backtest-csv",
         help="The committed backtest report the snapshots must reproduce.",
     ),  # fmt: skip
+    pos: str | None = typer.Option(
+        None,
+        "--pos",
+        help="Re-approve only this position (K or DST; default both): the other one's pin, "
+        "file and snapshot stay byte for byte, and its pinned snapshot must still reproduce "
+        "the report.",
+    ),  # fmt: skip
 ) -> None:
     """Approve the streamer's production methods for a season: train the K model (the
     backtest's fold for that season), write the D/ST rule, export both frozen backtests to
@@ -517,7 +524,8 @@ def streamer_pin(
         raise typer.Exit(code=1)
     try:
         made = sp.approve(pl.read_parquet(source), store=_project_path(store), season=chosen,
-                          csv_path=_project_path(backtest_csv))  # fmt: skip
+                          csv_path=_project_path(backtest_csv),
+                          positions=_positions(pos) or ("K", "DST"))  # fmt: skip
         pm, _ = sp.load_pinned_k(chosen)
         sp.load_pinned_rule(chosen)
     except (sp.StreamerProductionError, ValueError) as e:

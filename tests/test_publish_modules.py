@@ -265,7 +265,8 @@ def test_real_streamer_backtest_lists_are_the_frozen_backtest(tmp_path: Path) ->
         con.close()
     back = got.data.rows.filter(pl.col("kind") == "backtest")
     per = back.group_by("position").len().sort("position")
-    assert per.rows() == [("DST", 1424), ("K", 2318)]  # the snapshot's K rows; the rule's D/ST
+    # the snapshot's K rows; the rule's D/ST pool rows (1,424 before C1's league D/ST scoring)
+    assert per.rows() == [("DST", 1491), ("K", 2318)]
     first = back.filter(pl.col("season") == 2013)
     assert first.get_column("chance").null_count() == first.height  # no earlier season
     assert back.filter(pl.col("season") > 2013).get_column("chance").null_count() == 0

@@ -60,9 +60,10 @@ because a streamer is picked up for one game. Some weeks have no answer and are 
 team's bye week, the week after the last regular-season week, and weeks not yet played. A
 kicker who does not kick at all next week (inactive, released) counts as a **no**.
 
-In the pool, 24.6% of the kickers and 37.4% of the D/STs scored like a starter the next week
-(2013-2025). Those are the numbers to beat: picking at random from the pool would be right
-that often.
+In the pool, 24.6% of the kickers and 34.4% of the D/STs scored like a starter the next week
+(2013-2025; D/STs scored with the owner's league's yards-allowed tiers since step C1, 37.4%
+before). Those are the numbers to beat: picking at random from the pool would be right that
+often.
 
 ## What the streamer knows on Tuesday (the features)
 
@@ -124,26 +125,29 @@ Share of picks that scored like a starter the next week, 2013-2025 (from
 
 | | Kickers | D/STs |
 |---|---|---|
-| a random pool pick (base rate) | 24.6% | 37.4% |
-| model: top 5 (precision@5) | 38.4% (36.3-40.3) | 39.1% (36.1-42.2) |
-| best simple rule: top 5 | 36.9% (last game; points per game 36.7%) | 40.3% (next opponent) |
-| model: #1 pick | 42.4% (37.1-47.6) | 46.5% (39.4-53.0) |
-| best simple rule: #1 pick | 40.0% (last game) | 49.8% (next opponent) |
+| a random pool pick (base rate) | 24.6% | 34.4% |
+| model: top 5 (precision@5) | 38.4% (36.3-40.3) | 36.9% (33.9-40.0) |
+| best simple rule: top 5 | 36.9% (last game; points per game 36.7%) | 37.3% (next opponent) |
+| model: #1 pick | 42.4% (37.1-47.6) | 49.3% (40.6-57.1) |
+| best simple rule: #1 pick | 40.0% (last game) | 52.1% (next opponent) |
 
 (Numbers of the S2a re-run: ties are now broken by last game's points instead of by id, and a
-tuning setting that makes a constant model is skipped; S1d's first run had kickers at 37.9%.)
+tuning setting that makes a constant model is skipped; S1d's first run had kickers at 37.9%.
+The D/ST column is the C1 re-run (2026-09-30) with the owner's league's D/ST scoring, which adds
+yards-allowed tiers: the pool, the labels and the points features of D/STs changed, kickers did
+not. Before C1: base rate 37.4%, model top 5 39.1%, rule 40.3%, model #1 46.5%, rule 49.8%.)
 
 - **Kickers**: the model is ahead of every simple rule, but only by about 1 pick in 70 on the
   top 5 against "last game" and "points per game", and the interval of that gap includes zero
   (-0.2 to +3.0 points). It is clearly better than "next opponent" alone, mostly because that
   rule happily ranks practice-squad kickers who will not play.
-- **D/STs**: the model beats "points per game" (just clearly) and "last game" (almost), but
-  NOT "stream against the weakest offense": that rule is 1 point better on the top 5 and 3
-  points better on the #1 pick (neither gap is certain). For D/STs the old streaming rule of
+- **D/STs**: the model beats "points per game" and "last game" (both clearly on the top 5: +2.6
+  and +2.4 points), but NOT "stream against the weakest offense": that rule is 0.4 points
+  better on the top 5 and 2.8 points better on the #1 pick (neither gap is certain). For D/STs the old streaming rule of
   thumb is as good as our model, so **the weekly D/ST list uses that rule** (below).
 - **Probabilities**: the model also gives each pick a chance of starting. For kickers these
   chances are better than saying "25%" for everyone, but unreliable at the extremes; for D/STs
-  they are WORSE than saying "37%" for everyone. Read the list as an order, not as percentages.
+  they are WORSE than saying "34%" for everyone. Read the list as an order, not as percentages.
 
 In plain words: streaming works (the top of any sensible list starts far more often than a
 random free agent), but on Tuesday, without betting lines or weather, most of what can be known
@@ -165,18 +169,22 @@ owner approved, and writes `reports/streamer/weekly/<season>-W<nn>.md`:
   last game's points.
 - **D/STs: a simple rule, not a model.** Ranked by how many points next week's opponent scores
   per game, fewer first (ties: last game's points, then points per game). In the 2013-2025
-  backtest this rule picked starters a little more often than our model (top 5: 40.3% vs
-  39.1%; #1 pick: 49.8% vs 46.5%), so a method that lost is not shipped. A D/ST has no model
+  backtest this rule picked starters a little more often than our model (top 5: 37.3% vs
+  36.9%; #1 pick: 52.1% vs 49.3%; with the league's D/ST scoring, C1), so a method that lost
+  is not shipped. A D/ST has no model
   probability.
 - **Chance and its range**: read off the frozen backtest of the seasons BEFORE the list's
   season (a reconstructed 2020 list never uses 2020-2025 results). Kickers: how often kickers
   the model scored alike (bins of at least 200 backtest picks) started, with a 90% interval.
   D/STs: how often the rule's pick at that rank started (bins of ranks with at least 100 picks;
-  a better rank never shows a lower chance). For 2026 the rule's #1 pick started 49.8% of the
-  time, #2 41.3%, #3 39.2%.
+  a better rank never shows a lower chance). For 2026 the rule's #1 pick started 52.1% of the
+  time, #2 and #3 36.9% (C1, the league's D/ST scoring; before: 49.8%, 41.3%, 39.2%).
 - **Priority** from the chance, as on the Waiver Radar: must-add 50%+, speculative 25-50%,
-  watch below 25%. In the 2013-2025 backtest no kicker bin and no D/ST rank reached 50%, so
-  today's lists have no must-add: streaming picks are coin flips at best, and the list says so.
+  watch below 25%. In the 2013-2025 backtest no kicker bin reached 50%, so kickers have no
+  must-add: streaming picks are coin flips at best, and the list says so. Since C1 (the
+  league's D/ST scoring) the D/ST rule's #1 pick started 52.1% of the time (111 of 213 lists),
+  so from week 4 of 2026 the top D/ST of each list is a must-add (its interval includes 50%);
+  every other D/ST rank is speculative.
 - **Why**: plain-English reasons from the registry's sentences (docs/glossary.md, "Streamer
   reason"): for kickers the features that push the model's score up (the Radar's rules), plus
   the tie-breaker when a kicker shares his score; for D/STs the rule's own number.
@@ -199,6 +207,32 @@ owner approved, and writes `reports/streamer/weekly/<season>-W<nn>.md`:
   plus the 2013-2025 backtest lists for the time machine, read from the frozen backtest in place
   (the D/ST rule is applied again to the dataset and must give the pinned hit-rate table;
   docs/deploy.md "What a publish does").
+
+## The owner's league's D/ST scoring (step C1, 2026-09-30)
+
+The first real `twm league settings-diff` showed that the owner's ESPN league scores D/ST yards
+allowed (docs/scoring.md). The owner chose to score them like the league, so
+`config/scoring.yaml` gained the league's nine yards-allowed tiers, and everything built on D/ST
+points was redone: `twm streamer dataset` (the D/ST pool, labels and points features; 680 pool
+flags and 755 labels changed), `twm streamer backtest` (reports/streamer/backtest.md),
+`twm streamer pool-labels-report`, and the D/ST rule's frozen hit-rate table, re-approved with
+`uv run twm streamer pin --store <store> --pos DST` (only `streamer_dst` changes: its
+`hit_rates` sha256, rows and approval date; the rule file and version are the same, since the
+rule did not change). The rule still beats the D/ST model, so it stays.
+
+Kickers are unaffected and their approval was not touched: every kicker row of the rebuilt
+dataset is identical to the old one, the backtest's kicker rows in backtest.csv are identical,
+the new backtest's K predictions equal the pinned snapshot on every column but the run stamps
+(`created_at`, `code_version`), and the 2026 K fold retrains to the same version. `--pos DST`
+leaves the K model, its snapshot and its pin entry byte for byte, and refuses unless the PINNED
+K snapshot still reproduces the new backtest.csv (a re-pin of both would have re-stamped the K
+snapshot with the new run's times).
+
+**Lists already made stay as they are.** The live 2026 week-3 list (stored 2026-09-30, before
+C1) ranked D/STs with chances read from the old hit-rate table, under the old scoring (no yards
+allowed); it is frozen and is not re-scored. Outcomes are graded with the scoring of the time
+they are computed: week 3's D/ST outcomes, computed after C1, count yards allowed. Lists from
+week 4 on use the new table.
 
 ## Limitations
 
@@ -235,6 +269,7 @@ uv run twm streamer backtest --store PATH    # ... and store every prediction in
 uv run twm streamer score                    # this week's list (approved methods) -> store + report
 uv run twm streamer score --season 2026 --week 3 --store PATH   # a given week, another store
 uv run twm streamer pin --store PATH         # approve: train the K fold, write the rule, pin both
+uv run twm streamer pin --store PATH --pos DST   # re-approve one position only (C1: D/ST scoring)
 uv run twm model check                       # the Radar's and the streamer's pins (sha256, report)
 uv run twm score                             # every module's list (the Radar, then the streamer)
 ```

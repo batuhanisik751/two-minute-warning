@@ -103,19 +103,45 @@ give the same numbers). The config is the only copy of the weights.
   unbounded). Points allowed follow ESPN's rule that pick-sixes (and fumble returns) the team's
   own offense gives up do not count against its D/ST: docs/warehouse.md says exactly what is
   removed.
-- **Yards allowed** tiers are **off** (`yards_allowed_tiers: []`): the Scoring Formats page lists
-  the category without values, while ESPN's D/ST article
-  (https://support.espn.com/hc/en-us/articles/115003847231) implies yards tiers in standard
-  leagues. The owner's league settings decide (phase F); set tiers in the same format to use them.
+- **Yards allowed** by tier, from the owner's ESPN league settings, synced 2026-09-30 (step C1;
+  ESPN's Scoring Formats page lists the category without values, so the league decides): 0-99
+  yards = 5, 100-199 = 3, 200-299 = 2, 300-349 = 0, 350-399 = -1, 400-449 = -3, 450-499 = -5,
+  500-549 = -6, 550+ = -7 (`yards_allowed_tiers`, same format; upper bounds inclusive like
+  ESPN's categories "Less than 100", "100-199" ... "550+"; a test checks every boundary).
+  Yards allowed = the opponent's net offensive yards (passing + rushing, sack yards taken off;
+  docs/warehouse.md); a game without the opponent's team stats scores no yards tier. With
+  these tiers our D/ST points equal ESPN's box scores for every D/ST week synced so far (weeks
+  1-3 of 2026: before C1 all three differed by exactly the yards tier). `[]` turns it off.
 - Not expressible from the data: a 1-point safety on a conversion try (ESPN's D/ST article gives
   1 point; nflverse's `def_safeties` does not separate it) and defensive two-point returns (no
   ESPN default).
 
 Tests: `tests/test_scoring_kdst.py` (every FG bucket, miss, block, PAT, every D/ST event, every
-points-allowed tier boundary, config validation, SQL = polars) and the real-data reconciliation
-in `tests/test_kdst_warehouse.py`.
+points-allowed and yards-allowed tier boundary, config validation, SQL = polars) and the
+real-data reconciliation in `tests/test_kdst_warehouse.py`.
+
+## Known, deliberate differences from the owner's league (C1, 2026-09-30)
+
+The first real `twm league settings-diff` (2026-09-30) found the yards-allowed tiers (now in the
+config, above), the league's IR slot (now `IR: 1` in config/league.yaml; reserve slots change
+no derived number) and five bonus categories. The owner decided **not** to score the bonuses:
+
+| ESPN category (stat id) | the league | the app |
+| --- | --- | --- |
+| 400+ yard passing game (18) | 1 | not scored |
+| 200+ yard rushing game (38) | 1 | not scored |
+| 200+ yard receiving game (57) | 1 | not scored |
+| D/ST 2-point return (206) | 2 | not scored |
+| 1-point safety (209) | 1 | not scored |
+
+`twm league settings-diff` lists them as "the app does not score it on purpose (a known,
+deliberate difference)" and nothing else as a difference; its two held questions (fumbles lost
+on returns, a blocked field goal) stay open. When one of the owner's players has such a game,
+the league report's scoring check shows that player-week as "not derivable from the stats we
+hold" (ESPN's points are 1 or 2 higher than ours): that is this table, not a bug.
 
 ## Not supported (yet)
 
-Yardage or long-touchdown bonuses, points per first down, and individual defensive players.
-If an ESPN league uses any of these, step F2 will report them instead of silently ignoring them.
+Points per first down and individual defensive players, and the bonuses above. If an ESPN
+league uses any of these, `twm league settings-diff` reports them instead of silently ignoring
+them.

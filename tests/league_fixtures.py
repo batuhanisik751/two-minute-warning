@@ -41,6 +41,8 @@ BASE_ITEMS: tuple[tuple[int, float, float | None], ...] = (
     (104, 6, None), (93, 6, None),  # D/ST
     (89, 5, None), (90, 4, None), (91, 3, None), (92, 1, None), (121, 0, None), (122, 0, None),
     (123, -1, None), (124, -3, None), (125, -5, None),  # points allowed
+    (128, 5, None), (129, 3, None), (130, 2, None), (131, 0, None), (132, -1, None),
+    (133, -3, None), (134, -5, None), (135, -6, None), (136, -7, None),  # yards allowed (C1)
 )  # fmt: skip
 
 

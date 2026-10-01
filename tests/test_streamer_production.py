@@ -146,6 +146,52 @@ def test_approve_refuses_a_backtest_the_report_does_not_show(data, backtest, tmp
     assert not (tmp_path / "pins.yaml").exists()
 
 
+def _flip(data: pl.DataFrame, position: str) -> pl.DataFrame:
+    """``data`` with every other final label of ``position`` flipped (a scoring change)."""
+    hit = (pl.col("position") == position) & (pl.col("label_status") == "final")
+    flip = hit & (pl.col("week") % 2 == 1)
+    return data.with_columns(
+        pl.when(flip).then(~pl.col(sm.LABEL)).otherwise(pl.col(sm.LABEL)).alias(sm.LABEL)
+    )
+
+
+def test_dst_only_reapproval_keeps_the_k_pin_byte_for_byte(approved, data, tmp_path) -> None:
+    """C1: after a D/ST scoring change only the rule's snapshot is re-pinned (`twm streamer pin
+    --pos DST`); the K model, its snapshot and its pin entry stay byte for byte, and the pinned
+    K snapshot must still reproduce the new report."""
+    root, pin_path, made = approved
+    k_files = [made["K"].path(root)] + [b.path(root) for b in made["K"].backtest.values()]
+    k_bytes = [f.read_bytes() for f in k_files]
+    rule_bytes = made["DST"].path(root).read_bytes()
+    k_block = pin_path.read_text().split("streamer_k:", 1)[1]
+    new_data = _flip(data, "DST")
+    store, csv_path = make_backtest(tmp_path / "new", new_data)
+    later = datetime(2026, 10, 1, tzinfo=UTC)
+    with pytest.raises(sp.StreamerProductionError, match="positions"):
+        sp.approve(new_data, store=store, season=SEASON, csv_path=csv_path, root=root,
+                   path=pin_path, positions=("QB",))  # fmt: skip
+    again = sp.approve(new_data, store=store, season=SEASON, csv_path=csv_path, root=root,
+                       path=pin_path, today=later, positions=("DST",))  # fmt: skip
+    assert set(again) == {"DST"}
+    assert [f.read_bytes() for f in k_files] == k_bytes
+    assert pin_path.read_text().split("streamer_k:", 1)[1].split("streamer_dst:")[0] == (
+        k_block.split("streamer_dst:")[0])  # fmt: skip
+    pinned = pins.read_pins(pin_path)
+    assert pinned["streamer_k"] == made["K"] and pinned["streamer_k"].approved == "2026-09-30"
+    dst = pinned["streamer_dst"]
+    assert dst.approved == "2026-10-01" and dst.model_version == made["DST"].model_version
+    assert made["DST"].path(root).read_bytes() == rule_bytes  # the rule itself did not change
+    assert dst.backtest["hit_rates"].sha256 != made["DST"].backtest["hit_rates"].sha256
+    sp.load_pinned_k(SEASON, path=pin_path, root=root)
+    assert sp.load_hit_rates(sp.load_pinned_rule(SEASON, path=pin_path, root=root)[1], root).equals(
+        sp.dst_snapshot(store, new_data, SEASON)[0]["hit_rates"])  # fmt: skip
+    # K labels changed too: the pinned K snapshot no longer reproduces the report -> refused
+    store2, csv2 = make_backtest(tmp_path / "k", _flip(new_data, "K"))
+    with pytest.raises(sp.StreamerProductionError, match="disagrees with"):
+        sp.approve(_flip(new_data, "K"), store=store2, season=SEASON, csv_path=csv2, root=root,
+                   path=pin_path, positions=("DST",))  # fmt: skip
+
+
 def test_a_constant_k_model_is_refused(data, monkeypatch) -> None:
     monkeypatch.setattr(sm, "is_constant", lambda scores: True)
     with pytest.raises(sp.StreamerProductionError, match="constant model"):

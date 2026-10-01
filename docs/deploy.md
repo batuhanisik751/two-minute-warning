@@ -450,7 +450,8 @@ Radar's (whose entry and files stay byte-identical):
 - `streamer_dst` (`model: rule`): the D/ST list is a rule, not a fitted model, so the "model"
   file is the rule's definition (`<version>.json`: column, direction, tie-breakers; checked
   against the code's rule when loaded) and the frozen backtest is one table, `hit_rates` (per
-  test season, list length and rank: how many lists, how many starts; 407 rows).
+  test season, list length and rank: how many lists, how many starts; 434 rows since C1's
+  re-approval with the league's D/ST scoring, `twm streamer pin --pos DST`).
 
 `uv run twm streamer score` loads only these (sha256 first, then version and season; a changed
 file is never opened) and reads the chance and priority from the snapshots' seasons before the

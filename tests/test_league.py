@@ -394,7 +394,7 @@ def test_settings_diff_baseline_matches_the_config(isolated, monkeypatch):
     pytest.importorskip("espn_api")
     from tests.league_fixtures import FakeLeague
 
-    code, out = _diff_after_sync(monkeypatch, isolated, FakeLeague(slots={"21": 0}))
+    code, out = _diff_after_sync(monkeypatch, isolated, FakeLeague())  # IR 1 like league.yaml
     assert code == 0 and "No differences: the config matches the league." in out
     assert "kicking.fg_blocked: ESPN has no blocked-FG category" in out  # held question shown
     assert "Total Fumbles Lost" in out and "waiver:waiverProcessDays: WEDNESDAY" in out
@@ -406,12 +406,13 @@ def test_settings_diff_finds_one_difference_per_item_type(isolated, monkeypatch)
     from tests.league_fixtures import BASE_ITEMS, FakeLeague, item
 
     changed = {3: (0.05, None), 4: (6, None), 53: (0.5, None), 201: (5, None), 88: (-1, None),
-               99: (1, 2), 101: (6, 3), 89: (10, None), 128: (5, None), 136: (-5, None),
-               15: (2, None), 69: (-2, None), 70: (-2, None), 71: (-2, None)}  # fmt: skip
+               99: (1, 2), 101: (6, 3), 89: (10, None), 128: (6, None), 136: (-5, None),
+               15: (2, None), 69: (-2, None), 70: (-2, None), 71: (-2, None),
+               57: (1, None)}  # fmt: skip
     gone = {72, 63}  # scrimmage-only fumbles; no fumble-recovery TD for players
     items = [item(s, p, d) for s, p, d in BASE_ITEMS if s not in changed and s not in gone]
     items += [item(s, p, d) for s, (p, d) in changed.items()]
-    slots = {"7": 1, "20": 6, "10": 1}  # OP (superflex), 6 bench, one IDP linebacker; IR 1
+    slots = {"7": 1, "20": 6, "10": 1, "21": 2}  # OP (superflex), 6 bench, one IDP LB, IR 2
     code, out = _diff_after_sync(monkeypatch, isolated, FakeLeague(items, size=10, slots=slots))
     assert code == 0
     rows = {line.split()[1]: line.split()[2:4] for line in out.splitlines()
@@ -427,19 +428,23 @@ def test_settings_diff_finds_one_difference_per_item_type(isolated, monkeypatch)
         "defense.sacks": ["2", "1"],  # the D/ST override wins for D/ST items
         "defense.kickoff_return_tds": ["3", "6"],
         "defense.points_allowed_tiers": ["[[0,", "10],"],
-        "defense.yards_allowed_tiers": ["[[99,", "5],"],  # held question: yards tiers
+        "defense.yards_allowed_tiers": ["[[99,", "6],"],  # first and last tiers differ
         "teams": ["10", "12"],
         "lineup.bench": ["6", "7"],
-        "lineup.IR": ["1", "0"],
+        "lineup.IR": ["2", "1"],
         "lineup.SUPERFLEX": ["1", "0"],
     }
     assert "misc.special_teams_touchdowns" not in rows  # players keep 6 (the override is D/ST)
-    assert "stat 15: the league scores 40+ yard TD pass bonus 2; the app does not score it" in out
+    assert "stat 15: the league scores 40+ yard TD pass bonus 2; the app does not score it\n" in out
+    # the owner's league's bonuses the app leaves out on purpose (C1) say so
+    assert ("stat 57: the league scores 200+ yard receiving game 1; the app does not score it on "
+            "purpose (a known, deliberate difference: docs/scoring.md)") in out  # fmt: skip
     assert "ESPN slot(s) 'LB' the app lacks" in out
     patch = out.split("# config/scoring.yaml", 1)[1]
     for line in ("  touchdowns: 6  # config: 4", "  fumbles_lost_scope: scrimmage  # config: all",
                  "  points_allowed_tiers:", "    - [0, 10]", "    - [null, -5]",
-                 "  yards_allowed_tiers:", "    - [99, 5]", "teams: 10  # config: 12",
+                 "  yards_allowed_tiers:", "    - [99, 6]", "    - [null, -5]",
+                 "teams: 10  # config: 12",
                  "  SUPERFLEX: 1  # config: 0", "slot_eligibility:",
                  "  SUPERFLEX: [QB, RB, TE, WR]"):  # fmt: skip
         assert line in patch.splitlines(), line

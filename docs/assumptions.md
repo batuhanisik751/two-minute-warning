@@ -401,6 +401,12 @@ in step F2.
   coaches from 2024 on; the Hot-Seat firing labels must combine them with an owner-verified
   manual file (`data/manual/coach_departures.csv`, Hot-Seat step) for 2024+. The build records
   `n_team_seasons_multi_coach` in `build_manifest.notes` so the gap stays visible.
+  **H1 correction (2026-10-01, from the Wikipedia season pages cited in
+  `data/manual/coach_departures.csv`):** 2000-2023 is not exact either: 2015 MIA (Philbin), 2015
+  TEN (Whisenhunt), 2016 LA (Fisher) and 2019 CAR (Rivera) were fired in season but are listed
+  all season; and the 2026 schedule still lists Gannon (ARI), Morris (ATL) and McDermott (BUF),
+  reported fired in January 2026 (so 2026 coach attribution for those teams is wrong). The owner
+  file, not the schedule, is the source of truth for departures (docs/labeling_coaches.md).
 - **End-of-regular-season as-of vs Sunday-evening announcements.** `dim_week.
   asof_end_of_regular_season_utc` is the morning after the last REG game date (12:00 UTC), per
   config and spec 6.1. Some departures are announced on the Sunday evening of the finale (New

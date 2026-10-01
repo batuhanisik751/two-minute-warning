@@ -303,3 +303,47 @@ def wp_select_cmd(
                + ", ".join(f"{k} {sm[k]:.1f}" for k in ("score_step_h1", "score_step_h2",
                                                         "curvature", "halftime_possession"))
                + f" [{time.perf_counter() - t0:.0f} s]")  # fmt: skip
+
+
+@decisions_app.command("benchmark-nfl4th")
+def benchmark_nfl4th_cmd(
+    season: list[int] = typer.Option(
+        None, "--season", help="Season(s) to benchmark (repeatable); default 2024 and 2025."
+    ),
+    rscript: str | None = typer.Option(
+        None, "--rscript", help="Rscript executable (default: Rscript on PATH)."
+    ),
+    report_only: bool = typer.Option(
+        False, "--report-only", help="Run nothing; write the report from the last run."
+    ),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+) -> None:
+    """Benchmark our fourth-down recommendations against the nfl4th R package (G5): exports
+    the graded fourth downs' states and the games table, runs scripts/benchmarks/nfl4th.R
+    (never downloads: R runs with network calls denied where macOS allows it), joins nfl4th's
+    WPs and recommendation back on the play key, then writes reports/decisions/
+    nfl4th_benchmark.md + .csv. Skips with a message when Rscript or nfl4th is missing."""
+    import time
+
+    from twm.cli import _warehouse_or_exit
+    from twm.modules.decisions import benchmark as bm
+    from twm.modules.decisions import benchmark_report
+
+    t0 = time.perf_counter()
+    if not report_only:
+        path = _warehouse_or_exit(db)
+        seasons = sorted(set(season)) if season else list(bm.SEASONS)
+        try:
+            bm.benchmark(path, seasons, rscript=rscript, progress=typer.echo)
+        except bm.Nfl4thUnavailableError as e:
+            typer.echo(f"skipped: {e}")
+            return
+        except (ValueError, RuntimeError) as e:
+            typer.echo(f"nfl4th benchmark failed: {e}", err=True)
+            raise typer.Exit(code=1) from e
+    try:
+        md, csv = benchmark_report.write_report(progress=typer.echo)
+    except FileNotFoundError as e:
+        typer.echo(f"cannot write the report (run the benchmark first): {e}", err=True)
+        raise typer.Exit(code=1) from e
+    typer.echo(f"wrote {md} and {csv} [{time.perf_counter() - t0:.0f} s]")

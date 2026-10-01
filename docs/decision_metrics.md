@@ -388,6 +388,22 @@ identical. Coach-season aggregates (a table parallel to G3's): cases and timeout
 coach-season; the report lists league totals per season, the worst cases, a leaderboard per
 metric.
 
+## Benchmark against nfl4th (G5: `benchmark.py`, `scripts/benchmarks/nfl4th.R`)
+
+`twm decisions benchmark-nfl4th` (default 2024 and 2025) compares our recommended option on
+every graded fourth down (no exclusion rule; regulation only, more than 15 s left, as nfl4th
+evaluates) with the nfl4th R package's. We export the state columns nfl4th's
+`add_4th_probs()` documents (mapping in `benchmark.STATE_COLUMNS` and in the report) and the
+games table it joins (spread, total, roof) from our warehouse; the R script never downloads:
+its cache points at `data/decisions/benchmark/nfl4th/cache`, every download function is
+replaced by an error and, on macOS, R runs with network calls denied. nfl4th 1.0.7 ships its
+field-goal model, punt table and two-point model but downloads its WP and conversion models
+on first use; without those two files in the cache the run is `fg_only` (field-goal make
+chances only) and the report says the decision benchmark has not run. The owner approved those two files on 2026-10-01 (fetched once from the nflverse/nfl4th release `model_archive`; url, size, sha256 and download time in the report, re-checked on every run). nfl4th's models are
+probably in-sample for these seasons (spec 6.3); ours are walk-forward. Agreement is reported
+overall, for our clear decisions and for our toss-ups; a disagreement's "likely cause" is a
+heuristic (the sub-model whose gap moves WP the most), not a decomposition.
+
 ## Not graded (yet)
 
 Clock situations outside the three definitions above.

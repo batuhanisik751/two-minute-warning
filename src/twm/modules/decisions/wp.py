@@ -377,6 +377,15 @@ TEST_SEASONS = tuple(range(2006, 2026))
 FIRST_SEASON = 1999  # the first season in the warehouse: 2006 is trained on 1999-2005
 
 
+def fold_seasons() -> tuple[int, ...]:
+    """Seasons a fold may be fitted for: the backtest's :data:`TEST_SEASONS` plus the current
+    season (settings ``current_season``), whose fold learns from every completed season and
+    scores the season in progress (G3 grades it). Reports cover TEST_SEASONS only."""
+    from twm.config import settings
+
+    return tuple(sorted({*TEST_SEASONS, int(settings().current_season)}))
+
+
 def models_dir() -> Path:
     """``models/decisions`` (settings ``paths.models``; gitignored)."""
     from twm.config import settings

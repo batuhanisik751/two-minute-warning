@@ -244,28 +244,32 @@ def distribution(states: pl.DataFrame, model: sm.SubModel) -> pl.DataFrame:
     })  # fmt: skip
 
 
-def outcome_wp(results: pl.DataFrame, states: pl.DataFrame, runoff: float, wp_model: Any):
+def outcome_wp(results: pl.DataFrame, states: pl.DataFrame, runoff: float, wp_model: Any,
+               after_td: str | None = None):  # fmt: skip
     """The kicking team's WP after each result: ``results`` has ``row`` (a position in
     ``states``), ``outcome``, ``spot`` and ``prob``; ``states`` the punting team's state before
     the snap (G1's inputs :data:`submodels.STATE_INPUTS`). Returns ``results`` + ``wp_kick``
-    (in the order: receiving, kicking, return_td, kicking_td results)."""
+    (in the order: receiving, kicking, return_td, kicking_td results). After a touchdown the
+    other team starts at :data:`AFTER_TD_YARDLINE`, or at the yardline_100 in the ``states``
+    column named by ``after_td`` (G3: the kickoff spot measured point-in-time)."""
     from twm.modules.decisions import wp as wpm
 
-    missing = [c for c in sm.STATE_INPUTS if c not in states.columns]
+    need = [*sm.STATE_INPUTS, *([after_td] if after_td else [])]
+    missing = [c for c in need if c not in states.columns]
     if missing:
         raise sm.SubModelError(f"states lack columns {missing}")
-    base = (states.select(sm.STATE_INPUTS).with_row_index("row")
+    base = (states.select(need).with_row_index("row")
             .with_columns(sm.clock_after(runoff)))  # fmt: skip
     j = results.join(base, on="row", how="left")
     spot, o, sd = pl.col("spot"), pl.col("outcome"), pl.col("score_differential")
-    after_td = pl.lit(AFTER_TD_YARDLINE)
+    td_spot = pl.col(after_td) if after_td else pl.lit(AFTER_TD_YARDLINE)
     parts = [
         (sm.first_down_at(sm.other_side(j.filter(o == "receiving")), spot), True),
         (sm.first_down_at(j.filter(o == "kicking"), spot), False),
-        (sm.first_down_at(j.filter(o == "return_td").with_columns(sd - TD_POINTS), after_td),
+        (sm.first_down_at(j.filter(o == "return_td").with_columns(sd - TD_POINTS), td_spot),
          False),
         (sm.first_down_at(sm.other_side(j.filter(o == "kicking_td").with_columns(
-            sd + TD_POINTS)), after_td), True),
+            sd + TD_POINTS)), td_spot), True),
     ]  # fmt: skip
     out = []
     for frame, flip in parts:

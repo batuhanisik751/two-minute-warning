@@ -6,6 +6,14 @@ output (PROJECT_SPEC 6.3: trained on many seasons, a mild known leak in backtest
 
 ## Metrics
 
+### Aggressiveness
+
+How often a coach goes for it when the numbers clearly say go.
+
+- **Name:** `aggressiveness`; **unit:** share (0-1); **used by:** decisions
+- **Formula:** clear fourth downs where going for it was best AND the coach went / clear fourth downs where going for it was best (the go rate when go was clearly best)
+- **Source:** twm.modules.decisions.coach
+
 ### Average FPOE per game (prior) \*
 
 The value a shrunk FPOE/game is pulled toward when shrinking toward the position average instead of zero.
@@ -46,6 +54,14 @@ How many more of his targets he caught than an average receiver would have.
 - **Name:** `catch_rate_over_expected`; **unit:** catches per target; **used by:** regression_watch
 - **Formula:** (receptions - receptions_exp) / targets, over the games of one half of a player-season (summed, then divided)
 - **Source:** twm.modules.regression_watch.stability
+
+### Clear call or toss-up
+
+Only decisions with a clear answer count against a coach.
+
+- **Name:** `decision_grade`; **unit:** category; **used by:** decisions
+- **Formula:** 'clear' when the best option's WP beats the second best by more than decisions.toss_up_margin (1.5 WP points), else 'toss_up' (not graded)
+- **Source:** twm.modules.decisions.grade
 
 ### Completion rate over expected (CPOE) \*
 
@@ -298,6 +314,14 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Formula:** fact_opportunity_week.pass_interception, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
 
+### Kickoff spot after a score
+
+Where the other team starts after a score (the kickoff rules changed in 2024 and 2025, so it is measured, not assumed).
+
+- **Name:** `kickoff_spot`; **unit:** yardline_100; **used by:** decisions
+- **Formula:** mean receiving start of the same season's kickoffs in earlier weeks (at least decisions.kickoff_min_kicks), else the previous season's, rounded to the yard
+- **Source:** twm.modules.decisions.grade_inputs
+
 ### Legit (tested, not shown) \*
 
 Tested, not shown: a starter whose production is carried by his opportunity, not by luck. It predicted nothing (in the backtest 60.6% of the players it tagged stayed starters, and so did 61.1% of every starter), so the lists do not carry it.
@@ -497,6 +521,62 @@ How often a two-point try succeeds.
 - **Name:** `two_point_rate`; **unit:** share (0-1); **used by:** decisions
 - **Formula:** successful two-point tries / tries in the last 5 seasons before S
 - **Source:** twm.modules.decisions.tries
+
+### WP if going for it
+
+The offense's chance to win if it goes for it here.
+
+- **Name:** `wp_go`; **unit:** probability (0-1); **used by:** decisions
+- **Formula:** P(convert) x expected WP after a conversion + (1 - P(convert)) x expected WP after a failure (G2 ball-spot tables, G1 WP; fold models of seasons < S)
+- **Source:** twm.modules.decisions.grade
+
+### WP if going for two
+
+The scoring team's chance to win if it goes for two.
+
+- **Name:** `wp_two_point`; **unit:** probability (0-1); **used by:** decisions
+- **Formula:** two-point rate x WP(+2) + (1 - rate) x WP(+0), the opponent then receiving
+- **Source:** twm.modules.decisions.grade
+
+### WP if kicking a field goal
+
+The offense's chance to win if it kicks.
+
+- **Name:** `wp_fg`; **unit:** probability (0-1); **used by:** decisions
+- **Formula:** P(make) x WP(3 points up, opponent receives the kickoff) + (1 - P(make)) x WP(the opponent's ball at the spot of the kick or its 20); only within the longest field goal made before S
+- **Source:** twm.modules.decisions.grade
+
+### WP if kicking the extra point
+
+The scoring team's chance to win if it kicks after a touchdown.
+
+- **Name:** `wp_kick`; **unit:** probability (0-1); **used by:** decisions
+- **Formula:** PAT rate x WP(+1) + (1 - PAT rate) x WP(+0), the opponent then receiving the kickoff
+- **Source:** twm.modules.decisions.grade
+
+### WP if punting
+
+The offense's chance to win if it punts.
+
+- **Name:** `wp_punt`; **unit:** probability (0-1); **used by:** decisions
+- **Formula:** G2's punt_expected_wp with the measured kickoff spot after a return touchdown; only from yardlines punts come from
+- **Source:** twm.modules.decisions.grade
+
+### WP lost
+
+How much win probability a decision gave away by the model's numbers.
+
+- **Name:** `wp_lost`; **unit:** probability (0-1; shown as WP points); **used by:** decisions
+- **Formula:** WP of the best option - WP of the chosen option (0 when the best was chosen); summed over clear decisions only
+- **Source:** twm.modules.decisions.grade
+
+### WP lost per game
+
+A coach's decision cost per game, for the leaderboard.
+
+- **Name:** `wp_lost_per_game`; **unit:** probability (0-1; shown as WP points); **used by:** decisions
+- **Formula:** (fourth-down + two-point WP lost on clear decisions) / games coached
+- **Source:** twm.modules.decisions.coach
 
 ### WPA (win probability added) \*
 

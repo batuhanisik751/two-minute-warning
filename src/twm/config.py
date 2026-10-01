@@ -383,6 +383,38 @@ class PublishConfig(BaseModel):
         return v
 
 
+class DecisionsConfig(BaseModel):
+    """``decisions:`` in settings.yaml: the fourth-down and two-point grades (G3,
+    docs/decision_metrics.md)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # A decision is graded ("clear") only when the best option's WP beats the second best by
+    # MORE than this (0.015 = 1.5 WP points); otherwise it is a "toss-up" (reported only).
+    toss_up_margin: float = 0.015
+    # Fourth downs with at most this many seconds left in the half are the half's last snap
+    # (end-of-half desperation: a kick or a heave; nothing after the play is a real state).
+    end_of_half_seconds: int = 10
+    # The kickoff spot after a score: the same season's earlier weeks when they hold at least
+    # this many kickoffs, else the previous season.
+    kickoff_min_kicks: int = 100
+    # The punt option exists from yardlines at least as far from the end zone as this
+    # quantile of the training seasons' punting yardlines.
+    punt_range_quantile: float = 0.001
+    # Fourth-down Platt recalibration of P(convert): fitted on the conversion model's
+    # out-of-sample fourth downs of up to this many seasons, kept only if it helps on S-1.
+    platt_seasons: int = 3
+    # Coach leaderboards list coaches with at least this many games in the season.
+    leaderboard_min_games: int = 8
+
+    @field_validator("toss_up_margin", "punt_range_quantile")
+    @classmethod
+    def _unit(cls, v: float) -> float:
+        if not 0 <= v < 1:
+            raise ValueError(f"must be in [0, 1), not {v}")
+        return v
+
+
 class Settings(BaseModel):
     project_name: str
     current_season: int
@@ -395,6 +427,7 @@ class Settings(BaseModel):
     availability: AvailabilityConfig
     pipeline: PipelineConfig = PipelineConfig()
     publish: PublishConfig = PublishConfig()
+    decisions: DecisionsConfig = DecisionsConfig()
 
     def path(self, key: str) -> Path:
         return ROOT / getattr(self.paths, key)

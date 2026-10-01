@@ -15,7 +15,10 @@ decisions_app = typer.Typer(
 @decisions_app.command("wp-backtest")
 def wp_backtest(
     season: list[int] = typer.Option(
-        None, "--season", help="Test season(s) to fit (repeatable); default 2006-2025."
+        None,
+        "--season",
+        help="Test season(s) to fit (repeatable; 2006-2025 or the current season); "
+        "default 2006-2025.",
     ),
     force: bool = typer.Option(
         False, "--force", help="Refit folds even when the saved ones are current."
@@ -36,15 +39,18 @@ def wp_backtest(
     from twm.modules.decisions.wp_data import load_states
 
     seasons = sorted(set(season)) if season else list(wp.TEST_SEASONS)
-    bad = [s for s in seasons if s not in wp.TEST_SEASONS]
+    allowed = wp.fold_seasons()
+    bad = [s for s in seasons if s not in allowed]
     if bad:
-        raise typer.BadParameter(f"test seasons must be within 2006-2025; got {bad}")
+        raise typer.BadParameter(f"test seasons must be within {min(allowed)}-{max(allowed)}; "
+                                 f"got {bad}")  # fmt: skip
     # the arguments are checked before the warehouse: a bad season is a usage error (exit 2)
     path = _warehouse_or_exit(db)
     t0 = time.perf_counter()
-    states = load_states(path, tuple(range(wp.FIRST_SEASON, max(wp.TEST_SEASONS) + 1)))
+    last = max(*seasons, *wp.TEST_SEASONS)
+    states = load_states(path, tuple(range(wp.FIRST_SEASON, last + 1)))
     typer.echo(
-        f"{states.rows.height:,} play states {wp.FIRST_SEASON}-{max(wp.TEST_SEASONS)} "
+        f"{states.rows.height:,} play states {wp.FIRST_SEASON}-{last} "
         f"(dropped: {states.drops}; {states.n_tie_games} tie games) "
         f"[{time.perf_counter() - t0:.0f} s]"
     )
@@ -81,7 +87,10 @@ def submodel_parts(name: str):
 @decisions_app.command("submodels-backtest")
 def submodels_backtest(
     season: list[int] = typer.Option(
-        None, "--season", help="Test season(s) to fit (repeatable); default 2006-2025."
+        None,
+        "--season",
+        help="Test season(s) to fit (repeatable; 2006-2025 or the current season); "
+        "default 2006-2025.",
     ),
     only: list[str] = typer.Option(
         None, "--only", help="conversion, fieldgoal, punt or tries (repeatable); default all."
@@ -101,18 +110,21 @@ def submodels_backtest(
 
     from twm.cli import _warehouse_or_exit
     from twm.modules.decisions import submodels as sm
+    from twm.modules.decisions import wp
 
     path = _warehouse_or_exit(db)
     seasons = sorted(set(season)) if season else list(sm.TEST_SEASONS)
-    bad = [s for s in seasons if s not in sm.TEST_SEASONS]
+    allowed = wp.fold_seasons()
+    bad = [s for s in seasons if s not in allowed]
     if bad:
-        raise typer.BadParameter(f"test seasons must be within 2006-2025; got {bad}")
+        raise typer.BadParameter(f"test seasons must be within {min(allowed)}-{max(allowed)}; "
+                                 f"got {bad}")  # fmt: skip
     names = list(dict.fromkeys(only)) if only else list(SUBMODEL_NAMES)
     unknown = [n for n in names if n not in SUBMODEL_NAMES]
     if unknown:
         raise typer.BadParameter(f"unknown sub-model(s) {unknown}; known: {SUBMODEL_NAMES}")
     t0 = time.perf_counter()
-    plays = sm.load_plays(path, tuple(range(sm.FIRST_SEASON, max(sm.TEST_SEASONS) + 1)))
+    plays = sm.load_plays(path, tuple(range(sm.FIRST_SEASON, max(*seasons, *sm.TEST_SEASONS) + 1)))
     typer.echo(f"{plays.height:,} play rows [{time.perf_counter() - t0:.0f} s]")
     rows, drops = {}, {}
     for n in SUBMODEL_NAMES:
@@ -131,6 +143,59 @@ def submodels_backtest(
     try:
         md, csv = submodels_report.write_report(rows, drops=drops, progress=typer.echo)
     except sm.SubModelError as e:
+        typer.echo(f"cannot write the report: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    typer.echo(f"wrote {md} and {csv} [{time.perf_counter() - t0:.0f} s]")
+
+
+@decisions_app.command("grade")
+def grade(
+    season: list[int] = typer.Option(
+        None,
+        "--season",
+        help="Season(s) to grade (repeatable; 2006-2025 or the current season); default the "
+        "current season. Grade one season per command: each prints its progress.",
+    ),
+    report_only: bool = typer.Option(
+        False, "--report-only", help="Grade nothing; write the report from the stored grades."
+    ),
+    no_report: bool = typer.Option(False, "--no-report", help="Grade only; skip the report."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+) -> None:
+    """Grade every fourth down (go / field goal / punt) and every two-point decision of a
+    season with the fold models that learned from earlier seasons only (G3); each decision is
+    stored with all its inputs under data/decisions/graded/ (reproducible), credited to the
+    head coach. Then reports/decisions/fourth_downs.md + .csv from every graded season."""
+    import time
+
+    from twm.cli import _warehouse_or_exit
+    from twm.config import settings
+    from twm.modules.decisions import grade as gr
+    from twm.modules.decisions import wp
+
+    seasons = sorted(set(season)) if season else [int(settings().current_season)]
+    allowed = wp.fold_seasons()
+    bad = [s for s in seasons if s not in allowed]
+    if bad:
+        raise typer.BadParameter(f"seasons must be within {min(allowed)}-{max(allowed)}; "
+                                 f"got {bad}")  # fmt: skip
+    t0 = time.perf_counter()
+    if not report_only:
+        path = _warehouse_or_exit(db)
+        for i, s in enumerate(seasons, 1):
+            typer.echo(f"[{i}/{len(seasons)}] grading {s}")
+            try:
+                gr.grade_season(path, s, progress=typer.echo)
+            except gr.GradeError as e:
+                typer.echo(f"cannot grade {s}: {e}", err=True)
+                raise typer.Exit(code=1) from e
+    if no_report:
+        return
+    from twm.modules.decisions import decisions_report
+
+    try:
+        md, csv = decisions_report.write_report(progress=typer.echo)
+    except gr.GradeError as e:
         typer.echo(f"cannot write the report: {e}", err=True)
         raise typer.Exit(code=1) from e
     typer.echo(f"wrote {md} and {csv} [{time.perf_counter() - t0:.0f} s]")

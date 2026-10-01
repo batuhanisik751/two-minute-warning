@@ -1250,6 +1250,57 @@ def _submodel_entries() -> list[Entry]:
     ]  # fmt: skip
 
 
+def _grade_entries() -> list[Entry]:
+    """G3: the fourth-down and two-point grades and the coach aggregates
+    (twm.modules.decisions.grade, grade_inputs, coach; rules in docs/decision_metrics.md)."""
+    g, gi, c = ("twm.modules.decisions.grade", "twm.modules.decisions.grade_inputs",
+                "twm.modules.decisions.coach")  # fmt: skip
+    rows = [
+        ("wp_go", "WP if going for it", "probability (0-1)",
+         "P(convert) x expected WP after a conversion + (1 - P(convert)) x expected WP after "
+         "a failure (G2 ball-spot tables, G1 WP; fold models of seasons < S)",
+         "The offense's chance to win if it goes for it here.", g),
+        ("wp_fg", "WP if kicking a field goal", "probability (0-1)",
+         "P(make) x WP(3 points up, opponent receives the kickoff) + (1 - P(make)) x WP(the "
+         "opponent's ball at the spot of the kick or its 20); only within the longest field "
+         "goal made before S", "The offense's chance to win if it kicks.", g),
+        ("wp_punt", "WP if punting", "probability (0-1)",
+         "G2's punt_expected_wp with the measured kickoff spot after a return touchdown; only "
+         "from yardlines punts come from", "The offense's chance to win if it punts.", g),
+        ("wp_kick", "WP if kicking the extra point", "probability (0-1)",
+         "PAT rate x WP(+1) + (1 - PAT rate) x WP(+0), the opponent then receiving the kickoff",
+         "The scoring team's chance to win if it kicks after a touchdown.", g),
+        ("wp_two_point", "WP if going for two", "probability (0-1)",
+         "two-point rate x WP(+2) + (1 - rate) x WP(+0), the opponent then receiving",
+         "The scoring team's chance to win if it goes for two.", g),
+        ("wp_lost", "WP lost", "probability (0-1; shown as WP points)",
+         "WP of the best option - WP of the chosen option (0 when the best was chosen); "
+         "summed over clear decisions only",
+         "How much win probability a decision gave away by the model's numbers.", g),
+        ("decision_grade", "Clear call or toss-up", "category",
+         "'clear' when the best option's WP beats the second best by more than "
+         "decisions.toss_up_margin (1.5 WP points), else 'toss_up' (not graded)",
+         "Only decisions with a clear answer count against a coach.", g),
+        ("kickoff_spot", "Kickoff spot after a score", "yardline_100",
+         "mean receiving start of the same season's kickoffs in earlier weeks (at least "
+         "decisions.kickoff_min_kicks), else the previous season's, rounded to the yard",
+         "Where the other team starts after a score (the kickoff rules changed in 2024 and "
+         "2025, so it is measured, not assumed).", gi),
+        ("aggressiveness", "Aggressiveness", "share (0-1)",
+         "clear fourth downs where going for it was best AND the coach went / clear fourth "
+         "downs where going for it was best (the go rate when go was clearly best)",
+         "How often a coach goes for it when the numbers clearly say go.", c),
+        ("wp_lost_per_game", "WP lost per game", "probability (0-1; shown as WP points)",
+         "(fourth-down + two-point WP lost on clear decisions) / games coached",
+         "A coach's decision cost per game, for the leaderboard.", c),
+    ]  # fmt: skip
+    return [
+        Entry(name=n, title=t, kind="metric", modules=("decisions",), unit=u, formula=f,
+              explanation=e, source=src, step="G3")
+        for n, t, u, f, e, src in rows
+    ]  # fmt: skip
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
     pool = _pool_texts()
@@ -1646,6 +1697,7 @@ def _entries() -> list[Entry]:
         *_streamer_entries(),
         *_decisions_entries(),
         *_submodel_entries(),
+        *_grade_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
             name="weekly_pos_rank",

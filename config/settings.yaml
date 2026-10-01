@@ -158,3 +158,19 @@ publish:
   # A replaced table may lose at most this share of the rows the target holds; a bigger drop
   # means the local inputs are missing or broken, so the publish is refused (--allow-shrink).
   max_shrink_share: 0.10
+
+# The Decision Report Card's fourth-down and two-point grades (step G3; every rule is in
+# docs/decision_metrics.md, the code in src/twm/modules/decisions/grade.py).
+decisions:
+  # graded ("clear") only when best minus second-best WP > this (0.015 = 1.5 WP points)
+  toss_up_margin: 0.015
+  # fourth downs with <= this many seconds left in the half are excluded (the half's last snap)
+  end_of_half_seconds: 10
+  # kickoff spot after a score: this season's earlier weeks if >= this many kickoffs, else last season
+  kickoff_min_kicks: 100
+  # the punt option exists from yardlines at least as far out as this quantile of past punts
+  punt_range_quantile: 0.001
+  # fourth-down Platt recalibration of P(convert): seasons fitted (kept only if it helps on S-1)
+  platt_seasons: 3
+  # coach leaderboards: coaches with at least this many games in the season
+  leaderboard_min_games: 8

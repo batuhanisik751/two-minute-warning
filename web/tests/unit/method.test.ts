@@ -11,6 +11,7 @@ import {
   CHANCE_RANGE_LEVEL,
   CLOCK,
   END_OF_HALF_SECONDS,
+  LATE_GAME_Q4_SECONDS,
   LEADERBOARD_MIN_GAMES,
   POSITIONS,
   RANK_BUCKETS,
@@ -91,6 +92,7 @@ test("the Decision Report Card's margin, exclusions, leaderboard and clock thres
   };
   assert.equal(num("toss_up_margin"), TOSS_UP_MARGIN);
   assert.equal(num("end_of_half_seconds"), END_OF_HALF_SECONDS);
+  assert.equal(num("q4_seconds"), LATE_GAME_Q4_SECONDS);
   assert.equal(num("leaderboard_min_games"), LEADERBOARD_MIN_GAMES);
   assert.equal(num("one_score_margin"), CLOCK.oneScoreMargin);
   assert.equal(num("final_window_seconds"), CLOCK.finalWindowSeconds);

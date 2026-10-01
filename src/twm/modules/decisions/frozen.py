@@ -38,7 +38,8 @@ TABLES = DECISION_TABLES  # fourth_downs, two_point, clock_cases, team_games, se
 TOLERANCE = 1.01e-6  # the report CSVs print 6 decimals
 GRADE_INFO = ("wp_version", "conversion_version", "fieldgoal_version", "punt_version",
               "tries_version", "fg_max_distance", "punt_min_yardline", "fg_runoff_make",
-              "fg_runoff_miss", "margin", "end_of_half_seconds")  # fmt: skip
+              "fg_runoff_miss", "margin", "end_of_half_seconds", "late_game_q4_seconds",
+              "late_game_overtime")  # fmt: skip
 CLOCK_INFO = ("kneel_play", "kneel_cycle", "play_seconds_run", "play_seconds_pass")
 
 
@@ -61,6 +62,7 @@ SEASON_SCHEMA = {"season": pl.Int32, **dict.fromkeys(GRADE_INFO[:5], pl.String),
                  "fg_max_distance": pl.Int32, "punt_min_yardline": pl.Int32,
                  "fg_runoff_make": pl.Float64, "fg_runoff_miss": pl.Float64,
                  "margin": pl.Float64, "end_of_half_seconds": pl.Int32,
+                 "late_game_q4_seconds": pl.Int32, "late_game_overtime": pl.Boolean,
                  "platt_kept": pl.Boolean, "platt_a": pl.Float64, "platt_b": pl.Float64,
                  "grade_format": pl.Int32, "clock_wp_version": pl.String,
                  **dict.fromkeys(CLOCK_INFO, pl.Float64), "clock_format": pl.Int32}  # fmt: skip

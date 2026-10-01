@@ -3,7 +3,7 @@ import Term from "@/components/Term";
 import { EmptyState } from "@/components/ui";
 import { wpPoints } from "@/lib/decisions";
 import { smoothness } from "@/lib/decisions-track";
-import { END_OF_HALF_SECONDS, LEADERBOARD_MIN_GAMES, TOSS_UP_MARGIN } from "@/lib/method";
+import { END_OF_HALF_SECONDS, LATE_GAME_Q4_SECONDS, LEADERBOARD_MIN_GAMES, TOSS_UP_MARGIN } from "@/lib/method";
 import { getDecisionsMeta, getDecisionsTrack } from "@/lib/queries/decisions";
 import { ClockDefinitions } from "./DecisionsClock";
 import { Nfl4thBenchmark, Submodels } from "./DecisionsModels";
@@ -67,6 +67,12 @@ export default async function DecisionsSection() {
             <li>
               Not graded: snaps wiped out by a penalty, kneels and spikes, fumbled snaps, and fourth downs with{" "}
               {END_OF_HALF_SECONDS} seconds or less left in the half. Fake punts and fake field goals count as going for it.
+            </li>
+            <li>
+              Also not graded, for now: fourth downs and tries after a touchdown in the last {LATE_GAME_Q4_SECONDS / 60}{" "}
+              minutes of the fourth quarter and in overtime. Our win-probability model is not yet reliable there (it is
+              where the nfl4th comparison disagrees with us most), so those decisions are counted but never held against
+              anyone.
             </li>
             <li>
               Each decision is credited to the head coach of the team with the ball. The leaderboard ranks coaches with at

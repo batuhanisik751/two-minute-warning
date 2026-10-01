@@ -190,8 +190,9 @@ def current_frames(season: int, spec: object, season_dir: Path) -> dict[str, pl.
             f"the {season} season is not graded with the approved grading ({info_file} is "
             "missing): run `uv run twm decisions grade-pinned` first")  # fmt: skip
     info = json.loads(info_file.read_text())
-    want = {**spec.versions(), **{k: spec.inputs[k] for k in ("fg_max_distance",
-                                                               "punt_min_yardline")}}  # fmt: skip
+    approved = spec.info()
+    keys = ("fg_max_distance", "punt_min_yardline", "late_game_q4_seconds", "late_game_overtime")
+    want = {**spec.versions(), **{k: approved[k] for k in keys}}
     odd = [k for k, v in want.items() if info.get(k) != v]
     if odd:
         raise DecisionsInputError(

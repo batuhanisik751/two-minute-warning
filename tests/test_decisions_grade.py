@@ -12,6 +12,8 @@ point-in-time fold check, and reproduction of stored rows from their inputs alon
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import polars as pl
 import pytest
@@ -187,6 +189,9 @@ def _play(**kw):
     return {**base, **kw}
 
 
+LATE = (120, True)  # decisions.late_game: the last 120 s of Q4, and overtime
+
+
 def synth_season() -> pl.DataFrame:
     rows = [
         _play(play_id=1, qtr=1, down=None, play_type="kickoff", kickoff_attempt=1,
@@ -212,14 +217,14 @@ def synth_season() -> pl.DataFrame:
 
 
 def test_exclusion_rules_apply_in_order_and_fakes_are_go():
-    f = gi.fourth_down_rows(synth_season(), end_of_half_seconds=10)
+    f = gi.fourth_down_rows(synth_season(), end_of_half_seconds=10, late_game=LATE)
     ex = dict(zip(f.get_column("play_id"), f.get_column("exclusion"), strict=True))
     assert ex == {2: None, 3: None, 4: "penalty_no_play", 5: "kneel_or_spike",
                   6: "aborted_snap", 7: "end_of_half", 8: "missing_state", 9: "not_a_snap",
                   10: None}  # fmt: skip
     chosen = dict(zip(f.get_column("play_id"), f.get_column("chosen"), strict=True))
     assert chosen[2] == "go" and chosen[3] == "punt" and chosen[10] == "field_goal"
-    t = gi.try_rows(synth_season())
+    t = gi.try_rows(synth_season(), late_game=LATE)
     assert dict(zip(t.get_column("play_id"), t.get_column("chosen"), strict=True)) == {
         11: "kick",
         12: "two_point",
@@ -229,11 +234,11 @@ def test_exclusion_rules_apply_in_order_and_fakes_are_go():
 
 
 def test_decisions_are_credited_to_the_head_coach_of_the_team_with_the_ball():
-    f = gi.fourth_down_rows(synth_season(), end_of_half_seconds=10)
+    f = gi.fourth_down_rows(synth_season(), end_of_half_seconds=10, late_game=LATE)
     by = {r["play_id"]: (r["coach"], r["opp_coach"]) for r in f.iter_rows(named=True)}
     assert by[2] == ("Home Coach", "Away Coach")  # H has the ball at home
     assert by[3] == ("Away Coach", "Home Coach")
-    t = gi.try_rows(synth_season())
+    t = gi.try_rows(synth_season(), late_game=LATE)
     assert t.filter(pl.col("play_id") == 12).item(0, "coach") == "Away Coach"
     # the WP state: H is home, A kicked off first, so H does not get the 2nd-half kickoff
     row = f.filter(pl.col("play_id") == 2).row(0, named=True)
@@ -317,8 +322,8 @@ def test_stored_rows_reproduce_exactly_from_their_inputs(tmp_path):
         gr.verify(back, "fourth_downs", models_root=tmp_path)
 
 
-def _graded_season(m: gr.Models, tmp_path):
-    plays = synth_season()
+def _graded_season(m: gr.Models, tmp_path, plays: pl.DataFrame | None = None):
+    plays = plays if plays is not None else synth_season()
     spots = pl.DataFrame({"game_id": ["2010_01_A_H"], "kick_spot_mean": [74.6],
                           "kick_n": [150], "kick_runoff": [0.0],
                           "kick_source": ["season_to_date"],
@@ -326,7 +331,8 @@ def _graded_season(m: gr.Models, tmp_path):
         pl.col("kick_yardline_100").cast(pl.Int32))  # fmt: skip
     info = {"fg_max_distance": 60, "punt_min_yardline": 32, "fg_runoff_make": 5.0,
             "fg_runoff_miss": 5.0, "platt": {"kept": False, "a": None, "b": None},
-            "margin": 0.015, "end_of_half_seconds": 10, **m.versions()}  # fmt: skip
+            "margin": 0.015, "end_of_half_seconds": 10, "late_game_q4_seconds": 120,
+            "late_game_overtime": True, **m.versions()}  # fmt: skip
     fourth, tries = gr.grade_frames(*gr.assemble(plays, spots, info, m), m)
     gr.write_season(2010, fourth, tries, info, out_dir=tmp_path)
     return fourth, tries
@@ -352,6 +358,96 @@ def test_season_assembly_stores_inputs_and_report_runs_end_to_end(tmp_path):
     long = dr.csv_rows(c)
     assert set(long.get_column("table")) >= {"league", "coach_season"}
     assert tuple(long.columns) == dr.CSV_COLUMNS
+
+
+def late_season() -> pl.DataFrame:
+    """Fourth downs and tries around the late-game window (G3b) of one game."""
+    q4 = dict(qtr=4, game_half="Half2")
+    ot = dict(qtr=5, game_half="Overtime")
+    rows = [
+        _play(play_id=1, qtr=1, down=None, play_type="kickoff", kickoff_attempt=1,
+              posteam="A", defteam="H", game_half="Half1"),
+        _play(play_id=2, **q4, game_seconds_remaining=121, half_seconds_remaining=121),  # in
+        _play(play_id=3, **q4, game_seconds_remaining=120, half_seconds_remaining=120),  # late
+        _play(play_id=4, **q4, game_seconds_remaining=30, half_seconds_remaining=30),  # late
+        _play(play_id=5, **q4, play_type="punt", game_seconds_remaining=5,
+              half_seconds_remaining=5),  # the half's last snap: end_of_half comes first
+        _play(play_id=6, qtr=2, game_half="Half1", game_seconds_remaining=1900,
+              half_seconds_remaining=100),  # the first half's last 2:00 is still graded
+        _play(play_id=7, qtr=3, game_seconds_remaining=960, half_seconds_remaining=960),
+        _play(play_id=8, **ot, game_seconds_remaining=400, half_seconds_remaining=400),  # late
+        _play(play_id=9, **q4, down=None, play_type="extra_point", extra_point_attempt=1,
+              yardline_100=15, score_differential=6, game_seconds_remaining=90,
+              half_seconds_remaining=90),  # late try
+        _play(play_id=10, **q4, down=None, play_type="extra_point", extra_point_attempt=1,
+              yardline_100=15, score_differential=6, game_seconds_remaining=200,
+              half_seconds_remaining=200),  # graded try
+        _play(play_id=11, **ot, down=None, play_type="pass", two_point_attempt=1,
+              yardline_100=2, score_differential=-1, game_seconds_remaining=300,
+              half_seconds_remaining=300),  # late try
+    ]  # fmt: skip
+    return pl.DataFrame(rows, infer_schema_length=None).with_columns(
+        pl.col("down", "ydstogo", "posteam_timeouts_remaining").cast(pl.Int32)
+    )
+
+
+def test_the_late_game_window_is_not_graded_in_q4s_last_two_minutes_and_overtime():
+    f = gi.fourth_down_rows(late_season(), end_of_half_seconds=10, late_game=LATE)
+    ex = dict(zip(f.get_column("play_id"), f.get_column("exclusion"), strict=True))
+    assert ex == {2: None, 3: "late_game", 4: "late_game", 5: "end_of_half", 6: None, 7: None,
+                  8: "late_game"}  # fmt: skip
+    t = gi.try_rows(late_season(), late_game=LATE)
+    assert dict(zip(t.get_column("play_id"), t.get_column("exclusion"), strict=True)) == {
+        9: "late_game", 10: None, 11: "late_game"}  # fmt: skip
+    # the window follows the settings: overtime off, a shorter fourth-quarter window
+    f2 = gi.fourth_down_rows(late_season(), end_of_half_seconds=10, late_game=(30, False))
+    ex2 = dict(zip(f2.get_column("play_id"), f2.get_column("exclusion"), strict=True))
+    assert ex2[3] is None and ex2[4] == "late_game" and ex2[8] is None
+    assert gi.FOURTH_RULES.index("late_game") == gi.FOURTH_RULES.index("end_of_half") + 1
+
+
+def test_late_game_rows_are_counted_reported_and_never_graded(tmp_path):
+    from twm.config import settings
+    from twm.modules.decisions import decisions_report as dr
+
+    m = stub_models()
+    fourth, tries = _graded_season(m, tmp_path, plays=late_season())
+    late = fourth.filter(pl.col("exclusion") == "late_game")
+    assert late.height == 3 and late.get_column("grade").null_count() == 3
+    assert late.get_column("wp_go").null_count() == 3
+    assert tries.filter(pl.col("exclusion") == "late_game").get_column("grade").null_count() == 2
+    summary = json.loads((tmp_path / "season_2010.json").read_text())
+    assert summary["fourth_downs"]["excluded_late_game"] == 3
+    assert summary["tries"]["excluded_late_game"] == 2
+    assert (summary["late_game_q4_seconds"], summary["late_game_overtime"]) == (120, True)
+    assert coach.coach_season(fourth, tries).item(0, "fourth_graded") <= 3  # 3 graded rows
+    known = {tuple(m.versions().values()): m}
+    c = dr.compute(tmp_path, cfg=settings().decisions, models=known, models_root=tmp_path)
+    assert c["verify"]["mismatches"] == [] and c["verify"]["rows"] == 4  # 3 fourth + 1 try
+    md = dr.render(c)
+    assert "### Why the last two minutes are not graded" in md and "excl: late_game" in md
+    assert "| 2010 | 3 | 1 | " in md  # late fourth downs, of which overtime
+    long = dr.csv_rows(c).filter(pl.col("table") == "late_game")
+    got = dict(zip(long.get_column("metric"), long.get_column("value"), strict=True))
+    assert got["fourth_late"] == 3 and got["fourth_late_ot"] == 1 and got["tries_late"] == 2
+    assert got["fourth_share_pct"] == pytest.approx(100 * 3 / 7, abs=0.05)  # of every 4th down
+
+
+def test_the_g1b_comparison_leaves_the_late_game_out_of_both_sides():
+    from twm.modules.decisions import regrade_compare as rc
+
+    before = pl.DataFrame({"season": [2010] * 3, "game_id": ["g"] * 3, "play_id": [1, 2, 3],
+                           "exclusion": [None, None, "end_of_half"],
+                           "grade": ["clear", "clear", None],
+                           "recommended": ["go", "punt", None], "correct": [False, True, None],
+                           "wp_lost": [0.05, 0.0, None]})  # fmt: skip
+    after = before.with_columns(pl.Series("exclusion", [None, "late_game", "end_of_half"]))
+    b = rc.same_exclusions(before, after)
+    assert b.get_column("exclusion").to_list() == [None, "late_game", "end_of_half"]
+    assert b.row(1, named=True) | {"exclusion": None} == {
+        "season": 2010, "game_id": "g", "play_id": 2, "exclusion": None, "grade": None,
+        "recommended": None, "correct": None, "wp_lost": None}  # fmt: skip
+    assert b.row(0) == before.row(0)
 
 
 def test_coach_aggregates_count_clear_decisions_only():

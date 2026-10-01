@@ -28,6 +28,7 @@ RULE_TEXT = {
     "kneel_or_spike": "a kneel or a spike (running out the clock)",
     "aborted_snap": "an aborted snap (the intended play is unknown)",
     "end_of_half": "the half's last snap (end-of-half desperation)",
+    "late_game": "the last 2:00 of the 4th quarter or overtime: late game, not graded (below)",
     "missing_state": "a state the models cannot score (missing timeouts, spread, kickoff spot)",
 }
 VERIFY_SAMPLE = 200  # stored rows per season and kind regraded for the report's check
@@ -194,7 +195,66 @@ def _counts_md(c: dict) -> list[str]:
             for r in rules]  # fmt: skip
     return ["## 1. What was graded", "",
             "Exclusion rules, applied in this order (the first that applies is counted):", "",
-            *text, "", *_table(head, rows), ""]  # fmt: skip
+            *text, "", *_table(head, rows), "", *_late_md(c)]  # fmt: skip
+
+
+LATE_WHY = (
+    "The grades of the last two minutes rest on the WP model's values of late-game states, and "
+    "that is where the evidence says it cannot be trusted yet. (1) The nfl4th benchmark "
+    "(reports/decisions/nfl4th_benchmark.md, 2024-2025): its disagreements with us concentrate "
+    "in the 4th quarter's last 2:00, which has the largest gap in the value of going for it of "
+    "any game phase (-2.19 WP points on average; nfl4th says go on 60.8% of those fourth downs, "
+    "we on 47.3%). (2) G1b's smoothness limits stop at the start of the 4th quarter by design "
+    "(Q4 15:00); from Q4 10:00 and in overtime the model is a tree model alone, whose late-game "
+    "values were never held to those limits. (3) A hand-checked 2026 case: Tampa Bay, 4th and "
+    "11 at the opponent's 20, "
+    "down 4 with 0:22 left, went for it and was graded 19.8 WP points lost because the model "
+    "gave the field goal 34% (a field goal leaves them down 1 with the opponent getting the ball "
+    "and almost no time). So, since step G3b (a reviewer decision on 2026-10-01, made after the "
+    "hand-checked case and the benchmark), fourth downs and two-point tries in the 4th "
+    "quarter's last {q4} seconds and in overtime are counted here as 'late game, not graded' "
+    "and never graded or published as graded decisions (`decisions.late_game`). The rule "
+    "removes grades; it does not tune any model. The clock-management metrics "
+    "(reports/decisions/clock.md) are rule-defined, not WP-option grades, and are unaffected."
+)
+
+
+def _late_md(c: dict) -> list[str]:
+    """Why the late game is not graded, and how many decisions that leaves out per season."""
+    late = _late_counts(c["fourth"], c["tries"])
+    if late.height == 0:
+        return []
+    q4 = int(c["cfg"].late_game.q4_seconds)
+    rows = [[r["season"], r["fourth_late"], r["fourth_late_ot"], r["fourth_share_pct"],
+             r["tries_late"]] for r in late.iter_rows(named=True)]  # fmt: skip
+    done = late.filter(pl.col("season") < late.get_column("season").max())
+    span = done if done.height else late
+    lo, hi = span.get_column("fourth_late").min(), span.get_column("fourth_late").max()
+    tlo, thi = span.get_column("tries_late").min(), span.get_column("tries_late").max()
+    a, b = span.get_column("season").min(), span.get_column("season").max()
+    return ["### Why the last two minutes are not graded", "", LATE_WHY.format(q4=q4), "",
+            f"Per complete season ({a}-{b}) that leaves out {lo}-{hi} fourth downs and "
+            f"{tlo}-{thi} tries ({late.get_column('fourth_late').sum():,} and "
+            f"{late.get_column('tries_late').sum():,} over every season below).", "",
+            *_table(["Season", "4th downs: late game, not graded", "of which overtime",
+                     "Share of the season's 4th downs (%)", "Tries: late game, not graded"],
+                    rows), ""]  # fmt: skip
+
+
+def _late_counts(fourth: pl.DataFrame, tries: pl.DataFrame) -> pl.DataFrame:
+    """Per season: the late-game fourth downs (and those in overtime), their share of the
+    season's fourth-down rows and the late-game tries."""
+    late = (pl.col("exclusion") == "late_game").fill_null(False)
+    f = fourth.group_by("season").agg(
+        late.sum().cast(pl.Int64).alias("fourth_late"),
+        (late & (pl.col("qtr") >= 5)).sum().cast(pl.Int64).alias("fourth_late_ot"),
+        (100 * late.mean()).round(1).alias("fourth_share_pct"),
+    )  # fmt: skip
+    t = tries.group_by("season").agg(late.sum().cast(pl.Int64).alias("tries_late"))
+    out = f.join(t, on="season", how="left").with_columns(pl.col("tries_late").fill_null(0))
+    if out.get_column("fourth_late").sum() + out.get_column("tries_late").sum() == 0:
+        return out.clear()
+    return out.sort("season")
 
 
 def trend(league: pl.DataFrame, col: str = "wp_lost_per_team_game") -> dict[str, Any]:
@@ -365,7 +425,8 @@ def _compare_md(c: dict) -> list[str]:
     rk = cp["ranking"]
     out = ["### Before (G1's WP folds) vs after (the smoothed folds)", "",
            f"Same decisions, same sub-models and inputs; only the WP model changed "
-           f"({f4['graded']:,} graded fourth downs and {t['matched']:,} tries matched).", "",
+           f"({f4['graded']:,} graded fourth downs and {t['matched']:,} tries matched; the "
+           "late-game decisions no longer graded since G3b are left out of both sides).", "",
            f"- **Two-point decisions**: clear 'mistakes' {t['mistakes_before']:,} -> "
            f"{t['mistakes_after']:,}; of them first-quarter kicks at a 6-point lead "
            f"{t['q1_six_before']:,} -> {t['q1_six_after']:,}; their WP lost "
@@ -431,7 +492,8 @@ LIMITS = [
     "late in a half real teams hurry, so these over-run the clock there.",
     "League-wide models: no kicker, offense or defense strength beyond the closing spread; "
     "field goals of 55+ yards are under-predicted in 2023-2025 (G2, no recency weights).",
-    "Overtime is priced by the same WP model (its rules changed in 2022 and 2024).",
+    "The last 2:00 of the 4th quarter and overtime are not graded (section 1, 'Why the last "
+    "two minutes are not graded'); the last 2:00 of the first half still is.",
     "Rule settings (not model choices): `end_of_half_seconds` = 10 was set from the play-type "
     "mix at the end of halves (punts become rare under 7 s) and the punt-range quantile from "
     "the punting-yardline distribution, both read over 2006-2026 before any grade existed; "
@@ -454,7 +516,8 @@ def render(c: dict) -> str:
     done = [s for s in seasons if s in wpm.TEST_SEASONS]
     cfg = c["cfg"]
     lines = [
-        "# Fourth downs and two-point tries: the grades (G3, regraded in G1b)", "",
+        "# Fourth downs and two-point tries: the grades (G3, regraded in G1b; late game not "
+        "graded since G3b)", "",
         "Generated by `uv run twm decisions grade` (code: src/twm/modules/decisions/{grade_inputs,"
         "grade,coach,decisions_report}.py; every rule: docs/decision_metrics.md). Each season S "
         f"({seasons[0]}-{seasons[-1]}) is graded by the fold models that learned from seasons "
@@ -462,7 +525,9 @@ def render(c: dict) -> str:
         "A decision is "
         f"graded (**clear**) only when the best option's WP beats the second best by more than "
         f"{100 * cfg.toss_up_margin:.1f} WP points (`decisions.toss_up_margin`); otherwise it is "
-        "a **toss-up**, counted but not graded. Every row is stored with all its inputs under "
+        "a **toss-up**, counted but not graded. Decisions in the 4th quarter's last "
+        f"{int(cfg.late_game.q4_seconds)} seconds and in overtime are not graded at all "
+        "(section 1). Every row is stored with all its inputs under "
         "data/decisions/graded/. " + _header_note(c), "",
         *_counts_md(c), *_league_md(c), "## 3. Coaches", "",
         "Credited to the head coach of the team with the ball in that game "
@@ -504,6 +569,9 @@ def csv_rows(c: dict) -> pl.DataFrame:
     parts = [melt(c["league"], "league", ["season"]),
              melt(c["coach_season"], "coach_season", ["season", "coach", "team"]),
              melt(c["wp_diag"], "wp_diagnostics", ["season"])]  # fmt: skip
+    late = _late_counts(c["fourth"], c["tries"])
+    if late.height:
+        parts.append(melt(late, "late_game", ["season"]))
     fs = c.get("fold_smooth")
     if fs is not None and fs.height:
         parts.append(melt(fs.with_columns(pl.col("meets").cast(pl.Float64)), "wp_smoothness",

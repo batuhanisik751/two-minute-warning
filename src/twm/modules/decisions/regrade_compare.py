@@ -2,7 +2,9 @@
 
 "Before" = the grades made with G1's WP folds, frozen under ``data/decisions/graded_g1/`` (a
 copy of data/decisions/graded/ taken before the regrade; gitignored like every grade); "after"
-= the current grades. Matched decision by decision (season, game_id, play_id).
+= the current grades. Matched decision by decision (season, game_id, play_id). Decisions the
+current grades leave out as ``late_game`` (G3b: the last 2:00 of Q4 and overtime, no longer
+graded) are left out of "before" too, so the comparison is the WP model's change alone.
 """
 
 from __future__ import annotations
@@ -39,6 +41,21 @@ def _pair(before: pl.DataFrame, after: pl.DataFrame) -> pl.DataFrame:
     return after.join(b, on=KEY, how="inner")
 
 
+def same_exclusions(before: pl.DataFrame, after: pl.DataFrame) -> pl.DataFrame:
+    """``before`` with the late-game decisions of ``after`` excluded as they are now (exclusion
+    ``late_game``, no grade), so both sides grade the same decisions."""
+    late = after.filter(pl.col("exclusion") == "late_game").select(
+        *KEY, pl.lit(True).alias("_late"))  # fmt: skip
+    b = before.join(late, on=KEY, how="left")
+    is_late = pl.col("_late").fill_null(False)
+    blank = [c for c in ("grade", "recommended", "correct", "wp_lost") if c in b.columns]
+    return b.with_columns(
+        pl.when(is_late).then(pl.lit("late_game")).otherwise(pl.col("exclusion"))
+        .alias("exclusion"),
+        *(pl.when(is_late).then(None).otherwise(pl.col(c)).alias(c) for c in blank),
+    ).drop("_late")  # fmt: skip
+
+
 def changed(p: pl.DataFrame) -> pl.Expr:
     """The grade changed: clear <-> toss-up, or another recommended option."""
     return (pl.col("grade") != pl.col("grade_b")) | (
@@ -59,7 +76,8 @@ def compare(after_fourth: pl.DataFrame, after_tries: pl.DataFrame, *, season: in
     d = before
     if not d.exists() or not list(d.glob("fourth_downs_*.parquet")):
         return None
-    bf, bt = gr.load_graded("fourth_downs", out_dir=d), gr.load_graded("two_point", out_dir=d)
+    bf = same_exclusions(gr.load_graded("fourth_downs", out_dir=d), after_fourth)
+    bt = same_exclusions(gr.load_graded("two_point", out_dir=d), after_tries)
     out: dict[str, Any] = {}
     q1_six = (pl.col("qtr") == 1) & (pl.col("score_differential") == 6)
     mb, ma = _mistakes(bt), _mistakes(after_tries)

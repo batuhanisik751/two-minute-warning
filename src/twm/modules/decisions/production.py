@@ -75,9 +75,12 @@ class GradingSpec:
 
     def info(self) -> dict[str, Any]:
         """G3's season-level ``info`` (:func:`twm.modules.decisions.grade.season_inputs`)."""
+        from twm.modules.decisions import grade as gr
+
         c = self.cfg()
         return {**{k: self.inputs[k] for k in SEASON_INPUTS}, "margin": float(c.toss_up_margin),
-                "end_of_half_seconds": int(c.end_of_half_seconds), **self.versions()}  # fmt: skip
+                "end_of_half_seconds": int(c.end_of_half_seconds), **gr.late_game_info(c),
+                **self.versions()}  # fmt: skip
 
     def describe(self) -> str:
         platt = "kept" if self.inputs["platt"].get("kept") else "not kept"
@@ -245,6 +248,7 @@ def build_spec(season: int, *, stored: Path | None = None, models_root: Path | N
     cfg = settings().decisions
     clock_cfg = cfg.clock.model_dump()
     odd = [k for k in clock_cfg if c.get(k) != clock_cfg[k]]
+    odd += [k for k, v in gr.late_game_info(cfg).items() if g.get(k) != v]
     if (g.get("margin") != float(cfg.toss_up_margin)
             or g.get("end_of_half_seconds") != int(cfg.end_of_half_seconds) or odd
             or g.get("wp_version") != c.get("wp_version")):  # fmt: skip

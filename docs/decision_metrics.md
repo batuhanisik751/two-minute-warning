@@ -159,9 +159,12 @@ season per command, ~5 s each); `--report-only` writes reports/decisions/fourth_
   5. `end_of_half` (1,173): at most `decisions.end_of_half_seconds` (10) seconds left in the
      half: the half's last snap (end-of-half desperation: a kick or a heave; punts are rare
      under 7 s: 20 of 354 fourth downs at 4-6 s), nothing after the play is a real state.
-  6. `missing_state` (0): a state the models cannot score (missing timeouts, spread,
+  6. `late_game` (4,685; 206-279 per season, 5-6.5% of its fourth downs): at most
+     `decisions.late_game.q4_seconds` (120) seconds left in the 4th quarter, or overtime
+     (`decisions.late_game.overtime`): **late game, not graded** (G3b, below).
+  7. `missing_state` (0): a state the models cannot score (missing timeouts, spread,
      opening kickoff, kickoff spot) or no head coach to credit.
-  77,751 rows are graded (34,685 clear, 43,066 toss-ups); 2026 weeks 1-3: 634 (301 clear).
+  73,066 rows are graded (28,733 clear, 44,333 toss-ups); 2026 weeks 1-3: 603 (275 clear).
 - **Chosen option**: `pass` or `run` = go (fake punts and fake field goals are pass or run
   plays), `field_goal`, `punt`.
 - **Options** (all from the offense's view, priced by G1's `wp()` with season S's fold models):
@@ -201,7 +204,8 @@ season per command, ~5 s each); `--report-only` writes reports/decisions/fourth_
 
 - **Rows**: every try after a touchdown (`extra_point_attempt` or `two_point_attempt`; a fake
   or a run from kick formation is "two_point"). Excluded: `penalty_no_play` (40, 2006-2025;
-  the try is replayed), `aborted_snap` (20), `missing_state` (0). 27,302 graded (5,349 clear).
+  the try is replayed), `aborted_snap` (20), `late_game` (1,409: the 4th quarter's last 2:00
+  and overtime, G3b, below), `missing_state` (0). 25,893 graded (540 clear).
 - **State**: the scoring team at the try (the score already counts the six points), then the
   opponent's 1st and 10 at the kickoff spot, `kick_runoff` (the median seconds of the same
   kickoffs) later.
@@ -209,6 +213,33 @@ season per command, ~5 s each); `--report-only` writes reports/decisions/fourth_
   WP(+0), with season S's point-in-time rates (G2 `tries_rates`: PAT within the rule era,
   2-pt over the last 5 seasons). Defensive two-point returns are ignored. Same margin, WP lost
   and clear / toss-up rule.
+
+## The late game is not graded (G3b, `decisions.late_game`)
+
+Fourth downs and two-point tries with at most `decisions.late_game.q4_seconds` (120) seconds
+left in the 4th quarter, and every one in overtime (`decisions.late_game.overtime`), are not
+graded: they are counted and reported as "late game, not graded" (exclusion `late_game`, after
+`end_of_half` in the rule order, so the last 10 s stay `end_of_half`), never priced, never
+published as graded decisions and never credited to a coach. 2006-2025: 4,685 fourth downs
+(206-279 per season, 10-42 of them in overtime) and 1,409 tries (52-86 per season); per-season
+counts in reports/decisions/fourth_downs.md, section 1 (CSV table `late_game`). The first
+half's last 2:00 is still graded. The clock-management metrics below are rule-defined, not
+WP-option grades, and are unaffected.
+
+Why: those grades are differences between the WP model's values of late-game states, and that
+is where the model cannot be trusted yet. The nfl4th benchmark's disagreements concentrate in
+the 4th quarter's last 2:00 (the largest go-gain gap of any game phase, -2.19 WP points; nfl4th
+says go on 60.8% of those fourth downs, we on 47.3%); G1b's smoothness limits stop at Q4 15:00
+by design (from Q4 10:00 and in overtime the WP model is the tree model alone); and a
+hand-checked 2026 case (TB, 4th and 11 at the opponent's 20, down 4, 0:22 left: graded 19.8 WP
+points lost because the model gave the field goal 34%, though a field goal leaves them down 1
+with the opponent getting the ball) showed the failure. The rule stays until the late-game WP
+model is shown to be trustworthy there.
+
+**Honesty**: the rule was decided by the reviewer on 2026-10-01 after the hand-checked case and
+the benchmark had been seen, i.e. after looking at graded output. It removes grades; it does
+not tune any model or any other rule, and every decision outside the window keeps exactly the
+grade it had (checked row by row in the regrade).
 
 ## Stored inputs and reproducibility (G3)
 
@@ -402,10 +433,14 @@ on first use; without those two files in the cache the run is `fg_only` (field-g
 chances only) and the report says the decision benchmark has not run. The owner approved those two files on 2026-10-01 (fetched once from the nflverse/nfl4th release `model_archive`; url, size, sha256 and download time in the report, re-checked on every run). nfl4th's models are
 probably in-sample for these seasons (spec 6.3); ours are walk-forward. Agreement is reported
 overall, for our clear decisions and for our toss-ups; a disagreement's "likely cause" is a
-heuristic (the sub-model whose gap moves WP the most), not a decomposition.
+heuristic (the sub-model whose gap moves WP the most), not a decomposition. The committed
+benchmark (2024-2025) was run before G3b, on graded rows that still included the 4th quarter's
+last 2:00 (431 of them): it is part of the evidence for that rule. A rerun now compares only
+the decisions graded today (the late game is no longer graded).
 
 ## Not graded (yet)
 
+Fourth downs and two-point tries in the 4th quarter's last 2:00 and in overtime (G3b, above).
 Clock situations outside the three definitions above.
 
 ## Honesty note
@@ -415,3 +450,5 @@ The option to train the conversion and field-goal models on only the last 10 or 
 G1b (the smoothed WP model): the smoothness limits were fixed before any fix was tried, and every candidate was chosen on the 2004-05 validation seasons only; but two later candidate rounds (the late-game hand-over and the redefined drive value) were prompted by looking at regraded seasons, and the pooled test log loss of a first refit was seen before them. The 2006-2025 WP and grading numbers are therefore slightly optimistic; 2026 is their first clean test.
 
 G4 (clock management): the definitions and every threshold were written before any season was graded. Two things were seen before the full grading and are disclosed: a structural count of metric 2's candidates on 2024 with the thresholds relaxed (first-half kneels with >= 40 s left are almost absent in 2024; nothing was changed), and a first test run on 2024-2026 whose one hand-checked case (2025 week 1, HOU at LA) exposed that metric 3's written formula contradicted its own words; the formula was corrected (section "3. Late timeouts"), metric 1 was kept exactly as written, and the report shows metric 3's missed stops next to each metric-1 case as context.
+
+G3b (the late game is not graded): decided by the reviewer after a hand-checked 2026 case and the nfl4th benchmark, both of which looked at graded output. The rule only removes grades (the 4th quarter's last 2:00 and overtime); it does not tune any model, and every other decision keeps exactly its grade.

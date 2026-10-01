@@ -1304,7 +1304,8 @@ def _grade_entries() -> list[Entry]:
          "How much win probability a decision gave away by the model's numbers.", g),
         ("decision_grade", "Clear call or toss-up", "category",
          "'clear' when the best option's WP beats the second best by more than "
-         "decisions.toss_up_margin (1.5 WP points), else 'toss_up' (not graded)",
+         "decisions.toss_up_margin (1.5 WP points), else 'toss_up' (not graded); the 4th "
+         "quarter's last 2:00 and overtime are not graded at all (decisions.late_game)",
          "Only decisions with a clear answer count against a coach.", g),
         ("kickoff_spot", "Kickoff spot after a score", "yardline_100",
          "mean receiving start of the same season's kickoffs in earlier weeks (at least "

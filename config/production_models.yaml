@@ -6,32 +6,32 @@
 # a reviewed model.
 decisions:
   season: 2026
-  model_version: grading-ddbae071cb2914a3
-  file: artifacts/production_models/decisions/grading-ddbae071cb2914a3.json
-  sha256: 44371ae4953f82ce6977eddfe183db6dac8883bbe8e344c2a035bb183919b403
+  model_version: grading-100604cddaabf068
+  file: artifacts/production_models/decisions/grading-100604cddaabf068.json
+  sha256: c8749603c0a04cb686ca0db75d44525c8e8d85469c91d003501860bbb217e34f
   model: grading
   approved: '2026-10-01'
   backtest:
     seasons: 2006-2025
     fourth_downs:
-      file: artifacts/production_models/decisions/history-grading-ddbae071cb2914a3/fourth_downs.parquet
-      sha256: 99bf540c9ce6cd1b542e8f79fa5d1f2bd38e5936b56abe2de30f9d60b6cd1c7a
+      file: artifacts/production_models/decisions/history-grading-100604cddaabf068/fourth_downs.parquet
+      sha256: 186ec557e6f83587794b28ebdbefc0c0c0c7f0092af2d1a3110308d99c2325c3
       rows: 83462
     two_point:
-      file: artifacts/production_models/decisions/history-grading-ddbae071cb2914a3/two_point.parquet
-      sha256: ceb8c60208f0537f3a247b1214a0759fdfca6fb6b896ced34545a249ca08fa0f
+      file: artifacts/production_models/decisions/history-grading-100604cddaabf068/two_point.parquet
+      sha256: 901901080a56581b7eef4dfe774843c7419690a2d21b5b4b03074043d4af87f9
       rows: 27362
     clock_cases:
-      file: artifacts/production_models/decisions/history-grading-ddbae071cb2914a3/clock_cases.parquet
+      file: artifacts/production_models/decisions/history-grading-100604cddaabf068/clock_cases.parquet
       sha256: 8aef01161c616eb2cba2f18f1471a27771866210cc0a86985964f6dc32076c03
       rows: 1118
     team_games:
-      file: artifacts/production_models/decisions/history-grading-ddbae071cb2914a3/team_games.parquet
+      file: artifacts/production_models/decisions/history-grading-100604cddaabf068/team_games.parquet
       sha256: 6e505450779e3602d801a0e11c47fb6943f719c2dc0715130d29a9a93dad5f0f
       rows: 10862
     season_inputs:
-      file: artifacts/production_models/decisions/history-grading-ddbae071cb2914a3/season_inputs.parquet
-      sha256: e89a0e4e1694d5f2554d7733075dc16f5b70401353edba6a966d6351e8d9a9ca
+      file: artifacts/production_models/decisions/history-grading-100604cddaabf068/season_inputs.parquet
+      sha256: 4fc8833da3ea536bb9244f8c40b58a0fe18d6f59cbfda77ff52fe3e7dee6c7cd
       rows: 20
 regression_watch:
   season: 2026

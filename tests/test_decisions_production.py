@@ -391,3 +391,55 @@ def test_the_pinned_grading_reproduces_the_stored_grades_of_the_season(tmp_path:
     assert sn.differences(SEASON, stored, tmp_path) == []
     cur = dc.current_frames(SEASON, spec, tmp_path)
     assert cur["fourth_downs"].height > 600 and cur["season_inputs"].height == 1
+
+
+# --------------------------------------------------------------------------------------
+# G3b: the late game is not graded
+# --------------------------------------------------------------------------------------
+
+
+def test_the_committed_grading_and_history_never_grade_the_late_game(pinned) -> None:
+    """The approved grading carries the window; the frozen history counts the 4th quarter's
+    last 2:00 and overtime as late_game, and nothing in it is graded or published."""
+    spec, _, frames = pinned
+    info = spec.info()
+    assert (info["late_game_q4_seconds"], info["late_game_overtime"]) == (120, True)
+    s = frames["season_inputs"]
+    assert s["late_game_q4_seconds"].unique().to_list() == [120]
+    assert s["late_game_overtime"].all() and s["grade_format"].unique().to_list() == [2]
+    window = ((pl.col("qtr") == 4) & (pl.col("quarter_seconds") <= 120)) | (pl.col("qtr") >= 5)
+    for t in ("fourth_downs", "two_point"):
+        f = frames[t]
+        assert f.filter(window & pl.col("exclusion").is_null()).height == 0
+        late = f.filter(pl.col("exclusion") == "late_game")
+        assert late.height > 1000 and late["grade"].null_count() == late.height
+        assert late.filter(~window).height == 0
+    d = decision_data(frames)
+    for t in ("decision_fourth", "decision_two_point"):
+        pub = d.history[t]
+        assert pub.filter(window).height == 0 and pub.height > 0
+
+
+def test_season_grades_of_another_late_game_window_are_not_published(pinned, tmp_path) -> None:
+    spec, _, _ = pinned
+    (tmp_path / "graded").mkdir()
+    old = {k: v for k, v in spec.info().items() if not k.startswith("late_game")}
+    (tmp_path / "graded" / f"season_{SEASON}.json").write_text(json.dumps(old))
+    with pytest.raises(dc.DecisionsInputError, match="late_game_q4_seconds"):
+        dc.current_frames(SEASON, spec, tmp_path)
+
+
+def test_stored_grades_of_another_late_game_window_cannot_be_approved(tmp_path) -> None:
+    from twm.config import settings
+
+    cfg = settings().decisions
+    for sub in ("graded", "clock"):
+        (tmp_path / sub).mkdir()
+    g = {"season": SEASON, "margin": cfg.toss_up_margin, "wp_version": "wp-x",
+         "end_of_half_seconds": cfg.end_of_half_seconds, "late_game_q4_seconds": 60,
+         "late_game_overtime": True}  # fmt: skip
+    (tmp_path / "graded" / f"season_{SEASON}.json").write_text(json.dumps(g))
+    c = {**cfg.clock.model_dump(), "wp_version": "wp-x"}
+    (tmp_path / "clock" / f"season_{SEASON}.json").write_text(json.dumps(c))
+    with pytest.raises(dp.DecisionsProductionError, match="late_game_q4_seconds"):
+        dp.build_spec(SEASON, stored=tmp_path)

@@ -183,7 +183,8 @@ changed). Publishing twice in a row gives identical tables (apart from the run l
 
 Sizes: a full publish of the real data is about 58 MB of tables (65 MB for the whole local
 database; measured 2026-10-01 after `VACUUM FULL`). The Decision Report Card is 28 MB of it
-(`decision_fourth` 78,385 rows 18.5 MB, `decision_two_point` 27,547 rows 5.5 MB, `coach_week`
+(`decision_fourth` 78,385 rows 18.5 MB, `decision_two_point` 27,547 rows 5.5 MB when measured;
+73,669 and 26,123 rows since step G3b stopped grading the late game, so slightly less; `coach_week`
 10,954 rows 2.6 MB, `decision_clock` 1,125, `coach_season` 705, `dim_coach` 147,
 `decisions_track_record` 1,258 rows: under 1 MB together); the streamer's 425 lists and
 Regression Watch's 61 lists 6 MB (measured 2026-09-30; 21 MB in all before step P2). Far below

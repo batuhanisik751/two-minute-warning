@@ -18,7 +18,8 @@ any score the other team starts at the kickoff spot measured point-in-time (grad
 **Recommendation** = the option with the highest WP; **WP lost** = WP(best) - WP(chosen).
 A decision is **clear** (graded) only when the best option beats the second best by more than
 ``decisions.toss_up_margin`` (settings, 1.5 WP points); otherwise it is a **toss-up**
-(reported, not graded).
+(reported, not graded). Fourth downs and tries in the last 2:00 of the 4th quarter and in
+overtime are not graded at all (G3b, ``decisions.late_game``: exclusion ``late_game``).
 
 **Two-point tries.** After every touchdown: WP(kick) = p_PAT x WP(+1) + (1 - p_PAT) x WP(+0)
 and WP(go for two) = p_2pt x WP(+2) + (1 - p_2pt) x WP(+0), with the era's league rates
@@ -50,7 +51,9 @@ from twm.modules.decisions import submodels as sm
 from twm.modules.decisions import wp as wpm
 
 KEYS = gi.KEYS
-GRADE_FORMAT = 1  # bumped when the stored layout or the grading math changes
+# bumped when the stored layout, the grading math or what is graded changes (2: G3b, the
+# late-game window is no longer graded)
+GRADE_FORMAT = 2
 OPTIONS = ("go", "field_goal", "punt")
 TRY_OPTIONS = ("kick", "two_point")
 TD_POINTS = 7
@@ -384,20 +387,36 @@ def season_inputs(db: Path | str, season: int, models: Models, cfg: Any, *,
     platt = gi.platt(gi.platt_rows(db, season, cfg.platt_seasons), season, cfg.platt_seasons)
     info = {**gi.ranges(db, season, cfg.punt_range_quantile), **gi.runoffs(db, season),
             "platt": platt, "margin": float(cfg.toss_up_margin),
-            "end_of_half_seconds": int(cfg.end_of_half_seconds), **models.versions()}  # fmt: skip
+            "end_of_half_seconds": int(cfg.end_of_half_seconds), **late_game_info(cfg),
+            **models.versions()}  # fmt: skip
     fourth, tr = assemble(plays, spots, info, models)
     progress(f"{season}: {plays.height:,} plays, {fourth.height:,} fourth downs, {tr.height:,} "
              f"tries; inputs [{time.perf_counter() - t0:.0f} s]")  # fmt: skip
     return fourth, tr, info
 
 
+def late_game_info(cfg: Any) -> dict[str, Any]:
+    """The late-game window of ``cfg`` (``DecisionsConfig``) as season-level ``info`` keys."""
+    return {"late_game_q4_seconds": int(cfg.late_game.q4_seconds),
+            "late_game_overtime": bool(cfg.late_game.overtime)}  # fmt: skip
+
+
+def late_game(info: Mapping[str, Any]) -> tuple[int, bool]:
+    """(q4_seconds, overtime) of the season-level ``info`` (required: a season graded without
+    the late-game rule is of an older format)."""
+    return int(info["late_game_q4_seconds"]), bool(info["late_game_overtime"])
+
+
 def assemble(plays: pl.DataFrame, spots: pl.DataFrame, info: Mapping[str, Any],
              models: Models) -> tuple[pl.DataFrame, pl.DataFrame]:  # fmt: skip
     """The candidate fourth downs and tries of ``plays`` (one season) with every stored input:
     the per-game kickoff spot (``spots``), the season-level inputs (``info``: ranges, runoffs,
-    Platt, margin, end-of-half seconds) and the models' versions and try rates."""
-    fourth = gi.fourth_down_rows(plays, info["end_of_half_seconds"]).with_columns(_outcome())
-    tr = gi.try_rows(plays)
+    Platt, margin, end-of-half seconds, late-game window) and the models' versions and try
+    rates."""
+    late = late_game(info)
+    fourth = gi.fourth_down_rows(plays, info["end_of_half_seconds"], late_game=late)
+    fourth = fourth.with_columns(_outcome())
+    tr = gi.try_rows(plays, late_game=late)
     rates, platt = models.tries.extras, info["platt"]
     common = [pl.lit(float(info["margin"])).alias("margin"),
               *(pl.lit(v).alias(k) for k, v in models.versions().items()),

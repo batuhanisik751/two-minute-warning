@@ -28,6 +28,10 @@
   },
   "end_of_half_seconds": 10,
   "kickoff_min_kicks": 100,
+  "late_game": {
+   "overtime": true,
+   "q4_seconds": 120
+  },
   "leaderboard_min_games": 8,
   "platt_seasons": 3,
   "punt_range_quantile": 0.001,
@@ -62,7 +66,7 @@
    2025
   ]
  },
- "model_version": "grading-ddbae071cb2914a3",
+ "model_version": "grading-100604cddaabf068",
  "models": {
   "conversion": {
    "file": "artifacts/production_models/decisions/conversion_lgbm-77cc310830ebcb4f.joblib",

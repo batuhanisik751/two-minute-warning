@@ -60,6 +60,9 @@ export const AS_OF_TIME_UTC = "14:00";
 export const TOSS_UP_MARGIN = 0.015;
 /** Fourth downs with at most this many seconds left in the half are not graded. */
 export const END_OF_HALF_SECONDS = 10;
+/** Decisions in the last this-many seconds of the 4th quarter (and in overtime) are not graded (G3b: the late-game
+ *  win probability is not yet reliable). config/settings.yaml decisions.late_game.q4_seconds. */
+export const LATE_GAME_Q4_SECONDS = 120;
 /** The coach leaderboard ranks coaches with at least this many games in the season (or, early
  *  in a season, the most games any coach has: src/twm/modules/decisions/decisions_report.py). */
 export const LEADERBOARD_MIN_GAMES = 8;

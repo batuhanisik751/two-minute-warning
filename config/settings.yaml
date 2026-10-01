@@ -166,6 +166,12 @@ decisions:
   toss_up_margin: 0.015
   # fourth downs with <= this many seconds left in the half are excluded (the half's last snap)
   end_of_half_seconds: 10
+  # NOT graded (reviewer decision G3b, 2026-10-01): fourth downs and two-point tries with <= this
+  # many seconds left in the 4th quarter, and in overtime, until the late-game WP can be trusted
+  # (counted and reported as "late game, not graded"; the clock metrics are unaffected)
+  late_game:
+    q4_seconds: 120
+    overtime: true
   # kickoff spot after a score: this season's earlier weeks if >= this many kickoffs, else last season
   kickoff_min_kicks: 100
   # the punt option exists from yardlines at least as far out as this quantile of past punts

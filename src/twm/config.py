@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, PrivateAttr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "config"
@@ -404,6 +404,21 @@ class ClockConfig(BaseModel):
     passivity_min_ep: float = 1.0
 
 
+class LateGameConfig(BaseModel):
+    """``decisions.late_game:`` the window whose fourth downs and two-point tries are NOT graded
+    (reviewer decision G3b, 2026-10-01): the WP model is not trusted there yet (the nfl4th
+    benchmark's disagreements concentrate in the last 2:00 of Q4; G1b's smoothness limits stop
+    at Q4 15:00; a hand-checked 2026 case). Counted and reported, never graded. The clock
+    metrics (G4) are rule-defined and unaffected."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # fourth downs and tries with at most this many seconds left in the 4th quarter
+    q4_seconds: int = Field(default=120, ge=0, le=900)
+    # ... and every fourth down and try of overtime
+    overtime: bool = True
+
+
 class DecisionsConfig(BaseModel):
     """``decisions:`` in settings.yaml: the fourth-down and two-point grades (G3,
     docs/decision_metrics.md) and the clock metrics (``clock``, G4)."""
@@ -416,6 +431,8 @@ class DecisionsConfig(BaseModel):
     # Fourth downs with at most this many seconds left in the half are the half's last snap
     # (end-of-half desperation: a kick or a heave; nothing after the play is a real state).
     end_of_half_seconds: int = 10
+    # The late-game window that is not graded (G3b; after end_of_half in the rule order).
+    late_game: LateGameConfig = LateGameConfig()
     # The kickoff spot after a score: the same season's earlier weeks when they hold at least
     # this many kickoffs, else the previous season.
     kickoff_min_kicks: int = 100

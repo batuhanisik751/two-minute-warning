@@ -60,7 +60,7 @@ How many more of his targets he caught than an average receiver would have.
 Only decisions with a clear answer count against a coach.
 
 - **Name:** `decision_grade`; **unit:** category; **used by:** decisions
-- **Formula:** 'clear' when the best option's WP beats the second best by more than decisions.toss_up_margin (1.5 WP points), else 'toss_up' (not graded)
+- **Formula:** 'clear' when the best option's WP beats the second best by more than decisions.toss_up_margin (1.5 WP points), else 'toss_up' (not graded); the 4th quarter's last 2:00 and overtime are not graded at all (decisions.late_game)
 - **Source:** twm.modules.decisions.grade
 
 ### Completion rate over expected (CPOE) \*

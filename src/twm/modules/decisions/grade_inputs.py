@@ -6,7 +6,8 @@ point-in-time for the graded season S:
 - :func:`load_season`: the play rows of S (typed warehouse, read-only) with each game's
   closing spread, venue and head coaches (``fact_game.home_coach`` / ``away_coach``).
 - :func:`fourth_down_rows` / :func:`try_rows`: the candidate decisions, every exclusion rule
-  applied in order and recorded in ``exclusion`` (NULL = graded), with the state of G1's WP
+  applied in order and recorded in ``exclusion`` (NULL = graded; ``late_game`` = the last
+  2:00 of the 4th quarter and overtime, not graded since G3b), with the state of G1's WP
   model, the field-goal conditions and the head coach of the team with the ball.
 - :func:`kickoff_spots`: where the receiving team starts after a score, per game: the mean
   start of the same season's kickoffs in EARLIER weeks (at least ``kickoff_min_kicks``), else
@@ -32,8 +33,9 @@ from twm.modules.decisions import submodels as sm
 
 KEYS = sm.KEYS
 FOURTH_RULES = ("not_a_snap", "penalty_no_play", "kneel_or_spike", "aborted_snap",
-                "end_of_half", "missing_state")  # fmt: skip
-TRY_RULES = ("penalty_no_play", "aborted_snap", "missing_state")
+                "end_of_half", "late_game", "missing_state")  # fmt: skip
+TRY_RULES = ("penalty_no_play", "aborted_snap", "late_game", "missing_state")
+LATE_GAME = "late_game"  # the rule G3b added: counted and reported, never graded
 WP_STATE = (*sm.STATE_INPUTS, "down", "ydstogo", "yardline_100")
 FG_STATE = ("fg_distance", "roof_closed", "temp_f", "wind_mph", "surface_grass",
             "weather_missing")  # fmt: skip
@@ -111,10 +113,20 @@ def _first_rule(rules: Sequence[tuple[str, pl.Expr]]) -> pl.Expr:
     return e.alias("exclusion")
 
 
-def fourth_down_rows(plays: pl.DataFrame, end_of_half_seconds: int) -> pl.DataFrame:
+def late_game_window(q4_seconds: int, overtime: bool) -> pl.Expr:
+    """The late-game window that is not graded (G3b, ``decisions.late_game``): at most
+    ``q4_seconds`` left in the 4th quarter (its clock is ``game_seconds_remaining``), and
+    every overtime snap when ``overtime``."""
+    w = (pl.col("qtr") == 4) & (pl.col("game_seconds_remaining") <= int(q4_seconds))
+    return (w | (pl.col("qtr") >= 5)) if overtime else w
+
+
+def fourth_down_rows(plays: pl.DataFrame, end_of_half_seconds: int, *,
+                     late_game: tuple[int, bool]) -> pl.DataFrame:  # fmt: skip
     """Every fourth-down row of ``plays`` (one season, :func:`load_season`) with its state,
     ``chosen`` option (go / field_goal / punt; fake punts and fake field goals are pass or
-    run plays, so "go") and ``exclusion`` (the first of :data:`FOURTH_RULES` that applies)."""
+    run plays, so "go") and ``exclusion`` (the first of :data:`FOURTH_RULES` that applies;
+    ``late_game`` = (q4_seconds, overtime) of :func:`late_game_window`)."""
     rows = _states(plays.filter(pl.col("down") == 4), plays)
     pt = pl.col("play_type")
     rules = [
@@ -123,6 +135,7 @@ def fourth_down_rows(plays: pl.DataFrame, end_of_half_seconds: int) -> pl.DataFr
         ("kneel_or_spike", pt.is_in(["qb_kneel", "qb_spike"])),
         ("aborted_snap", pl.col("aborted_play") == 1),
         ("end_of_half", pl.col("half_seconds_remaining") <= end_of_half_seconds),
+        (LATE_GAME, late_game_window(*late_game)),
         ("missing_state", ~_valid().fill_null(False)),
     ]
     return rows.with_columns(
@@ -130,16 +143,18 @@ def fourth_down_rows(plays: pl.DataFrame, end_of_half_seconds: int) -> pl.DataFr
     ).sort(list(KEYS))
 
 
-def try_rows(plays: pl.DataFrame) -> pl.DataFrame:
+def try_rows(plays: pl.DataFrame, *, late_game: tuple[int, bool]) -> pl.DataFrame:
     """Every try after a touchdown (extra point or two-point attempt) with its state (the
     scoring team has the ball; the score already counts the touchdown), ``chosen`` (kick /
-    two_point) and ``exclusion`` (the first of :data:`TRY_RULES` that applies)."""
+    two_point) and ``exclusion`` (the first of :data:`TRY_RULES` that applies; ``late_game``
+    as :func:`fourth_down_rows`)."""
     tries = plays.filter((pl.col("extra_point_attempt") == 1) | (pl.col("two_point_attempt") == 1))
     rows = _states(tries.with_columns(pl.lit(1, pl.Int32).alias("down"),
                                       pl.lit(10, pl.Int32).alias("ydstogo")), plays)  # fmt: skip
     rules = [
         ("penalty_no_play", pl.col("play_type") == "no_play"),
         ("aborted_snap", pl.col("aborted_play") == 1),
+        (LATE_GAME, late_game_window(*late_game)),
         ("missing_state", ~_valid().fill_null(False)),
     ]
     kick = pl.col("extra_point_attempt") == 1

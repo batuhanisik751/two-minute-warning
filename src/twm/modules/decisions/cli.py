@@ -35,11 +35,12 @@ def wp_backtest(
     from twm.modules.decisions import wp
     from twm.modules.decisions.wp_data import load_states
 
-    path = _warehouse_or_exit(db)
     seasons = sorted(set(season)) if season else list(wp.TEST_SEASONS)
     bad = [s for s in seasons if s not in wp.TEST_SEASONS]
     if bad:
         raise typer.BadParameter(f"test seasons must be within 2006-2025; got {bad}")
+    # the arguments are checked before the warehouse: a bad season is a usage error (exit 2)
+    path = _warehouse_or_exit(db)
     t0 = time.perf_counter()
     states = load_states(path, tuple(range(wp.FIRST_SEASON, max(wp.TEST_SEASONS) + 1)))
     typer.echo(

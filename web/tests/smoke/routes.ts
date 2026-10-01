@@ -8,7 +8,7 @@ import { DATA, fetchPage } from "./dom";
 
 export type Route = {
   path: string;
-  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach";
+  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record";
 };
 
 export type RouteSet = {
@@ -56,6 +56,7 @@ function seedRoutes(): RouteSet {
       { path: `/regression?season=${rb.season}&week=${rb.week}`, kind: "regression" },
       { path: `/regression?season=${rb.season}&week=${rb.week}&gt=off`, kind: "regression" },
       { path: "/methodology", kind: "methodology" },
+      { path: "/track-record", kind: "track-record" },
       // the Decision Report Card: the season being graded, the complete season (long lists that
       // fold), the oldest; a coach with every kind of row, one with clock cases, the long name
       { path: "/decisions", kind: "decisions" },
@@ -115,7 +116,7 @@ async function realRoutes(): Promise<RouteSet> {
   const rs = Array.from(rd.querySelectorAll<HTMLOptionElement>("select[name=season] option")).map((o) => o.value);
   if (rs.length > 1) routes.push({ path: `/regression?season=${rs[rs.length - 1]}`, kind: "regression" });
   if (player) routes.push({ path: `${player}${player.includes("?") ? "&" : "?"}gt=off`, kind: "player" });
-  routes.push({ path: "/methodology", kind: "methodology" });
+  routes.push({ path: "/methodology", kind: "methodology" }, { path: "/track-record", kind: "track-record" });
   // the Decision Report Card: the newest season, the oldest, the first coaches it links
   const dd = (await fetchPage("/decisions")).doc;
   const ds = Array.from(dd.querySelectorAll<HTMLOptionElement>("form[action='/decisions'] select[name=season] option")).map((o) => o.value);

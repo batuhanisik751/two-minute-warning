@@ -385,7 +385,8 @@ export default async function MethodologyPage() {
       <PageHeader title="Methodology (draft)" kicker="How it works">
         How the Waiver Radar, the K and D/ST streamer, Regression Watch and the Decision Report Card work, what data they use, how they were tested
         and what the tests found. Every result on this page is read from the published track records, the priority table,
-        the frozen parameters and the glossary; none is typed in by hand.
+        the frozen parameters and the glossary; none is typed in by hand. Each module&apos;s results season by season, its
+        calibration and its live lists are on <Link href="/track-record">the Track record page</Link>.
       </PageHeader>
 
       <nav aria-label="On this page" className="mb-10 rounded-lg border border-line bg-surface p-4 text-sm">

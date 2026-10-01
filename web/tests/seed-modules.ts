@@ -142,7 +142,21 @@ function streamTrack(): (typeof s.streamTrackRecord.$inferInsert)[] {
   // K: the model against the best rule; D/ST: the model against the rule (the rule is published)
   out.push({ ...base, position: "K", method: "logit", scope: "diff", key: "baseline_last_points", metric: "p_at_5", value: 0.03, lo: -0.01, hi: 0.07, shareAboveZero: 0.9 });
   out.push({ ...base, position: "DST", method: "logit", scope: "diff", key: "baseline_opponent", metric: "p_at_5", value: -0.02, lo: -0.05, hi: 0.01, shareAboveZero: 0.1 });
-  out.push({ ...base, position: "K", method: "logit", scope: "season", seasons: "2025", metric: "p_at_5", value: 0.5 });
+  out.push({ ...base, position: "K", method: "logit", scope: "season", seasons: "2025", metric: "p_at_5", value: 0.5, nGroups: 16, nRows: 150, nPos: 40 });
+  // /track-record: per-season rows (K: twelve seasons, so the table folds; D/ST: two) and the K
+  // model's calibration (observed rates only, as published; D/ST has none: "not published yet")
+  for (let y = 2014; y <= 2025; y++) {
+    const one = { ...base, position: "K", scope: "season", seasons: String(y), metric: "p_at_5", nGroups: 16, nRows: 150, nPos: 40 };
+    if (y < 2025) out.push({ ...one, method: "logit", value: 0.38 + (y - 2014) / 200 });
+    out.push({ ...one, method: "baseline_last_points", value: 0.36 });
+  }
+  for (const y of [2024, 2025]) {
+    const one = { ...base, position: "DST", scope: "season", seasons: String(y), metric: "p_at_5", nGroups: 16, nRows: 120, nPos: 45 };
+    out.push({ ...one, method: "baseline_opponent", value: 0.41 }, { ...one, method: "logit", value: 0.39 });
+  }
+  for (const [key, value, nRows, nPos] of [["0.0-0.1", 0.05, 500, 25], ["0.3-0.4", 0.36, 300, 108]] as const) {
+    out.push({ ...base, position: "K", method: "logit", scope: "calibration", key, metric: "observed", value, nRows, nPos, nGroups: null });
+  }
   return out.map((r, i) => ({ ...r, line: i + 1 }));
 }
 

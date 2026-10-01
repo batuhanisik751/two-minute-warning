@@ -204,6 +204,19 @@ function track(): Track[] {
     if (vegas !== null) add(W, "smoothness", "reference", "2016-2025", "nflfastr_vegas_wp", metric, vegas, 0);
     add(W, "smoothness", "validation", "2014-2015", "spline_sym_late_hand_over", metric, ours, 0);
   }
+  // /track-record: the test seasons one by one (no interval on a season's own score, intervals on
+  // its differences) and the reliability bins of our model
+  for (let y = 2016; y <= 2025; y++) {
+    const k = (y - 2016) / 1000;
+    add(W, "season", String(y), "all plays", "own", "brier", 0.15 + k, 5000);
+    add(W, "season", String(y), "all plays", "own", "log_loss", 0.45 + k, 5000);
+    add(W, "season", String(y), "all plays", "own - nflfastr_wp", "log_loss", -0.03, 5000);
+    add(W, "season", String(y), "all plays", "own - nflfastr_vegas_wp", "log_loss", 0.004, 5000);
+  }
+  for (const [bin, pred, obs] of [["0.0-0.1", 0.04, 0.035], ["0.4-0.5", 0.45, 0.46], ["0.9-1.0", 0.96, 0.97]] as const) {
+    add(W, "reliability", "pooled", bin, "own", "mean_predicted", pred, 20000);
+    add(W, "reliability", "pooled", bin, "own", "observed", obs, 20000);
+  }
   const S = "submodels";
   for (const [section, scope, base, diff, metric, m, b, d, n] of [
     ["conversion", "down 4", "lookup", "model - lookup", "log_loss", 0.64, 0.646, -0.006, 1200],

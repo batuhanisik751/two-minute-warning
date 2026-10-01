@@ -339,5 +339,13 @@ function trackRows(): (typeof s.trackRecord.$inferInsert)[] {
     out.push({ ...base, model: "logit", label: "y_hit", metric: "mean_pred", scope: "calibration_fixed", scopeValue: bin, exclRostered: false, value: pred, nRows: n });
     out.push({ ...base, model: "logit", label: "y_hit", metric: "observed", scope: "calibration_fixed", scopeValue: bin, exclRostered: false, value: obs, nRows: n });
   }
+  // per season (scope 'season', /track-record): twelve seasons, so the seasons table folds
+  for (let season = 2014; season <= 2025; season++) {
+    const one = { ...base, seasonFrom: season, seasonTo: season, scopeValue: String(season), label: "y_hit", scope: "season", exclRostered: false };
+    const k = (season - 2014) / 100;
+    out.push({ ...one, model: "logit", metric: "p_at_10", value: 0.44 + k, nLists: 60, nPositives: 800, nRows: 8000, nTopHits: Math.round(600 * (0.44 + k)), nTop: 600 });
+    out.push({ ...one, model: "baseline_last_points", metric: "p_at_10", value: 0.38 + k / 2, nLists: 60, nPositives: 800, nRows: 8000, nTopHits: Math.round(600 * (0.38 + k / 2)), nTop: 600 });
+    out.push({ ...one, model: "base_rate", metric: "base_rate", value: 0.1, nLists: 60, nPositives: 800, nRows: 8000 });
+  }
   return out;
 }

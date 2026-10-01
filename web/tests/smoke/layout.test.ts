@@ -41,7 +41,8 @@ export const CHECK = String.raw`(() => {
     const rb = row.getBoundingClientRect();
     if (rb.width === 0 || rb.height === 0) continue; // not displayed at this width
     out.rows++;
-    if (row.closest("details[data-fold]")) out.folded++;
+    // folded: in an opened list's <details>, or in a folded table's second <tbody> (components/Fold.tsx)
+    if (row.closest("details[data-fold], tbody[data-fold-rest]")) out.folded++;
     const label = ((row.querySelector("[data-cell=player] a") || row).textContent || "").trim().slice(0, 40);
     const boxes = [];
     for (const cell of row.querySelectorAll("[data-cell]")) {
@@ -105,8 +106,9 @@ before(
     // every page that shows a list: home (half-width cards, the FLEX card, the top-of-the-board
     // row, the Streamers and Regression flags cards), the position lists, FLEX, reconstructed
     // lists without chances, the K and D/ST lists, every Regression Watch table, and the Decision
-    // Report Card's call and clock-case rows (/decisions, the coach pages, the home card)
-    paths = set.routes.filter((r) => ["home", "waivers", "waivers-live", "waivers-flex", "waivers-backtest", "waivers-stream", "regression", "decisions", "coach"].includes(r.kind)).map((r) => r.path);
+    // Report Card's call and clock-case rows (/decisions, the coach pages, the home card), and
+    // /track-record's headline tiles and live rows
+    paths = set.routes.filter((r) => ["home", "waivers", "waivers-live", "waivers-flex", "waivers-backtest", "waivers-stream", "regression", "decisions", "coach", "track-record"].includes(r.kind)).map((r) => r.path);
   },
   // two Chrome start attempts of up to 60 s each, plus the connection
   { timeout: 200_000 },

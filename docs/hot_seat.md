@@ -238,6 +238,13 @@ Code: `models.py`, `backtest.py`, `evaluation.py`, `backtest_report.py`; command
   hit rate at week 12 and season end, firings per season, interims and censored rows apart, the
   two sensitivity runs (censored dropped; `resigned_under_pressure` positive), coefficients per fold.
 
+## Research question (step H5)
+
+Does poor fourth-down decision quality raise firing risk, controlling for performance vs
+expectation (spec 8.5)? `uv run twm hotseat research` (code `research.py`,
+`research_report.py`) -> reports/hot_seat/research.md + .csv; the plain-English write-up is
+docs/research_decisions_vs_firings.md.
+
 ## Where the labels come from
 
 `data/manual/coach_departures.csv`: every departure type, date and source was researched from cited public pages (mostly each season's Wikipedia "NFL season" page and the coaches' own pages, URL and quote per row, step H1); on 2026-10-01 the owner accepted all of them as true in bulk rather than re-checking each row, and one row the research could not settle (2010 TEN, Jeff Fisher) was filled from his own page. Describe them that way wherever results are shown.

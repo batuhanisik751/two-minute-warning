@@ -207,3 +207,52 @@ def backtest_cmd(
     for p in paths.values():
         typer.echo(f"wrote {p}")
     typer.echo(f"done in {time.perf_counter() - t0:.0f} s")
+
+
+@hotseat_app.command("research")
+def research_cmd(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse (default: config paths)."),
+    features: Path | None = typer.Option(None, "--features", help=f"Default {FEATURES_PATH}."),
+    n_boot: int = typer.Option(2000, "--n-boot", help="Season-bootstrap resamples."),
+    n_perm: int = typer.Option(1000, "--n-perm", help="Within-season permutations."),
+    out_dir: Path | None = typer.Option(None, "--out-dir", help=f"Default {REPORT_DIR}."),
+) -> None:
+    """H5 research question (spec 8.5): does poor fourth-down decision quality raise firing
+    risk, controlling for performance vs expectation? Verified labels only; writes
+    reports/hot_seat/research.md + research.csv (docs/research_decisions_vs_firings.md)."""
+    import time
+
+    from twm.cli import _warehouse_or_exit
+    from twm.config import ROOT
+    from twm.modules.hot_seat import research as rs
+    from twm.modules.hot_seat import research_report as rr
+    from twm.modules.hot_seat import targets as ht
+
+    t0 = time.perf_counter()
+    path = _warehouse_or_exit(db)
+    fpath = features or ROOT / FEATURES_PATH
+    lpath, cpath = _manual(LABELS_CSV), _manual(CANDIDATES_CSV)
+    for p in (fpath, lpath, cpath):
+        if not p.exists():
+            typer.echo(f"not found: {p}", err=True)
+            raise typer.Exit(code=1)
+    try:
+        main, rup, counts = rs.load_rows(path, fpath, lpath, cpath)
+    except (ht.UnverifiedLabelsError, ValueError) as e:
+        typer.echo(f"refused: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    fourth, clock = rs.load_stored_grades()
+    res = rs.run_research(
+        main,
+        rup,
+        rs.decision_extras(fourth, clock),
+        n_boot=n_boot,
+        n_perm=n_perm,
+        progress=lambda m: typer.echo(f"{m} ({time.perf_counter() - t0:.0f} s)"),
+    )
+    paths = rr.write_outputs(
+        res, counts, rs.grade_counts(fourth, clock), out_dir or ROOT / REPORT_DIR
+    )
+    for p in paths.values():
+        typer.echo(f"wrote {p}")
+    typer.echo(f"done in {time.perf_counter() - t0:.0f} s")

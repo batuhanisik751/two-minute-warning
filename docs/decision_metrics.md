@@ -11,8 +11,68 @@ seasons before S only (spec 6.2). Backtest: `uv run twm decisions submodels-back
 
 `own_wp`: the chance that the team with the ball wins, from the state before the snap (score,
 clock, down, distance, field position, timeouts, second-half kickoff, home, closing spread,
-era). See reports/decisions/wp_backtest.md and notebooks/03_wp_model.ipynb. The sub-models
+era; G1b adds `drive_value` and `z_margin`). Since G1b: the smooth hand-over model of the next
+section. See reports/decisions/wp_backtest.md and notebooks/03_wp_model.ipynb. The sub-models
 below turn a fourth-down choice into resulting states; G1's `wp()` prices each state.
+
+## WP smoothness (G1b: `wp_smooth.py`)
+
+A grade is a difference between the WPs of hypothetical states, so the WP model must also be
+locally sensible. Five checks on a fixed grid of synthetic states (neutral site, 1st and 10,
+all timeouts; WP points, 0-100), defined and given limits BEFORE any fix was tried:
+
+| Metric | What | Limit | Why |
+|---|---|---|---|
+| `score_step_h1` | largest WP change for ONE point of score, score -14..+14, at Q1 10:00, Q2 15:00, Q2 5:00 x own 25 / midfield / opp 30 x spread -3.5 / 0 / +3.5 x either team receiving the 2nd-half kickoff | 6 | a random-walk model of the margin (sd 13.5 points per game) gives at most 3-4 near a tie; nflfastR's vegas_wp reads 3.8 (wp 5.4); G1 had 9-24 |
+| `score_step_h2` | the same at Q3 13:20, Q3 5:00, Q4 15:00 | 8 | random walk: up to about 6 at the start of Q4; vegas_wp 7.2 (wp 9.0); G1 9-21 |
+| `curvature` | largest \|second difference\| of WP along the same score lines | 4 | an isolated step makes it about as large as the step; smooth curves stay under 1, key numbers (3, 7) add a little; vegas_wp 2.3; G1 8-24 |
+| `halftime_possession` | largest \|WP with the ball at its own 42 (25) minus WP when the opponent has it at ITS own 42 (25)\|, 1/5/10 s before halftime, score -7..+7, spread 0 / 3.5, both kickoff owners | 3 | outside field-goal range nothing much can happen (football: about 0-1); vegas_wp reads 3.8 (mean 1.6), wp 7.6; G1 7-25 |
+| `monotone_violations` | grid pairs where WP falls by more than 0.1 as the lead grows by one point or the ball moves one yard closer | 0 | football; G1's monotone constraints already give 0 |
+
+`yard_step` (largest change for one yard, Q1/Q2/Q3, score -7/0/+7) and `possession_2min` (mean
+value of the ball at its own 42 / 25, 30-120 s before halftime, tied; added after the first
+regrade, see below) are reported without a limit. What the ball was worth in real games in that
+window (logistic regression on 1999-2005 first-half plays at the own 25-50): +1.0 WP points
+(95% -2.8 to +4.9).
+**References**: nflfastR's model cannot be run offline on synthetic states, so its stored `wp`
+/ `vegas_wp` are read off real plays 2006-2025 near each grid line (a local regression of
+logit WP on the score as a factor and the clock, yardline, spread, home, timeouts as
+deviations; score levels with at least 100 nearby plays). They are references only (fit
+partly in-sample) and approximate.
+
+**Choosing the fix** (rule fixed before any candidate was fitted): every candidate runs the
+walk-forward folds of the VALIDATION seasons 2004 and 2005 (trained on 1999-2003 / 1999-2004,
+never a test or graded season); among the candidates whose two fold models meet every limit,
+the lowest pooled 2004-2005 log loss wins. If none meets them all, the smallest worst
+metric/limit ratio wins (then log loss). Each fold's smoothness is reported (wp_backtest.md;
+candidates and their numbers: `uv run twm decisions wp-select`).
+
+**What was chosen (G1b)**: `spline_sym_late_hand_over`. Up to 15:00 of the fourth quarter the
+WP is a logistic regression on an ODD cubic spline of `z_margin` (the lead plus `drive_value`,
+the net points the ball is expected to add before halftime, plus the remaining spread, in
+standard deviations of what can still happen) with no intercept, terms that change sign when the other team has the ball, and
+possession terms that vanish as the half ends: so the first three quarters are smooth and,
+seconds before halftime, the ball outside field-goal range is worth nothing. From Q4 15:00 to
+10:00 it hands over linearly to one monotone LightGBM fit on every play (and uses it alone after
+10:00 and in overtime), where real score thresholds (a tie, a field goal, a touchdown) matter.
+The limits do not cover the last 15 minutes by design (the grid stops at Q4 15:00).
+Rounds of candidates, all judged on 2004-2005 only: (1) G1, bagging, linear trees, the drive
+features, a spline model, blends and boosting: all broke the halftime-possession limit, most
+also the score steps; (2) the possession-symmetric spline (`spline_sym`, `spline_sym_late`)
+met every limit; (3) added after a first regrade of 2006 (a graded season) with
+`spline_sym_late` left no clear two-point decision and the 2005 validation season showed the
+spline worst in the last minutes: two late-game variants; (4) a regrade with the hand-over then
+showed many more clear 'go' calls in the last 2:00 of the first half: the first `drive_value`
+(the drive's points minus the other team's next drive, assumed to start 104 s later) valued the
+ball at the own 42 two minutes before halftime at 14-18 WP points, against about +1 (-3 to +5)
+in real 1999-2005 games. `drive_value` was redefined as the measured NET points until halftime
+(`HALF_VALUE_TABLE`, 1999-2005) and every candidate was rerun. The rule picks the hand-over
+again (pooled 2004-2005 log loss 0.436326; G1 0.436333; `spline_sym_late_trees` 0.436480;
+`spline_sym_late` 0.436517: differences of noise size), and every fold 2006-2026 was refitted
+with it (earlier full refits with the first `drive_value` were replaced).
+**Calibration**: isotonic is kept only when it helps on the validation season AND the
+calibrated model still meets the limits (a step-function calibrator re-creates steps; added in
+G1b after the 2008 fold kept one and broke them, from model properties only).
 
 ## Go for it: P(convert) (`conversion.py`)
 
@@ -176,16 +236,14 @@ season). The report regrades 200 stored rows per season and kind on every run.
   leaderboard (coaches with at least `decisions.leaderboard_min_games` = 8 games, least WP
   lost per game first). League per season: the real go rate vs the recommended go rate.
 
-## Known weakness: the WP model's steps (open)
+## The WP model's steps (found in G3, fixed in G1b)
 
-Every grade is a difference between WPs of hypothetical states, so it inherits any unevenness
-in G1's WP model. Two synthetic checks per fold (report section 6) show that the model
-changes by 6-19 WP points for ONE point of score in some first-quarter states (football: 1-3)
-and that, one second before halftime, having the ball is worth -3 to +20 WP points (mostly
-8-20; football: about 0). Consequences: many clear two-point "mistakes" are first-quarter extra points after a
-touchdown made the lead 6, and going for it is over-valued in the last minutes of the first
-half. The grades are provisional until G1's WP model is smoothed in score and near halftime;
-the stored inputs make the regrade seconds per season.
+G3 found G1's LightGBM uneven where grades look: one point of score worth 6-19 WP points in
+some first-quarter states (football: 1-3) and, one second before halftime, the ball worth -3 to
++20 WP points (football: about 0). Many clear two-point "mistakes" were first-quarter extra
+points after a touchdown made the lead 6, and going for it was over-valued late in the first
+half. G1b replaced the model (section "WP smoothness") and regraded every season from the
+stored inputs; reports/decisions/fourth_downs.md section 6 shows what changed.
 
 ## Not graded (yet)
 
@@ -194,3 +252,5 @@ Clock management (G4).
 ## Honesty note
 
 The option to train the conversion and field-goal models on only the last 10 or 5 seasons was added after a first walk-forward backtest had shown recent seasons under-predicted. Each fold still chooses its window on its validation season (S-1) only, but because the option itself was suggested by test-season results, the published 2006-2025 numbers for those two models are slightly optimistic. The 2026 season is their first clean test.
+
+G1b (the smoothed WP model): the smoothness limits were fixed before any fix was tried, and every candidate was chosen on the 2004-05 validation seasons only; but two later candidate rounds (the late-game hand-over and the redefined drive value) were prompted by looking at regraded seasons, and the pooled test log loss of a first refit was seen before them. The 2006-2025 WP and grading numbers are therefore slightly optimistic; 2026 is their first clean test.

@@ -1139,10 +1139,33 @@ def _decisions_entries() -> list[Entry]:
          "kickoff from 2024)",
          "Kickoff rules changed where drives start after a score.", "fact_play.season"),
     ]  # fmt: skip
+    smooth = [
+        ("drive_value", "Value of the ball before the half ends", "points",
+         "half_value(yardline_100, half_seconds_remaining): the offense's points minus the "
+         "defense's from a 1st down at this spot and clock until halftime, a fixed table "
+         "measured on the 1999-2005 first halves (wp_data.HALF_VALUE_TABLE), read "
+         "linearly in yards and log seconds; 0 when the half is over",
+         "What having the ball here is worth before halftime (or the end), the other team's "
+         "later possessions included: about 4 points at the opponent's 20 early in a half, "
+         "about 2 at midfield, 0 when the half ends.",
+         "fact_play.yardline_100, fact_play.half_seconds_remaining"),
+        ("z_margin", "Lead in standard deviations of what is left", "z-score",
+         "(score_differential + drive_value + posteam_spread x t) / (13.5 x sqrt(t) + 1), "
+         "t = share of regulation left",
+         "A random-walk view of the game: how many 'typical swings of the remaining time' the "
+         "offense is ahead by, counting the ball and the spread.",
+         "fact_play.score_differential, fact_game.spread_line, "
+         "fact_play.game_seconds_remaining"),
+    ]  # fmt: skip
     return [
         Entry(name=name, title=title, kind="feature", modules=("decisions",), unit=unit,
               formula=formula, explanation=explanation, source=f"{source}; {play}", step="G1")
         for name, title, unit, formula, explanation, source in rows
+    ] + [
+        Entry(name=name, title=title, kind="feature", modules=("decisions",), unit=unit,
+              formula=formula, explanation=explanation, source=f"{source}; {play}",
+              step="G1b")
+        for name, title, unit, formula, explanation, source in smooth
     ] + [
         Entry(
             name="posteam_wins",
@@ -1162,9 +1185,11 @@ def _decisions_entries() -> list[Entry]:
             kind="metric",
             modules=("decisions",),
             unit="probability (0-1)",
-            formula="LightGBM on the play state (the G1 features), trained walk-forward on "
-            "seasons before the play's season; isotonic calibration only where it helped on the "
-            "validation season",
+            formula="trained walk-forward on seasons before the play's season (G1); since G1b a "
+            "smooth possession-symmetric spline logistic model of the play state up to 15:00 of "
+            "the fourth quarter, handing over to a monotone LightGBM by 10:00 left "
+            "(wp_select.CHOSEN); isotonic calibration only where it helped on the validation "
+            "season and kept the model within the smoothness limits",
             explanation="The chance the offense wins from this moment, from a model that never "
             "saw the season it scores. It replaces nflfastR's wp in the decision grades.",
             source="twm.modules.decisions.wp",

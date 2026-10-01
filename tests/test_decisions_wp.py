@@ -244,7 +244,8 @@ def test_save_and_load_give_identical_probabilities(rows, small_grid, tmp_path):
     path = wp.save_fold(out, models_root=tmp_path / "m", out_dir=tmp_path / "bt")
     assert path.name == f"{out.model.version}.joblib"
     loaded = wp.load_fold_model(2006, models_root=tmp_path / "m", out_dir=tmp_path / "bt")
-    x = rows.filter(pl.col("season") == 2006).select(wd.FEATURES)
+    # the model's own features (G1b: the chosen family adds drive_value and z_margin)
+    x = rows.filter(pl.col("season") == 2006).select(out.model.features)
     assert np.array_equal(loaded.probability(x), out.model.probability(x))
     assert wp.fold_is_current(rows, 2006, tmp_path / "bt", tmp_path / "m")
     assert not wp.fold_is_current(rows.filter(pl.col("game_id") != rows.item(0, "game_id")),

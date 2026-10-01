@@ -199,3 +199,47 @@ def grade(
         typer.echo(f"cannot write the report: {e}", err=True)
         raise typer.Exit(code=1) from e
     typer.echo(f"wrote {md} and {csv} [{time.perf_counter() - t0:.0f} s]")
+
+
+@decisions_app.command("wp-select")
+def wp_select_cmd(
+    candidate: str = typer.Option(None, "--candidate", help="Candidate family to fit."),
+    season: int = typer.Option(None, "--season", help="Validation season (2004 or 2005)."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+) -> None:
+    """G1b: fit one candidate WP family's walk-forward fold for one VALIDATION season (2004 or
+    2005; test and graded seasons are refused) and save its log loss and smoothness under
+    data/decisions/wp_select/. Without --candidate: print every saved result and the family
+    the fixed rule chooses (docs/decision_metrics.md, "WP smoothness")."""
+    import time
+
+    from twm.modules.decisions import wp_select as ws
+
+    if candidate is None:
+        rows = ws.summarize(ws.load_results())
+        for r in sorted(rows, key=lambda r: r["log_loss"]):
+            typer.echo(f"{r['candidate']:<18} log loss {r['log_loss']:.5f} meets {r['meets']!s:<5} "
+                       f"worst ratio {r['worst_ratio']:.2f} h1 {r['score_step_h1']:.1f} "
+                       f"h2 {r['score_step_h2']:.1f} curv {r['curvature']:.1f} "
+                       f"half {r['halftime_possession']:.1f} viol {r['monotone_violations']} "
+                       f"[{r['seconds']:.0f} s]")  # fmt: skip
+        if rows:
+            typer.echo(f"chosen by the rule: {ws.choose(ws.load_results())} "
+                       f"(in use: {ws.CHOSEN})")  # fmt: skip
+        return
+    if season is None or season not in ws.VALIDATION_SEASONS or candidate not in ws.CANDIDATES:
+        raise typer.BadParameter(f"--season must be one of {ws.VALIDATION_SEASONS} and "
+                                 f"--candidate one of {sorted(ws.CANDIDATES)}")  # fmt: skip
+    from twm.cli import _warehouse_or_exit
+    from twm.modules.decisions import wp
+    from twm.modules.decisions.wp_data import load_states
+
+    path = _warehouse_or_exit(db)
+    t0 = time.perf_counter()
+    states = load_states(path, tuple(range(wp.FIRST_SEASON, season + 1)))
+    r = ws.run_candidate(states.rows, candidate, season, progress=typer.echo)
+    sm = r["smooth"]
+    typer.echo(f"{candidate} {season}: log loss {r['log_loss']:.5f}, failures {r['failures']}, "
+               + ", ".join(f"{k} {sm[k]:.1f}" for k in ("score_step_h1", "score_step_h2",
+                                                        "curvature", "halftime_possession"))
+               + f" [{time.perf_counter() - t0:.0f} s]")  # fmt: skip

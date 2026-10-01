@@ -34,7 +34,14 @@ import numpy as np
 import polars as pl
 
 from twm.backtest.walkforward import RAW_SCORE, fit_fold, plan_folds
-from twm.modules.decisions.wp_data import FEATURES, KEYS, LABEL, time_interactions
+from twm.modules.decisions.wp_data import (
+    FEATURES,
+    KEYS,
+    LABEL,
+    SMOOTH_FEATURES,
+    smooth_features,
+    time_interactions,
+)
 from twm.predictions import model_version
 
 MODULE = "decisions"
@@ -201,6 +208,7 @@ class WpModel:
     calibrator: Any = field(repr=False, default=None)  # IsotonicRegression or None
     calibration: str = "none"
     dataset_hash: str = ""
+    candidate: str = "g1"  # the model family (wp_select.CANDIDATES); G1's folds = "g1"
 
     def raw(self, x: pl.DataFrame) -> np.ndarray:
         return self.fitted.predict(x)
@@ -227,6 +235,9 @@ def complete_states(states: pl.DataFrame) -> pl.DataFrame:
         add = [e for e in time_interactions() if e.meta.output_name() not in s.columns]
         if add:
             s = s.with_columns(add)
+    need = (*need, "yardline_100", "half_seconds_remaining")
+    if all(c in s.columns for c in need) and not all(c in s.columns for c in SMOOTH_FEATURES):
+        s = smooth_features(s.drop(SMOOTH_FEATURES, strict=False))
     return s
 
 
@@ -277,18 +288,25 @@ class FoldOutput:
     summary: dict[str, Any]
 
 
-def _training_hash(train: pl.DataFrame) -> str:
+def _training_hash(train: pl.DataFrame, features: Sequence[str] = FEATURES) -> str:
     from twm.predictions import combine_hashes, frame_hash
 
-    cols = [*KEYS, *FEATURES, LABEL]
+    cols = [*KEYS, *features, LABEL]
     parts = train.select(cols).sort(list(KEYS)).partition_by("season", maintain_order=True)
     return combine_hashes([frame_hash(p) for p in parts])
 
 
-def run_fold(rows: pl.DataFrame, test_season: int, *, progress=print) -> FoldOutput:
+def run_fold(rows: pl.DataFrame, test_season: int, *, candidate: Any = None,
+             progress=print) -> FoldOutput:  # fmt: skip
     """Tune, calibrate (if it helps), refit and score one test season; ``rows`` = model rows
     of every season (:func:`wp_data.build_states`). Only seasons < ``test_season`` are learned
-    from (the harness refuses anything else)."""
+    from (the harness refuses anything else). ``candidate`` = the model family
+    (:class:`wp_select.Candidate`; default: the chosen one, :func:`wp_select.chosen`)."""
+    from twm.modules.decisions import wp_select
+
+    cand = candidate if candidate is not None else wp_select.chosen()
+    estimator, features = cand.make(), tuple(cand.features)
+    n_grid = len(estimator.grid())
     t0 = time.perf_counter()
     fold = plan_folds(rows.get_column("season").unique().to_list(), [test_season])[0]
     train = rows.filter(pl.col("season").is_in(list(fold.train_seasons))).sort(list(KEYS))
@@ -299,14 +317,15 @@ def run_fold(rows: pl.DataFrame, test_season: int, *, progress=print) -> FoldOut
         s = val.get_column(RAW_SCORE).to_numpy()
         val_scores.append(s)
         ll = log_loss(val.get_column(LABEL).to_numpy(), s)
-        progress(f"  {test_season}: trial {len(val_scores)}/{len(GRID)} validation log loss "
+        progress(f"  {test_season}: trial {len(val_scores)}/{n_grid} validation log loss "
                  f"{ll:.4f} [{time.perf_counter() - t0:.0f} s]")  # fmt: skip
         return -ll
 
     progress(f"{fold.describe()}: {train.height:,} training plays, {test.height:,} test plays")
-    fr = fit_fold(train, fold, estimator=WpEstimator(), features=FEATURES, label=LABEL,
+    fr = fit_fold(train, fold, estimator=estimator, features=features, label=LABEL,
                   module=MODULE, keys=KEYS, tune_metric=tune_metric)  # fmt: skip
-    summary: dict[str, Any] = {"test_season": test_season, "fold": fold.describe()}
+    summary: dict[str, Any] = {"test_season": test_season, "fold": fold.describe(),
+                               "candidate": cand.name}  # fmt: skip
     calibrator, calibration = None, "none (thin fold: no validation season)"
     if not fold.thin:
         best = next(i for i, t in enumerate(fr.trials) if t.refit_params == fr.params)
@@ -314,29 +333,37 @@ def run_fold(rows: pl.DataFrame, test_season: int, *, progress=print) -> FoldOut
         yv = val.get_column(LABEL).to_numpy()
         helps, raw_ll, iso_ll = isotonic_helps(val.get_column("game_id").to_list(), yv,
                                                val_scores[best])  # fmt: skip
+        why = ""
+        if helps and fr.calibrator is not None:
+            broken = _calibration_breaks_smoothness(fr, features, test_season)
+            if broken:
+                helps, why = False, f"; isotonic dropped: it breaks the smoothness limits {broken}"
         calibrator = fr.calibrator if helps else None
         calibration = (
             f"{'isotonic' if helps else 'none'} (validation {fold.val_season}: raw log loss "
-            f"{raw_ll:.5f}, cross-fitted isotonic {iso_ll:.5f})"
+            f"{raw_ll:.5f}, cross-fitted isotonic {iso_ll:.5f}{why})"
         )
         summary.update(val_logloss=raw_ll, val_logloss_isotonic=iso_ll, best_trial=best + 1)
-        summary["era_ablation"] = _era_ablation(train, fold, fr.params, yv, raw_ll)
+        summary["era_ablation"] = _era_ablation(train, fold, fr.params, yv, raw_ll, cand)
     test_raw = fr.model.predict(test)
     model = WpModel(
         version="", test_season=test_season, train_seasons=fold.train_seasons,
-        val_season=fold.val_season, features=tuple(FEATURES), params=dict(fr.params),
+        val_season=fold.val_season, features=features, params=dict(fr.params),
         fitted=fr.model, calibrator=calibrator, calibration=calibration,
-        dataset_hash=_training_hash(train),
+        dataset_hash=_training_hash(train, features), candidate=cand.name,
     )  # fmt: skip
     model.version = model_version(
-        module=MODULE, model=MODEL, label=LABEL, features=FEATURES,
-        params={**WpEstimator.fixed_params, **fr.params, "calibration": calibration.split()[0]},
+        module=MODULE, model=estimator.name, label=LABEL, features=features,
+        params={**estimator.fixed_params, **fr.params, "calibration": calibration.split()[0]},
         training_seasons=fold.train_seasons, test_season=test_season,
         dataset_hash=model.dataset_hash,
     )  # fmt: skip
     preds = test.select(KEYS).with_columns(
-        pl.Series("raw", test_raw), pl.Series("prob", model.probability(test.select(FEATURES)))
+        pl.Series("raw", test_raw), pl.Series("prob", model.probability(test.select(features)))
     )
+    from twm.modules.decisions import wp_smooth
+
+    summary["smoothness"] = wp_smooth.measure(lambda st: wp(st, model), test_season)
     summary.update(
         version=model.version, calibration=calibration, params=dict(fr.params),
         n_train=fr.n_train, n_train_pos=fr.n_train_pos, n_test=test.height,
@@ -351,18 +378,38 @@ def run_fold(rows: pl.DataFrame, test_season: int, *, progress=print) -> FoldOut
     return FoldOutput(model, preds, summary)
 
 
+def _calibration_breaks_smoothness(fr: Any, features: Sequence[str], season: int) -> list[str]:
+    """The smoothness limits (wp_smooth.THRESHOLDS) that the raw model meets but the model with
+    the isotonic calibrator breaks (a step-function calibrator re-creates steps; G1b). Model
+    properties on synthetic states only: no test-season play is used."""
+    from twm.modules.decisions import wp_smooth
+
+    def m(cal: Any) -> list[str]:
+        model = WpModel("", season, (), None, tuple(features), {}, fr.model, calibrator=cal)
+        return wp_smooth.failures(wp_smooth.measure(lambda st: wp(st, model), season))
+
+    raw = set(m(None))
+    return [k for k in m(fr.calibrator) if k not in raw]
+
+
 def _era_ablation(
-    train: pl.DataFrame, fold: Any, params: Mapping[str, Any], yv: np.ndarray, val_ll: float
+    train: pl.DataFrame,
+    fold: Any,
+    params: Mapping[str, Any],
+    yv: np.ndarray,
+    val_ll: float,
+    cand: Any,
 ) -> dict[str, Any] | None:
     """Do the era flags matter? The tuning model refit without them (same settings and number
     of trees) and scored on the validation season. None when the flags are constant in the
-    tuning seasons (a tree cannot split on them, so they cannot matter there)."""
+    tuning seasons (a tree cannot split on them, so they cannot matter there), or when the
+    family cannot drop them (the spline model's design uses them)."""
     tune = train.filter(pl.col("season").is_in(list(fold.tune_seasons)))
     varying = [c for c in ERA if tune.get_column(c).n_unique() > 1]
-    if not varying:
+    if not varying or not getattr(cand, "era_ablation", True):
         return None
-    feats = [f for f in FEATURES if f not in ERA]
-    m = WpEstimator().fit(tune.select(feats), tune.get_column(LABEL).to_numpy(), params)
+    feats = [f for f in cand.features if f not in ERA]
+    m = cand.make().fit(tune.select(feats), tune.get_column(LABEL).to_numpy(), params)
     val = train.filter(pl.col("season") == fold.val_season)
     without = log_loss(yv, m.predict(val.select(feats)))
     return {"varying": varying, "val_logloss_with": val_ll, "val_logloss_without": without}
@@ -455,17 +502,25 @@ def load_fold_model(season: int, *, models_root: Path | None = None, out_dir: Pa
 # --------------------------------------------------------------------------------------
 
 
-def fold_is_current(rows: pl.DataFrame, season: int, out_dir: Path, models_root: Path) -> bool:
-    """A saved fold can be reused when its summary, predictions and model file exist and its
-    training rows hash equals today's (same data, same feature code)."""
+def fold_is_current(rows: pl.DataFrame, season: int, out_dir: Path, models_root: Path,
+                    candidate: Any = None) -> bool:  # fmt: skip
+    """A saved fold can be reused when its summary, predictions and model file exist, it is of
+    the same model family (``candidate``, default the chosen one) and its training rows hash
+    equals today's (same data, same feature code)."""
+    from twm.modules.decisions import wp_select
+
+    cand = candidate if candidate is not None else wp_select.chosen()
     f = out_dir / f"fold_{season}.json"
     if not f.exists() or not (out_dir / f"fold_{season}.parquet").exists():
         return False
     s = json.loads(f.read_text())
     if not (models_root / str(s.get("model_file"))).exists():
         return False
+    if s.get("candidate", "g1") != cand.name:
+        return False
     train = rows.filter(pl.col("season") < season)
-    return s.get("dataset_hash") == _training_hash(train) and s.get("format") == FILE_FORMAT
+    return (s.get("dataset_hash") == _training_hash(train, cand.features)
+            and s.get("format") == FILE_FORMAT)  # fmt: skip
 
 
 def run_backtest(
@@ -475,19 +530,22 @@ def run_backtest(
     force: bool = False,
     models_root: Path | None = None,
     out_dir: Path | None = None,
+    candidate: Any = None,
     progress=print,
 ) -> list[int]:
     """Run (or reuse, unless ``force``) the fold of every season in ``seasons``, one at a
-    time, saving each as soon as it is done. Returns the seasons that were fitted."""
+    time, saving each as soon as it is done. Returns the seasons that were fitted.
+    ``candidate``: the model family (default: the chosen one)."""
     models_root = models_root if models_root is not None else models_dir()
     out_dir = out_dir if out_dir is not None else backtest_dir()
     fitted = []
     for i, s in enumerate(sorted({int(x) for x in seasons}), 1):
-        if not force and fold_is_current(rows, s, out_dir, models_root):
+        if not force and fold_is_current(rows, s, out_dir, models_root, candidate):
             progress(f"[{i}/{len(seasons)}] {s}: saved fold is current, reused")
             continue
         progress(f"[{i}/{len(seasons)}] {s}: fitting")
-        out = run_fold(rows.filter(pl.col("season") <= s), s, progress=progress)
+        out = run_fold(rows.filter(pl.col("season") <= s), s, candidate=candidate,
+                       progress=progress)  # fmt: skip
         save_fold(out, models_root=models_root, out_dir=out_dir)
         fitted.append(s)
     return fitted

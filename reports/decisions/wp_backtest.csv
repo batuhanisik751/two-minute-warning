@@ -1,288 +1,288 @@
 table,scope,subset,method,metric,value,lo,hi,n_plays,n_blocks
-metrics,pooled,2006-2025,own,brier,0.148880,0.144934,0.152933,753923,20
-metrics,pooled,2006-2025,own,log_loss,0.448098,0.437375,0.459066,753923,20
-metrics,pooled,2006-2025,own,ece,0.003836,0.002685,0.010018,753923,20
+metrics,pooled,2006-2025,own,brier,0.148672,0.144844,0.152666,753923,20
+metrics,pooled,2006-2025,own,log_loss,0.447486,0.436927,0.458764,753923,20
+metrics,pooled,2006-2025,own,ece,0.004337,0.002978,0.010013,753923,20
 metrics,pooled,2006-2025,nflfastr_wp,brier,0.162321,0.158877,0.166351,753923,20
 metrics,pooled,2006-2025,nflfastr_wp,log_loss,0.480312,0.470968,0.491478,753923,20
 metrics,pooled,2006-2025,nflfastr_wp,ece,0.006241,0.003924,0.011503,753923,20
 metrics,pooled,2006-2025,nflfastr_vegas_wp,brier,0.147274,0.143227,0.151379,753923,20
 metrics,pooled,2006-2025,nflfastr_vegas_wp,log_loss,0.443025,0.432089,0.455001,753923,20
 metrics,pooled,2006-2025,nflfastr_vegas_wp,ece,0.003213,0.002570,0.008091,753923,20
-difference,pooled,2006-2025,own - nflfastr_wp,brier,-0.013441,-0.015538,-0.011353,753923,20
-difference,pooled,2006-2025,own - nflfastr_wp,log_loss,-0.032213,-0.037639,-0.027031,753923,20
-difference,pooled,2006-2025,own - nflfastr_vegas_wp,brier,0.001606,0.001103,0.002090,753923,20
-difference,pooled,2006-2025,own - nflfastr_vegas_wp,log_loss,0.005073,0.003267,0.006714,753923,20
-metrics,era,2006-2014,own,brier,0.149832,0.145769,0.154528,335833,9
-metrics,era,2006-2014,own,log_loss,0.449000,0.438238,0.461357,335833,9
-metrics,era,2006-2014,own,ece,0.007236,0.003975,0.015438,335833,9
+difference,pooled,2006-2025,own - nflfastr_wp,brier,-0.013649,-0.015459,-0.011841,753923,20
+difference,pooled,2006-2025,own - nflfastr_wp,log_loss,-0.032825,-0.037090,-0.028465,753923,20
+difference,pooled,2006-2025,own - nflfastr_vegas_wp,brier,0.001398,0.000923,0.001879,753923,20
+difference,pooled,2006-2025,own - nflfastr_vegas_wp,log_loss,0.004461,0.002884,0.005934,753923,20
+metrics,era,2006-2014,own,brier,0.149683,0.145639,0.154184,335833,9
+metrics,era,2006-2014,own,log_loss,0.448689,0.437941,0.460532,335833,9
+metrics,era,2006-2014,own,ece,0.005839,0.004141,0.012904,335833,9
 metrics,era,2006-2014,nflfastr_wp,brier,0.163315,0.159879,0.166694,335833,9
 metrics,era,2006-2014,nflfastr_wp,log_loss,0.481543,0.472430,0.490636,335833,9
 metrics,era,2006-2014,nflfastr_wp,ece,0.011415,0.006646,0.017748,335833,9
 metrics,era,2006-2014,nflfastr_vegas_wp,brier,0.147937,0.143880,0.152434,335833,9
 metrics,era,2006-2014,nflfastr_vegas_wp,log_loss,0.442644,0.431940,0.454330,335833,9
 metrics,era,2006-2014,nflfastr_vegas_wp,ece,0.008498,0.003829,0.015861,335833,9
-difference,era,2006-2014,own - nflfastr_wp,brier,-0.013483,-0.016355,-0.010348,335833,9
-difference,era,2006-2014,own - nflfastr_wp,log_loss,-0.032543,-0.039999,-0.024876,335833,9
-difference,era,2006-2014,own - nflfastr_vegas_wp,brier,0.001895,0.001268,0.002545,335833,9
-difference,era,2006-2014,own - nflfastr_vegas_wp,log_loss,0.006357,0.004502,0.008249,335833,9
-metrics,era,2015-2022,own,brier,0.147640,0.139887,0.155896,301875,8
-metrics,era,2015-2022,own,log_loss,0.446037,0.425088,0.469428,301875,8
-metrics,era,2015-2022,own,ece,0.006249,0.004384,0.014771,301875,8
+difference,era,2006-2014,own - nflfastr_wp,brier,-0.013631,-0.016029,-0.010945,335833,9
+difference,era,2006-2014,own - nflfastr_wp,log_loss,-0.032854,-0.038635,-0.026620,335833,9
+difference,era,2006-2014,own - nflfastr_vegas_wp,brier,0.001746,0.001356,0.002138,335833,9
+difference,era,2006-2014,own - nflfastr_vegas_wp,log_loss,0.006045,0.004889,0.007089,335833,9
+metrics,era,2015-2022,own,brier,0.147570,0.140214,0.155917,301875,8
+metrics,era,2015-2022,own,log_loss,0.445655,0.425293,0.469705,301875,8
+metrics,era,2015-2022,own,ece,0.005996,0.004135,0.015925,301875,8
 metrics,era,2015-2022,nflfastr_wp,brier,0.161230,0.154939,0.170445,301875,8
 metrics,era,2015-2022,nflfastr_wp,log_loss,0.478901,0.461371,0.504607,301875,8
 metrics,era,2015-2022,nflfastr_wp,ece,0.004926,0.004366,0.014899,301875,8
 metrics,era,2015-2022,nflfastr_vegas_wp,brier,0.146109,0.138293,0.154929,301875,8
 metrics,era,2015-2022,nflfastr_vegas_wp,log_loss,0.441535,0.419657,0.468150,301875,8
 metrics,era,2015-2022,nflfastr_vegas_wp,ece,0.004546,0.004188,0.014523,301875,8
-difference,era,2015-2022,own - nflfastr_wp,brier,-0.013590,-0.016970,-0.010068,301875,8
-difference,era,2015-2022,own - nflfastr_wp,log_loss,-0.032864,-0.041139,-0.023991,301875,8
-difference,era,2015-2022,own - nflfastr_vegas_wp,brier,0.001531,0.000653,0.002343,301875,8
-difference,era,2015-2022,own - nflfastr_vegas_wp,log_loss,0.004502,0.001033,0.007314,301875,8
-metrics,era,2023-2025,own,brier,0.149353,0.137944,0.158491,116215,3
-metrics,era,2023-2025,own,log_loss,0.450845,0.420305,0.475054,116215,3
-metrics,era,2023-2025,own,ece,0.009439,0.009439,0.027841,116215,3
+difference,era,2015-2022,own - nflfastr_wp,brier,-0.013660,-0.016491,-0.010562,301875,8
+difference,era,2015-2022,own - nflfastr_wp,log_loss,-0.033246,-0.040024,-0.025670,301875,8
+difference,era,2015-2022,own - nflfastr_vegas_wp,brier,0.001462,0.000646,0.002337,301875,8
+difference,era,2015-2022,own - nflfastr_vegas_wp,log_loss,0.004120,0.001006,0.006897,301875,8
+metrics,era,2023-2025,own,brier,0.148613,0.137847,0.157977,116215,3
+metrics,era,2023-2025,own,log_loss,0.448769,0.419408,0.473582,116215,3
+metrics,era,2023-2025,own,ece,0.011327,0.008489,0.028907,116215,3
 metrics,era,2023-2025,nflfastr_wp,brier,0.162287,0.156631,0.171376,116215,3
 metrics,era,2023-2025,nflfastr_wp,log_loss,0.480417,0.462467,0.505000,116215,3
 metrics,era,2023-2025,nflfastr_wp,ece,0.009352,0.008319,0.017607,116215,3
 metrics,era,2023-2025,nflfastr_vegas_wp,brier,0.148388,0.136460,0.158548,116215,3
 metrics,era,2023-2025,nflfastr_vegas_wp,log_loss,0.447999,0.415452,0.475857,116215,3
 metrics,era,2023-2025,nflfastr_vegas_wp,ece,0.009265,0.009265,0.026862,116215,3
-difference,era,2023-2025,own - nflfastr_wp,brier,-0.012935,-0.018687,-0.007341,116215,3
-difference,era,2023-2025,own - nflfastr_wp,log_loss,-0.029572,-0.042162,-0.016863,116215,3
-difference,era,2023-2025,own - nflfastr_vegas_wp,brier,0.000964,-0.000057,0.001483,116215,3
-difference,era,2023-2025,own - nflfastr_vegas_wp,log_loss,0.002847,-0.000803,0.004853,116215,3
-metrics,slice,4th quarter,own,brier,0.092727,0.087763,0.098175,203978,20
-metrics,slice,4th quarter,own,log_loss,0.291120,0.276931,0.306682,203978,20
-metrics,slice,4th quarter,own,ece,0.003986,0.003072,0.009354,203978,20
+difference,era,2023-2025,own - nflfastr_wp,brier,-0.013674,-0.018783,-0.008929,116215,3
+difference,era,2023-2025,own - nflfastr_wp,log_loss,-0.031648,-0.043059,-0.020678,116215,3
+difference,era,2023-2025,own - nflfastr_vegas_wp,brier,0.000225,-0.000571,0.001387,116215,3
+difference,era,2023-2025,own - nflfastr_vegas_wp,log_loss,0.000770,-0.002275,0.003956,116215,3
+metrics,slice,4th quarter,own,brier,0.092485,0.087591,0.097907,203978,20
+metrics,slice,4th quarter,own,log_loss,0.290268,0.276168,0.305904,203978,20
+metrics,slice,4th quarter,own,ece,0.003931,0.003129,0.008988,203978,20
 metrics,slice,4th quarter,nflfastr_wp,brier,0.094743,0.089717,0.100521,203978,20
 metrics,slice,4th quarter,nflfastr_wp,log_loss,0.295654,0.281551,0.311613,203978,20
 metrics,slice,4th quarter,nflfastr_wp,ece,0.003863,0.003313,0.009585,203978,20
 metrics,slice,4th quarter,nflfastr_vegas_wp,brier,0.091544,0.086473,0.097227,203978,20
 metrics,slice,4th quarter,nflfastr_vegas_wp,log_loss,0.285579,0.271163,0.302179,203978,20
 metrics,slice,4th quarter,nflfastr_vegas_wp,ece,0.003591,0.002738,0.008892,203978,20
-difference,slice,4th quarter,own - nflfastr_wp,brier,-0.002016,-0.003202,-0.000894,203978,20
-difference,slice,4th quarter,own - nflfastr_wp,log_loss,-0.004534,-0.008177,-0.001172,203978,20
-difference,slice,4th quarter,own - nflfastr_vegas_wp,brier,0.001183,0.000633,0.001671,203978,20
-difference,slice,4th quarter,own - nflfastr_vegas_wp,log_loss,0.005541,0.003632,0.007244,203978,20
-metrics,slice,one-score games (lead of 8 or less),own,brier,0.194118,0.190190,0.197922,491597,20
-metrics,slice,one-score games (lead of 8 or less),own,log_loss,0.569232,0.559864,0.578426,491597,20
-metrics,slice,one-score games (lead of 8 or less),own,ece,0.005648,0.003861,0.012777,491597,20
+difference,slice,4th quarter,own - nflfastr_wp,brier,-0.002258,-0.003215,-0.001390,203978,20
+difference,slice,4th quarter,own - nflfastr_wp,log_loss,-0.005386,-0.008308,-0.002654,203978,20
+difference,slice,4th quarter,own - nflfastr_vegas_wp,brier,0.000941,0.000533,0.001321,203978,20
+difference,slice,4th quarter,own - nflfastr_vegas_wp,log_loss,0.004689,0.003196,0.006092,203978,20
+metrics,slice,one-score games (lead of 8 or less),own,brier,0.193850,0.190440,0.197337,491597,20
+metrics,slice,one-score games (lead of 8 or less),own,log_loss,0.568460,0.560325,0.576587,491597,20
+metrics,slice,one-score games (lead of 8 or less),own,ece,0.006142,0.003362,0.013353,491597,20
 metrics,slice,one-score games (lead of 8 or less),nflfastr_wp,brier,0.212953,0.210020,0.216072,491597,20
 metrics,slice,one-score games (lead of 8 or less),nflfastr_wp,log_loss,0.612010,0.605535,0.619219,491597,20
 metrics,slice,one-score games (lead of 8 or less),nflfastr_wp,ece,0.008144,0.004432,0.014760,491597,20
 metrics,slice,one-score games (lead of 8 or less),nflfastr_vegas_wp,brier,0.192121,0.188202,0.195921,491597,20
 metrics,slice,one-score games (lead of 8 or less),nflfastr_vegas_wp,log_loss,0.563899,0.554414,0.572855,491597,20
 metrics,slice,one-score games (lead of 8 or less),nflfastr_vegas_wp,ece,0.004530,0.003191,0.010998,491597,20
-difference,slice,one-score games (lead of 8 or less),own - nflfastr_wp,brier,-0.018835,-0.021891,-0.015900,491597,20
-difference,slice,one-score games (lead of 8 or less),own - nflfastr_wp,log_loss,-0.042777,-0.050084,-0.035591,491597,20
-difference,slice,one-score games (lead of 8 or less),own - nflfastr_vegas_wp,brier,0.001996,0.001375,0.002613,491597,20
-difference,slice,one-score games (lead of 8 or less),own - nflfastr_vegas_wp,log_loss,0.005333,0.003719,0.006990,491597,20
-metrics,slice,first play of a drive,own,brier,0.147363,0.143375,0.151393,122617,20
-metrics,slice,first play of a drive,own,log_loss,0.443699,0.432928,0.454604,122617,20
-metrics,slice,first play of a drive,own,ece,0.004510,0.003761,0.010870,122617,20
+difference,slice,one-score games (lead of 8 or less),own - nflfastr_wp,brier,-0.019102,-0.021689,-0.016474,491597,20
+difference,slice,one-score games (lead of 8 or less),own - nflfastr_wp,log_loss,-0.043550,-0.049476,-0.037538,491597,20
+difference,slice,one-score games (lead of 8 or less),own - nflfastr_vegas_wp,brier,0.001729,0.001171,0.002322,491597,20
+difference,slice,one-score games (lead of 8 or less),own - nflfastr_vegas_wp,log_loss,0.004561,0.003076,0.006108,491597,20
+metrics,slice,first play of a drive,own,brier,0.147071,0.143269,0.150986,122617,20
+metrics,slice,first play of a drive,own,log_loss,0.442867,0.432357,0.453785,122617,20
+metrics,slice,first play of a drive,own,ece,0.004815,0.004102,0.011000,122617,20
 metrics,slice,first play of a drive,nflfastr_wp,brier,0.160676,0.157214,0.164639,122617,20
 metrics,slice,first play of a drive,nflfastr_wp,log_loss,0.475820,0.466168,0.486877,122617,20
 metrics,slice,first play of a drive,nflfastr_wp,ece,0.006149,0.003347,0.010759,122617,20
 metrics,slice,first play of a drive,nflfastr_vegas_wp,brier,0.145892,0.141901,0.149971,122617,20
 metrics,slice,first play of a drive,nflfastr_vegas_wp,log_loss,0.439032,0.427997,0.450877,122617,20
 metrics,slice,first play of a drive,nflfastr_vegas_wp,ece,0.003822,0.003257,0.008615,122617,20
-difference,slice,first play of a drive,own - nflfastr_wp,brier,-0.013313,-0.015444,-0.011202,122617,20
-difference,slice,first play of a drive,own - nflfastr_wp,log_loss,-0.032121,-0.037654,-0.027011,122617,20
-difference,slice,first play of a drive,own - nflfastr_vegas_wp,brier,0.001472,0.001001,0.001935,122617,20
-difference,slice,first play of a drive,own - nflfastr_vegas_wp,log_loss,0.004666,0.002899,0.006192,122617,20
-metrics,slice,overtime,own,brier,0.203163,0.190833,0.216853,4600,20
-metrics,slice,overtime,own,log_loss,0.588102,0.559792,0.618868,4600,20
-metrics,slice,overtime,own,ece,0.027365,0.017547,0.059612,4600,20
+difference,slice,first play of a drive,own - nflfastr_wp,brier,-0.013606,-0.015412,-0.011784,122617,20
+difference,slice,first play of a drive,own - nflfastr_wp,log_loss,-0.032953,-0.037332,-0.028558,122617,20
+difference,slice,first play of a drive,own - nflfastr_vegas_wp,brier,0.001179,0.000807,0.001577,122617,20
+difference,slice,first play of a drive,own - nflfastr_vegas_wp,log_loss,0.003835,0.002498,0.005069,122617,20
+metrics,slice,overtime,own,brier,0.198778,0.187466,0.210649,4600,20
+metrics,slice,overtime,own,log_loss,0.578137,0.551451,0.605122,4600,20
+metrics,slice,overtime,own,ece,0.024575,0.018704,0.046672,4600,20
 metrics,slice,overtime,nflfastr_wp,brier,0.213127,0.202111,0.224018,4600,20
 metrics,slice,overtime,nflfastr_wp,log_loss,0.613189,0.585634,0.640847,4600,20
 metrics,slice,overtime,nflfastr_wp,ece,0.056982,0.041912,0.083510,4600,20
 metrics,slice,overtime,nflfastr_vegas_wp,brier,0.213127,0.202111,0.224018,4600,20
 metrics,slice,overtime,nflfastr_vegas_wp,log_loss,0.613189,0.585634,0.640847,4600,20
 metrics,slice,overtime,nflfastr_vegas_wp,ece,0.056982,0.041912,0.083510,4600,20
-difference,slice,overtime,own - nflfastr_wp,brier,-0.009964,-0.019254,0.000191,4600,20
-difference,slice,overtime,own - nflfastr_wp,log_loss,-0.025088,-0.046398,-0.002485,4600,20
-difference,slice,overtime,own - nflfastr_vegas_wp,brier,-0.009964,-0.019254,0.000191,4600,20
-difference,slice,overtime,own - nflfastr_vegas_wp,log_loss,-0.025088,-0.046398,-0.002485,4600,20
-season,2006,all plays,own,brier,0.162670,,,37027,0
-season,2006,all plays,own,log_loss,0.484168,,,37027,0
+difference,slice,overtime,own - nflfastr_wp,brier,-0.014348,-0.023061,-0.005390,4600,20
+difference,slice,overtime,own - nflfastr_wp,log_loss,-0.035052,-0.055058,-0.014695,4600,20
+difference,slice,overtime,own - nflfastr_vegas_wp,brier,-0.014348,-0.023061,-0.005390,4600,20
+difference,slice,overtime,own - nflfastr_vegas_wp,log_loss,-0.035052,-0.055058,-0.014695,4600,20
+season,2006,all plays,own,brier,0.161361,,,37027,0
+season,2006,all plays,own,log_loss,0.480046,,,37027,0
 season,2006,all plays,nflfastr_wp,brier,0.166799,,,37027,0
 season,2006,all plays,nflfastr_wp,log_loss,0.494261,,,37027,0
 season,2006,all plays,nflfastr_vegas_wp,brier,0.159253,,,37027,0
 season,2006,all plays,nflfastr_vegas_wp,log_loss,0.472392,,,37027,0
-season,2006,all plays,own - nflfastr_wp,log_loss,-0.010093,-0.038421,0.015238,37027,267
-season,2006,all plays,own - nflfastr_vegas_wp,log_loss,0.011775,0.005668,0.018136,37027,267
-season,2007,all plays,own,brier,0.142735,,,36925,0
-season,2007,all plays,own,log_loss,0.426434,,,36925,0
+season,2006,all plays,own - nflfastr_wp,log_loss,-0.014215,-0.038147,0.007873,37027,267
+season,2006,all plays,own - nflfastr_vegas_wp,log_loss,0.007654,0.002159,0.013577,37027,267
+season,2007,all plays,own,brier,0.141670,,,36925,0
+season,2007,all plays,own,log_loss,0.424814,,,36925,0
 season,2007,all plays,nflfastr_wp,brier,0.156291,,,36925,0
 season,2007,all plays,nflfastr_wp,log_loss,0.460690,,,36925,0
 season,2007,all plays,nflfastr_vegas_wp,brier,0.139623,,,36925,0
 season,2007,all plays,nflfastr_vegas_wp,log_loss,0.417383,,,36925,0
-season,2007,all plays,own - nflfastr_wp,log_loss,-0.034256,-0.058326,-0.009499,36925,267
-season,2007,all plays,own - nflfastr_vegas_wp,log_loss,0.009051,0.003838,0.014107,36925,267
-season,2008,all plays,own,brier,0.143891,,,36325,0
-season,2008,all plays,own,log_loss,0.431129,,,36325,0
+season,2007,all plays,own - nflfastr_wp,log_loss,-0.035876,-0.056993,-0.014652,36925,267
+season,2007,all plays,own - nflfastr_vegas_wp,log_loss,0.007431,0.001710,0.012823,36925,267
+season,2008,all plays,own,brier,0.144770,,,36325,0
+season,2008,all plays,own,log_loss,0.434702,,,36325,0
 season,2008,all plays,nflfastr_wp,brier,0.160929,,,36325,0
 season,2008,all plays,nflfastr_wp,log_loss,0.476757,,,36325,0
 season,2008,all plays,nflfastr_vegas_wp,brier,0.142287,,,36325,0
 season,2008,all plays,nflfastr_vegas_wp,log_loss,0.427210,,,36325,0
-season,2008,all plays,own - nflfastr_wp,log_loss,-0.045629,-0.068794,-0.020393,36325,266
-season,2008,all plays,own - nflfastr_vegas_wp,log_loss,0.003918,-0.000052,0.007944,36325,266
-season,2009,all plays,own,brier,0.142365,,,37113,0
-season,2009,all plays,own,log_loss,0.432142,,,37113,0
+season,2008,all plays,own - nflfastr_wp,log_loss,-0.042055,-0.062676,-0.019875,36325,266
+season,2008,all plays,own - nflfastr_vegas_wp,log_loss,0.007492,0.002725,0.012262,36325,266
+season,2009,all plays,own,brier,0.141287,,,37113,0
+season,2009,all plays,own,log_loss,0.428117,,,37113,0
 season,2009,all plays,nflfastr_wp,brier,0.157967,,,37113,0
 season,2009,all plays,nflfastr_wp,log_loss,0.465384,,,37113,0
 season,2009,all plays,nflfastr_vegas_wp,brier,0.140281,,,37113,0
 season,2009,all plays,nflfastr_vegas_wp,log_loss,0.424851,,,37113,0
-season,2009,all plays,own - nflfastr_wp,log_loss,-0.033241,-0.065225,0.000581,37113,267
-season,2009,all plays,own - nflfastr_vegas_wp,log_loss,0.007292,0.001772,0.013538,37113,267
-season,2010,all plays,own,brier,0.146993,,,37257,0
-season,2010,all plays,own,log_loss,0.443076,,,37257,0
+season,2009,all plays,own - nflfastr_wp,log_loss,-0.037267,-0.062986,-0.010375,37113,267
+season,2009,all plays,own - nflfastr_vegas_wp,log_loss,0.003266,-0.001388,0.008060,37113,267
+season,2010,all plays,own,brier,0.146614,,,37257,0
+season,2010,all plays,own,log_loss,0.442204,,,37257,0
 season,2010,all plays,nflfastr_wp,brier,0.155745,,,37257,0
 season,2010,all plays,nflfastr_wp,log_loss,0.463450,,,37257,0
 season,2010,all plays,nflfastr_vegas_wp,brier,0.145068,,,37257,0
 season,2010,all plays,nflfastr_vegas_wp,log_loss,0.436573,,,37257,0
-season,2010,all plays,own - nflfastr_wp,log_loss,-0.020374,-0.040262,0.000860,37257,267
-season,2010,all plays,own - nflfastr_vegas_wp,log_loss,0.006502,0.002414,0.010968,37257,267
-season,2011,all plays,own,brier,0.158423,,,37703,0
-season,2011,all plays,own,log_loss,0.469573,,,37703,0
+season,2010,all plays,own - nflfastr_wp,log_loss,-0.021246,-0.038760,-0.001848,37257,267
+season,2010,all plays,own - nflfastr_vegas_wp,log_loss,0.005631,0.001548,0.009493,37257,267
+season,2011,all plays,own,brier,0.157645,,,37703,0
+season,2011,all plays,own,log_loss,0.466801,,,37703,0
 season,2011,all plays,nflfastr_wp,brier,0.168346,,,37703,0
 season,2011,all plays,nflfastr_wp,log_loss,0.493560,,,37703,0
 season,2011,all plays,nflfastr_vegas_wp,brier,0.155677,,,37703,0
 season,2011,all plays,nflfastr_vegas_wp,log_loss,0.461170,,,37703,0
-season,2011,all plays,own - nflfastr_wp,log_loss,-0.023987,-0.051612,0.003391,37703,267
-season,2011,all plays,own - nflfastr_vegas_wp,log_loss,0.008403,0.004070,0.013077,37703,267
-season,2012,all plays,own,brier,0.152328,,,37817,0
-season,2012,all plays,own,log_loss,0.455419,,,37817,0
+season,2011,all plays,own - nflfastr_wp,log_loss,-0.026759,-0.049180,-0.004185,37703,267
+season,2011,all plays,own - nflfastr_vegas_wp,log_loss,0.005631,0.000623,0.010540,37703,267
+season,2012,all plays,own,brier,0.152409,,,37817,0
+season,2012,all plays,own,log_loss,0.455249,,,37817,0
 season,2012,all plays,nflfastr_wp,brier,0.168010,,,37817,0
 season,2012,all plays,nflfastr_wp,log_loss,0.490632,,,37817,0
 season,2012,all plays,nflfastr_vegas_wp,brier,0.151555,,,37817,0
 season,2012,all plays,nflfastr_vegas_wp,log_loss,0.451651,,,37817,0
-season,2012,all plays,own - nflfastr_wp,log_loss,-0.035213,-0.059799,-0.010085,37817,266
-season,2012,all plays,own - nflfastr_vegas_wp,log_loss,0.003768,-0.003454,0.010352,37817,266
-season,2013,all plays,own,brier,0.152208,,,38140,0
-season,2013,all plays,own,log_loss,0.455432,,,38140,0
+season,2012,all plays,own - nflfastr_wp,log_loss,-0.035383,-0.055638,-0.013616,37817,266
+season,2012,all plays,own - nflfastr_vegas_wp,log_loss,0.003598,-0.001490,0.007950,37817,266
+season,2013,all plays,own,brier,0.152882,,,38140,0
+season,2013,all plays,own,log_loss,0.458808,,,38140,0
 season,2013,all plays,nflfastr_wp,brier,0.170039,,,38140,0
 season,2013,all plays,nflfastr_wp,log_loss,0.500252,,,38140,0
 season,2013,all plays,nflfastr_vegas_wp,brier,0.151721,,,38140,0
 season,2013,all plays,nflfastr_vegas_wp,log_loss,0.453343,,,38140,0
-season,2013,all plays,own - nflfastr_wp,log_loss,-0.044820,-0.071870,-0.019863,38140,266
-season,2013,all plays,own - nflfastr_vegas_wp,log_loss,0.002089,-0.006288,0.009178,38140,266
-season,2014,all plays,own,brier,0.146540,,,37526,0
-season,2014,all plays,own,log_loss,0.442685,,,37526,0
+season,2013,all plays,own - nflfastr_wp,log_loss,-0.041444,-0.062757,-0.021128,38140,266
+season,2013,all plays,own - nflfastr_vegas_wp,log_loss,0.005465,0.000730,0.010279,38140,266
+season,2014,all plays,own,brier,0.148156,,,37526,0
+season,2014,all plays,own,log_loss,0.446468,,,37526,0
 season,2014,all plays,nflfastr_wp,brier,0.165279,,,37526,0
 season,2014,all plays,nflfastr_wp,log_loss,0.487842,,,37526,0
 season,2014,all plays,nflfastr_vegas_wp,brier,0.145571,,,37526,0
 season,2014,all plays,nflfastr_vegas_wp,log_loss,0.438145,,,37526,0
-season,2014,all plays,own - nflfastr_wp,log_loss,-0.045157,-0.067745,-0.020149,37526,266
-season,2014,all plays,own - nflfastr_vegas_wp,log_loss,0.004540,-0.000007,0.008744,37526,266
-season,2015,all plays,own,brier,0.155932,,,37996,0
-season,2015,all plays,own,log_loss,0.467138,,,37996,0
+season,2014,all plays,own - nflfastr_wp,log_loss,-0.041374,-0.060798,-0.020687,37526,266
+season,2014,all plays,own - nflfastr_vegas_wp,log_loss,0.008323,0.003248,0.013238,37526,266
+season,2015,all plays,own,brier,0.155581,,,37996,0
+season,2015,all plays,own,log_loss,0.465523,,,37996,0
 season,2015,all plays,nflfastr_wp,brier,0.160738,,,37996,0
 season,2015,all plays,nflfastr_wp,log_loss,0.477022,,,37996,0
 season,2015,all plays,nflfastr_vegas_wp,brier,0.154145,,,37996,0
 season,2015,all plays,nflfastr_vegas_wp,log_loss,0.461289,,,37996,0
-season,2015,all plays,own - nflfastr_wp,log_loss,-0.009884,-0.035239,0.015268,37996,267
-season,2015,all plays,own - nflfastr_vegas_wp,log_loss,0.005849,0.001080,0.010506,37996,267
-season,2016,all plays,own,brier,0.153637,,,37274,0
-season,2016,all plays,own,log_loss,0.461852,,,37274,0
+season,2015,all plays,own - nflfastr_wp,log_loss,-0.011499,-0.031790,0.008802,37996,267
+season,2015,all plays,own - nflfastr_vegas_wp,log_loss,0.004235,-0.000188,0.008200,37996,267
+season,2016,all plays,own,brier,0.153083,,,37274,0
+season,2016,all plays,own,log_loss,0.461771,,,37274,0
 season,2016,all plays,nflfastr_wp,brier,0.163046,,,37274,0
 season,2016,all plays,nflfastr_wp,log_loss,0.487315,,,37274,0
 season,2016,all plays,nflfastr_vegas_wp,brier,0.151526,,,37274,0
 season,2016,all plays,nflfastr_vegas_wp,log_loss,0.456238,,,37274,0
-season,2016,all plays,own - nflfastr_wp,log_loss,-0.025462,-0.045739,-0.004720,37274,265
-season,2016,all plays,own - nflfastr_vegas_wp,log_loss,0.005614,0.000031,0.011689,37274,265
-season,2017,all plays,own,brier,0.131280,,,37501,0
-season,2017,all plays,own,log_loss,0.404026,,,37501,0
+season,2016,all plays,own - nflfastr_wp,log_loss,-0.025543,-0.041883,-0.009102,37274,265
+season,2016,all plays,own - nflfastr_vegas_wp,log_loss,0.005533,0.001312,0.009785,37274,265
+season,2017,all plays,own,brier,0.133455,,,37501,0
+season,2017,all plays,own,log_loss,0.409817,,,37501,0
 season,2017,all plays,nflfastr_wp,brier,0.150212,,,37501,0
 season,2017,all plays,nflfastr_wp,log_loss,0.450702,,,37501,0
 season,2017,all plays,nflfastr_vegas_wp,brier,0.130547,,,37501,0
 season,2017,all plays,nflfastr_vegas_wp,log_loss,0.401705,,,37501,0
-season,2017,all plays,own - nflfastr_wp,log_loss,-0.046676,-0.071765,-0.020711,37501,267
-season,2017,all plays,own - nflfastr_vegas_wp,log_loss,0.002321,-0.001899,0.006779,37501,267
-season,2018,all plays,own,brier,0.142499,,,36615,0
-season,2018,all plays,own,log_loss,0.429819,,,36615,0
+season,2017,all plays,own - nflfastr_wp,log_loss,-0.040885,-0.062705,-0.019045,37501,267
+season,2017,all plays,own - nflfastr_vegas_wp,log_loss,0.008113,0.004551,0.011209,37501,267
+season,2018,all plays,own,brier,0.141193,,,36615,0
+season,2018,all plays,own,log_loss,0.427286,,,36615,0
 season,2018,all plays,nflfastr_wp,brier,0.154521,,,36615,0
 season,2018,all plays,nflfastr_wp,log_loss,0.460976,,,36615,0
 season,2018,all plays,nflfastr_vegas_wp,brier,0.140308,,,36615,0
 season,2018,all plays,nflfastr_vegas_wp,log_loss,0.423213,,,36615,0
-season,2018,all plays,own - nflfastr_wp,log_loss,-0.031157,-0.058125,-0.002456,36615,265
-season,2018,all plays,own - nflfastr_vegas_wp,log_loss,0.006606,-0.000291,0.014845,36615,265
-season,2019,all plays,own,brier,0.142399,,,36973,0
-season,2019,all plays,own,log_loss,0.430101,,,36973,0
+season,2018,all plays,own - nflfastr_wp,log_loss,-0.033690,-0.055597,-0.011142,36615,265
+season,2018,all plays,own - nflfastr_vegas_wp,log_loss,0.004074,0.000747,0.007424,36615,265
+season,2019,all plays,own,brier,0.140612,,,36973,0
+season,2019,all plays,own,log_loss,0.424715,,,36973,0
 season,2019,all plays,nflfastr_wp,brier,0.153792,,,36973,0
 season,2019,all plays,nflfastr_wp,log_loss,0.456807,,,36973,0
 season,2019,all plays,nflfastr_vegas_wp,brier,0.139098,,,36973,0
 season,2019,all plays,nflfastr_vegas_wp,log_loss,0.419478,,,36973,0
-season,2019,all plays,own - nflfastr_wp,log_loss,-0.026707,-0.059302,0.006807,36973,266
-season,2019,all plays,own - nflfastr_vegas_wp,log_loss,0.010622,0.001926,0.023508,36973,266
-season,2020,all plays,own,brier,0.139386,,,37465,0
-season,2020,all plays,own,log_loss,0.426494,,,37465,0
+season,2019,all plays,own - nflfastr_wp,log_loss,-0.032093,-0.056558,-0.007126,36973,266
+season,2019,all plays,own - nflfastr_vegas_wp,log_loss,0.005236,0.001018,0.009889,36973,266
+season,2020,all plays,own,brier,0.140223,,,37465,0
+season,2020,all plays,own,log_loss,0.428200,,,37465,0
 season,2020,all plays,nflfastr_wp,brier,0.160695,,,37465,0
 season,2020,all plays,nflfastr_wp,log_loss,0.477029,,,37465,0
 season,2020,all plays,nflfastr_vegas_wp,brier,0.136641,,,37465,0
 season,2020,all plays,nflfastr_vegas_wp,log_loss,0.418013,,,37465,0
-season,2020,all plays,own - nflfastr_wp,log_loss,-0.050535,-0.082123,-0.019489,37465,268
-season,2020,all plays,own - nflfastr_vegas_wp,log_loss,0.008481,-0.001142,0.019507,37465,268
-season,2021,all plays,own,brier,0.144300,,,39183,0
-season,2021,all plays,own,log_loss,0.433602,,,39183,0
+season,2020,all plays,own - nflfastr_wp,log_loss,-0.048829,-0.072125,-0.026821,37465,268
+season,2020,all plays,own - nflfastr_vegas_wp,log_loss,0.010187,0.005932,0.014601,37465,268
+season,2021,all plays,own,brier,0.144085,,,39183,0
+season,2021,all plays,own,log_loss,0.430433,,,39183,0
 season,2021,all plays,nflfastr_wp,brier,0.156764,,,39183,0
 season,2021,all plays,nflfastr_wp,log_loss,0.461805,,,39183,0
 season,2021,all plays,nflfastr_vegas_wp,brier,0.144554,,,39183,0
 season,2021,all plays,nflfastr_vegas_wp,log_loss,0.431831,,,39183,0
-season,2021,all plays,own - nflfastr_wp,log_loss,-0.028202,-0.060348,0.006424,39183,284
-season,2021,all plays,own - nflfastr_vegas_wp,log_loss,0.001771,-0.008126,0.013031,39183,284
-season,2022,all plays,own,brier,0.170716,,,38868,0
-season,2022,all plays,own,log_loss,0.512588,,,38868,0
+season,2021,all plays,own - nflfastr_wp,log_loss,-0.031372,-0.054431,-0.007326,39183,284
+season,2021,all plays,own - nflfastr_vegas_wp,log_loss,-0.001398,-0.004794,0.001965,39183,284
+season,2022,all plays,own,brier,0.171293,,,38868,0
+season,2022,all plays,own,log_loss,0.514749,,,38868,0
 season,2022,all plays,nflfastr_wp,brier,0.189012,,,38868,0
 season,2022,all plays,nflfastr_wp,log_loss,0.556820,,,38868,0
 season,2022,all plays,nflfastr_vegas_wp,brier,0.170899,,,38868,0
 season,2022,all plays,nflfastr_vegas_wp,log_loss,0.517254,,,38868,0
-season,2022,all plays,own - nflfastr_wp,log_loss,-0.044232,-0.069952,-0.017204,38868,282
-season,2022,all plays,own - nflfastr_vegas_wp,log_loss,-0.004666,-0.013317,0.002364,38868,282
-season,2023,all plays,own,brier,0.151728,,,39456,0
-season,2023,all plays,own,log_loss,0.457447,,,39456,0
+season,2022,all plays,own - nflfastr_wp,log_loss,-0.042071,-0.063993,-0.019869,38868,282
+season,2022,all plays,own - nflfastr_vegas_wp,log_loss,-0.002505,-0.008869,0.002929,38868,282
+season,2023,all plays,own,brier,0.150140,,,39456,0
+season,2023,all plays,own,log_loss,0.453632,,,39456,0
 season,2023,all plays,nflfastr_wp,brier,0.159069,,,39456,0
 season,2023,all plays,nflfastr_wp,log_loss,0.474310,,,39456,0
 season,2023,all plays,nflfastr_vegas_wp,brier,0.150287,,,39456,0
 season,2023,all plays,nflfastr_vegas_wp,log_loss,0.453048,,,39456,0
-season,2023,all plays,own - nflfastr_wp,log_loss,-0.016863,-0.040084,0.006276,39456,285
-season,2023,all plays,own - nflfastr_vegas_wp,log_loss,0.004399,-0.000434,0.008936,39456,285
-season,2024,all plays,own,brier,0.137944,,,38699,0
-season,2024,all plays,own,log_loss,0.420305,,,38699,0
+season,2023,all plays,own - nflfastr_wp,log_loss,-0.020678,-0.041543,0.000557,39456,285
+season,2023,all plays,own - nflfastr_vegas_wp,log_loss,0.000584,-0.003983,0.005100,39456,285
+season,2024,all plays,own,brier,0.137847,,,38699,0
+season,2024,all plays,own,log_loss,0.419408,,,38699,0
 season,2024,all plays,nflfastr_wp,brier,0.156631,,,38699,0
 season,2024,all plays,nflfastr_wp,log_loss,0.462467,,,38699,0
 season,2024,all plays,nflfastr_vegas_wp,brier,0.136460,,,38699,0
 season,2024,all plays,nflfastr_vegas_wp,log_loss,0.415452,,,38699,0
-season,2024,all plays,own - nflfastr_wp,log_loss,-0.042162,-0.064900,-0.018018,38699,285
-season,2024,all plays,own - nflfastr_vegas_wp,log_loss,0.004853,0.000883,0.009021,38699,285
-season,2025,all plays,own,brier,0.158491,,,38060,0
-season,2025,all plays,own,log_loss,0.475054,,,38060,0
+season,2024,all plays,own - nflfastr_wp,log_loss,-0.043059,-0.061831,-0.023577,38699,285
+season,2024,all plays,own - nflfastr_vegas_wp,log_loss,0.003956,0.000364,0.007302,38699,285
+season,2025,all plays,own,brier,0.157977,,,38060,0
+season,2025,all plays,own,log_loss,0.473582,,,38060,0
 season,2025,all plays,nflfastr_wp,brier,0.171376,,,38060,0
 season,2025,all plays,nflfastr_wp,log_loss,0.505000,,,38060,0
 season,2025,all plays,nflfastr_vegas_wp,brier,0.158548,,,38060,0
 season,2025,all plays,nflfastr_vegas_wp,log_loss,0.475857,,,38060,0
-season,2025,all plays,own - nflfastr_wp,log_loss,-0.029945,-0.058778,-0.000530,38060,284
-season,2025,all plays,own - nflfastr_vegas_wp,log_loss,-0.000803,-0.006458,0.005066,38060,284
-reliability,pooled,0.0-0.1,own,mean_predicted,0.034649,,,111902,20
-reliability,pooled,0.0-0.1,own,observed,0.036085,0.030590,0.042462,111902,20
-reliability,pooled,0.1-0.2,own,mean_predicted,0.150400,,,59893,20
-reliability,pooled,0.1-0.2,own,observed,0.160954,0.147950,0.173545,59893,20
-reliability,pooled,0.2-0.3,own,mean_predicted,0.249648,,,68583,20
-reliability,pooled,0.2-0.3,own,observed,0.253503,0.238263,0.268728,68583,20
-reliability,pooled,0.3-0.4,own,mean_predicted,0.350232,,,62832,20
-reliability,pooled,0.3-0.4,own,observed,0.349933,0.340116,0.359461,62832,20
-reliability,pooled,0.4-0.5,own,mean_predicted,0.449835,,,66409,20
-reliability,pooled,0.4-0.5,own,observed,0.452363,0.445069,0.460860,66409,20
-reliability,pooled,0.5-0.6,own,mean_predicted,0.549865,,,65780,20
-reliability,pooled,0.5-0.6,own,observed,0.556233,0.549783,0.562806,65780,20
-reliability,pooled,0.6-0.7,own,mean_predicted,0.650924,,,67132,20
-reliability,pooled,0.6-0.7,own,observed,0.654382,0.641778,0.664664,67132,20
-reliability,pooled,0.7-0.8,own,mean_predicted,0.750421,,,68307,20
-reliability,pooled,0.7-0.8,own,observed,0.746117,0.734949,0.757477,68307,20
-reliability,pooled,0.8-0.9,own,mean_predicted,0.849288,,,66449,20
-reliability,pooled,0.8-0.9,own,observed,0.841186,0.830098,0.852242,66449,20
-reliability,pooled,0.9-1.0,own,mean_predicted,0.965761,,,116636,20
-reliability,pooled,0.9-1.0,own,observed,0.964351,0.958533,0.969508,116636,20
+season,2025,all plays,own - nflfastr_wp,log_loss,-0.031417,-0.053975,-0.009000,38060,284
+season,2025,all plays,own - nflfastr_vegas_wp,log_loss,-0.002275,-0.005982,0.001179,38060,284
+reliability,pooled,0.0-0.1,own,mean_predicted,0.034829,,,107565,20
+reliability,pooled,0.0-0.1,own,observed,0.032315,0.026421,0.039025,107565,20
+reliability,pooled,0.1-0.2,own,mean_predicted,0.150139,,,60123,20
+reliability,pooled,0.1-0.2,own,observed,0.151822,0.140605,0.163841,60123,20
+reliability,pooled,0.2-0.3,own,mean_predicted,0.250558,,,66762,20
+reliability,pooled,0.2-0.3,own,observed,0.248450,0.233869,0.263650,66762,20
+reliability,pooled,0.3-0.4,own,mean_predicted,0.350431,,,67968,20
+reliability,pooled,0.3-0.4,own,observed,0.345604,0.335091,0.356364,67968,20
+reliability,pooled,0.4-0.5,own,mean_predicted,0.449272,,,67969,20
+reliability,pooled,0.4-0.5,own,observed,0.453972,0.448863,0.459756,67969,20
+reliability,pooled,0.5-0.6,own,mean_predicted,0.550782,,,65826,20
+reliability,pooled,0.5-0.6,own,observed,0.555601,0.549483,0.561782,65826,20
+reliability,pooled,0.6-0.7,own,mean_predicted,0.649830,,,72820,20
+reliability,pooled,0.6-0.7,own,observed,0.656935,0.645433,0.666386,72820,20
+reliability,pooled,0.7-0.8,own,mean_predicted,0.749588,,,70294,20
+reliability,pooled,0.7-0.8,own,observed,0.757533,0.745184,0.770006,70294,20
+reliability,pooled,0.8-0.9,own,mean_predicted,0.849468,,,63869,20
+reliability,pooled,0.8-0.9,own,observed,0.852965,0.844356,0.861679,63869,20
+reliability,pooled,0.9-1.0,own,mean_predicted,0.964354,,,110727,20
+reliability,pooled,0.9-1.0,own,observed,0.968815,0.963321,0.973342,110727,20
 reliability,pooled,0.0-0.1,nflfastr_wp,mean_predicted,0.032724,,,89928,20
 reliability,pooled,0.0-0.1,nflfastr_wp,observed,0.029279,0.023019,0.036140,89928,20
 reliability,pooled,0.1-0.2,nflfastr_wp,mean_predicted,0.150422,,,57434,20
@@ -323,3 +323,482 @@ reliability,pooled,0.8-0.9,nflfastr_vegas_wp,mean_predicted,0.850078,,,66838,20
 reliability,pooled,0.8-0.9,nflfastr_vegas_wp,observed,0.846674,0.836662,0.857273,66838,20
 reliability,pooled,0.9-1.0,nflfastr_vegas_wp,mean_predicted,0.966686,,,115800,20
 reliability,pooled,0.9-1.0,nflfastr_vegas_wp,observed,0.968532,0.962873,0.973328,115800,20
+smoothness,limit,-,threshold,score_step_h1,6.000000,,,0,0
+smoothness,limit,-,threshold,score_step_h2,8.000000,,,0,0
+smoothness,limit,-,threshold,curvature,4.000000,,,0,0
+smoothness,limit,-,threshold,halftime_possession,3.000000,,,0,0
+smoothness,limit,-,threshold,monotone_violations,0.000000,,,0,0
+smoothness,fold,2006,own,score_step_h1,3.566903,,,0,0
+smoothness,fold,2006,own,score_step_h2,5.005029,,,0,0
+smoothness,fold,2006,own,curvature,0.418346,,,0,0
+smoothness,fold,2006,own,halftime_possession,1.442296,,,0,0
+smoothness,fold,2006,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2006,own,yard_step,1.144811,,,0,0
+smoothness,fold,2006,own,possession_2min,5.231620,,,0,0
+smoothness,fold,2007,own,score_step_h1,3.449634,,,0,0
+smoothness,fold,2007,own,score_step_h2,4.878533,,,0,0
+smoothness,fold,2007,own,curvature,0.353726,,,0,0
+smoothness,fold,2007,own,halftime_possession,1.424974,,,0,0
+smoothness,fold,2007,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2007,own,yard_step,1.228677,,,0,0
+smoothness,fold,2007,own,possession_2min,5.077835,,,0,0
+smoothness,fold,2008,own,score_step_h1,3.320036,,,0,0
+smoothness,fold,2008,own,score_step_h2,4.735192,,,0,0
+smoothness,fold,2008,own,curvature,0.377738,,,0,0
+smoothness,fold,2008,own,halftime_possession,1.399149,,,0,0
+smoothness,fold,2008,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2008,own,yard_step,1.248839,,,0,0
+smoothness,fold,2008,own,possession_2min,4.892663,,,0,0
+smoothness,fold,2009,own,score_step_h1,3.351214,,,0,0
+smoothness,fold,2009,own,score_step_h2,4.828016,,,0,0
+smoothness,fold,2009,own,curvature,0.382345,,,0,0
+smoothness,fold,2009,own,halftime_possession,1.443458,,,0,0
+smoothness,fold,2009,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2009,own,yard_step,1.192009,,,0,0
+smoothness,fold,2009,own,possession_2min,4.956159,,,0,0
+smoothness,fold,2010,own,score_step_h1,3.267674,,,0,0
+smoothness,fold,2010,own,score_step_h2,4.735758,,,0,0
+smoothness,fold,2010,own,curvature,0.372645,,,0,0
+smoothness,fold,2010,own,halftime_possession,1.388391,,,0,0
+smoothness,fold,2010,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2010,own,yard_step,1.178871,,,0,0
+smoothness,fold,2010,own,possession_2min,4.817173,,,0,0
+smoothness,fold,2011,own,score_step_h1,3.323474,,,0,0
+smoothness,fold,2011,own,score_step_h2,4.808536,,,0,0
+smoothness,fold,2011,own,curvature,0.366702,,,0,0
+smoothness,fold,2011,own,halftime_possession,1.386413,,,0,0
+smoothness,fold,2011,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2011,own,yard_step,1.203328,,,0,0
+smoothness,fold,2011,own,possession_2min,4.975547,,,0,0
+smoothness,fold,2012,own,score_step_h1,3.197018,,,0,0
+smoothness,fold,2012,own,score_step_h2,4.655901,,,0,0
+smoothness,fold,2012,own,curvature,0.384000,,,0,0
+smoothness,fold,2012,own,halftime_possession,1.331528,,,0,0
+smoothness,fold,2012,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2012,own,yard_step,1.152140,,,0,0
+smoothness,fold,2012,own,possession_2min,4.908060,,,0,0
+smoothness,fold,2013,own,score_step_h1,3.101735,,,0,0
+smoothness,fold,2013,own,score_step_h2,4.486028,,,0,0
+smoothness,fold,2013,own,curvature,0.379873,,,0,0
+smoothness,fold,2013,own,halftime_possession,1.274630,,,0,0
+smoothness,fold,2013,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2013,own,yard_step,1.263007,,,0,0
+smoothness,fold,2013,own,possession_2min,4.778930,,,0,0
+smoothness,fold,2014,own,score_step_h1,3.094239,,,0,0
+smoothness,fold,2014,own,score_step_h2,4.504168,,,0,0
+smoothness,fold,2014,own,curvature,0.382848,,,0,0
+smoothness,fold,2014,own,halftime_possession,1.269548,,,0,0
+smoothness,fold,2014,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2014,own,yard_step,1.127082,,,0,0
+smoothness,fold,2014,own,possession_2min,4.863961,,,0,0
+smoothness,fold,2015,own,score_step_h1,3.110239,,,0,0
+smoothness,fold,2015,own,score_step_h2,4.546968,,,0,0
+smoothness,fold,2015,own,curvature,0.369384,,,0,0
+smoothness,fold,2015,own,halftime_possession,1.306851,,,0,0
+smoothness,fold,2015,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2015,own,yard_step,1.057619,,,0,0
+smoothness,fold,2015,own,possession_2min,5.001226,,,0,0
+smoothness,fold,2016,own,score_step_h1,3.179780,,,0,0
+smoothness,fold,2016,own,score_step_h2,4.601782,,,0,0
+smoothness,fold,2016,own,curvature,0.338410,,,0,0
+smoothness,fold,2016,own,halftime_possession,1.318836,,,0,0
+smoothness,fold,2016,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2016,own,yard_step,1.104386,,,0,0
+smoothness,fold,2016,own,possession_2min,5.340744,,,0,0
+smoothness,fold,2017,own,score_step_h1,3.199957,,,0,0
+smoothness,fold,2017,own,score_step_h2,4.645353,,,0,0
+smoothness,fold,2017,own,curvature,0.323743,,,0,0
+smoothness,fold,2017,own,halftime_possession,1.321930,,,0,0
+smoothness,fold,2017,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2017,own,yard_step,1.114893,,,0,0
+smoothness,fold,2017,own,possession_2min,5.508696,,,0,0
+smoothness,fold,2018,own,score_step_h1,3.294394,,,0,0
+smoothness,fold,2018,own,score_step_h2,4.754337,,,0,0
+smoothness,fold,2018,own,curvature,0.326213,,,0,0
+smoothness,fold,2018,own,halftime_possession,1.355044,,,0,0
+smoothness,fold,2018,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2018,own,yard_step,1.114210,,,0,0
+smoothness,fold,2018,own,possession_2min,5.847391,,,0,0
+smoothness,fold,2019,own,score_step_h1,3.314087,,,0,0
+smoothness,fold,2019,own,score_step_h2,4.777348,,,0,0
+smoothness,fold,2019,own,curvature,0.329598,,,0,0
+smoothness,fold,2019,own,halftime_possession,1.352471,,,0,0
+smoothness,fold,2019,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2019,own,yard_step,1.133115,,,0,0
+smoothness,fold,2019,own,possession_2min,5.924770,,,0,0
+smoothness,fold,2020,own,score_step_h1,3.341112,,,0,0
+smoothness,fold,2020,own,score_step_h2,4.800778,,,0,0
+smoothness,fold,2020,own,curvature,0.333380,,,0,0
+smoothness,fold,2020,own,halftime_possession,1.345364,,,0,0
+smoothness,fold,2020,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2020,own,yard_step,1.181717,,,0,0
+smoothness,fold,2020,own,possession_2min,5.969852,,,0,0
+smoothness,fold,2021,own,score_step_h1,3.333895,,,0,0
+smoothness,fold,2021,own,score_step_h2,4.813181,,,0,0
+smoothness,fold,2021,own,curvature,0.331203,,,0,0
+smoothness,fold,2021,own,halftime_possession,1.340993,,,0,0
+smoothness,fold,2021,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2021,own,yard_step,1.207611,,,0,0
+smoothness,fold,2021,own,possession_2min,5.996128,,,0,0
+smoothness,fold,2022,own,score_step_h1,3.300010,,,0,0
+smoothness,fold,2022,own,score_step_h2,4.781721,,,0,0
+smoothness,fold,2022,own,curvature,0.343704,,,0,0
+smoothness,fold,2022,own,halftime_possession,1.327265,,,0,0
+smoothness,fold,2022,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2022,own,yard_step,1.201550,,,0,0
+smoothness,fold,2022,own,possession_2min,5.999896,,,0,0
+smoothness,fold,2023,own,score_step_h1,3.287132,,,0,0
+smoothness,fold,2023,own,score_step_h2,4.802432,,,0,0
+smoothness,fold,2023,own,curvature,0.337097,,,0,0
+smoothness,fold,2023,own,halftime_possession,1.325066,,,0,0
+smoothness,fold,2023,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2023,own,yard_step,1.131771,,,0,0
+smoothness,fold,2023,own,possession_2min,6.026172,,,0,0
+smoothness,fold,2024,own,score_step_h1,3.323679,,,0,0
+smoothness,fold,2024,own,score_step_h2,4.814410,,,0,0
+smoothness,fold,2024,own,curvature,0.326050,,,0,0
+smoothness,fold,2024,own,halftime_possession,1.337102,,,0,0
+smoothness,fold,2024,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2024,own,yard_step,1.176813,,,0,0
+smoothness,fold,2024,own,possession_2min,5.567431,,,0,0
+smoothness,fold,2025,own,score_step_h1,3.341836,,,0,0
+smoothness,fold,2025,own,score_step_h2,4.857069,,,0,0
+smoothness,fold,2025,own,curvature,0.330094,,,0,0
+smoothness,fold,2025,own,halftime_possession,1.330731,,,0,0
+smoothness,fold,2025,own,monotone_violations,0.000000,,,0,0
+smoothness,fold,2025,own,yard_step,1.160584,,,0,0
+smoothness,fold,2025,own,possession_2min,5.344155,,,0,0
+smoothness,fold,2006,g1_before,curvature,14.517600,,,0,0
+smoothness,fold,2006,g1_before,halftime_possession,11.336200,,,0,0
+smoothness,fold,2006,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2006,g1_before,possession_2min,8.510100,,,0,0
+smoothness,fold,2006,g1_before,score_step_h1,14.517600,,,0,0
+smoothness,fold,2006,g1_before,score_step_h2,13.598800,,,0,0
+smoothness,fold,2006,g1_before,yard_step,2.610300,,,0,0
+smoothness,fold,2007,g1_before,curvature,15.971500,,,0,0
+smoothness,fold,2007,g1_before,halftime_possession,10.576200,,,0,0
+smoothness,fold,2007,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2007,g1_before,possession_2min,5.614400,,,0,0
+smoothness,fold,2007,g1_before,score_step_h1,16.538800,,,0,0
+smoothness,fold,2007,g1_before,score_step_h2,13.225700,,,0,0
+smoothness,fold,2007,g1_before,yard_step,1.985000,,,0,0
+smoothness,fold,2008,g1_before,curvature,16.622100,,,0,0
+smoothness,fold,2008,g1_before,halftime_possession,9.712200,,,0,0
+smoothness,fold,2008,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2008,g1_before,possession_2min,5.674600,,,0,0
+smoothness,fold,2008,g1_before,score_step_h1,16.957500,,,0,0
+smoothness,fold,2008,g1_before,score_step_h2,14.410800,,,0,0
+smoothness,fold,2008,g1_before,yard_step,3.483300,,,0,0
+smoothness,fold,2009,g1_before,curvature,14.219000,,,0,0
+smoothness,fold,2009,g1_before,halftime_possession,6.694700,,,0,0
+smoothness,fold,2009,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2009,g1_before,possession_2min,5.728600,,,0,0
+smoothness,fold,2009,g1_before,score_step_h1,14.866500,,,0,0
+smoothness,fold,2009,g1_before,score_step_h2,11.957700,,,0,0
+smoothness,fold,2009,g1_before,yard_step,3.035100,,,0,0
+smoothness,fold,2010,g1_before,curvature,14.859500,,,0,0
+smoothness,fold,2010,g1_before,halftime_possession,10.858600,,,0,0
+smoothness,fold,2010,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2010,g1_before,possession_2min,5.725800,,,0,0
+smoothness,fold,2010,g1_before,score_step_h1,15.396200,,,0,0
+smoothness,fold,2010,g1_before,score_step_h2,13.144300,,,0,0
+smoothness,fold,2010,g1_before,yard_step,2.188100,,,0,0
+smoothness,fold,2011,g1_before,curvature,12.352100,,,0,0
+smoothness,fold,2011,g1_before,halftime_possession,11.195100,,,0,0
+smoothness,fold,2011,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2011,g1_before,possession_2min,6.580400,,,0,0
+smoothness,fold,2011,g1_before,score_step_h1,12.656000,,,0,0
+smoothness,fold,2011,g1_before,score_step_h2,12.093400,,,0,0
+smoothness,fold,2011,g1_before,yard_step,2.755100,,,0,0
+smoothness,fold,2012,g1_before,curvature,11.662800,,,0,0
+smoothness,fold,2012,g1_before,halftime_possession,12.018600,,,0,0
+smoothness,fold,2012,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2012,g1_before,possession_2min,6.725300,,,0,0
+smoothness,fold,2012,g1_before,score_step_h1,11.973300,,,0,0
+smoothness,fold,2012,g1_before,score_step_h2,12.150800,,,0,0
+smoothness,fold,2012,g1_before,yard_step,1.960300,,,0,0
+smoothness,fold,2013,g1_before,curvature,11.344100,,,0,0
+smoothness,fold,2013,g1_before,halftime_possession,12.113600,,,0,0
+smoothness,fold,2013,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2013,g1_before,possession_2min,6.234000,,,0,0
+smoothness,fold,2013,g1_before,score_step_h1,11.344100,,,0,0
+smoothness,fold,2013,g1_before,score_step_h2,10.721200,,,0,0
+smoothness,fold,2013,g1_before,yard_step,2.621000,,,0,0
+smoothness,fold,2014,g1_before,curvature,11.005000,,,0,0
+smoothness,fold,2014,g1_before,halftime_possession,11.657100,,,0,0
+smoothness,fold,2014,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2014,g1_before,possession_2min,5.684300,,,0,0
+smoothness,fold,2014,g1_before,score_step_h1,11.085800,,,0,0
+smoothness,fold,2014,g1_before,score_step_h2,10.387200,,,0,0
+smoothness,fold,2014,g1_before,yard_step,3.036700,,,0,0
+smoothness,fold,2015,g1_before,curvature,11.760300,,,0,0
+smoothness,fold,2015,g1_before,halftime_possession,19.012900,,,0,0
+smoothness,fold,2015,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2015,g1_before,possession_2min,7.102800,,,0,0
+smoothness,fold,2015,g1_before,score_step_h1,11.821500,,,0,0
+smoothness,fold,2015,g1_before,score_step_h2,12.136200,,,0,0
+smoothness,fold,2015,g1_before,yard_step,4.069300,,,0,0
+smoothness,fold,2016,g1_before,curvature,23.950900,,,0,0
+smoothness,fold,2016,g1_before,halftime_possession,17.507500,,,0,0
+smoothness,fold,2016,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2016,g1_before,possession_2min,3.721500,,,0,0
+smoothness,fold,2016,g1_before,score_step_h1,24.122600,,,0,0
+smoothness,fold,2016,g1_before,score_step_h2,20.131800,,,0,0
+smoothness,fold,2016,g1_before,yard_step,2.838400,,,0,0
+smoothness,fold,2017,g1_before,curvature,10.281900,,,0,0
+smoothness,fold,2017,g1_before,halftime_possession,13.521800,,,0,0
+smoothness,fold,2017,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2017,g1_before,possession_2min,8.684100,,,0,0
+smoothness,fold,2017,g1_before,score_step_h1,10.357100,,,0,0
+smoothness,fold,2017,g1_before,score_step_h2,10.292000,,,0,0
+smoothness,fold,2017,g1_before,yard_step,2.180000,,,0,0
+smoothness,fold,2018,g1_before,curvature,10.014600,,,0,0
+smoothness,fold,2018,g1_before,halftime_possession,18.027800,,,0,0
+smoothness,fold,2018,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2018,g1_before,possession_2min,8.992400,,,0,0
+smoothness,fold,2018,g1_before,score_step_h1,13.001300,,,0,0
+smoothness,fold,2018,g1_before,score_step_h2,11.192400,,,0,0
+smoothness,fold,2018,g1_before,yard_step,1.934900,,,0,0
+smoothness,fold,2019,g1_before,curvature,9.765400,,,0,0
+smoothness,fold,2019,g1_before,halftime_possession,11.902300,,,0,0
+smoothness,fold,2019,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2019,g1_before,possession_2min,2.836000,,,0,0
+smoothness,fold,2019,g1_before,score_step_h1,9.747600,,,0,0
+smoothness,fold,2019,g1_before,score_step_h2,9.765400,,,0,0
+smoothness,fold,2019,g1_before,yard_step,1.939300,,,0,0
+smoothness,fold,2020,g1_before,curvature,8.240900,,,0,0
+smoothness,fold,2020,g1_before,halftime_possession,15.808600,,,0,0
+smoothness,fold,2020,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2020,g1_before,possession_2min,10.117600,,,0,0
+smoothness,fold,2020,g1_before,score_step_h1,9.318000,,,0,0
+smoothness,fold,2020,g1_before,score_step_h2,9.416000,,,0,0
+smoothness,fold,2020,g1_before,yard_step,2.107000,,,0,0
+smoothness,fold,2021,g1_before,curvature,8.978400,,,0,0
+smoothness,fold,2021,g1_before,halftime_possession,17.475000,,,0,0
+smoothness,fold,2021,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2021,g1_before,possession_2min,11.966100,,,0,0
+smoothness,fold,2021,g1_before,score_step_h1,9.171300,,,0,0
+smoothness,fold,2021,g1_before,score_step_h2,9.661600,,,0,0
+smoothness,fold,2021,g1_before,yard_step,2.714700,,,0,0
+smoothness,fold,2022,g1_before,curvature,10.593200,,,0,0
+smoothness,fold,2022,g1_before,halftime_possession,17.930800,,,0,0
+smoothness,fold,2022,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2022,g1_before,possession_2min,10.819300,,,0,0
+smoothness,fold,2022,g1_before,score_step_h1,9.469500,,,0,0
+smoothness,fold,2022,g1_before,score_step_h2,11.104400,,,0,0
+smoothness,fold,2022,g1_before,yard_step,2.434400,,,0,0
+smoothness,fold,2023,g1_before,curvature,10.149400,,,0,0
+smoothness,fold,2023,g1_before,halftime_possession,14.164500,,,0,0
+smoothness,fold,2023,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2023,g1_before,possession_2min,7.589500,,,0,0
+smoothness,fold,2023,g1_before,score_step_h1,9.555700,,,0,0
+smoothness,fold,2023,g1_before,score_step_h2,10.787800,,,0,0
+smoothness,fold,2023,g1_before,yard_step,1.810800,,,0,0
+smoothness,fold,2024,g1_before,curvature,9.849800,,,0,0
+smoothness,fold,2024,g1_before,halftime_possession,21.475800,,,0,0
+smoothness,fold,2024,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2024,g1_before,possession_2min,10.621500,,,0,0
+smoothness,fold,2024,g1_before,score_step_h1,9.684800,,,0,0
+smoothness,fold,2024,g1_before,score_step_h2,10.852900,,,0,0
+smoothness,fold,2024,g1_before,yard_step,1.709000,,,0,0
+smoothness,fold,2025,g1_before,curvature,22.036500,,,0,0
+smoothness,fold,2025,g1_before,halftime_possession,25.229900,,,0,0
+smoothness,fold,2025,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2025,g1_before,possession_2min,10.291700,,,0,0
+smoothness,fold,2025,g1_before,score_step_h1,22.070000,,,0,0
+smoothness,fold,2025,g1_before,score_step_h2,20.487800,,,0,0
+smoothness,fold,2025,g1_before,yard_step,1.770200,,,0,0
+smoothness,fold,2026,g1_before,curvature,11.905800,,,0,0
+smoothness,fold,2026,g1_before,halftime_possession,19.948300,,,0,0
+smoothness,fold,2026,g1_before,monotone_violations,0.000000,,,0,0
+smoothness,fold,2026,g1_before,possession_2min,10.378600,,,0,0
+smoothness,fold,2026,g1_before,score_step_h1,9.983300,,,0,0
+smoothness,fold,2026,g1_before,score_step_h2,12.668900,,,0,0
+smoothness,fold,2026,g1_before,yard_step,1.639100,,,0,0
+smoothness,cost,pooled,g1_before,log_loss,0.448098,,,753923,0
+smoothness,cost,pooled,g1_before,brier,0.148880,,,753923,0
+smoothness,validation,2004-2005,bag5,log_loss,0.435573,,,73861,0
+smoothness,validation,2004-2005,bag5,brier,0.143141,,,73861,0
+smoothness,validation,2004-2005,bag5,worst_ratio,3.518443,,,73861,0
+smoothness,validation,2004-2005,bag5,meets,0.000000,,,73861,0
+smoothness,validation,2004-2005,bag5,seconds,202.600000,,,73861,0
+smoothness,validation,2004-2005,bag5,score_step_h1,14.344590,,,73861,0
+smoothness,validation,2004-2005,bag5,score_step_h2,14.009277,,,73861,0
+smoothness,validation,2004-2005,bag5,curvature,14.073773,,,73861,0
+smoothness,validation,2004-2005,bag5,halftime_possession,6.340273,,,73861,0
+smoothness,validation,2004-2005,bag5,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,bag5,yard_step,1.988135,,,73861,0
+smoothness,validation,2004-2005,bag5,possession_2min,2.479256,,,73861,0
+smoothness,validation,2004-2005,blend,log_loss,0.434473,,,73861,0
+smoothness,validation,2004-2005,blend,brier,0.142428,,,73861,0
+smoothness,validation,2004-2005,blend,worst_ratio,1.409292,,,73861,0
+smoothness,validation,2004-2005,blend,meets,0.000000,,,73861,0
+smoothness,validation,2004-2005,blend,seconds,176.500000,,,73861,0
+smoothness,validation,2004-2005,blend,score_step_h1,6.607818,,,73861,0
+smoothness,validation,2004-2005,blend,score_step_h2,7.260793,,,73861,0
+smoothness,validation,2004-2005,blend,curvature,5.384913,,,73861,0
+smoothness,validation,2004-2005,blend,halftime_possession,4.227877,,,73861,0
+smoothness,validation,2004-2005,blend,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,blend,yard_step,1.523920,,,73861,0
+smoothness,validation,2004-2005,blend,possession_2min,3.947741,,,73861,0
+smoothness,validation,2004-2005,blend_sym,log_loss,0.434514,,,73861,0
+smoothness,validation,2004-2005,blend_sym,brier,0.142458,,,73861,0
+smoothness,validation,2004-2005,blend_sym,worst_ratio,1.353072,,,73861,0
+smoothness,validation,2004-2005,blend_sym,meets,0.000000,,,73861,0
+smoothness,validation,2004-2005,blend_sym,seconds,175.600000,,,73861,0
+smoothness,validation,2004-2005,blend_sym,score_step_h1,6.614082,,,73861,0
+smoothness,validation,2004-2005,blend_sym,score_step_h2,7.295143,,,73861,0
+smoothness,validation,2004-2005,blend_sym,curvature,5.412289,,,73861,0
+smoothness,validation,2004-2005,blend_sym,halftime_possession,3.535747,,,73861,0
+smoothness,validation,2004-2005,blend_sym,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,blend_sym,yard_step,1.522513,,,73861,0
+smoothness,validation,2004-2005,blend_sym,possession_2min,3.985288,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,log_loss,0.433979,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,brier,0.142256,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,worst_ratio,1.296636,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,meets,0.000000,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,seconds,71.200000,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,score_step_h1,4.332101,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,score_step_h2,6.864211,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,curvature,2.759785,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,halftime_possession,3.889909,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,yard_step,1.250352,,,73861,0
+smoothness,validation,2004-2005,boost_spline_bag5,possession_2min,4.231503,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,log_loss,0.434134,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,brier,0.142340,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,worst_ratio,1.132985,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,meets,0.000000,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,seconds,72.900000,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,score_step_h1,5.452550,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,score_step_h2,6.101999,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,curvature,3.126461,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,halftime_possession,3.398954,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,yard_step,1.228148,,,73861,0
+smoothness,validation,2004-2005,boost_spline_sym_bag5,possession_2min,4.677135,,,73861,0
+smoothness,validation,2004-2005,g1,log_loss,0.436333,,,73861,0
+smoothness,validation,2004-2005,g1,brier,0.143549,,,73861,0
+smoothness,validation,2004-2005,g1,worst_ratio,4.044697,,,73861,0
+smoothness,validation,2004-2005,g1,meets,0.000000,,,73861,0
+smoothness,validation,2004-2005,g1,seconds,46.800000,,,73861,0
+smoothness,validation,2004-2005,g1,score_step_h1,15.152071,,,73861,0
+smoothness,validation,2004-2005,g1,score_step_h2,16.272050,,,73861,0
+smoothness,validation,2004-2005,g1,curvature,16.178789,,,73861,0
+smoothness,validation,2004-2005,g1,halftime_possession,5.748247,,,73861,0
+smoothness,validation,2004-2005,g1,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,g1,yard_step,3.460102,,,73861,0
+smoothness,validation,2004-2005,g1,possession_2min,5.039977,,,73861,0
+smoothness,validation,2004-2005,linear_tree,log_loss,0.439343,,,73861,0
+smoothness,validation,2004-2005,linear_tree,brier,0.144519,,,73861,0
+smoothness,validation,2004-2005,linear_tree,worst_ratio,268.000000,,,73861,0
+smoothness,validation,2004-2005,linear_tree,meets,0.000000,,,73861,0
+smoothness,validation,2004-2005,linear_tree,seconds,34.200000,,,73861,0
+smoothness,validation,2004-2005,linear_tree,score_step_h1,21.550394,,,73861,0
+smoothness,validation,2004-2005,linear_tree,score_step_h2,22.841248,,,73861,0
+smoothness,validation,2004-2005,linear_tree,curvature,22.423335,,,73861,0
+smoothness,validation,2004-2005,linear_tree,halftime_possession,14.651574,,,73861,0
+smoothness,validation,2004-2005,linear_tree,monotone_violations,267.000000,,,73861,0
+smoothness,validation,2004-2005,linear_tree,yard_step,3.982950,,,73861,0
+smoothness,validation,2004-2005,linear_tree,possession_2min,0.395298,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,log_loss,0.434768,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,brier,0.142861,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,worst_ratio,2.649552,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,meets,0.000000,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,seconds,39.300000,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,score_step_h1,10.276546,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,score_step_h2,10.949679,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,curvature,10.598207,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,halftime_possession,7.199997,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,yard_step,3.965309,,,73861,0
+smoothness,validation,2004-2005,smooth_feat,possession_2min,3.954943,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,log_loss,0.434081,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,brier,0.142642,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,worst_ratio,2.751714,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,meets,0.000000,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,seconds,175.200000,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,score_step_h1,10.098183,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,score_step_h2,11.060891,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,curvature,11.006857,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,halftime_possession,6.107067,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,yard_step,2.950024,,,73861,0
+smoothness,validation,2004-2005,smooth_feat_bag5,possession_2min,3.315838,,,73861,0
+smoothness,validation,2004-2005,spline_logit,log_loss,0.436804,,,73861,0
+smoothness,validation,2004-2005,spline_logit,brier,0.142888,,,73861,0
+smoothness,validation,2004-2005,spline_logit,worst_ratio,1.512112,,,73861,0
+smoothness,validation,2004-2005,spline_logit,meets,0.000000,,,73861,0
+smoothness,validation,2004-2005,spline_logit,seconds,1.500000,,,73861,0
+smoothness,validation,2004-2005,spline_logit,score_step_h1,3.718546,,,73861,0
+smoothness,validation,2004-2005,spline_logit,score_step_h2,5.391376,,,73861,0
+smoothness,validation,2004-2005,spline_logit,curvature,0.857191,,,73861,0
+smoothness,validation,2004-2005,spline_logit,halftime_possession,4.536337,,,73861,0
+smoothness,validation,2004-2005,spline_logit,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,spline_logit,yard_step,1.218260,,,73861,0
+smoothness,validation,2004-2005,spline_logit,possession_2min,4.884206,,,73861,0
+smoothness,validation,2004-2005,spline_sym,log_loss,0.436871,,,73861,0
+smoothness,validation,2004-2005,spline_sym,brier,0.142948,,,73861,0
+smoothness,validation,2004-2005,spline_sym,worst_ratio,0.601890,,,73861,0
+smoothness,validation,2004-2005,spline_sym,meets,1.000000,,,73861,0
+smoothness,validation,2004-2005,spline_sym,seconds,1.500000,,,73861,0
+smoothness,validation,2004-2005,spline_sym,score_step_h1,3.301021,,,73861,0
+smoothness,validation,2004-2005,spline_sym,score_step_h2,4.815121,,,73861,0
+smoothness,validation,2004-2005,spline_sym,curvature,0.354486,,,73861,0
+smoothness,validation,2004-2005,spline_sym,halftime_possession,1.445060,,,73861,0
+smoothness,validation,2004-2005,spline_sym,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,spline_sym,yard_step,1.195950,,,73861,0
+smoothness,validation,2004-2005,spline_sym,possession_2min,4.780441,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,log_loss,0.436517,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,brier,0.142898,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,worst_ratio,0.593777,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,meets,1.000000,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,seconds,2.100000,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,score_step_h1,3.440723,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,score_step_h2,4.750217,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,curvature,0.361039,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,halftime_possession,1.423367,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,yard_step,1.170199,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late,possession_2min,5.038327,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,log_loss,0.436326,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,brier,0.142838,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,worst_ratio,0.593777,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,meets,1.000000,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,seconds,43.000000,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,score_step_h1,3.440723,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,score_step_h2,4.750217,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,curvature,0.361039,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,halftime_possession,1.423367,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,yard_step,1.170199,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,possession_2min,5.038327,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,log_loss,0.436480,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,brier,0.142929,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,worst_ratio,0.593777,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,meets,1.000000,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,seconds,21.000000,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,score_step_h1,3.440723,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,score_step_h2,4.750217,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,curvature,0.361039,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,halftime_possession,1.423367,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,monotone_violations,0.000000,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,yard_step,1.170199,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_trees,possession_2min,5.038327,,,73861,0
+smoothness,validation,2004-2005,spline_sym_late_hand_over,chosen_by_rule,1.000000,,,0,0
+smoothness,empirical,1999-2005,what happened,possession_2min,1.023544,,,3283,0
+smoothness,empirical,1999-2005,what happened,possession_2min_lo,-2.834061,,,3283,0
+smoothness,empirical,1999-2005,what happened,possession_2min_hi,4.878105,,,3283,0
+smoothness,empirical,2006-2025,what happened,possession_2min,4.886085,,,9996,0
+smoothness,empirical,2006-2025,what happened,possession_2min_lo,2.621812,,,9996,0
+smoothness,empirical,2006-2025,what happened,possession_2min_hi,7.145348,,,9996,0
+smoothness,reference,2006-2025,nflfastr_vegas_wp,score_step_h1,3.759966,,,180605,0
+smoothness,reference,2006-2025,nflfastr_vegas_wp,score_step_h2,7.169725,,,180605,0
+smoothness,reference,2006-2025,nflfastr_vegas_wp,curvature,2.274566,,,180605,0
+smoothness,reference,2006-2025,nflfastr_vegas_wp,halftime_possession,3.782875,,,180605,0
+smoothness,reference,2006-2025,nflfastr_vegas_wp,halftime_possession_mean,1.596827,,,180605,0
+smoothness,reference,2006-2025,nflfastr_wp,score_step_h1,5.386087,,,180605,0
+smoothness,reference,2006-2025,nflfastr_wp,score_step_h2,9.024104,,,180605,0
+smoothness,reference,2006-2025,nflfastr_wp,curvature,7.808254,,,180605,0
+smoothness,reference,2006-2025,nflfastr_wp,halftime_possession,7.592964,,,180605,0
+smoothness,reference,2006-2025,nflfastr_wp,halftime_possession_mean,4.733326,,,180605,0

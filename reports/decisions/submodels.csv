@@ -268,30 +268,30 @@ punt,kicking team keeps the ball,own 1-20 (80-99),observed,rate,0.012826,0.01083
 punt,kicking team keeps the ball,own 1-20 (80-99),model,mean_predicted,0.013217,0.012490,0.013957,8654,20
 punt,receiving spot (its yardline_100),own 1-20 (80-99),observed,rate,57.189224,56.598521,57.717947,8445,20
 punt,receiving spot (its yardline_100),own 1-20 (80-99),model,mean_predicted,57.251992,56.519475,57.940428,8445,20
-punt,expected WP,"all punts, 2006-2025",model,exp_wp,0.471454,0.469358,0.473525,47765,20
-punt,expected WP,"all punts, 2006-2025",model,real_wp,0.472279,0.470100,0.474389,47765,20
-punt,expected WP,"all punts, 2006-2025",model,bias,-0.000825,-0.001111,-0.000533,47765,20
-punt,expected WP,"all punts, 2006-2025",model,abs_err,0.011115,0.010524,0.011692,47765,20
-punt,expected WP,opp 30-49 (yardline_100 30-49),model,exp_wp,0.548230,0.540415,0.557243,7715,20
-punt,expected WP,opp 30-49 (yardline_100 30-49),model,real_wp,0.548666,0.540780,0.557647,7715,20
-punt,expected WP,opp 30-49 (yardline_100 30-49),model,bias,-0.000436,-0.000722,-0.000131,7715,20
-punt,expected WP,opp 30-49 (yardline_100 30-49),model,abs_err,0.007219,0.006415,0.007963,7715,20
-punt,expected WP,50-59,model,exp_wp,0.501356,0.493570,0.509499,8889,20
-punt,expected WP,50-59,model,real_wp,0.502393,0.494634,0.510385,8889,20
-punt,expected WP,50-59,model,bias,-0.001037,-0.001505,-0.000554,8889,20
-punt,expected WP,50-59,model,abs_err,0.009141,0.008225,0.010048,8889,20
-punt,expected WP,60-69,model,exp_wp,0.468505,0.463695,0.473516,10854,20
-punt,expected WP,60-69,model,real_wp,0.470134,0.465187,0.475322,10854,20
-punt,expected WP,60-69,model,bias,-0.001629,-0.002128,-0.001152,10854,20
-punt,expected WP,60-69,model,abs_err,0.012173,0.011291,0.013044,10854,20
-punt,expected WP,70-79,model,exp_wp,0.433668,0.426424,0.439627,11647,20
-punt,expected WP,70-79,model,real_wp,0.434309,0.426965,0.440323,11647,20
-punt,expected WP,70-79,model,bias,-0.000641,-0.001155,-0.000106,11647,20
-punt,expected WP,70-79,model,abs_err,0.013146,0.012542,0.013758,11647,20
-punt,expected WP,own 1-20 (80-99),model,exp_wp,0.426560,0.417562,0.436124,8654,20
-punt,expected WP,own 1-20 (80-99),model,real_wp,0.426759,0.417549,0.436507,8654,20
-punt,expected WP,own 1-20 (80-99),model,bias,-0.000200,-0.000846,0.000402,8654,20
-punt,expected WP,own 1-20 (80-99),model,abs_err,0.012556,0.011956,0.013179,8654,20
+punt,expected WP,"all punts, 2006-2025",model,exp_wp,0.473043,0.470973,0.475053,47765,20
+punt,expected WP,"all punts, 2006-2025",model,real_wp,0.473816,0.471777,0.475828,47765,20
+punt,expected WP,"all punts, 2006-2025",model,bias,-0.000773,-0.001052,-0.000489,47765,20
+punt,expected WP,"all punts, 2006-2025",model,abs_err,0.011232,0.010790,0.011637,47765,20
+punt,expected WP,opp 30-49 (yardline_100 30-49),model,exp_wp,0.549695,0.541993,0.558698,7715,20
+punt,expected WP,opp 30-49 (yardline_100 30-49),model,real_wp,0.550033,0.542281,0.559066,7715,20
+punt,expected WP,opp 30-49 (yardline_100 30-49),model,bias,-0.000338,-0.000646,-0.000010,7715,20
+punt,expected WP,opp 30-49 (yardline_100 30-49),model,abs_err,0.005740,0.005431,0.006032,7715,20
+punt,expected WP,50-59,model,exp_wp,0.503706,0.495608,0.511974,8889,20
+punt,expected WP,50-59,model,real_wp,0.504695,0.496832,0.513063,8889,20
+punt,expected WP,50-59,model,bias,-0.000990,-0.001474,-0.000523,8889,20
+punt,expected WP,50-59,model,abs_err,0.008412,0.007914,0.008921,8889,20
+punt,expected WP,60-69,model,exp_wp,0.470474,0.465931,0.475239,10854,20
+punt,expected WP,60-69,model,real_wp,0.472178,0.467488,0.477252,10854,20
+punt,expected WP,60-69,model,bias,-0.001704,-0.002222,-0.001186,10854,20
+punt,expected WP,60-69,model,abs_err,0.012367,0.011664,0.013060,10854,20
+punt,expected WP,70-79,model,exp_wp,0.435398,0.428501,0.441205,11647,20
+punt,expected WP,70-79,model,real_wp,0.435918,0.428902,0.441875,11647,20
+punt,expected WP,70-79,model,bias,-0.000520,-0.001073,0.000031,11647,20
+punt,expected WP,70-79,model,abs_err,0.014138,0.013466,0.014818,11647,20
+punt,expected WP,own 1-20 (80-99),model,exp_wp,0.426793,0.417696,0.436278,8654,20
+punt,expected WP,own 1-20 (80-99),model,real_wp,0.426907,0.417848,0.436395,8654,20
+punt,expected WP,own 1-20 (80-99),model,bias,-0.000113,-0.000803,0.000517,8654,20
+punt,expected WP,own 1-20 (80-99),model,abs_err,0.013697,0.013093,0.014314,8654,20
 tries,pat,2006-2025,model,brier,0.033602,0.023830,0.043437,25429,20
 tries,pat,2006-2025,model,log_loss,0.144120,0.107012,0.180905,25429,20
 tries,pat,2006-2025,model,ece,0.004571,0.001045,0.008199,25429,20

@@ -19,6 +19,7 @@ import polars as pl
 
 from twm.modules.decisions import coach
 from twm.modules.decisions import grade as gr
+from twm.modules.decisions import regrade_compare as rc
 
 RULE_TEXT = {
     "not_a_snap": "not a scrimmage snap (no play type a decision can have)",
@@ -63,8 +64,16 @@ def verify_sample(fourth: pl.DataFrame, tries: pl.DataFrame, n: int = VERIFY_SAM
     return out
 
 
+def _last_test(fourth: pl.DataFrame) -> int:
+    from twm.modules.decisions import wp as wpm
+
+    done = [s for s in fourth.get_column("season").unique().to_list() if s in wpm.TEST_SEASONS]
+    return max(done) if done else int(fourth.get_column("season").max())
+
+
 def compute(out_dir: Path | None = None, *, cfg: Any = None, verify: bool = True,
-            models_root: Path | None = None, models=None) -> dict[str, Any]:  # fmt: skip
+            models_root: Path | None = None, models=None,
+            before: Path | None = None) -> dict[str, Any]:  # fmt: skip
     """Every table of the report from the stored grades."""
     from twm.config import settings
 
@@ -83,6 +92,13 @@ def compute(out_dir: Path | None = None, *, cfg: Any = None, verify: bool = True
         "verify": (verify_sample(fourth, tries, models_root=models_root, models=models)
                    if verify else None),
         "wp_diag": wp_diagnostics(fourth.get_column("season").unique().to_list(), models_root),
+        "fold_smooth": fold_smoothness(fourth.get_column("season").unique().to_list(),
+                                       None if out_dir is None else out_dir.parent / "wp_backtest"),
+        "compare": rc.compare(fourth, tries, season=_last_test(fourth),
+                              min_games=int(cfg.leaderboard_min_games),
+                              before=before if before is not None else (
+                                  rc.before_dir() if out_dir is None
+                                  else out_dir.parent / "graded_g1")),
         "platt": platt_check(fourth),
     }  # fmt: skip
 
@@ -298,50 +314,113 @@ def _checks_md(c: dict) -> list[str]:
 
 
 def _wp_md(c: dict) -> list[str]:
-    d = c["wp_diag"]
-    rows = [[r["season"], _pts(r["score_step"], 1), r["score_step_at"],
-             _pts(r["halftime_possession"], 1)] for r in d.iter_rows(named=True)]  # fmt: skip
-    worst = d.sort("score_step", descending=True).row(0, named=True) if d.height else None
-    big = (f" The largest is {_pts(worst['score_step'], 1)} WP points ({worst['season']} fold, "
-           f"between {worst['score_step_at']} and {worst['score_step_at'] + 1})."
-           if worst else "")  # fmt: skip
-    return ["## 6. Warning: the WP model's steps (G1) drive part of these grades", "",
-            "Every grade is a difference between the WP of two or more hypothetical states, so "
-            "it inherits any unevenness of G1's WP model. Two checks on synthetic states, per "
-            "fold model (model properties, not grades):", "",
-            "- **Score step**: the largest WP change for ONE point of score for a team that "
-            "has just received a first-quarter kickoff (football: about 1-3 WP points)." + big,
-            "- **Halftime possession**: WP with the ball at its own 42 minus WP when the "
-            "opponent has it at the opponent's 42, one second before halftime, tied (football: "
-            "about 0).", "",
-            "Both are far from football. What it does to the grades: " + _impact(c) + " "
-            "Until G1's WP model is smoothed in score and near halftime, treat the grades as "
-            "provisional; the stored inputs make a full regrade a matter of seconds per "
-            "season.", "",
-            *_table(["Fold", "Score step (pts)", "At score", "Halftime possession (pts)"],
-                    rows), ""]  # fmt: skip
+    """Section 6: the WP model's smoothness per fold (G1b limits and G3's two original checks)
+    and, when the grades made with G1's WP folds were frozen, what the regrade changed."""
+    from twm.modules.decisions import wp_select as ws
+    from twm.modules.decisions import wp_smooth as wsm
+
+    d, fs = c["wp_diag"], c["fold_smooth"]
+    lim = wsm.THRESHOLDS
+    by = {r["season"]: r for r in fs.iter_rows(named=True)} if fs.height else {}
+    rows = []
+    for r in d.iter_rows(named=True):
+        g = by.get(r["season"], {})
+        rows.append([r["season"], *[f"{g[k]:.1f}" if k in g else "-" for k in
+                                    ("score_step_h1", "score_step_h2", "curvature",
+                                     "halftime_possession", "possession_2min")],
+                     _pts(r["score_step"], 1), _pts(r["halftime_possession"], 1),
+                     ("yes" if g.get("meets") else "no") if g else "-"])  # fmt: skip
+    n_ok = int(fs.get_column("meets").sum()) if fs.height else 0
+    head = ["Fold", f"1-pt step, 1st half (<= {lim['score_step_h1']:g})",
+            f"1-pt step, 2nd half (<= {lim['score_step_h2']:g})",
+            f"Curvature (<= {lim['curvature']:g})",
+            f"Halftime possession (<= {lim['halftime_possession']:g})",
+            "Ball 30-120 s before half (reported)",
+            "G3 check: score step", "G3 check: halftime possession",
+            "Meets the limits"]  # fmt: skip
+    verdict = (f"All {fs.height} fold models meet every limit." if _smooth_ok(c) else
+               f"Only {n_ok} of {fs.height} fold models meet every limit: treat the grades of "
+               "the others as provisional.")  # fmt: skip
+    out = ["## 6. The WP model's smoothness (G1b) and what the regrade changed", "",
+           "Every grade is a difference between the WPs of hypothetical states, so it inherits "
+           "any unevenness of the WP model. G3 found G1's model uneven (one point of score "
+           "worth 6-19 WP points in the first quarter; the ball worth up to 20 points one "
+           f"second before halftime). G1b replaced it with **{ws.CHOSEN}** "
+           f"({ws.chosen().description}), chosen on the validation seasons 2004-2005 only "
+           "(reports/decisions/wp_backtest.md, 'Smoothness'; limits and reasons: "
+           "docs/decision_metrics.md). Per fold model, in WP points (model properties on "
+           "synthetic states, not grades): the G1b metrics and G3's two original checks "
+           "(a team receiving a first-quarter kickoff; the ball at its own 42 one second "
+           "before halftime, tied).", "", *_table(head, rows), "", verdict, ""]  # fmt: skip
+    return out + _compare_md(c)
 
 
-def _impact(c: dict) -> str:
-    """Computed sentences: how much of the two-point and fourth-down WP lost sits where the
-    WP model is uneven (first-quarter 6-point leads; the last 2:00 of the first half)."""
-    t = c["tries"].filter((pl.col("grade") == "clear") & ~pl.col("correct").fill_null(True))
-    q1 = t.filter((pl.col("qtr") == 1) & (pl.col("score_differential") == 6))
-    f = c["fourth"].filter(pl.col("grade") == "clear")
-    late = (pl.col("half_number") == 1) & (pl.col("half_seconds_remaining") <= 120)
-    lost = f.get_column("wp_lost").sum()
-    late_lost = f.filter(late).get_column("wp_lost").sum()
-    share = q1.height / t.height if t.height else 0.0
-    mean = q1.get_column("wp_lost").mean() if q1.height else 0.0
-    late_share = f.filter(late).height / max(f.height, 1)
-    return (
-        f"{q1.height:,} of the {t.height:,} clear two-point 'mistakes' ({_pct(share, 0)}) "
-        "are first-quarter kicks after a touchdown that made the lead 6, each said to cost "
-        f"{_pts(mean, 1)} WP points on average (one-point steps of the model, table below); "
-        f"the last 2:00 of the first half hold {_pct(late_share, 0)} "
-        f"of the clear fourth downs and {_pct(late_lost / lost if lost else 0.0, 0)} of their "
-        "WP lost (possession over-valued there makes going for it look better)."
-    )
+def _compare_md(c: dict) -> list[str]:
+    cp = c.get("compare")
+    if cp is None:
+        return ["No frozen grades from G1's WP folds (data/decisions/graded_g1/) to compare "
+                "with.", ""]  # fmt: skip
+    t, late, f4 = cp["tries"], cp["late_h1"], cp["fourth"]
+    tb, ta = trend(cp["league_before"]), trend(cp["league_after"])
+    rk = cp["ranking"]
+    out = ["### Before (G1's WP folds) vs after (the smoothed folds)", "",
+           f"Same decisions, same sub-models and inputs; only the WP model changed "
+           f"({f4['graded']:,} graded fourth downs and {t['matched']:,} tries matched).", "",
+           f"- **Two-point decisions**: clear 'mistakes' {t['mistakes_before']:,} -> "
+           f"{t['mistakes_after']:,}; of them first-quarter kicks at a 6-point lead "
+           f"{t['q1_six_before']:,} -> {t['q1_six_after']:,}; their WP lost "
+           f"{100 * t['lost_before']:.0f} -> {100 * t['lost_after']:.0f} points. "
+           f"{t['changed']:,} of {t['matched']:,} try grades changed (clear vs toss-up, or the "
+           "recommended option).",
+           f"- **Fourth downs in the last 2:00 of the first half** ({late['graded']:,} graded): "
+           f"{late['changed']:,} grades changed; clear {late['clear_before']:,} -> "
+           f"{late['clear_after']:,}; clearly 'go' {late['go_before']:,} -> {late['go_after']:,}; "
+           f"WP lost on clear calls {100 * late['lost_before']:.0f} -> "
+           f"{100 * late['lost_after']:.0f} points.",
+           f"- **All fourth downs**: {f4['changed']:,} of {f4['graded']:,} grades changed; clear "
+           f"{f4['clear_before']:,} -> {f4['clear_after']:,}."]  # fmt: skip
+    if tb and ta:
+        out.append(f"- **League trend** (fourth-down WP lost per team-game, first five -> last "
+                   f"five seasons; slope per season): before {_pts(tb['first'])} -> "
+                   f"{_pts(tb['last'])} ({100 * tb['slope']:+.3f}); after {_pts(ta['first'])} -> "
+                   f"{_pts(ta['last'])} ({100 * ta['slope']:+.3f}).")  # fmt: skip
+    j = rk["table"]
+    if j.height:
+        rho = f"{rk['spearman']:.2f}" if rk["spearman"] is not None else "-"
+        moves = j.with_columns((pl.col("rank_before") - pl.col("rank")).alias("up"))
+        big = moves.sort(pl.col("up").abs(), "coach", descending=[True, False]).head(3)
+        mv = "; ".join(f"{r['coach']} {r['rank_before']} -> {r['rank']}"
+                       for r in big.iter_rows(named=True))  # fmt: skip
+        out += [f"- **{rk['season']} coach ranking**: rank correlation before vs after {rho}; "
+                f"biggest moves: {mv}.", "",
+                *_table(["Rank now", "Coach", "Team", "Rank before", "WP lost per game now",
+                         "Before"],
+                        [[r["rank"], r["coach"], r["team"], r["rank_before"],
+                          _pts(r["wp_lost_per_game"]), _pts(r["per_game_before"])]
+                         for r in j.iter_rows(named=True)])]  # fmt: skip
+    return [*out, ""]
+
+
+def fold_smoothness(seasons, wp_dir: Path | None = None) -> pl.DataFrame:
+    """The G1b smoothness metrics of each season's WP fold model (from its fold summary in
+    ``wp_dir``, default data/decisions/wp_backtest)."""
+    from twm.modules.decisions import wp as wpm
+    from twm.modules.decisions import wp_smooth as wsm
+
+    out = []
+    for s in sorted(seasons):
+        f = (wp_dir if wp_dir is not None else wpm.backtest_dir()) / f"fold_{s}.json"
+        sm = json.loads(f.read_text()).get("smoothness") if f.exists() else None
+        if sm:
+            out.append({"season": s, **{k: float(sm[k]) for k in wsm.THRESHOLDS},
+                        "possession_2min": float(sm.get("possession_2min", float("nan"))),
+                        "meets": not wsm.failures(sm)})  # fmt: skip
+    return pl.DataFrame(out)
+
+
+def _smooth_ok(c: dict) -> bool:
+    fs = c.get("fold_smooth")
+    return fs is not None and fs.height > 0 and bool(fs.get_column("meets").all())
 
 
 LIMITS = [
@@ -359,6 +438,11 @@ LIMITS = [
     "the per-season ranges themselves use the seasons before S only.",
     "Honesty note (from G2): the 10/5-season training windows of the conversion and field-goal "
     "models were added after a first backtest; each fold still picks its window on S-1 only.",
+    "Honesty note (G1b): the smoothness limits were fixed before any fix was tried, and every "
+    "candidate was chosen on the 2004-05 validation seasons only; but two later candidate rounds "
+    "(the late-game hand-over and the redefined drive value) were prompted by looking at regraded "
+    "seasons, and the pooled test log loss of a first refit (.4484) was seen before them. The "
+    "2006-2025 numbers are therefore slightly optimistic; 2026 is the first clean test.",
 ]
 
 
@@ -370,16 +454,16 @@ def render(c: dict) -> str:
     done = [s for s in seasons if s in wpm.TEST_SEASONS]
     cfg = c["cfg"]
     lines = [
-        "# Fourth downs and two-point tries: the grades (G3)", "",
+        "# Fourth downs and two-point tries: the grades (G3, regraded in G1b)", "",
         "Generated by `uv run twm decisions grade` (code: src/twm/modules/decisions/{grade_inputs,"
         "grade,coach,decisions_report}.py; every rule: docs/decision_metrics.md). Each season S "
         f"({seasons[0]}-{seasons[-1]}) is graded by the fold models that learned from seasons "
-        "before S only (WP: G1; conversion, field goal, punt, try rates: G2). A decision is "
+        "before S only (WP: G1, smoothed in G1b; conversion, field goal, punt, try rates: G2). "
+        "A decision is "
         f"graded (**clear**) only when the best option's WP beats the second best by more than "
         f"{100 * cfg.toss_up_margin:.1f} WP points (`decisions.toss_up_margin`); otherwise it is "
         "a **toss-up**, counted but not graded. Every row is stored with all its inputs under "
-        "data/decisions/graded/. **Read section 6 first**: G1's WP model has steps that make "
-        "part of these grades artifacts.", "",
+        "data/decisions/graded/. " + _header_note(c), "",
         *_counts_md(c), *_league_md(c), "## 3. Coaches", "",
         "Credited to the head coach of the team with the ball in that game "
         "(`fact_game.home_coach` / `away_coach`). Full tables per coach-season: the CSV.", "",
@@ -391,6 +475,14 @@ def render(c: dict) -> str:
     lines += [*_inputs_md(c), *_checks_md(c), *_wp_md(c), "## 7. Limitations", "",
               *[f"- {x}" for x in LIMITS], ""]  # fmt: skip
     return "\n".join(lines)
+
+
+def _header_note(c: dict) -> str:
+    if _smooth_ok(c):
+        return ("The WP model was smoothed in G1b (section 6: every fold model meets the "
+                "smoothness limits; what the regrade changed).")  # fmt: skip
+    return ("**Read section 6 first**: some WP fold models break the smoothness limits, so "
+            "part of their grades can be artifacts.")  # fmt: skip
 
 
 CSV_COLUMNS = ("table", "season", "coach", "team", "metric", "value")
@@ -412,6 +504,23 @@ def csv_rows(c: dict) -> pl.DataFrame:
     parts = [melt(c["league"], "league", ["season"]),
              melt(c["coach_season"], "coach_season", ["season", "coach", "team"]),
              melt(c["wp_diag"], "wp_diagnostics", ["season"])]  # fmt: skip
+    fs = c.get("fold_smooth")
+    if fs is not None and fs.height:
+        parts.append(melt(fs.with_columns(pl.col("meets").cast(pl.Float64)), "wp_smoothness",
+                          ["season"]))  # fmt: skip
+    cp = c.get("compare")
+    if cp is not None:
+        flat = [(f"{k}_{m}", float(v)) for k in ("tries", "late_h1", "fourth")
+                for m, v in cp[k].items()]  # fmt: skip
+        if cp["ranking"]["spearman"] is not None:
+            flat.append(("ranking_spearman", cp["ranking"]["spearman"]))
+        parts.append(pl.DataFrame({"table": "regrade_g1b", "season": None, "coach": None,
+                                   "team": None, "metric": [k for k, _ in flat],
+                                   "value": [v for _, v in flat]},
+                                  schema={"table": pl.String, "season": pl.Int32,
+                                          "coach": pl.String, "team": pl.String,
+                                          "metric": pl.String, "value": pl.Float64}))  # fmt: skip
+        parts.append(melt(cp["league_before"], "league_before_g1b", ["season"]))
     return pl.concat(parts).sort("table", "season", "coach", "metric", nulls_last=True)
 
 

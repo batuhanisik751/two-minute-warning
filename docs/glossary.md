@@ -607,7 +607,7 @@ The chance the offense wins from this moment, given score, time, field position 
 The chance the offense wins from this moment, from a model that never saw the season it scores. It replaces nflfastR's wp in the decision grades.
 
 - **Name:** `own_wp`; **unit:** probability (0-1); **used by:** decisions
-- **Formula:** LightGBM on the play state (the G1 features), trained walk-forward on seasons before the play's season; isotonic calibration only where it helped on the validation season
+- **Formula:** trained walk-forward on seasons before the play's season (G1); since G1b a smooth possession-symmetric spline logistic model of the play state up to 15:00 of the fourth quarter, handing over to a monotone LightGBM by 10:00 left (wp_select.CHOSEN); isotonic calibration only where it helped on the validation season and kept the model within the smoothness limits
 - **Source:** twm.modules.decisions.wp
 
 ### YAC over expected \*
@@ -1016,6 +1016,14 @@ Where experts (or last season's scoring) placed it before the season.
 - **Formula:** the pool's preseason_pos_rank: 2020 on the rank on FantasyPros' last August/September K or DST cheat sheet before week 1; earlier the rank by last season's points per game
 - **Source:** twm.modules.streamer.features; fact_ranking_kdst.pos_rank; twm.modules.streamer.pool
 - **Streamer reason:** "Was ranked #{value:.0f} at {pos} before the season"
+
+### Lead in standard deviations of what is left
+
+A random-walk view of the game: how many 'typical swings of the remaining time' the offense is ahead by, counting the ball and the spread.
+
+- **Name:** `z_margin`; **unit:** z-score; **used by:** decisions
+- **Formula:** (score_differential + drive_value + posteam_spread x t) / (13.5 x sqrt(t) + 1), t = share of regulation left
+- **Source:** fact_play.score_differential, fact_game.spread_line, fact_play.game_seconds_remaining; twm.modules.decisions.wp_data
 
 ### Lead x time played
 
@@ -1544,6 +1552,14 @@ Targets freed up by players at his own position: the most direct path to more wo
 - **Formula:** vacated_target_share over unavailable teammates of his own position group only
 - **Source:** twm.modules.waiver_radar.features; as vacated_target_share
 - **Waiver Radar reason:** "{teammate} ({pos}) {why}: {value:.0%} of the team's targets are up for grabs at his position"
+
+### Value of the ball before the half ends
+
+What having the ball here is worth before halftime (or the end), the other team's later possessions included: about 4 points at the opponent's 20 early in a half, about 2 at midfield, 0 when the half ends.
+
+- **Name:** `drive_value`; **unit:** points; **used by:** decisions
+- **Formula:** half_value(yardline_100, half_seconds_remaining): the offense's points minus the defense's from a 1st down at this spot and clock until halftime, a fixed table measured on the 1999-2005 first halves (wp_data.HALF_VALUE_TABLE), read linearly in yards and log seconds; 0 when the half is over
+- **Source:** fact_play.yardline_100, fact_play.half_seconds_remaining; twm.modules.decisions.wp_data
 
 ### WOPR (weighted opportunity rating)
 

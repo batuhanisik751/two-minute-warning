@@ -24,7 +24,7 @@ import numpy as np
 import polars as pl
 
 from twm.backtest import metrics as mt
-from twm.modules.decisions import wp
+from twm.modules.decisions import wp, wp_smooth_report
 from twm.modules.decisions.wp_data import KEYS, LABEL, States
 
 METHODS = {"own": "prob", "nflfastr_wp": "wp", "nflfastr_vegas_wp": "vegas_wp"}
@@ -231,6 +231,13 @@ def compute(
     progress("report: pooled, era and slice metrics done; per season and reliability next")
     rows += season_rows(pp)
     rows += reliability_rows(pp)
+    side = None if out_dir is None else out_dir.parent  # tests: nothing outside out_dir
+    rows += wp_smooth_report.rows(
+        summaries, states.rows,
+        select_dir=None if side is None else side / "wp_select",
+        before=None if side is None else side / "wp_smoothness_g1.csv",
+    )  # fmt: skip
+    progress("report: smoothness (folds, validation candidates, nflfastR readings) done")
     return pl.DataFrame(rows, schema=SCHEMA, orient="row"), summaries, info
 
 
@@ -265,8 +272,15 @@ def _method_table(t: pl.DataFrame, scope: str, subset: str) -> list[str]:
 
 
 def _setup(summaries: list[dict], info: dict) -> list[str]:
+    from twm.modules.decisions import wp_select as ws
+
     first, last = summaries[0], summaries[-1]
+    names = sorted({s.get("candidate", "g1") for s in summaries})
+    fam = "; ".join(f"**{n}** ({ws.CANDIDATES[n].description})" if n in ws.CANDIDATES else n
+                    for n in names)  # fmt: skip
+    n_trials = "/".join(str(n) for n in sorted({len(s["trials"]) for s in summaries}))
     kept = [s["test_season"] for s in summaries if s["calibration"].startswith("isotonic")]
+    dropped = [s["test_season"] for s in summaries if "isotonic dropped" in s["calibration"]]
     d = info["drops"]
     return [
         "## Setup", "",
@@ -280,21 +294,29 @@ def _setup(summaries: list[dict], info: dict) -> list[str]:
         f"- **Walk-forward**: {len(summaries)} folds, test seasons "
         f"{first['test_season']}-{last['test_season']}. The first fold is '{first['fold']}'; the "
         f"last is '{last['fold']}'. Each model learns from earlier seasons only; its settings "
-        "are tuned on the season before the test season (early stopping, 4 settings: 31 or 63 "
-        "leaves x at least 200 or 1,000 plays per leaf, learning rate 0.05, log loss), then it "
-        "is refit on every earlier season. LightGBM, single-threaded and deterministic.",
+        f"are tuned on the season before the test season ({n_trials} setting(s) per fold, "
+        "log loss), then it is refit on every earlier season. Single-threaded and "
+        "deterministic.",
+        f"- **Model** (G1b): {fam}. Chosen on the validation seasons 2004-2005 by a rule fixed "
+        "beforehand (section 'Smoothness'). G1's original model, one monotone LightGBM (31 or "
+        "63 leaves x at least 200 or 1,000 plays per leaf, learning rate 0.05, early stopping), "
+        "was well calibrated but uneven between neighbouring states.",
         "- **Features**: score difference, seconds left in the game and in the half, half, down, "
         "distance, yards to the end zone, both teams' timeouts, receives the second-half kickoff "
         "(from the opening kickoff), home / away / neutral, the closing spread from the "
         "offense's view, era flags (2015 extra-point rule, 2023+ kickoff rules) and two "
         "time interactions (spread x time left, lead / time left: nflfastR's own, chosen on "
-        "1999-2003 -> 2004-2005 validation before any test season was scored). Monotone: a "
-        "bigger lead or spread, more own timeouts, fewer yards to go or to the end zone, an "
-        "earlier down and getting the ball after halftime never lower the offense's WP; more "
-        "defensive timeouts never raise it.",
+        "1999-2003 -> 2004-2005 validation before any test season was scored); G1b adds "
+        "`drive_value` (the net points, for minus against, that the ball is expected to add "
+        "before halftime: a table measured on 1999-2005) and `z_margin` (the lead, drive "
+        "value and remaining spread in standard deviations of what is left: a random-walk "
+        "view).",
         f"- **Calibration**: isotonic only if it beats the raw model out of sample on the "
-        f"validation season (fit on half its games, scored on the other half). Kept in "
-        f"{len(kept)} of {len(summaries)} folds{': ' + ', '.join(map(str, kept)) if kept else ''}.",
+        f"validation season (fit on half its games, scored on the other half) and (G1b) the "
+        f"calibrated model still meets the smoothness limits (a step-function calibrator "
+        f"re-creates steps). Kept in {len(kept)} of {len(summaries)} folds"
+        f"{': ' + ', '.join(map(str, kept)) if kept else ''}"
+        f"{'; dropped for smoothness in ' + ', '.join(map(str, dropped)) if dropped else ''}.",
         f"- **Comparison**: {info['n_compared']:,} of {info['n_test']:,} test plays "
         f"({info['n_games']:,} games) have nflfastR's `wp` and `vegas_wp`; every number below "
         "is on those plays. Intervals: 95%, season-block bootstrap (2,000 resamples). The "
@@ -317,9 +339,17 @@ def _season_table(t: pl.DataFrame, summaries: list[dict]) -> list[str]:
         ll = " / ".join(_fmt(_get(t, "season", y, "all plays", m, "log_loss")) for m in METHODS)
         d = _get(t, "season", y, "all plays", "own - nflfastr_vegas_wp", "log_loss")
         lines.append(f"| {y} | {d.get('n_plays', 0):,} | {b} | {ll} | {_fmt(d, sign=True)} | "
-                     f"{s['calibration'].split()[0]} | {s['params']['n_estimators']} | "
+                     f"{s['calibration'].split()[0]} | {_trees(s['params'])} | "
                      f"{s['seconds']:.0f} |")  # fmt: skip
     return lines
+
+
+def _trees(params: dict) -> str:
+    """Trees of the refit: one number, or members x (fewest-most) for a bag."""
+    n = params.get("n_estimators")
+    if isinstance(n, list):
+        return f"{len(n)} x {min(n)}-{max(n)}"
+    return "-" if n is None else str(n)
 
 
 def _reliability_table(t: pl.DataFrame) -> list[str]:
@@ -343,6 +373,13 @@ def _reliability_table(t: pl.DataFrame) -> list[str]:
 def _era_test(summaries: list[dict]) -> list[str]:
     rows = [(s["test_season"], s["era_ablation"]) for s in summaries if s.get("era_ablation")]
     if not rows:
+        from twm.modules.decisions import wp_select as ws
+
+        fams = {s.get("candidate", "g1") for s in summaries}
+        if any(f in ws.CANDIDATES and not ws.CANDIDATES[f].era_ablation for f in fams):
+            return ["Not run for this model family: its design uses the era flags (as "
+                    "possession terms), so they cannot be dropped like a tree "
+                    "feature."]  # fmt: skip
         return ["No fold had an era flag that varies within its tuning seasons."]
     lines = ["| Test season | Flags that vary while tuning | Validation log loss with | "
              "without | With minus without |", "|---|---|---|---|---|"]  # fmt: skip
@@ -376,12 +413,18 @@ def render(t: pl.DataFrame, summaries: list[dict], info: dict) -> str:
     secs = [s["seconds"] for s in summaries]
     span = f"{summaries[0]['test_season']}-{summaries[-1]['test_season']}"
     out = [
-        "# Win probability: our walk-forward model vs nflfastR (G1)", "",
+        "# Win probability: our walk-forward model vs nflfastR (G1, smoothed in G1b)", "",
         "Generated by `uv run twm decisions wp-backtest` (code: src/twm/modules/decisions/; "
         "walk-through: notebooks/03_wp_model.ipynb). Win probability (WP) = the chance that "
         "the team with the ball wins, from the situation before the snap. Lower Brier and log "
         "loss = better forecasts; the calibration error says how far, on average, '70%' "
         "forecasts are from winning 70% of the time.", "",
+        "Honesty note (G1b): the smoothness limits were fixed before any fix was tried, and every "
+        "candidate was chosen on the 2004-05 validation seasons only; but two later candidate "
+        "rounds (the late-game hand-over and the redefined drive value) were prompted by looking "
+        "at regraded seasons, and the pooled test log loss of a first refit (.4484) was seen "
+        "before them. The 2006-2025 numbers are therefore slightly optimistic; 2026 is the first "
+        "clean test.", "",
         *_setup(summaries, info),
         f"## Pooled {span}", "", *_method_table(t, "pooled", span), "",
         "## By era", "",
@@ -391,8 +434,11 @@ def render(t: pl.DataFrame, summaries: list[dict], info: dict) -> str:
     out += [f"## Slices ({span})", ""]
     for name in SLICES:
         out += [f"### {name.capitalize()}", "", *_method_table(t, "slice", name), ""]
+    out += [*wp_smooth_report.markdown(t, summaries)]
     out += ["## Per season", "", *_season_table(t, summaries), "",
-            f"Runtime per fold (tuning 4 settings + era test + refit, one thread): "
+            f"Runtime per fold (tuning {len(summaries[-1]['trials'])} settings"
+            f"{' + era test' if any(x.get('era_ablation') for x in summaries) else ''}"
+            f" + smoothness check + refit, one thread): "
             f"{min(secs):.0f}-{max(secs):.0f} s, {sum(secs) / 60:.0f} min in all.", "",
             f"## Reliability (pooled {span}, 10 bins)", "", *_reliability_table(t), "",
             "## Do the era flags matter?", "",

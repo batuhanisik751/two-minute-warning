@@ -1,0 +1,325 @@
+table,scope,subset,method,metric,value,lo,hi,n_plays,n_blocks
+metrics,pooled,2006-2025,own,brier,0.148880,0.144934,0.152933,753923,20
+metrics,pooled,2006-2025,own,log_loss,0.448098,0.437375,0.459066,753923,20
+metrics,pooled,2006-2025,own,ece,0.003836,0.002685,0.010018,753923,20
+metrics,pooled,2006-2025,nflfastr_wp,brier,0.162321,0.158877,0.166351,753923,20
+metrics,pooled,2006-2025,nflfastr_wp,log_loss,0.480312,0.470968,0.491478,753923,20
+metrics,pooled,2006-2025,nflfastr_wp,ece,0.006241,0.003924,0.011503,753923,20
+metrics,pooled,2006-2025,nflfastr_vegas_wp,brier,0.147274,0.143227,0.151379,753923,20
+metrics,pooled,2006-2025,nflfastr_vegas_wp,log_loss,0.443025,0.432089,0.455001,753923,20
+metrics,pooled,2006-2025,nflfastr_vegas_wp,ece,0.003213,0.002570,0.008091,753923,20
+difference,pooled,2006-2025,own - nflfastr_wp,brier,-0.013441,-0.015538,-0.011353,753923,20
+difference,pooled,2006-2025,own - nflfastr_wp,log_loss,-0.032213,-0.037639,-0.027031,753923,20
+difference,pooled,2006-2025,own - nflfastr_vegas_wp,brier,0.001606,0.001103,0.002090,753923,20
+difference,pooled,2006-2025,own - nflfastr_vegas_wp,log_loss,0.005073,0.003267,0.006714,753923,20
+metrics,era,2006-2014,own,brier,0.149832,0.145769,0.154528,335833,9
+metrics,era,2006-2014,own,log_loss,0.449000,0.438238,0.461357,335833,9
+metrics,era,2006-2014,own,ece,0.007236,0.003975,0.015438,335833,9
+metrics,era,2006-2014,nflfastr_wp,brier,0.163315,0.159879,0.166694,335833,9
+metrics,era,2006-2014,nflfastr_wp,log_loss,0.481543,0.472430,0.490636,335833,9
+metrics,era,2006-2014,nflfastr_wp,ece,0.011415,0.006646,0.017748,335833,9
+metrics,era,2006-2014,nflfastr_vegas_wp,brier,0.147937,0.143880,0.152434,335833,9
+metrics,era,2006-2014,nflfastr_vegas_wp,log_loss,0.442644,0.431940,0.454330,335833,9
+metrics,era,2006-2014,nflfastr_vegas_wp,ece,0.008498,0.003829,0.015861,335833,9
+difference,era,2006-2014,own - nflfastr_wp,brier,-0.013483,-0.016355,-0.010348,335833,9
+difference,era,2006-2014,own - nflfastr_wp,log_loss,-0.032543,-0.039999,-0.024876,335833,9
+difference,era,2006-2014,own - nflfastr_vegas_wp,brier,0.001895,0.001268,0.002545,335833,9
+difference,era,2006-2014,own - nflfastr_vegas_wp,log_loss,0.006357,0.004502,0.008249,335833,9
+metrics,era,2015-2022,own,brier,0.147640,0.139887,0.155896,301875,8
+metrics,era,2015-2022,own,log_loss,0.446037,0.425088,0.469428,301875,8
+metrics,era,2015-2022,own,ece,0.006249,0.004384,0.014771,301875,8
+metrics,era,2015-2022,nflfastr_wp,brier,0.161230,0.154939,0.170445,301875,8
+metrics,era,2015-2022,nflfastr_wp,log_loss,0.478901,0.461371,0.504607,301875,8
+metrics,era,2015-2022,nflfastr_wp,ece,0.004926,0.004366,0.014899,301875,8
+metrics,era,2015-2022,nflfastr_vegas_wp,brier,0.146109,0.138293,0.154929,301875,8
+metrics,era,2015-2022,nflfastr_vegas_wp,log_loss,0.441535,0.419657,0.468150,301875,8
+metrics,era,2015-2022,nflfastr_vegas_wp,ece,0.004546,0.004188,0.014523,301875,8
+difference,era,2015-2022,own - nflfastr_wp,brier,-0.013590,-0.016970,-0.010068,301875,8
+difference,era,2015-2022,own - nflfastr_wp,log_loss,-0.032864,-0.041139,-0.023991,301875,8
+difference,era,2015-2022,own - nflfastr_vegas_wp,brier,0.001531,0.000653,0.002343,301875,8
+difference,era,2015-2022,own - nflfastr_vegas_wp,log_loss,0.004502,0.001033,0.007314,301875,8
+metrics,era,2023-2025,own,brier,0.149353,0.137944,0.158491,116215,3
+metrics,era,2023-2025,own,log_loss,0.450845,0.420305,0.475054,116215,3
+metrics,era,2023-2025,own,ece,0.009439,0.009439,0.027841,116215,3
+metrics,era,2023-2025,nflfastr_wp,brier,0.162287,0.156631,0.171376,116215,3
+metrics,era,2023-2025,nflfastr_wp,log_loss,0.480417,0.462467,0.505000,116215,3
+metrics,era,2023-2025,nflfastr_wp,ece,0.009352,0.008319,0.017607,116215,3
+metrics,era,2023-2025,nflfastr_vegas_wp,brier,0.148388,0.136460,0.158548,116215,3
+metrics,era,2023-2025,nflfastr_vegas_wp,log_loss,0.447999,0.415452,0.475857,116215,3
+metrics,era,2023-2025,nflfastr_vegas_wp,ece,0.009265,0.009265,0.026862,116215,3
+difference,era,2023-2025,own - nflfastr_wp,brier,-0.012935,-0.018687,-0.007341,116215,3
+difference,era,2023-2025,own - nflfastr_wp,log_loss,-0.029572,-0.042162,-0.016863,116215,3
+difference,era,2023-2025,own - nflfastr_vegas_wp,brier,0.000964,-0.000057,0.001483,116215,3
+difference,era,2023-2025,own - nflfastr_vegas_wp,log_loss,0.002847,-0.000803,0.004853,116215,3
+metrics,slice,4th quarter,own,brier,0.092727,0.087763,0.098175,203978,20
+metrics,slice,4th quarter,own,log_loss,0.291120,0.276931,0.306682,203978,20
+metrics,slice,4th quarter,own,ece,0.003986,0.003072,0.009354,203978,20
+metrics,slice,4th quarter,nflfastr_wp,brier,0.094743,0.089717,0.100521,203978,20
+metrics,slice,4th quarter,nflfastr_wp,log_loss,0.295654,0.281551,0.311613,203978,20
+metrics,slice,4th quarter,nflfastr_wp,ece,0.003863,0.003313,0.009585,203978,20
+metrics,slice,4th quarter,nflfastr_vegas_wp,brier,0.091544,0.086473,0.097227,203978,20
+metrics,slice,4th quarter,nflfastr_vegas_wp,log_loss,0.285579,0.271163,0.302179,203978,20
+metrics,slice,4th quarter,nflfastr_vegas_wp,ece,0.003591,0.002738,0.008892,203978,20
+difference,slice,4th quarter,own - nflfastr_wp,brier,-0.002016,-0.003202,-0.000894,203978,20
+difference,slice,4th quarter,own - nflfastr_wp,log_loss,-0.004534,-0.008177,-0.001172,203978,20
+difference,slice,4th quarter,own - nflfastr_vegas_wp,brier,0.001183,0.000633,0.001671,203978,20
+difference,slice,4th quarter,own - nflfastr_vegas_wp,log_loss,0.005541,0.003632,0.007244,203978,20
+metrics,slice,one-score games (lead of 8 or less),own,brier,0.194118,0.190190,0.197922,491597,20
+metrics,slice,one-score games (lead of 8 or less),own,log_loss,0.569232,0.559864,0.578426,491597,20
+metrics,slice,one-score games (lead of 8 or less),own,ece,0.005648,0.003861,0.012777,491597,20
+metrics,slice,one-score games (lead of 8 or less),nflfastr_wp,brier,0.212953,0.210020,0.216072,491597,20
+metrics,slice,one-score games (lead of 8 or less),nflfastr_wp,log_loss,0.612010,0.605535,0.619219,491597,20
+metrics,slice,one-score games (lead of 8 or less),nflfastr_wp,ece,0.008144,0.004432,0.014760,491597,20
+metrics,slice,one-score games (lead of 8 or less),nflfastr_vegas_wp,brier,0.192121,0.188202,0.195921,491597,20
+metrics,slice,one-score games (lead of 8 or less),nflfastr_vegas_wp,log_loss,0.563899,0.554414,0.572855,491597,20
+metrics,slice,one-score games (lead of 8 or less),nflfastr_vegas_wp,ece,0.004530,0.003191,0.010998,491597,20
+difference,slice,one-score games (lead of 8 or less),own - nflfastr_wp,brier,-0.018835,-0.021891,-0.015900,491597,20
+difference,slice,one-score games (lead of 8 or less),own - nflfastr_wp,log_loss,-0.042777,-0.050084,-0.035591,491597,20
+difference,slice,one-score games (lead of 8 or less),own - nflfastr_vegas_wp,brier,0.001996,0.001375,0.002613,491597,20
+difference,slice,one-score games (lead of 8 or less),own - nflfastr_vegas_wp,log_loss,0.005333,0.003719,0.006990,491597,20
+metrics,slice,first play of a drive,own,brier,0.147363,0.143375,0.151393,122617,20
+metrics,slice,first play of a drive,own,log_loss,0.443699,0.432928,0.454604,122617,20
+metrics,slice,first play of a drive,own,ece,0.004510,0.003761,0.010870,122617,20
+metrics,slice,first play of a drive,nflfastr_wp,brier,0.160676,0.157214,0.164639,122617,20
+metrics,slice,first play of a drive,nflfastr_wp,log_loss,0.475820,0.466168,0.486877,122617,20
+metrics,slice,first play of a drive,nflfastr_wp,ece,0.006149,0.003347,0.010759,122617,20
+metrics,slice,first play of a drive,nflfastr_vegas_wp,brier,0.145892,0.141901,0.149971,122617,20
+metrics,slice,first play of a drive,nflfastr_vegas_wp,log_loss,0.439032,0.427997,0.450877,122617,20
+metrics,slice,first play of a drive,nflfastr_vegas_wp,ece,0.003822,0.003257,0.008615,122617,20
+difference,slice,first play of a drive,own - nflfastr_wp,brier,-0.013313,-0.015444,-0.011202,122617,20
+difference,slice,first play of a drive,own - nflfastr_wp,log_loss,-0.032121,-0.037654,-0.027011,122617,20
+difference,slice,first play of a drive,own - nflfastr_vegas_wp,brier,0.001472,0.001001,0.001935,122617,20
+difference,slice,first play of a drive,own - nflfastr_vegas_wp,log_loss,0.004666,0.002899,0.006192,122617,20
+metrics,slice,overtime,own,brier,0.203163,0.190833,0.216853,4600,20
+metrics,slice,overtime,own,log_loss,0.588102,0.559792,0.618868,4600,20
+metrics,slice,overtime,own,ece,0.027365,0.017547,0.059612,4600,20
+metrics,slice,overtime,nflfastr_wp,brier,0.213127,0.202111,0.224018,4600,20
+metrics,slice,overtime,nflfastr_wp,log_loss,0.613189,0.585634,0.640847,4600,20
+metrics,slice,overtime,nflfastr_wp,ece,0.056982,0.041912,0.083510,4600,20
+metrics,slice,overtime,nflfastr_vegas_wp,brier,0.213127,0.202111,0.224018,4600,20
+metrics,slice,overtime,nflfastr_vegas_wp,log_loss,0.613189,0.585634,0.640847,4600,20
+metrics,slice,overtime,nflfastr_vegas_wp,ece,0.056982,0.041912,0.083510,4600,20
+difference,slice,overtime,own - nflfastr_wp,brier,-0.009964,-0.019254,0.000191,4600,20
+difference,slice,overtime,own - nflfastr_wp,log_loss,-0.025088,-0.046398,-0.002485,4600,20
+difference,slice,overtime,own - nflfastr_vegas_wp,brier,-0.009964,-0.019254,0.000191,4600,20
+difference,slice,overtime,own - nflfastr_vegas_wp,log_loss,-0.025088,-0.046398,-0.002485,4600,20
+season,2006,all plays,own,brier,0.162670,,,37027,0
+season,2006,all plays,own,log_loss,0.484168,,,37027,0
+season,2006,all plays,nflfastr_wp,brier,0.166799,,,37027,0
+season,2006,all plays,nflfastr_wp,log_loss,0.494261,,,37027,0
+season,2006,all plays,nflfastr_vegas_wp,brier,0.159253,,,37027,0
+season,2006,all plays,nflfastr_vegas_wp,log_loss,0.472392,,,37027,0
+season,2006,all plays,own - nflfastr_wp,log_loss,-0.010093,-0.038421,0.015238,37027,267
+season,2006,all plays,own - nflfastr_vegas_wp,log_loss,0.011775,0.005668,0.018136,37027,267
+season,2007,all plays,own,brier,0.142735,,,36925,0
+season,2007,all plays,own,log_loss,0.426434,,,36925,0
+season,2007,all plays,nflfastr_wp,brier,0.156291,,,36925,0
+season,2007,all plays,nflfastr_wp,log_loss,0.460690,,,36925,0
+season,2007,all plays,nflfastr_vegas_wp,brier,0.139623,,,36925,0
+season,2007,all plays,nflfastr_vegas_wp,log_loss,0.417383,,,36925,0
+season,2007,all plays,own - nflfastr_wp,log_loss,-0.034256,-0.058326,-0.009499,36925,267
+season,2007,all plays,own - nflfastr_vegas_wp,log_loss,0.009051,0.003838,0.014107,36925,267
+season,2008,all plays,own,brier,0.143891,,,36325,0
+season,2008,all plays,own,log_loss,0.431129,,,36325,0
+season,2008,all plays,nflfastr_wp,brier,0.160929,,,36325,0
+season,2008,all plays,nflfastr_wp,log_loss,0.476757,,,36325,0
+season,2008,all plays,nflfastr_vegas_wp,brier,0.142287,,,36325,0
+season,2008,all plays,nflfastr_vegas_wp,log_loss,0.427210,,,36325,0
+season,2008,all plays,own - nflfastr_wp,log_loss,-0.045629,-0.068794,-0.020393,36325,266
+season,2008,all plays,own - nflfastr_vegas_wp,log_loss,0.003918,-0.000052,0.007944,36325,266
+season,2009,all plays,own,brier,0.142365,,,37113,0
+season,2009,all plays,own,log_loss,0.432142,,,37113,0
+season,2009,all plays,nflfastr_wp,brier,0.157967,,,37113,0
+season,2009,all plays,nflfastr_wp,log_loss,0.465384,,,37113,0
+season,2009,all plays,nflfastr_vegas_wp,brier,0.140281,,,37113,0
+season,2009,all plays,nflfastr_vegas_wp,log_loss,0.424851,,,37113,0
+season,2009,all plays,own - nflfastr_wp,log_loss,-0.033241,-0.065225,0.000581,37113,267
+season,2009,all plays,own - nflfastr_vegas_wp,log_loss,0.007292,0.001772,0.013538,37113,267
+season,2010,all plays,own,brier,0.146993,,,37257,0
+season,2010,all plays,own,log_loss,0.443076,,,37257,0
+season,2010,all plays,nflfastr_wp,brier,0.155745,,,37257,0
+season,2010,all plays,nflfastr_wp,log_loss,0.463450,,,37257,0
+season,2010,all plays,nflfastr_vegas_wp,brier,0.145068,,,37257,0
+season,2010,all plays,nflfastr_vegas_wp,log_loss,0.436573,,,37257,0
+season,2010,all plays,own - nflfastr_wp,log_loss,-0.020374,-0.040262,0.000860,37257,267
+season,2010,all plays,own - nflfastr_vegas_wp,log_loss,0.006502,0.002414,0.010968,37257,267
+season,2011,all plays,own,brier,0.158423,,,37703,0
+season,2011,all plays,own,log_loss,0.469573,,,37703,0
+season,2011,all plays,nflfastr_wp,brier,0.168346,,,37703,0
+season,2011,all plays,nflfastr_wp,log_loss,0.493560,,,37703,0
+season,2011,all plays,nflfastr_vegas_wp,brier,0.155677,,,37703,0
+season,2011,all plays,nflfastr_vegas_wp,log_loss,0.461170,,,37703,0
+season,2011,all plays,own - nflfastr_wp,log_loss,-0.023987,-0.051612,0.003391,37703,267
+season,2011,all plays,own - nflfastr_vegas_wp,log_loss,0.008403,0.004070,0.013077,37703,267
+season,2012,all plays,own,brier,0.152328,,,37817,0
+season,2012,all plays,own,log_loss,0.455419,,,37817,0
+season,2012,all plays,nflfastr_wp,brier,0.168010,,,37817,0
+season,2012,all plays,nflfastr_wp,log_loss,0.490632,,,37817,0
+season,2012,all plays,nflfastr_vegas_wp,brier,0.151555,,,37817,0
+season,2012,all plays,nflfastr_vegas_wp,log_loss,0.451651,,,37817,0
+season,2012,all plays,own - nflfastr_wp,log_loss,-0.035213,-0.059799,-0.010085,37817,266
+season,2012,all plays,own - nflfastr_vegas_wp,log_loss,0.003768,-0.003454,0.010352,37817,266
+season,2013,all plays,own,brier,0.152208,,,38140,0
+season,2013,all plays,own,log_loss,0.455432,,,38140,0
+season,2013,all plays,nflfastr_wp,brier,0.170039,,,38140,0
+season,2013,all plays,nflfastr_wp,log_loss,0.500252,,,38140,0
+season,2013,all plays,nflfastr_vegas_wp,brier,0.151721,,,38140,0
+season,2013,all plays,nflfastr_vegas_wp,log_loss,0.453343,,,38140,0
+season,2013,all plays,own - nflfastr_wp,log_loss,-0.044820,-0.071870,-0.019863,38140,266
+season,2013,all plays,own - nflfastr_vegas_wp,log_loss,0.002089,-0.006288,0.009178,38140,266
+season,2014,all plays,own,brier,0.146540,,,37526,0
+season,2014,all plays,own,log_loss,0.442685,,,37526,0
+season,2014,all plays,nflfastr_wp,brier,0.165279,,,37526,0
+season,2014,all plays,nflfastr_wp,log_loss,0.487842,,,37526,0
+season,2014,all plays,nflfastr_vegas_wp,brier,0.145571,,,37526,0
+season,2014,all plays,nflfastr_vegas_wp,log_loss,0.438145,,,37526,0
+season,2014,all plays,own - nflfastr_wp,log_loss,-0.045157,-0.067745,-0.020149,37526,266
+season,2014,all plays,own - nflfastr_vegas_wp,log_loss,0.004540,-0.000007,0.008744,37526,266
+season,2015,all plays,own,brier,0.155932,,,37996,0
+season,2015,all plays,own,log_loss,0.467138,,,37996,0
+season,2015,all plays,nflfastr_wp,brier,0.160738,,,37996,0
+season,2015,all plays,nflfastr_wp,log_loss,0.477022,,,37996,0
+season,2015,all plays,nflfastr_vegas_wp,brier,0.154145,,,37996,0
+season,2015,all plays,nflfastr_vegas_wp,log_loss,0.461289,,,37996,0
+season,2015,all plays,own - nflfastr_wp,log_loss,-0.009884,-0.035239,0.015268,37996,267
+season,2015,all plays,own - nflfastr_vegas_wp,log_loss,0.005849,0.001080,0.010506,37996,267
+season,2016,all plays,own,brier,0.153637,,,37274,0
+season,2016,all plays,own,log_loss,0.461852,,,37274,0
+season,2016,all plays,nflfastr_wp,brier,0.163046,,,37274,0
+season,2016,all plays,nflfastr_wp,log_loss,0.487315,,,37274,0
+season,2016,all plays,nflfastr_vegas_wp,brier,0.151526,,,37274,0
+season,2016,all plays,nflfastr_vegas_wp,log_loss,0.456238,,,37274,0
+season,2016,all plays,own - nflfastr_wp,log_loss,-0.025462,-0.045739,-0.004720,37274,265
+season,2016,all plays,own - nflfastr_vegas_wp,log_loss,0.005614,0.000031,0.011689,37274,265
+season,2017,all plays,own,brier,0.131280,,,37501,0
+season,2017,all plays,own,log_loss,0.404026,,,37501,0
+season,2017,all plays,nflfastr_wp,brier,0.150212,,,37501,0
+season,2017,all plays,nflfastr_wp,log_loss,0.450702,,,37501,0
+season,2017,all plays,nflfastr_vegas_wp,brier,0.130547,,,37501,0
+season,2017,all plays,nflfastr_vegas_wp,log_loss,0.401705,,,37501,0
+season,2017,all plays,own - nflfastr_wp,log_loss,-0.046676,-0.071765,-0.020711,37501,267
+season,2017,all plays,own - nflfastr_vegas_wp,log_loss,0.002321,-0.001899,0.006779,37501,267
+season,2018,all plays,own,brier,0.142499,,,36615,0
+season,2018,all plays,own,log_loss,0.429819,,,36615,0
+season,2018,all plays,nflfastr_wp,brier,0.154521,,,36615,0
+season,2018,all plays,nflfastr_wp,log_loss,0.460976,,,36615,0
+season,2018,all plays,nflfastr_vegas_wp,brier,0.140308,,,36615,0
+season,2018,all plays,nflfastr_vegas_wp,log_loss,0.423213,,,36615,0
+season,2018,all plays,own - nflfastr_wp,log_loss,-0.031157,-0.058125,-0.002456,36615,265
+season,2018,all plays,own - nflfastr_vegas_wp,log_loss,0.006606,-0.000291,0.014845,36615,265
+season,2019,all plays,own,brier,0.142399,,,36973,0
+season,2019,all plays,own,log_loss,0.430101,,,36973,0
+season,2019,all plays,nflfastr_wp,brier,0.153792,,,36973,0
+season,2019,all plays,nflfastr_wp,log_loss,0.456807,,,36973,0
+season,2019,all plays,nflfastr_vegas_wp,brier,0.139098,,,36973,0
+season,2019,all plays,nflfastr_vegas_wp,log_loss,0.419478,,,36973,0
+season,2019,all plays,own - nflfastr_wp,log_loss,-0.026707,-0.059302,0.006807,36973,266
+season,2019,all plays,own - nflfastr_vegas_wp,log_loss,0.010622,0.001926,0.023508,36973,266
+season,2020,all plays,own,brier,0.139386,,,37465,0
+season,2020,all plays,own,log_loss,0.426494,,,37465,0
+season,2020,all plays,nflfastr_wp,brier,0.160695,,,37465,0
+season,2020,all plays,nflfastr_wp,log_loss,0.477029,,,37465,0
+season,2020,all plays,nflfastr_vegas_wp,brier,0.136641,,,37465,0
+season,2020,all plays,nflfastr_vegas_wp,log_loss,0.418013,,,37465,0
+season,2020,all plays,own - nflfastr_wp,log_loss,-0.050535,-0.082123,-0.019489,37465,268
+season,2020,all plays,own - nflfastr_vegas_wp,log_loss,0.008481,-0.001142,0.019507,37465,268
+season,2021,all plays,own,brier,0.144300,,,39183,0
+season,2021,all plays,own,log_loss,0.433602,,,39183,0
+season,2021,all plays,nflfastr_wp,brier,0.156764,,,39183,0
+season,2021,all plays,nflfastr_wp,log_loss,0.461805,,,39183,0
+season,2021,all plays,nflfastr_vegas_wp,brier,0.144554,,,39183,0
+season,2021,all plays,nflfastr_vegas_wp,log_loss,0.431831,,,39183,0
+season,2021,all plays,own - nflfastr_wp,log_loss,-0.028202,-0.060348,0.006424,39183,284
+season,2021,all plays,own - nflfastr_vegas_wp,log_loss,0.001771,-0.008126,0.013031,39183,284
+season,2022,all plays,own,brier,0.170716,,,38868,0
+season,2022,all plays,own,log_loss,0.512588,,,38868,0
+season,2022,all plays,nflfastr_wp,brier,0.189012,,,38868,0
+season,2022,all plays,nflfastr_wp,log_loss,0.556820,,,38868,0
+season,2022,all plays,nflfastr_vegas_wp,brier,0.170899,,,38868,0
+season,2022,all plays,nflfastr_vegas_wp,log_loss,0.517254,,,38868,0
+season,2022,all plays,own - nflfastr_wp,log_loss,-0.044232,-0.069952,-0.017204,38868,282
+season,2022,all plays,own - nflfastr_vegas_wp,log_loss,-0.004666,-0.013317,0.002364,38868,282
+season,2023,all plays,own,brier,0.151728,,,39456,0
+season,2023,all plays,own,log_loss,0.457447,,,39456,0
+season,2023,all plays,nflfastr_wp,brier,0.159069,,,39456,0
+season,2023,all plays,nflfastr_wp,log_loss,0.474310,,,39456,0
+season,2023,all plays,nflfastr_vegas_wp,brier,0.150287,,,39456,0
+season,2023,all plays,nflfastr_vegas_wp,log_loss,0.453048,,,39456,0
+season,2023,all plays,own - nflfastr_wp,log_loss,-0.016863,-0.040084,0.006276,39456,285
+season,2023,all plays,own - nflfastr_vegas_wp,log_loss,0.004399,-0.000434,0.008936,39456,285
+season,2024,all plays,own,brier,0.137944,,,38699,0
+season,2024,all plays,own,log_loss,0.420305,,,38699,0
+season,2024,all plays,nflfastr_wp,brier,0.156631,,,38699,0
+season,2024,all plays,nflfastr_wp,log_loss,0.462467,,,38699,0
+season,2024,all plays,nflfastr_vegas_wp,brier,0.136460,,,38699,0
+season,2024,all plays,nflfastr_vegas_wp,log_loss,0.415452,,,38699,0
+season,2024,all plays,own - nflfastr_wp,log_loss,-0.042162,-0.064900,-0.018018,38699,285
+season,2024,all plays,own - nflfastr_vegas_wp,log_loss,0.004853,0.000883,0.009021,38699,285
+season,2025,all plays,own,brier,0.158491,,,38060,0
+season,2025,all plays,own,log_loss,0.475054,,,38060,0
+season,2025,all plays,nflfastr_wp,brier,0.171376,,,38060,0
+season,2025,all plays,nflfastr_wp,log_loss,0.505000,,,38060,0
+season,2025,all plays,nflfastr_vegas_wp,brier,0.158548,,,38060,0
+season,2025,all plays,nflfastr_vegas_wp,log_loss,0.475857,,,38060,0
+season,2025,all plays,own - nflfastr_wp,log_loss,-0.029945,-0.058778,-0.000530,38060,284
+season,2025,all plays,own - nflfastr_vegas_wp,log_loss,-0.000803,-0.006458,0.005066,38060,284
+reliability,pooled,0.0-0.1,own,mean_predicted,0.034649,,,111902,20
+reliability,pooled,0.0-0.1,own,observed,0.036085,0.030590,0.042462,111902,20
+reliability,pooled,0.1-0.2,own,mean_predicted,0.150400,,,59893,20
+reliability,pooled,0.1-0.2,own,observed,0.160954,0.147950,0.173545,59893,20
+reliability,pooled,0.2-0.3,own,mean_predicted,0.249648,,,68583,20
+reliability,pooled,0.2-0.3,own,observed,0.253503,0.238263,0.268728,68583,20
+reliability,pooled,0.3-0.4,own,mean_predicted,0.350232,,,62832,20
+reliability,pooled,0.3-0.4,own,observed,0.349933,0.340116,0.359461,62832,20
+reliability,pooled,0.4-0.5,own,mean_predicted,0.449835,,,66409,20
+reliability,pooled,0.4-0.5,own,observed,0.452363,0.445069,0.460860,66409,20
+reliability,pooled,0.5-0.6,own,mean_predicted,0.549865,,,65780,20
+reliability,pooled,0.5-0.6,own,observed,0.556233,0.549783,0.562806,65780,20
+reliability,pooled,0.6-0.7,own,mean_predicted,0.650924,,,67132,20
+reliability,pooled,0.6-0.7,own,observed,0.654382,0.641778,0.664664,67132,20
+reliability,pooled,0.7-0.8,own,mean_predicted,0.750421,,,68307,20
+reliability,pooled,0.7-0.8,own,observed,0.746117,0.734949,0.757477,68307,20
+reliability,pooled,0.8-0.9,own,mean_predicted,0.849288,,,66449,20
+reliability,pooled,0.8-0.9,own,observed,0.841186,0.830098,0.852242,66449,20
+reliability,pooled,0.9-1.0,own,mean_predicted,0.965761,,,116636,20
+reliability,pooled,0.9-1.0,own,observed,0.964351,0.958533,0.969508,116636,20
+reliability,pooled,0.0-0.1,nflfastr_wp,mean_predicted,0.032724,,,89928,20
+reliability,pooled,0.0-0.1,nflfastr_wp,observed,0.029279,0.023019,0.036140,89928,20
+reliability,pooled,0.1-0.2,nflfastr_wp,mean_predicted,0.150422,,,57434,20
+reliability,pooled,0.1-0.2,nflfastr_wp,observed,0.152314,0.139372,0.165339,57434,20
+reliability,pooled,0.2-0.3,nflfastr_wp,mean_predicted,0.251324,,,62413,20
+reliability,pooled,0.2-0.3,nflfastr_wp,observed,0.261131,0.247280,0.276151,62413,20
+reliability,pooled,0.3-0.4,nflfastr_wp,mean_predicted,0.349995,,,70210,20
+reliability,pooled,0.3-0.4,nflfastr_wp,observed,0.363923,0.352219,0.374934,70210,20
+reliability,pooled,0.4-0.5,nflfastr_wp,mean_predicted,0.449135,,,84487,20
+reliability,pooled,0.4-0.5,nflfastr_wp,observed,0.457502,0.451342,0.463899,84487,20
+reliability,pooled,0.5-0.6,nflfastr_wp,mean_predicted,0.550820,,,90893,20
+reliability,pooled,0.5-0.6,nflfastr_wp,observed,0.551165,0.544833,0.557163,90893,20
+reliability,pooled,0.6-0.7,nflfastr_wp,mean_predicted,0.647606,,,78048,20
+reliability,pooled,0.6-0.7,nflfastr_wp,observed,0.635263,0.627351,0.644673,78048,20
+reliability,pooled,0.7-0.8,nflfastr_wp,mean_predicted,0.748277,,,67698,20
+reliability,pooled,0.7-0.8,nflfastr_wp,observed,0.740701,0.730555,0.751297,67698,20
+reliability,pooled,0.8-0.9,nflfastr_wp,mean_predicted,0.850280,,,59060,20
+reliability,pooled,0.8-0.9,nflfastr_wp,observed,0.852286,0.842174,0.862361,59060,20
+reliability,pooled,0.9-1.0,nflfastr_wp,mean_predicted,0.965795,,,93752,20
+reliability,pooled,0.9-1.0,nflfastr_wp,observed,0.969675,0.963238,0.975487,93752,20
+reliability,pooled,0.0-0.1,nflfastr_vegas_wp,mean_predicted,0.033364,,,111986,20
+reliability,pooled,0.0-0.1,nflfastr_vegas_wp,observed,0.032245,0.026407,0.039430,111986,20
+reliability,pooled,0.1-0.2,nflfastr_vegas_wp,mean_predicted,0.149890,,,62295,20
+reliability,pooled,0.1-0.2,nflfastr_vegas_wp,observed,0.156433,0.145065,0.167529,62295,20
+reliability,pooled,0.2-0.3,nflfastr_vegas_wp,mean_predicted,0.249833,,,65622,20
+reliability,pooled,0.2-0.3,nflfastr_vegas_wp,observed,0.256515,0.242672,0.270304,65622,20
+reliability,pooled,0.3-0.4,nflfastr_vegas_wp,mean_predicted,0.349717,,,62671,20
+reliability,pooled,0.3-0.4,nflfastr_vegas_wp,observed,0.347306,0.338334,0.356518,62671,20
+reliability,pooled,0.4-0.5,nflfastr_vegas_wp,mean_predicted,0.450034,,,66440,20
+reliability,pooled,0.4-0.5,nflfastr_vegas_wp,observed,0.452815,0.446735,0.459617,66440,20
+reliability,pooled,0.5-0.6,nflfastr_vegas_wp,mean_predicted,0.551348,,,65030,20
+reliability,pooled,0.5-0.6,nflfastr_vegas_wp,observed,0.554160,0.547766,0.560074,65030,20
+reliability,pooled,0.6-0.7,nflfastr_vegas_wp,mean_predicted,0.649621,,,69140,20
+reliability,pooled,0.6-0.7,nflfastr_vegas_wp,observed,0.654353,0.643573,0.663288,69140,20
+reliability,pooled,0.7-0.8,nflfastr_vegas_wp,mean_predicted,0.749602,,,68101,20
+reliability,pooled,0.7-0.8,nflfastr_vegas_wp,observed,0.747199,0.735077,0.759610,68101,20
+reliability,pooled,0.8-0.9,nflfastr_vegas_wp,mean_predicted,0.850078,,,66838,20
+reliability,pooled,0.8-0.9,nflfastr_vegas_wp,observed,0.846674,0.836662,0.857273,66838,20
+reliability,pooled,0.9-1.0,nflfastr_vegas_wp,mean_predicted,0.966686,,,115800,20
+reliability,pooled,0.9-1.0,nflfastr_vegas_wp,observed,0.968532,0.962873,0.973328,115800,20

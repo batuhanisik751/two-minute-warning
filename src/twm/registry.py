@@ -1065,6 +1065,114 @@ def _streamer_entries() -> list[Entry]:
     ]
 
 
+def _decisions_entries() -> list[Entry]:
+    """G1: the features and label of the app's own win-probability model
+    (twm.modules.decisions.wp_data, twm.modules.decisions.wp)."""
+    play = "twm.modules.decisions.wp_data"
+    rows = [
+        ("score_differential", "Score difference (offense minus defense)", "points",
+         "possession team's score minus the defense's, before the snap",
+         "How far ahead (positive) or behind (negative) the team with the ball is.",
+         "fact_play.score_differential"),
+        ("game_seconds_remaining", "Seconds left in the game", "seconds",
+         "seconds left in regulation (in overtime: in the overtime period), before the snap",
+         "How much time is left. A 7-point lead means little early and a lot late.",
+         "fact_play.game_seconds_remaining"),
+        ("half_seconds_remaining", "Seconds left in the half", "seconds",
+         "seconds left in the current half (or overtime period), before the snap",
+         "Time left before halftime or the end of the game; drives the two-minute drill.",
+         "fact_play.half_seconds_remaining"),
+        ("down", "Down", "1-4", "the down before the snap",
+         "Which of the offense's four tries to gain the distance this is.",
+         "fact_play.down"),
+        ("ydstogo", "Yards to go", "yards", "yards needed for a first down (or a touchdown)",
+         "The distance the offense still needs; 3rd and 1 is far better than 3rd and 12.",
+         "fact_play.ydstogo"),
+        ("yardline_100", "Yards to the end zone", "yards (1-99)",
+         "yards between the line of scrimmage and the opponent's goal line",
+         "Field position: 1 = at the opponent's goal line, 99 = backed up at your own 1.",
+         "fact_play.yardline_100"),
+        ("posteam_timeouts_remaining", "Offense timeouts left", "0-3",
+         "the possession team's timeouts left in the half, before the snap",
+         "Timeouts stop the clock: a trailing team with timeouts has more time to come back.",
+         "fact_play.posteam_timeouts_remaining"),
+        ("defteam_timeouts_remaining", "Defense timeouts left", "0-3",
+         "the defense's timeouts left in the half, before the snap",
+         "The other team's timeouts: they can stop the clock to get the ball back.",
+         "fact_play.defteam_timeouts_remaining"),
+        ("half_number", "Half", "1, 2 or 3", "1 = first half, 2 = second half, 3 = overtime "
+         "(from fact_play.game_half)",
+         "Which half the play is in. Halftime resets timeouts and gives one team the ball.",
+         "fact_play.game_half"),
+        ("receives_2h_kickoff", "Gets the ball after halftime", "boolean (0/1)",
+         "first half only: 1 when the possession team kicked the opening kickoff (it receives "
+         "the second-half kickoff); 0 in the second half and overtime",
+         "In the first half, knowing you get the ball back after halftime is worth a little.",
+         "fact_play.kickoff_attempt, fact_play.defteam (the game's first kickoff)"),
+    ]  # fmt: skip
+    rows += [
+        ("posteam_is_home", "Offense at home", "1 / 0 / 0.5",
+         "1 when the possession team is the home team, 0 when away, 0.5 at a neutral site "
+         "(fact_game.location)",
+         "Home teams win a bit more often; neutral-site games (London, Super Bowl) have no "
+         "home team.", "fact_game.location"),
+        ("posteam_spread", "Pregame spread (offense's view)", "points",
+         "closing spread_line if the possession team is home, else minus spread_line "
+         "(spread_line > 0 = home favored): the margin the market expected for the offense",
+         "How many points the betting market expected the team with the ball to win by, set "
+         "right before kickoff (allowed: it is known when the game starts).",
+         "fact_game.spread_line"),
+        ("spread_time", "Spread x time left", "points",
+         "posteam_spread x exp(-4 x elapsed share of regulation; overtime = 1)",
+         "The pregame expectation fades as the game goes on; this lets the model weigh it "
+         "less and less.", "fact_game.spread_line, fact_play.game_seconds_remaining"),
+        ("diff_time_ratio", "Lead x time played", "points",
+         "score_differential / exp(-4 x elapsed share of regulation; overtime = 1)",
+         "The same lead is worth more late in the game; this number grows as time runs out.",
+         "fact_play.score_differential, fact_play.game_seconds_remaining"),
+        ("era_pat_2015", "Era: long extra point (2015+)", "boolean (0/1)",
+         "1 for seasons 2015 and later (extra points snapped from the 15-yard line)",
+         "Extra points got harder in 2015, which slightly changes what a touchdown is worth.",
+         "fact_play.season"),
+        ("era_kickoff_2023", "Era: new kickoff rules (2023+)", "boolean (0/1)",
+         "1 for seasons 2023 and later (fair-catch touchbacks to the 25 in 2023, the dynamic "
+         "kickoff from 2024)",
+         "Kickoff rules changed where drives start after a score.", "fact_play.season"),
+    ]  # fmt: skip
+    return [
+        Entry(name=name, title=title, kind="feature", modules=("decisions",), unit=unit,
+              formula=formula, explanation=explanation, source=f"{source}; {play}", step="G1")
+        for name, title, unit, formula, explanation, source in rows
+    ] + [
+        Entry(
+            name="posteam_wins",
+            title="WP label: the team with the ball won",
+            kind="label",
+            modules=("decisions",),
+            unit="boolean",
+            formula="1 when the possession team before the snap won the game (fact_game.result "
+            "from its side > 0), 0 when it lost; tie games are left out",
+            explanation="What the win-probability model learns to predict, play by play.",
+            source="fact_game.result; twm.modules.decisions.wp_data",
+            step="G1",
+        ),
+        Entry(
+            name="own_wp",
+            title="Win probability (our model)",
+            kind="metric",
+            modules=("decisions",),
+            unit="probability (0-1)",
+            formula="LightGBM on the play state (the G1 features), trained walk-forward on "
+            "seasons before the play's season; isotonic calibration only where it helped on the "
+            "validation season",
+            explanation="The chance the offense wins from this moment, from a model that never "
+            "saw the season it scores. It replaces nflfastR's wp in the decision grades.",
+            source="twm.modules.decisions.wp",
+            step="G1",
+        ),
+    ]  # fmt: skip
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
     pool = _pool_texts()
@@ -1459,6 +1567,7 @@ def _entries() -> list[Entry]:
         *_stability_entries(),
         *_projection_entries(),
         *_streamer_entries(),
+        *_decisions_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
             name="weekly_pos_rank",

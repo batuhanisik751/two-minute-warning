@@ -53,6 +53,7 @@ fi
 relocate data/raw dir
 relocate data/waiver_radar dir   # the Waiver Radar dataset (C3)
 relocate data/streamer dir       # the K and D/ST streamer dataset (S1c)
+relocate data/decisions dir      # G1: WP backtest fold predictions and summaries
 relocate models dir              # trained production models (C6: models/waiver_radar/*.joblib)
 # The predictions store (C4) is opened in place by DuckDB, so a symlinked file works.
 if [ -e "$ROOT/data/predictions.duckdb" ] || [ -L "$ROOT/data/predictions.duckdb" ]; then

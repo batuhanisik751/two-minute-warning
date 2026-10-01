@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from twm import __version__
+from twm.modules.decisions.cli import decisions_app
 from twm.modules.streamer.cli import streamer_app
 
 app = typer.Typer(help="Two-Minute Warning pipeline.", no_args_is_help=True)
@@ -318,6 +319,7 @@ radar_app = typer.Typer(
 )
 app.add_typer(radar_app, name="radar")
 app.add_typer(streamer_app, name="streamer")  # S1b: K and D/ST (src/twm/modules/streamer/cli.py)
+app.add_typer(decisions_app, name="decisions")  # G1: own WP (src/twm/modules/decisions/cli.py)
 
 
 def _warehouse_or_exit(db: Path | None) -> Path:

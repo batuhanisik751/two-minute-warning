@@ -482,6 +482,14 @@ The chance the offense wins from this moment, given score, time, field position 
 - **Formula:** nflfastR's estimated probability that the team with the ball wins, before the snap
 - **Source:** fact_play.wp
 
+### Win probability (our model)
+
+The chance the offense wins from this moment, from a model that never saw the season it scores. It replaces nflfastR's wp in the decision grades.
+
+- **Name:** `own_wp`; **unit:** probability (0-1); **used by:** decisions
+- **Formula:** LightGBM on the play state (the G1 features), trained walk-forward on seasons before the play's season; isotonic calibration only where it helped on the validation season
+- **Source:** twm.modules.decisions.wp
+
 ### YAC over expected \*
 
 Yards after the catch beyond what an average receiver gains on the same catches.
@@ -605,6 +613,14 @@ Touchdowns scored by the defense or the return teams: rare, but worth a lot.
 - **Source:** twm.modules.streamer.features; fact_defense_week.interception_return_tds, fact_defense_week.fumble_return_tds, fact_defense_week.kickoff_return_tds, fact_defense_week.punt_return_tds, fact_defense_week.blocked_kick_return_tds
 - **Streamer reason:** "Scores {value:.2f} defense or return touchdowns per game"
 
+### Defense timeouts left
+
+The other team's timeouts: they can stop the clock to get the ball back.
+
+- **Name:** `defteam_timeouts_remaining`; **unit:** 0-3; **used by:** decisions
+- **Formula:** the defense's timeouts left in the half, before the snap
+- **Source:** fact_play.defteam_timeouts_remaining; twm.modules.decisions.wp_data
+
 ### Depth-chart move
 
 How many spots he moved up the depth chart in a week.
@@ -632,6 +648,14 @@ Where the team lists him at his position: 1 is the starter.
 - **Source:** twm.modules.waiver_radar.features; fact_depth_chart.position, depth_rank
 - **Waiver Radar reason:** "Is No. {value:.0f} at {pos} on his team's depth chart"
 
+### Down
+
+Which of the offense's four tries to gain the distance this is.
+
+- **Name:** `down`; **unit:** 1-4; **used by:** decisions
+- **Formula:** the down before the snap
+- **Source:** fact_play.down; twm.modules.decisions.wp_data
+
 ### Draft round
 
 Teams give early picks more chances.
@@ -640,6 +664,22 @@ Teams give early picks more chances.
 - **Formula:** dim_player.draft_round; NULL when undrafted (see is_undrafted)
 - **Source:** twm.modules.waiver_radar.features; dim_player.draft_round
 - **Waiver Radar reason:** "Was drafted in round {value:.0f}: teams give higher draft picks more chances"
+
+### Era: long extra point (2015+)
+
+Extra points got harder in 2015, which slightly changes what a touchdown is worth.
+
+- **Name:** `era_pat_2015`; **unit:** boolean (0/1); **used by:** decisions
+- **Formula:** 1 for seasons 2015 and later (extra points snapped from the 15-yard line)
+- **Source:** fact_play.season; twm.modules.decisions.wp_data
+
+### Era: new kickoff rules (2023+)
+
+Kickoff rules changed where drives start after a score.
+
+- **Name:** `era_kickoff_2023`; **unit:** boolean (0/1); **used by:** decisions
+- **Formula:** 1 for seasons 2023 and later (fair-catch touchbacks to the 25 in 2023, the dynamic kickoff from 2024)
+- **Source:** fact_play.season; twm.modules.decisions.wp_data
 
 ### Extra-point attempts per game
 
@@ -739,6 +779,14 @@ How much season is left to use him.
 - **Source:** twm.modules.waiver_radar.features; fact_schedule
 - **Waiver Radar reason:** "His team has {value:.0f} games left this season"
 
+### Gets the ball after halftime
+
+In the first half, knowing you get the ball back after halftime is worth a little.
+
+- **Name:** `receives_2h_kickoff`; **unit:** boolean (0/1); **used by:** decisions
+- **Formula:** first half only: 1 when the possession team kicked the opening kickoff (it receives the second-half kickoff); 0 in the second half and overtime
+- **Source:** fact_play.kickoff_attempt, fact_play.defteam (the game's first kickoff); twm.modules.decisions.wp_data
+
 ### Goal-line opportunities per game
 
 Chances inside the 10-yard line: the most valuable touches in fantasy.
@@ -747,6 +795,14 @@ Chances inside the 10-yard line: the most valuable touches in fantasy.
 - **Formula:** mean over the team's last 3 games of his targets plus carries (as above) with yardline_100 <= 10 (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_play
 - **Waiver Radar reason:** "Had {value:.1f} chances per game inside the opponent's 10-yard line over the last {weeks} games"
+
+### Half
+
+Which half the play is in. Halftime resets timeouts and gives one team the ball.
+
+- **Name:** `half_number`; **unit:** 1, 2 or 3; **used by:** decisions
+- **Formula:** 1 = first half, 2 = second half, 3 = overtime (from fact_play.game_half)
+- **Source:** fact_play.game_half; twm.modules.decisions.wp_data
 
 ### Home game next week
 
@@ -800,6 +856,14 @@ Where experts (or last season's scoring) placed it before the season.
 - **Formula:** the pool's preseason_pos_rank: 2020 on the rank on FantasyPros' last August/September K or DST cheat sheet before week 1; earlier the rank by last season's points per game
 - **Source:** twm.modules.streamer.features; fact_ranking_kdst.pos_rank; twm.modules.streamer.pool
 - **Streamer reason:** "Was ranked #{value:.0f} at {pos} before the season"
+
+### Lead x time played
+
+The same lead is worth more late in the game; this number grows as time runs out.
+
+- **Name:** `diff_time_ratio`; **unit:** points; **used by:** decisions
+- **Formula:** score_differential / exp(-4 x elapsed share of regulation; overtime = 1)
+- **Source:** fact_play.score_differential, fact_play.game_seconds_remaining; twm.modules.decisions.wp_data
 
 ### Long field-goal attempts per game
 
@@ -908,6 +972,22 @@ Whether his next matchups are soft (above 1) or tough (below 1) for his position
 - **Source:** twm.modules.waiver_radar.features; fact_schedule, fact_player_week, fact_snaps
 - **Waiver Radar reason:** "Soft schedule: his next opponents have allowed {value:.2f} times the average fantasy points to {pos}s"
 
+### Offense at home
+
+Home teams win a bit more often; neutral-site games (London, Super Bowl) have no home team.
+
+- **Name:** `posteam_is_home`; **unit:** 1 / 0 / 0.5; **used by:** decisions
+- **Formula:** 1 when the possession team is the home team, 0 when away, 0.5 at a neutral site (fact_game.location)
+- **Source:** fact_game.location; twm.modules.decisions.wp_data
+
+### Offense timeouts left
+
+Timeouts stop the clock: a trailing team with timeouts has more time to come back.
+
+- **Name:** `posteam_timeouts_remaining`; **unit:** 0-3; **used by:** decisions
+- **Formula:** the possession team's timeouts left in the half, before the snap
+- **Source:** fact_play.posteam_timeouts_remaining; twm.modules.decisions.wp_data
+
 ### On the depth chart
 
 Whether the team lists him at all.
@@ -968,6 +1048,14 @@ Which position he plays; hit rates differ by position. A category, not an identi
 - **Name:** `position`; **unit:** category (QB, RB, WR, TE); **used by:** waiver_radar
 - **Formula:** his point-in-time roster position (the pool's position)
 - **Source:** twm.modules.waiver_radar.features; fact_roster_week.position
+
+### Pregame spread (offense's view)
+
+How many points the betting market expected the team with the ball to win by, set right before kickoff (allowed: it is known when the game starts).
+
+- **Name:** `posteam_spread`; **unit:** points; **used by:** decisions
+- **Formula:** closing spread_line if the possession team is home, else minus spread_line (spread_line > 0 = home favored): the margin the market expected for the offense
+- **Source:** fact_game.spread_line; twm.modules.decisions.wp_data
 
 ### Preseason position rank
 
@@ -1059,6 +1147,30 @@ How often the defense sacks the quarterback; every sack scores for a team defens
 - **Source:** twm.modules.streamer.features; fact_defense_week.def_sacks
 - **Streamer reason:** "Gets {value:.1f} sacks per game"
 
+### Score difference (offense minus defense)
+
+How far ahead (positive) or behind (negative) the team with the ball is.
+
+- **Name:** `score_differential`; **unit:** points; **used by:** decisions
+- **Formula:** possession team's score minus the defense's, before the snap
+- **Source:** fact_play.score_differential; twm.modules.decisions.wp_data
+
+### Seconds left in the game
+
+How much time is left. A 7-point lead means little early and a lot late.
+
+- **Name:** `game_seconds_remaining`; **unit:** seconds; **used by:** decisions
+- **Formula:** seconds left in regulation (in overtime: in the overtime period), before the snap
+- **Source:** fact_play.game_seconds_remaining; twm.modules.decisions.wp_data
+
+### Seconds left in the half
+
+Time left before halftime or the end of the game; drives the two-minute drill.
+
+- **Name:** `half_seconds_remaining`; **unit:** seconds; **used by:** decisions
+- **Formula:** seconds left in the current half (or overtime period), before the snap
+- **Source:** fact_play.half_seconds_remaining; twm.modules.decisions.wp_data
+
 ### Snap share
 
 How often a player was on the field when his team had the ball. Coaches reveal their plans through snaps before the box score does.
@@ -1103,6 +1215,14 @@ His playing time over the whole season so far.
 - **Formula:** mean offense_snap_share over all team games of the season (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_snaps.offense_pct
 - **Waiver Radar reason:** "Has played {value:.0%} of his team's snaps this season"
+
+### Spread x time left
+
+The pregame expectation fades as the game goes on; this lets the model weigh it less and less.
+
+- **Name:** `spread_time`; **unit:** points; **used by:** decisions
+- **Formula:** posteam_spread x exp(-4 x elapsed share of regulation; overtime = 1)
+- **Source:** fact_game.spread_line, fact_play.game_seconds_remaining; twm.modules.decisions.wp_data
 
 ### Takeaways per game
 
@@ -1284,6 +1404,22 @@ Where experts ranked it last week.
 - **Source:** twm.modules.streamer.features; fact_ranking_kdst.pos_rank
 - **Streamer reason:** "Experts ranked {player} #{value:.0f} at {pos} last week"
 
+### Yards to go
+
+The distance the offense still needs; 3rd and 1 is far better than 3rd and 12.
+
+- **Name:** `ydstogo`; **unit:** yards; **used by:** decisions
+- **Formula:** yards needed for a first down (or a touchdown)
+- **Source:** fact_play.ydstogo; twm.modules.decisions.wp_data
+
+### Yards to the end zone
+
+Field position: 1 = at the opponent's goal line, 99 = backed up at your own 1.
+
+- **Name:** `yardline_100`; **unit:** yards (1-99); **used by:** decisions
+- **Formula:** yards between the line of scrimmage and the opponent's goal line
+- **Source:** fact_play.yardline_100; twm.modules.decisions.wp_data
+
 ### Years of experience
 
 Seasons in the league before this one.
@@ -1409,6 +1545,14 @@ Whether a model may learn from this row. A label detail: never a model feature.
 - **Name:** `train_eligible`; **unit:** boolean; **used by:** waiver_radar
 - **Formula:** window_games >= 2 (PROJECT_SPEC 8.1: weeks with fewer remaining games are left out of training)
 - **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### WP label: the team with the ball won
+
+What the win-probability model learns to predict, play by play.
+
+- **Name:** `posteam_wins`; **unit:** boolean; **used by:** decisions
+- **Formula:** 1 when the possession team before the snap won the game (fact_game.result from its side > 0), 0 when it lost; tie games are left out
+- **Source:** fact_game.result; twm.modules.decisions.wp_data
 
 ### Waiver hit
 

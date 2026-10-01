@@ -55,6 +55,8 @@ def summary_markdown(result: Any) -> str:
     for module, m in (getattr(r, "modules", None) or {}).items():
         kind = f", stored as '{m['list_kind']}'" if m.get("list_kind") else ""
         facts.append((titles.get(module, module), f"week {r.week}: {m.get('score')}{kind}"))
+    if getattr(r, "decisions", ""):  # step P3: the season in progress's grades
+        facts.append(("Decisions", r.decisions))
     facts.append(("Publish", r.publish + (f" to {r.target}" if r.target else "")))
     lines += [f"- **{k}:** {_cell(v)}" for k, v in facts if v]
     lines += ["", "| stage | result | time | notes |", "|---|---|---:|---|"]

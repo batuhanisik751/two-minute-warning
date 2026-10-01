@@ -1,0 +1,95 @@
+{
+ "clock": {
+  "constant_seasons": [
+   2021,
+   2022,
+   2023,
+   2024,
+   2025
+  ],
+  "kneel_cycle": 38.0,
+  "kneel_play": 2.0,
+  "n_kneel_cycle": 725,
+  "n_kneel_play": 60,
+  "n_play_seconds_pass": 1153,
+  "n_play_seconds_run": 1321,
+  "play_seconds_pass": 6.0,
+  "play_seconds_run": 5.0
+ },
+ "config": {
+  "clock": {
+   "clock_ran_min_seconds": 10,
+   "final_window_seconds": 120,
+   "one_score_margin": 8,
+   "passivity_min_ep": 1.0,
+   "passivity_min_seconds": 40,
+   "passivity_min_timeouts": 1,
+   "runoff_seasons": 5
+  },
+  "end_of_half_seconds": 10,
+  "kickoff_min_kicks": 100,
+  "leaderboard_min_games": 8,
+  "platt_seasons": 3,
+  "punt_range_quantile": 0.001,
+  "toss_up_margin": 0.015
+ },
+ "format": 1,
+ "inputs": {
+  "fg_max_distance": 68,
+  "fg_runoff_make": 5.0,
+  "fg_runoff_miss": 5.0,
+  "platt": {
+   "a": null,
+   "b": null,
+   "final_seasons": [],
+   "fit_seasons": [
+    2022,
+    2023,
+    2024
+   ],
+   "kept": false,
+   "val_logloss_platt": 0.6466474209387978,
+   "val_logloss_raw": 0.646481953849618,
+   "val_n": 931,
+   "val_season": 2025
+  },
+  "punt_min_yardline": 32,
+  "runoff_seasons": [
+   2021,
+   2022,
+   2023,
+   2024,
+   2025
+  ]
+ },
+ "model_version": "grading-ddbae071cb2914a3",
+ "models": {
+  "conversion": {
+   "file": "artifacts/production_models/decisions/conversion_lgbm-77cc310830ebcb4f.joblib",
+   "sha256": "beae23be1e534da901cec59bcffdbd88597e7b447b531895394fd3034bc6a8b8",
+   "version": "conversion_lgbm-77cc310830ebcb4f"
+  },
+  "fieldgoal": {
+   "file": "artifacts/production_models/decisions/fieldgoal_lgbm-dd3eefa7754fe8db.joblib",
+   "sha256": "cf334f07cdaa2a4e1af8393fbed27dca8c7868398e09f6633a585cf02d0554ed",
+   "version": "fieldgoal_lgbm-dd3eefa7754fe8db"
+  },
+  "punt": {
+   "file": "artifacts/production_models/decisions/punt_kernel-e66984fcbabcce24.joblib",
+   "sha256": "a9bb024c2f575762e8d0418e2ea4f52f2da5f3473203d95905dfbcd35ee55b19",
+   "version": "punt_kernel-e66984fcbabcce24"
+  },
+  "tries": {
+   "file": "artifacts/production_models/decisions/tries_rates-9e2c0626110761fe.joblib",
+   "sha256": "594df1ccb58978d5392e91a67d449aec3fa225dcee3ef8f92c1c537c6aa24274",
+   "version": "tries_rates-9e2c0626110761fe"
+  },
+  "wp": {
+   "file": "artifacts/production_models/decisions/wp_spline_sym_late_hand_over-a77d68ef0c02363b.joblib",
+   "sha256": "c07ff827b6c212ac2d4d56ed9b5d59e24158baf10ffaf60db76df16eabedca04",
+   "version": "wp_spline_sym_late_hand_over-a77d68ef0c02363b"
+  }
+ },
+ "module": "decisions",
+ "season": 2026
+}

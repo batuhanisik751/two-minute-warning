@@ -587,3 +587,244 @@ export const glossary = pgTable("glossary", {
   modules: text("modules").array().notNull(),
   modelOutput: boolean("model_output").notNull(),
 });
+
+// ---------------------------------------------------------------------------------------
+// Decision Report Card (step P3): the graded decisions, the coach tables, the track record.
+// The seasons before the approved grading's season are the FROZEN history (the committed
+// snapshot pinned in config/production_models.yaml; rewritten only when it changes); the
+// season in progress is regraded with the pinned models on every run and replaced.
+// ---------------------------------------------------------------------------------------
+
+/** The head coaches named by published decisions (upserted; never deleted). coach_id = the
+ * name as a slug ('andy-reid'), the /coach/[id] route. */
+export const dimCoach = pgTable("dim_coach", {
+  coachId: text("coach_id").primaryKey(),
+  name: text("name").notNull(),
+});
+
+/** Every graded fourth down (clear and toss-up; excluded plays are not published), credited to
+ * the head coach of the team with the ball. WP as 0-1: each option's WP rounded to 4 decimals
+ * (wp_fg / wp_punt / p_make NULL when the option did not exist), wp_lost = WP(best) -
+ * WP(chosen) exact. quarter_seconds: left in the quarter (overtime: in the period). */
+export const decisionFourth = pgTable(
+  "decision_fourth",
+  {
+    gameId: text("game_id").notNull(),
+    playId: integer("play_id").notNull(),
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    seasonType: text("season_type").notNull(),
+    posteam: text("posteam").notNull(),
+    defteam: text("defteam").notNull(),
+    coachId: text("coach_id")
+      .notNull()
+      .references(() => dimCoach.coachId),
+    qtr: integer("qtr").notNull(),
+    quarterSeconds: integer("quarter_seconds").notNull(),
+    scoreDifferential: integer("score_differential").notNull(),
+    ydstogo: integer("ydstogo").notNull(),
+    yardline100: integer("yardline_100").notNull(),
+    chosen: text("chosen").notNull(),
+    recommended: text("recommended").notNull(),
+    grade: text("grade").notNull(),
+    correct: boolean("correct").notNull(),
+    wpGo: doublePrecision("wp_go").notNull(),
+    wpFg: doublePrecision("wp_fg"),
+    wpPunt: doublePrecision("wp_punt"),
+    wpLost: doublePrecision("wp_lost").notNull(),
+    pConvert: doublePrecision("p_convert").notNull(),
+    pMake: doublePrecision("p_make"),
+    outcome: text("outcome"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.gameId, t.playId] }),
+    index("decision_fourth_coach_idx").on(t.coachId, t.season),
+    index("decision_fourth_season_idx").on(t.season, t.week),
+    check("decision_fourth_chosen_check", sql`${t.chosen} in ('go', 'field_goal', 'punt')`),
+    check(
+      "decision_fourth_recommended_check",
+      sql`${t.recommended} in ('go', 'field_goal', 'punt')`,
+    ),
+    check("decision_fourth_grade_check", sql`${t.grade} in ('clear', 'toss_up', 'one_option')`),
+    check("decision_fourth_wp_lost_check", sql`${t.wpLost} >= 0 and ${t.wpLost} <= 1`),
+  ],
+);
+
+/** Every graded try after a touchdown (kick vs two-point): the same rules as decision_fourth.
+ * score_differential: before the try; result: the try's result as nflverse names it. */
+export const decisionTwoPoint = pgTable(
+  "decision_two_point",
+  {
+    gameId: text("game_id").notNull(),
+    playId: integer("play_id").notNull(),
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    seasonType: text("season_type").notNull(),
+    posteam: text("posteam").notNull(),
+    defteam: text("defteam").notNull(),
+    coachId: text("coach_id")
+      .notNull()
+      .references(() => dimCoach.coachId),
+    qtr: integer("qtr").notNull(),
+    quarterSeconds: integer("quarter_seconds").notNull(),
+    scoreDifferential: integer("score_differential").notNull(),
+    chosen: text("chosen").notNull(),
+    recommended: text("recommended").notNull(),
+    grade: text("grade").notNull(),
+    correct: boolean("correct").notNull(),
+    wpKick: doublePrecision("wp_kick").notNull(),
+    wpTwoPoint: doublePrecision("wp_two_point").notNull(),
+    wpLost: doublePrecision("wp_lost").notNull(),
+    result: text("result"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.gameId, t.playId] }),
+    index("decision_two_point_coach_idx").on(t.coachId, t.season),
+    check("decision_two_point_chosen_check", sql`${t.chosen} in ('kick', 'two_point')`),
+    check("decision_two_point_recommended_check", sql`${t.recommended} in ('kick', 'two_point')`),
+    check("decision_two_point_grade_check", sql`${t.grade} in ('clear', 'toss_up')`),
+  ],
+);
+
+/** The clock-management metrics (docs/decision_metrics.md "Clock management"), one row per
+ * metric and team-game: candidates and cases (is_case). The key snap: timeouts_unused = the
+ * opponent's first run-out snap (amount = timeouts the team still held), half_passivity = the
+ * decision snap (amount = EP left, wp_left = WP left), seconds_wasted = the worst counted
+ * interval (amount = seconds wasted). detail: the metric's own context (JSON). */
+export const decisionClock = pgTable(
+  "decision_clock",
+  {
+    metric: text("metric").notNull(),
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    seasonType: text("season_type").notNull(),
+    gameId: text("game_id").notNull(),
+    team: text("team").notNull(),
+    opp: text("opp").notNull(),
+    coachId: text("coach_id")
+      .notNull()
+      .references(() => dimCoach.coachId),
+    playId: integer("play_id").notNull(),
+    qtr: integer("qtr").notNull(),
+    quarterSeconds: integer("quarter_seconds").notNull(),
+    down: integer("down"),
+    ydstogo: integer("ydstogo"),
+    yardline100: integer("yardline_100"),
+    scoreDifferential: integer("score_differential").notNull(),
+    timeouts: integer("timeouts").notNull(),
+    isCase: boolean("is_case").notNull(),
+    amount: doublePrecision("amount").notNull(),
+    wpLeft: doublePrecision("wp_left"),
+    desc: text("desc"),
+    detail: jsonb("detail").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.metric, t.gameId, t.team] }),
+    index("decision_clock_coach_idx").on(t.coachId, t.season),
+    check(
+      "decision_clock_metric_check",
+      sql`${t.metric} in ('timeouts_unused', 'half_passivity', 'seconds_wasted')`,
+    ),
+  ],
+);
+
+/** One row per coach and season (the leaderboards; reports/decisions/fourth_downs.csv and
+ * clock.csv `coach_season`): games (with a fourth down), clear (graded) and toss-up decisions,
+ * WP lost (clear decisions only, 0-1 units), wrong calls, the aggressiveness index (went for it
+ * / going was clearly best; NULL without such a decision) and the clock metrics' candidates,
+ * cases and amounts (m1 timeouts unused, m2 end-of-half passivity, m3 seconds wasted). team:
+ * 'PHI', or 'ATL/OAK' after a move during the season. */
+export const coachSeason = pgTable(
+  "coach_season",
+  {
+    season: integer("season").notNull(),
+    coachId: text("coach_id")
+      .notNull()
+      .references(() => dimCoach.coachId),
+    team: text("team").notNull(),
+    games: integer("games").notNull(),
+    fourthGraded: integer("fourth_graded").notNull(),
+    fourthTossUps: integer("fourth_toss_ups").notNull(),
+    fourthWpLost: doublePrecision("fourth_wp_lost").notNull(),
+    fourthWrong: integer("fourth_wrong").notNull(),
+    goClear: integer("go_clear").notNull(),
+    goClearWent: integer("go_clear_went").notNull(),
+    went: integer("went").notNull(),
+    twoPointGraded: integer("two_point_graded").notNull(),
+    twoPointTossUps: integer("two_point_toss_ups").notNull(),
+    twoPointWpLost: doublePrecision("two_point_wp_lost").notNull(),
+    twoPointWrong: integer("two_point_wrong").notNull(),
+    wpLost: doublePrecision("wp_lost").notNull(),
+    aggressiveness: doublePrecision("aggressiveness"),
+    wpLostPerGame: doublePrecision("wp_lost_per_game").notNull(),
+    m1Candidates: integer("m1_candidates").notNull(),
+    m1Cases: integer("m1_cases").notNull(),
+    m1TimeoutsLeft: integer("m1_timeouts_left").notNull(),
+    m2Candidates: integer("m2_candidates").notNull(),
+    m2Cases: integer("m2_cases").notNull(),
+    m2EpLeft: doublePrecision("m2_ep_left").notNull(),
+    m2WpLeft: doublePrecision("m2_wp_left").notNull(),
+    m3DecisiveGames: integer("m3_decisive_games").notNull(),
+    m3Cases: integer("m3_cases").notNull(),
+    m3SecondsWasted: doublePrecision("m3_seconds_wasted").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.season, t.coachId] })],
+);
+
+/** One row per coach and game (the coach page's timeline): the decision counts and WP lost of
+ * that game, as in coach_season. */
+export const coachWeek = pgTable(
+  "coach_week",
+  {
+    gameId: text("game_id").notNull(),
+    coachId: text("coach_id")
+      .notNull()
+      .references(() => dimCoach.coachId),
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    seasonType: text("season_type").notNull(),
+    team: text("team").notNull(),
+    opp: text("opp").notNull(),
+    fourthGraded: integer("fourth_graded").notNull(),
+    fourthTossUps: integer("fourth_toss_ups").notNull(),
+    fourthWpLost: doublePrecision("fourth_wp_lost").notNull(),
+    fourthWrong: integer("fourth_wrong").notNull(),
+    goClear: integer("go_clear").notNull(),
+    goClearWent: integer("go_clear_went").notNull(),
+    went: integer("went").notNull(),
+    twoPointGraded: integer("two_point_graded").notNull(),
+    twoPointTossUps: integer("two_point_toss_ups").notNull(),
+    twoPointWpLost: doublePrecision("two_point_wp_lost").notNull(),
+    twoPointWrong: integer("two_point_wrong").notNull(),
+    wpLost: doublePrecision("wp_lost").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.gameId, t.coachId] }),
+    index("coach_week_coach_idx").on(t.coachId, t.season, t.week),
+  ],
+);
+
+/** The Decision Report Card's track record, row for row: source 'wp_backtest' and 'submodels'
+ * = every row of reports/decisions/wp_backtest.csv and submodels.csv (line = the CSV's data
+ * row, from 1; section = its `table`, n = its `n_plays`); 'nfl4th_benchmark' = the agreement
+ * with nfl4th summarized from reports/decisions/nfl4th_benchmark.csv (section 'agreement':
+ * scope = our grade, subset = the season or 'all', value = the share of the same
+ * recommendation, n = rows; section 'go_rate': the recommended and real go rates). */
+export const decisionsTrackRecord = pgTable(
+  "decisions_track_record",
+  {
+    source: text("source").notNull(),
+    line: integer("line").notNull(),
+    section: text("section").notNull(),
+    scope: text("scope"),
+    subset: text("subset"),
+    method: text("method"),
+    metric: text("metric").notNull(),
+    value: doublePrecision("value"),
+    lo: doublePrecision("lo"),
+    hi: doublePrecision("hi"),
+    n: integer("n"),
+    nBlocks: integer("n_blocks"),
+  },
+  (t) => [primaryKey({ columns: [t.source, t.line] })],
+);

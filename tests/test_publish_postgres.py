@@ -745,7 +745,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                                   [f"twm.{key}_password", roles[role]])  # fmt: skip
                 owner.execute((ROOT / "scripts" / "neon" / "roles.sql").read_text())
             assert mg.apply_migrations(owner) == ["0001_streamer_regression_watch",
-                                                  "0002_regression_stability"]  # fmt: skip
+                                                  "0002_regression_stability",
+                                                  "0003_decisions"]  # fmt: skip
         job = tg.resolve("local", env={tg.LOCAL_ENV: make_conninfo(
             url, user="twm_job", password=roles["twm_job"])}, env_file=NO_ENV_FILE)  # fmt: skip
         syn = ps.build(tmp_path / "syn", live_weeks=(3,))
@@ -756,9 +757,108 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
             for t in ("stream_list", "stream_pick", "regression_row", "regression_track_record",
                       "regression_stability"):  # fmt: skip
                 assert conn.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] > 0
+            for t in ("dim_coach", "decision_fourth", "coach_season", "decisions_track_record"):
+                conn.execute(f'SELECT count(*) FROM "{t}"')  # P3 tables: readable by the site
             with pytest.raises((psycopg.errors.InsufficientPrivilege,
                                 psycopg.errors.ReadOnlySqlTransaction)):  # fmt: skip
                 conn.execute("DELETE FROM stream_pick")
     finally:
         with psycopg.connect(server, autocommit=True) as admin:
             admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+
+
+# --------------------------------------------------------------------------------------
+# Step P3: the Decision Report Card (frozen history + the season in progress)
+# --------------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def decision_frames() -> dict[str, pl.DataFrame]:
+    """The committed frozen history (2023-2025 only: small and real)."""
+    from twm.modules.decisions import frozen as fz
+    from twm.modules.decisions import production as dp
+
+    _, pin = dp.load_pinned_spec(2026)
+    return {t: f.filter(pl.col("season") >= 2023) for t, f in fz.load_snapshot(pin).items()}
+
+
+def publish_decisions(target: tg.Target, inputs, dec, **kwargs) -> wr.PublishResult:
+    data = col.collect(inputs)
+    data.decisions = dec
+    data.tables["dim_coach"], data.tables["decisions_track_record"] = dec.coaches, \
+        dec.track_record  # fmt: skip
+    assert col.validate(data) == []
+    return wr.publish(target, data, **kwargs)
+
+
+def test_the_decision_report_card_is_published_and_a_second_run_rewrites_nothing(
+    db: tg.Target, tmp_path: Path, decision_frames
+) -> None:
+    from tests.test_decisions_production import decision_data
+
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    dec = decision_data(decision_frames)
+    res = publish_decisions(db, syn.inputs, dec)
+    for name in ("decision_fourth", "decision_two_point", "decision_clock", "coach_season",
+                 "coach_week"):  # fmt: skip
+        want = dec.history[name].height + dec.current[name].height
+        assert res.counts[name] == res.written[name] == want > 0, name
+    assert res.counts["dim_coach"] == dec.coaches.height and res.counts[
+        "decisions_track_record"] == 5  # fmt: skip
+    meta = dict(rows(db, "SELECT key, value FROM site_meta"))
+    assert meta["hash:decisions_history"].startswith("v1:") and "hash:decisions_season" in meta
+    assert rows(db, "SELECT count(*) FROM decision_fourth WHERE season = 2025")[0][0] == \
+        dec.current["decision_fourth"].height  # fmt: skip
+    # a coach's leaderboard row reads back as published
+    top = dec.current["coach_season"].sort("wp_lost_per_game").row(0, named=True)
+    assert rows(db, "SELECT c.name, s.games FROM coach_season s JOIN dim_coach c USING "
+                    "(coach_id) WHERE s.season = 2025 ORDER BY s.wp_lost_per_game, c.coach_id "
+                    "LIMIT 1")[0][1] == top["games"]  # fmt: skip
+    detail = rows(db, "SELECT detail FROM decision_clock LIMIT 1")[0][0]
+    assert isinstance(detail, dict)
+    content = dump(db)
+    again = publish_decisions(db, syn.inputs, dec)
+    assert {"decisions_history", "decisions_season", "decisions_track_record"} <= set(
+        again.unchanged)  # fmt: skip
+    assert again.written["decision_fourth"] == 0 and dump(db) == content
+    notes = wr.table_notes(again)
+    assert notes["decision_fourth"] == ("history unchanged (not rewritten); season in progress "
+                                        "unchanged (not rewritten)")  # fmt: skip
+
+
+def test_the_season_in_progress_is_replaced_and_the_history_guarded(
+    db: tg.Target, tmp_path: Path, decision_frames
+) -> None:
+    from dataclasses import replace
+
+    from tests.test_decisions_production import decision_data
+
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    dec = decision_data(decision_frames)
+    publish_decisions(db, syn.inputs, dec)
+    history = rows(db, "SELECT count(*), sum(wp_lost) FROM decision_fourth WHERE season < 2025")
+    # a regrade of the season in progress (one value changed): only that part is rewritten
+    cur = dict(dec.current)
+    cur["decision_fourth"] = cur["decision_fourth"].with_columns(
+        pl.when(pl.int_range(pl.len()) == 0).then(pl.lit(0.5)).otherwise(pl.col("wp_go"))
+        .alias("wp_go"))  # fmt: skip
+    res = publish_decisions(db, syn.inputs, replace(dec, current=cur))
+    assert "decisions_history" in res.unchanged and "decisions_season" not in res.unchanged
+    assert res.written["decision_fourth"] == cur["decision_fourth"].height
+    assert rows(db, "SELECT count(*) FROM decision_fourth WHERE wp_go = 0.5 AND season = 2025"
+                )[0][0] >= 1  # fmt: skip
+    assert rows(db, "SELECT count(*), sum(wp_lost) FROM decision_fourth WHERE season < 2025") \
+        == history  # fmt: skip
+    # the frozen history losing a season, or the season in progress losing most of its rows:
+    # refused, nothing changes
+    content = dump(db)
+    small = {t: f.filter(pl.col("season") == 2024) for t, f in dec.history.items()}
+    with pytest.raises(wr.PublishError, match=r"decision_fourth \(history\) would go from"):
+        publish_decisions(db, syn.inputs, replace(dec, history=small))
+    few = {t: f.head(3) for t, f in cur.items()}
+    with pytest.raises(wr.PublishError, match=r"decision_fourth \(season\) would go from"):
+        publish_decisions(db, syn.inputs, replace(dec, current=few))
+    assert dump(db) == content
+    res = publish_decisions(db, syn.inputs, replace(dec, history=small), allow_shrink=True)
+    assert rows(db, "SELECT DISTINCT season FROM coach_season ORDER BY 1") == [(2024,), (2025,)]
+    assert any("decision_fourth (history)" in w for w in res.warnings)

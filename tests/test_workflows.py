@@ -136,3 +136,30 @@ def test_one_publish_carries_every_module() -> None:
                    "pj.FIRST_DATA_SEASON"):  # fmt: skip
         assert needle not in publish, needle
     assert "load_snapshot" in publish
+
+
+def test_the_decisions_are_graded_with_the_pins_and_history_is_never_regraded() -> None:
+    """P3: the job checks the approved grading and its frozen history, grades the season in
+    progress with the pins only (no fold is trained, no season before it is graded), and the
+    publish reads the pinned snapshot (never the stored or recomputed history)."""
+    text = (WORKFLOWS / "pipeline.yml").read_text()
+    code = (ROOT / "src" / "twm" / "pipeline" / "runner.py").read_text()
+    for needle in ("wp-backtest", "submodels-backtest", '"decisions", "grade"]',
+                   '"decisions", "clock"', '"decisions", "pin"', "decisions pin",
+                   "decisions grade ", "wp-select"):  # fmt: skip
+        assert needle not in text and needle not in code, needle
+    assert '["model", "check", "decisions"' in code and '"grade-pinned"' in code
+    stages = code[code.index("def _stages(") :]
+    order = ["for module in MODULE_SCORES", '"decisions_backtest"', "r.decisions()",
+             "r.publish()"]  # fmt: skip
+    at = [stages.index(s) for s in order]
+    assert at == sorted(at), order
+    season = (ROOT / "src" / "twm" / "modules" / "decisions" / "season.py").read_text()
+    for needle in ("fit_fold", "run_fold", "load_fold_model", "measure_constants",
+                   "gi.ranges(", "gi.runoffs(", "gi.platt", "season_inputs("):  # fmt: skip
+        assert needle not in season, needle
+    publish = (ROOT / "src" / "twm" / "publish" / "decisions.py").read_text()
+    for needle in ("grade_frames", "grade_season", "load_graded", "build_snapshot",
+                   "load_fold_model"):  # fmt: skip
+        assert needle not in publish, needle
+    assert "load_snapshot" in publish and "load_pinned_spec" in publish

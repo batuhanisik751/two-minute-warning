@@ -4,7 +4,8 @@ The stages, in order (each ``twm`` command runs as its own process, with the sam
 same exit codes and the same files as when the owner types it):
 
 1. **preflight** (here): the approved models load (``config/production_models.yaml``: file,
-   sha256 and version checked; the Radar's, the streamer's and Regression Watch's); where the
+   sha256 and version checked; the Radar's, the streamer's, Regression Watch's and the
+   decisions' grading with its fold models); where the
    publish goes and, for Neon, which CA bundle checks its certificate.
 2. **gate** (here, :func:`twm.pipeline.schedule.gate`): offseason days without a run stop here.
 3. **ingest**: ``twm ingest --start <season> --force`` (the nightly refresh: the current season
@@ -33,7 +34,14 @@ same exit codes and the same files as when the owner types it):
     publish reads the lists in place; nothing is recomputed on the runner.
     **regression_score** / **regression_export** (only when a list is due): ``twm regression
     score`` with the approved frozen parameters, the same rules.
-14. **publish**: ``twm publish`` (remote when ``DATABASE_URL`` is set, else skipped with a
+14. **decisions_backtest** (step P3): ``twm model check decisions``: the approved grading (spec,
+    the five fold models: sha256 before anything is opened) and its frozen 2006-2025 history
+    (sha256, rows, ``reports/decisions/{fourth_downs,clock}.csv`` reproduced). History is never
+    regraded on the runner.
+15. **decisions**: ``twm decisions grade-pinned``: every fourth down, try and clock case of the
+    season so far graded with the pinned models and inputs (nothing trained, nothing measured on
+    earlier seasons); every run, whether or not a list is due.
+16. **publish**: ``twm publish`` (remote when ``DATABASE_URL`` is set, else skipped with a
     warning), ONE publish for every module, also after a not-ready score, so outcomes and player
     pages stay fresh.
 
@@ -73,7 +81,7 @@ PUBLISH_MODES = ("auto", "local", "remote", "skip")
 TIMEOUTS = {"ingest": 25 * 60, "build": 15 * 60, "dataset": 15 * 60, "backtest": 20 * 60,
             "score": 15 * 60, "streamer_dataset": 15 * 60, "streamer_backtest": 10 * 60,
             "streamer_score": 15 * 60, "regression_backtest": 10 * 60,
-            "regression_score": 15 * 60,
+            "regression_score": 15 * 60, "decisions_backtest": 10 * 60, "decisions": 15 * 60,
             "publish": 15 * 60}  # fmt: skip
 # The modules scored after the Radar (step P2): stage, the `twm` command, the report's title.
 MODULE_SCORES = {
@@ -140,6 +148,7 @@ class RunResult:
     errors: list[str] = field(default_factory=list)
     files: list[str] = field(default_factory=list)
     publish_result: dict[str, Any] = field(default_factory=dict)
+    decisions: str = ""  # step P3: what the season-in-progress grading found
 
     @property
     def seconds(self) -> float:
@@ -246,6 +255,27 @@ class Hooks:
     record_failure: Callable[..., bool]
     sleep: Callable[[float], None] = time.sleep
     ca_bundle: Callable[[], str] = lambda: ca_bundle()  # noqa: E731
+    # step P3: season -> one line on the season in progress's grades (decisions_summary)
+    decisions_summary: Callable[[int], str] = lambda s: decisions_summary(s)  # noqa: E731
+
+
+def decisions_summary(season: int, folder: Path | None = None) -> str:
+    """'634 fourth downs graded (292 clear), 245 tries (5 clear), clock: 0 timeouts-unused,
+    0 passivity, 0 seconds-wasted cases' from ``twm decisions grade-pinned``'s summaries."""
+    from twm.modules.decisions import season as sn
+
+    d = folder if folder is not None else sn.season_dir()
+    g = json.loads((d / "graded" / f"season_{season}.json").read_text())
+    c = json.loads((d / "clock" / f"season_{season}.json").read_text())
+    f, t = g["fourth_downs"], g["tries"]
+
+    def graded(x: dict[str, int]) -> int:
+        return sum(v for k, v in x.items() if k in ("clear", "toss_up", "one_option"))
+
+    return (f"{season}: {graded(f):,} fourth downs graded ({f.get('clear', 0):,} clear), "
+            f"{graded(t):,} tries ({t.get('clear', 0):,} clear); clock cases: timeouts unused "
+            f"{c['timeouts_unused_cases']}, end-of-half passivity {c['passivity_cases']}, "
+            f"seconds wasted {c['late_cases']}")  # fmt: skip
 
 
 def ca_bundle() -> str:
@@ -302,10 +332,14 @@ def default_hooks() -> Hooks:
 
         k, rule = load_pinned_k(season)[0], load_pinned_rule(season)[0]
         params = load_pinned_params(season)[0]
+        # step P3: the decisions' grading spec and its five fold models (sha256 first)
+        from twm.modules.decisions.production import load_pinned as load_pinned_grading
+
+        grading = load_pinned_grading(season)[0]
         return (f"approved model {pm.model_version} ({pin.file}, sha256 {pin.sha256[:12]}...) "
                 f"and its backtest {pin.backtest_seasons} ({n:,} predictions); streamer "
                 f"{k.model_version} and {rule.model_version}; Regression Watch "
-                f"{params.model_version}")  # fmt: skip
+                f"{params.model_version}; decisions {grading.model_version}")  # fmt: skip
 
     return Hooks(
         check_model=check_model,
@@ -601,6 +635,24 @@ class _Run:
         self.add(stage, "ok", t0, f"{kind} list: " + ", ".join(files) if files
                  else "no list was stored this week")  # fmt: skip
 
+    def decisions(self) -> bool:
+        """Grade the season in progress with the approved grading (step P3): `twm decisions
+        grade-pinned`; any failure stops the run (the publish would refuse stale grades)."""
+        t0 = time.perf_counter()
+        code, log = self.cli("decisions", ["decisions", "grade-pinned", "--season",
+                                           str(self.season)])  # fmt: skip
+        if code != 0:
+            self.fail("decisions", f"`twm decisions grade-pinned` exited with {code}", t0,
+                      code=code, logs=[log])  # fmt: skip
+            return False
+        try:
+            text = self.hooks.decisions_summary(self.season)
+        except Exception as e:  # informative only: the grades were written
+            text = f"graded with the approved grading (summary unreadable: {e})"
+        self.res.decisions = text
+        self.add("decisions", "ok", t0, text, code=0, logs=[self.rel(log)])
+        return True
+
     def publish(self) -> bool:
         t0 = time.perf_counter()
         if self.target is None:
@@ -709,5 +761,13 @@ def _stages(r: _Run) -> None:
             ok = r.score(p, module)
             if ok:
                 r.export(p, module)
+    # step P3: the Decision Report Card: its approved grading and frozen history checked, then
+    # the season in progress graded with the pins (never retrained), every run
+    ok = ok and r.command(
+        "decisions_backtest", ["model", "check", "decisions", "--season", str(season)],
+        "the approved grading (spec and fold models: sha256) and its frozen history checked "
+        "(sha256, rows, reports/decisions/{fourth_downs,clock}.csv); history never regraded",
+    )  # fmt: skip
+    ok = ok and r.decisions()
     if ok and p is not None:
         r.publish()

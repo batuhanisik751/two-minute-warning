@@ -37,6 +37,9 @@ JSON definition and the snapshot a ``hit_rates`` table); :func:`read_snapshot` r
 snapshot files with the same sha256 and row checks. A pin without ``model`` is the Radar's.
 Regression Watch (D4a, :mod:`twm.modules.regression_watch.production`) pins
 ``regression_watch`` (``model: params``: one JSON file of frozen parameters, no snapshot).
+The Decision Report Card (P3, :mod:`twm.modules.decisions.production`) pins ``decisions``
+(``model: grading``: a JSON grading spec naming the season's fold models by file and sha256,
+and the frozen graded history as its snapshot).
 """
 
 from __future__ import annotations
@@ -53,8 +56,10 @@ import yaml
 PIN_FILE = "production_models.yaml"
 ARTIFACT_DIR = Path("artifacts") / "production_models"
 BACKTEST_TABLES = ("predictions", "outcomes", "model_versions")
-# Every snapshot file a pin may name (S2a): a rule's frozen backtest is one hit-rate table.
-SNAPSHOT_TABLES = (*BACKTEST_TABLES, "hit_rates")
+# Every snapshot file a pin may name (S2a): a rule's frozen backtest is one hit-rate table;
+# P3: the Decision Report Card's frozen history (twm.modules.decisions.frozen.TABLES).
+DECISION_TABLES = ("fourth_downs", "two_point", "clock_cases", "team_games", "season_inputs")
+SNAPSHOT_TABLES = (*BACKTEST_TABLES, "hit_rates", *DECISION_TABLES)
 PARQUET_LEVEL = 19  # zstd level of the snapshot files (measured: 0.89 MB for 91,638 rows)
 FLOAT_TOLERANCE = 1.01e-6  # the evaluation CSV prints 6 decimals
 HEADER = """\

@@ -83,6 +83,7 @@ class Fake:
                                                 "kind": "live", "incomplete": False},
             resolve_target=lambda mode: FakeTarget(), record_failure=record,
             sleep=self.slept.append,
+            decisions_summary=lambda s: f"{s}: 9 fourth downs graded (4 clear)",
         )  # fmt: skip
 
     def stages(self) -> list[str]:
@@ -105,7 +106,8 @@ def test_a_full_run_in_season(tmp_path: Path) -> None:
     assert res.exit_code == rn.EXIT_OK and res.status == "ok", res.errors
     assert fake.stages() == ["ingest", "build", "dataset", "backtest", "score", "streamer_dataset",
                              "streamer_backtest", "regression_backtest", "streamer_score",
-                             "regression_score", "publish"]  # fmt: skip
+                             "regression_score", "decisions_backtest", "decisions",
+                             "publish"]  # fmt: skip
     assert fake.args("ingest") == [["ingest", "--start", "2026", "--force"]]
     # Regression Watch's backtest lists are frozen: the job's warehouse still starts in 2012
     assert fake.args("build") == [["build", "--start", "2012", "--end", "2026"]]
@@ -115,6 +117,12 @@ def test_a_full_run_in_season(tmp_path: Path) -> None:
     # Regression Watch's frozen backtest lists: checked, never recomputed on the runner
     assert fake.args("regression_backtest") == [["model", "check", "regression_watch",
                                                  "--season", "2026"]]  # fmt: skip
+    # step P3: the decisions' approved grading and frozen history are checked, never regraded;
+    # the season in progress is graded with the pins on every run
+    assert fake.args("decisions_backtest") == [["model", "check", "decisions", "--season",
+                                                "2026"]]  # fmt: skip
+    assert fake.args("decisions") == [["decisions", "grade-pinned", "--season", "2026"]]
+    assert res.decisions == "2026: 9 fourth downs graded (4 clear)"
     for stage, cmd in (("streamer_score", ["streamer", "score"]),
                        ("regression_score", ["regression", "score"])):  # fmt: skip
         args = fake.args(stage)[0]
@@ -138,7 +146,7 @@ def test_a_full_run_in_season(tmp_path: Path) -> None:
     order = ["preflight", "gate", "ingest", "build", "plan", "dataset", "backtest", "score",
              "export", "streamer_dataset", "streamer_backtest", "regression_backtest",
              "streamer_score", "streamer_export", "regression_score", "regression_export",
-             "publish"]  # fmt: skip
+             "decisions_backtest", "decisions", "publish"]  # fmt: skip
     assert [s.name for s in res.stages] == order
     assert res.week == 3 and res.list_kind == "live" and res.publish == "published"
     out = tmp_path / "run"
@@ -146,6 +154,7 @@ def test_a_full_run_in_season(tmp_path: Path) -> None:
     assert "pipeline: done" in summary and "| glossary | 101 | 0 | unchanged" in summary
     assert "**K and D/ST streamer:** week 3: scored, stored as 'live'" in summary
     assert "**Regression Watch:** week 3: scored" in summary
+    assert "**Decisions:** 2026: 9 fourth downs graded (4 clear)" in summary
     assert notes["modules"]["streamer"]["score"] == "scored"
     assert json.loads((out / "result.json").read_text())["exit_code"] == 0
     assert SECRET not in summary and "S3cret" not in (out / "result.json").read_text()
@@ -198,7 +207,8 @@ def test_the_streamer_and_regression_watch_follow_the_same_not_ready_rules(
     res = run(fake, tmp_path / "a", now="2026-09-29T15:20")
     assert res.exit_code == rn.EXIT_OK and res.status == "warning" and res.score == "scored"
     assert res.modules["streamer"]["score"] == "not_ready"
-    assert fake.stages()[-2:] == ["regression_score", "publish"]
+    assert fake.stages()[-4:] == ["regression_score", "decisions_backtest", "decisions",
+                                  "publish"]  # fmt: skip
     assert res.stage("streamer_export") is None
     assert any(w.startswith("streamer: week 3's data has not fully arrived") for w in res.warnings)
     # the last attempt: late (exit code 3), still published once
@@ -212,7 +222,8 @@ def test_the_streamer_and_regression_watch_follow_the_same_not_ready_rules(
 
 def test_a_failed_streamer_or_regression_stage_stops_before_the_publish(tmp_path: Path) -> None:
     for i, stage in enumerate(("streamer_dataset", "streamer_backtest", "regression_backtest",
-                               "streamer_score", "regression_score")):  # fmt: skip
+                               "streamer_score", "regression_score", "decisions_backtest",
+                               "decisions")):  # fmt: skip
         fake = Fake(codes={stage: 1})
         res = run(fake, tmp_path / str(i))
         assert res.exit_code == rn.EXIT_FAILED and res.status == "failed", stage
@@ -282,6 +293,8 @@ def test_no_list_due_still_refreshes_and_publishes(tmp_path: Path) -> None:
     res = run(fake, tmp_path, now="2026-10-02T10:50", cron="47 10 * * *")  # Friday
     assert res.exit_code == 0 and res.week is None and "score" not in fake.stages()
     assert "publish" in fake.stages() and "window closed" in res.plan
+    # the decisions are graded whether or not a list is due (fresh games every night)
+    assert fake.stages()[-3:] == ["decisions_backtest", "decisions", "publish"]
 
 
 def test_github_outputs_summary_and_annotations(tmp_path: Path, capsys) -> None:

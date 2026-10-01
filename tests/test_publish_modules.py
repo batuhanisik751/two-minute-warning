@@ -28,7 +28,7 @@ def data(tmp_path: Path) -> col.PublishData:
 
 
 def test_every_list_table_belongs_to_one_module() -> None:
-    assert list(FAMILIES) == list(col.MODULES)
+    assert list(FAMILIES) == [m for m in col.MODULES if m != "decisions"]  # P3: not a list family
     for f in FAMILIES.values():
         for name in (f.lists, f.rows):
             assert TABLES[name].mode == "lists" and "kind" in TABLES[name].names
@@ -78,7 +78,7 @@ def test_the_synthetic_modules_pass_and_broken_rows_are_caught(data: col.Publish
 
 def test_live_decisions_name_their_module(data: col.PublishData) -> None:
     got = {m: wr.plan_live(data, {}, allow_incomplete=False, replace_live=[], module=m)
-           for m in col.MODULES}  # fmt: skip
+           for m in FAMILIES}  # fmt: skip
     assert [d.label for d in got["streamer"][0]] == ["streamer 2026-W03 K",
                                                      "streamer 2026-W03 DST"]  # fmt: skip
     assert [d.label for d in got["regression_watch"][0]] == ["regression watch 2026-W03"]

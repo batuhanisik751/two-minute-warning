@@ -10,6 +10,9 @@ Vercel, step E3) reads them from there.
   its range and the priority computed walk-forward, see below), the track record
   (`reports/waiver_radar/evaluation.csv`, row for row), how each priority tier did, a weekly
   summary per player for the player pages (2013 on), the glossary, and small bookkeeping tables.
+  Step P3 adds the Decision Report Card: every graded fourth down and two-point try of 2006 on,
+  the clock-management cases, the coach-season and coach-game tables, the coaches, and its
+  track record (see "The Decision Report Card" below).
 - **What is never published:** anything from your ESPN league (spec rule 9; the publisher
   never imports `twm.league`, a test checks it), logos (rule 10), and player ids other than
   nflverse's `gsis_id` (ESPN, PFR, Sleeper... ids stay in the warehouse).
@@ -54,7 +57,9 @@ is written or nothing is. One publish carries every module's lists (step P2): th
 Radar (`radar_list`, `radar_pick`, `radar_outcome`), the K and D/ST streamer (`stream_list`,
 `stream_pick`, `stream_outcome`, `stream_track_record`) and Regression Watch
 (`regression_list`, `regression_row`, `regression_outcome`, `regression_track_record`,
-`regression_stability`), with the same rules for all three (the code is shared: `src/twm/publish/tables.py` `FAMILIES`).
+`regression_stability`), with the same rules for all three (the code is shared: `src/twm/publish/tables.py` `FAMILIES`),
+and (step P3) the Decision Report Card (`dim_coach`, `decision_fourth`, `decision_two_point`,
+`decision_clock`, `coach_season`, `coach_week`, `decisions_track_record`; `tables.py` `DECISIONS`).
 
 1. **Target check.** `--target local` uses `TWM_LOCAL_DATABASE_URL` (default: the container
    above) and refuses any host that is not this computer. `--target remote` uses
@@ -87,11 +92,14 @@ Radar (`radar_list`, `radar_pick`, `radar_outcome`), the K and D/ST streamer (`s
    more than `publish.max_shrink_share` of its rows (settings.yaml, 10%), the publish is
    refused with exit code `5` and a failed `pipeline_runs` row, and nothing changes. A run
    whose local inputs went missing or came out much smaller therefore never wipes the site.
+   The decision tables are watched in two parts each, the frozen history and the season in
+   progress (`decision_fourth (history)`, `decision_fourth (season)`, ...).
    `--allow-shrink` is the owner's explicit override (the drop is reported as a warning).
 6. **Unchanged tables are not rewritten** (step E4). Each replaced table's content hash is
    kept in `site_meta` (keys `hash:<table>`; a module's backtest lists and rows share one key,
    `hash:backtest_lists` for the Radar, `hash:stream_backtest_lists` and
-   `hash:regression_backtest_lists`, which leave out `generated_at`). A table whose hash and row
+   `hash:regression_backtest_lists`, which leave out `generated_at`; the decision tables have
+   two units, `hash:decisions_history` and `hash:decisions_season`). A table whose hash and row
    count equal the target's is skipped: the summary says "unchanged (not rewritten)". That
    saves Neon writes on nightly runs where only a few tables change. A table whose rows were
    changed behind the publisher's back (a different row count) is rewritten anyway.
@@ -137,6 +145,32 @@ predictions store (read-only), as the Radar's do. The backtest lists (the time m
   row for row (`line` = the CSV's data row; the latter's `table` and `group` columns are
   `section` and `row_group`).
 
+**The Decision Report Card** (step P3; `src/twm/publish/decisions.py`). Every graded fourth
+down (`decision_fourth`) and try (`decision_two_point`) of 2006 on, clear and toss-up (excluded
+plays are not published), with the play key, the clock, score, down and distance, what was
+chosen and recommended, each option's WP (rounded to 0.01 WP points for display) and the WP
+lost (exact); the clock-management candidates and cases (`decision_clock`, one row per metric
+and team-game); `coach_season` (the leaderboards: G3's and G4's coach-season rows) and
+`coach_week` (one row per coach and game); `dim_coach` (`coach_id` = the name as a slug,
+`andy-reid`); `decisions_track_record` (`reports/decisions/wp_backtest.csv` and
+`submodels.csv` row for row, and the nfl4th agreement summarized from
+`nfl4th_benchmark.csv`: published only once that file is a full run, otherwise skipped with a
+warning; `twm.publish.decisions.nfl4th_rows`). The five decision tables are split at the
+approved grading's season S:
+
+- *the history* (2006 .. S-1) is the FROZEN snapshot pinned with the grading (see "The Decision
+  Report Card's approved grading" below; sha256 checked before it is read, and its coach-season
+  and league rows must reproduce `reports/decisions/fourth_downs.csv` and `clock.csv`, else
+  nothing is published). It is never regraded by the job: a Linux rebuild of the fold models
+  could flip near ties, and it would need the warehouse from 1999 and every fold's models;
+- *the season in progress* (S) is what `twm decisions grade-pinned` wrote
+  (`data/decisions/season/`) with the pinned models; it is replaced on every run (grades of
+  past weeks are recomputed with the same pins: deterministic on one machine). The publish
+  refuses grades made with other models or inputs.
+
+`site_meta` gains `decisions_season`, `decisions_version` (the approved grading),
+`decisions_history` (`2006-2025`) and `decisions_latest_week`.
+
 `site_meta` also carries `current_week` and `current_as_of` (that week's official Tuesday
 14:00 UTC as-of, ISO 8601 UTC, the value `twm.asof.weekly_as_of` gives; empty before the
 season's first as-of), `data_as_of`, `generated_at` and the latest list weeks.
@@ -147,10 +181,13 @@ lists were skipped as incomplete; `5` refused by the empty-replacement guard (no
 changed). Publishing twice in a row gives identical tables (apart from the run log and the
 `generated_at` time).
 
-Sizes: a full publish of the real data is about 29 MB of tables (36 MB for the whole local
-database; measured 2026-09-30 after `VACUUM FULL`, with the streamer's 425 lists and 3,762
-picks and Regression Watch's 61 lists and 10,964 rows: 6 MB of them; 21 MB before step P2),
-far below Neon's free-plan storage of 0.5 GB. Because every run deletes and rewrites most rows, the sizes a publish prints include
+Sizes: a full publish of the real data is about 58 MB of tables (65 MB for the whole local
+database; measured 2026-10-01 after `VACUUM FULL`). The Decision Report Card is 28 MB of it
+(`decision_fourth` 78,385 rows 18.5 MB, `decision_two_point` 27,547 rows 5.5 MB, `coach_week`
+10,954 rows 2.6 MB, `decision_clock` 1,125, `coach_season` 705, `dim_coach` 147,
+`decisions_track_record` 1,258 rows: under 1 MB together); the streamer's 425 lists and
+Regression Watch's 61 lists 6 MB (measured 2026-09-30; 21 MB in all before step P2). Far below
+Neon's free-plan storage of 0.5 GB. Because every run deletes and rewrites most rows, the sizes a publish prints include
 the old row versions until Postgres's automatic clean-up (autovacuum) has run; right after a
 run they can read about twice the real size.
 
@@ -274,7 +311,7 @@ it; the run's log shows every one):
 
 | stage | what |
 |---|---|
-| preflight | the approved models load (the Radar's model and backtest, the streamer's K model and D/ST rule, Regression Watch's parameters: pin, file, sha256, version); where the publish goes; which CA bundle would check Neon's certificate |
+| preflight | the approved models load (the Radar's model and backtest, the streamer's K model and D/ST rule, Regression Watch's parameters, the decisions' grading spec and its five fold models: pin, file, sha256, version); where the publish goes; which CA bundle would check Neon's certificate |
 | gate | offseason days without a run stop here (exit 0) |
 | ingest | `twm ingest --start <season> --force` (current season and one-file datasets); on a cold cache first `twm ingest --end <season - 1>`; one retry after 60 s |
 | build | `twm build --start 2012 --end <season>` (`pipeline.build_start`) |
@@ -288,6 +325,8 @@ it; the run's log shows every one):
 | regression_backtest | `twm model check regression_watch`: the approved parameters and their frozen backtest lists (sha256, rows, and `reports/regression_watch/backtest.csv` reproduced). Nothing is recomputed on the runner (a Linux rebuild could flip a near-tie of the variant choice, and it would need the warehouse from 2006) |
 | streamer_score, streamer_export | only when a list is due: `twm streamer score` with the approved methods; the same not-ready rules as the Radar (exit 3: a warning on an early attempt, `late` from the last one) |
 | regression_score, regression_export | only when a list is due: `twm regression score` with the approved frozen parameters; the same rules. Weeks 1-2 store nothing (nobody has 3 games) |
+| decisions_backtest | `twm model check decisions` (step P3): the approved grading (spec and fold models, sha256 before anything is opened) and its frozen 2006-2025 history (sha256, rows, `reports/decisions/fourth_downs.csv` and `clock.csv` reproduced). History is never regraded on the runner |
+| decisions | `twm decisions grade-pinned`: every fourth down, try and clock case of the season so far graded with the pinned models and inputs (nothing trained; nothing measured on earlier seasons: the runner's warehouse starts in 2012). Every run, whether or not a list is due (games of the weekend get graded the next night); the job summary's "Decisions" line counts them |
 | publish | ONE `twm publish --target remote` for every module when the `DATABASE_URL` secret exists, otherwise skipped with a warning (so the pipeline can be rehearsed before Neon exists); it also runs after a not-ready score, so outcomes and player pages stay fresh |
 
 **How a run ends** (the job's colour and GitHub's email follow the exit code):
@@ -295,7 +334,7 @@ it; the run's log shows every one):
 | exit code | job | meaning |
 |---|---|---|
 | 0 | green | done. Warnings (annotations on the run page): publish skipped (no secret), week not ready yet on an early attempt, a flaky download retried, the approved model's training data differs from today's |
-| 1 | red | a stage failed; the job summary names it, and the failure is recorded in `pipeline_runs` (`stage` = the stage) when the database is reachable |
+| 1 | red | a stage failed (for example a decisions pin that does not match its files); the job summary names it, and the failure is recorded in `pipeline_runs` (`stage` = the stage) when the database is reachable |
 | 3 | red | the week's data had not arrived by the last attempt (or a week you named is not ready), for any of the three lists; the publish still ran |
 
 A live list is still only made in its live window (Tuesday as-of to the next kickoff), and a
@@ -350,6 +389,7 @@ each stage's real time):
 | backtest (restore the snapshot) | 2 s | 2 s |
 | score | 3 s | 3 s |
 | publish | 6 s (everything written) | 4 s (every replaced table unchanged, 0 rows rewritten) |
+| decisions_backtest + decisions (P3, 2026-10-01, weeks 1-3) | 2 s + 2 s | 2 s + 2 s |
 | **all stages** | **2 min 38 s** | **87 s** |
 
 (Before the snapshot, the backtest stage rebuilt the folds: 53 s; the warm run took 2 min 17 s.)
@@ -495,6 +535,52 @@ warehouse, refuses when its record disagrees with the report, and freezes the ba
 the pin, the files and `reports/regression_watch/` together. The scheduled job checks them
 (`regression_backtest`) and scores with them (`regression_score`), as `uv run twm score` does.
 
+### The Decision Report Card's approved grading (step P3)
+
+The decisions have no single model: a grade needs five fold models (G1b's WP model, G2's
+conversion, field-goal and punt models and the try rates), each trained on the seasons before
+the graded one, plus inputs G3 and G4 measured on the full warehouse (the longest made field
+goal and the punt range before S, the field goal's runoffs, the Platt choice, the clock
+constants). The job must grade the season in progress with what the owner approved and never
+regrade history, so all of it is pinned as a fifth entry, `decisions` (`model: grading`), next
+to the others (their entries and files stay byte-identical):
+
+- the **grading spec** `artifacts/production_models/decisions/<version>.json` (2.5 KB; the
+  pin's file and sha256, version = a hash of its content): the season, each fold model by
+  version, file and sha256, the season-level inputs, the clock constants and the
+  `decisions:` settings the grades were made with;
+- the five **fold models** next to it, byte copies of `models/decisions/<version>.joblib`
+  (1.1 MB in all: WP 424 KB, conversion 369 KB, field goal 183 KB, punt 159 KB, tries 1 KB);
+  each is opened only after its sha256 matched the spec, then its version, its season (the
+  fold of S) and its training seasons (all before S) are checked;
+- the **frozen history** `history-<version>/` (the pin's `backtest:`, zstd level 19, 2.2 MB):
+  `fourth_downs` (every fourth down 2006-2025 with its exclusion: 83,462 rows, 1.6 MB),
+  `two_point` (27,362 rows, 0.4 MB), `clock_cases` (1,118), `team_games` (10,862) and
+  `season_inputs` (20: each season's model versions and inputs), made from the stored grades
+  by `src/twm/modules/decisions/frozen.py`. Only the columns the site needs: the display WPs
+  are rounded to 4 decimals (0.01 WP points; full precision would be 4.8 MB, over the
+  repository's 2 MB file limit); `wp_lost` is exact, so the coach tables add up.
+
+`uv run twm decisions grade-pinned` (the job's `decisions` stage) loads only these (sha256
+first) and grades the season so far. The only things it reads from the warehouse are the
+season's own plays and the kickoffs of S-1 and S (each game's kickoff spot), so the runner's
+2012-2026 warehouse gives the same grades: checked 2026-10-01 on a scratch 2012-2026 build,
+whose grades of 2026 equal the stored ones bit for bit. `uv run twm model check` (no argument,
+or `decisions`) checks the pin, the spec, every model file and the frozen history, whose
+coach-season and league rows must reproduce `reports/decisions/fourth_downs.csv` and
+`clock.csv` (counts exactly, values to 6 decimals).
+
+To approve for a new season, on your Mac: grade it and every earlier season and write the
+reports (`twm decisions wp-backtest` / `submodels-backtest --season S`, `twm decisions grade`,
+`twm decisions clock`), then `uv run twm decisions pin`. It builds the spec from the season's
+stored summaries (refused when today's `decisions:` settings differ from the ones they were
+made with), copies the models, freezes the history of every earlier season and refuses unless
+the history reproduces the two reports and grading S with the copied pins reproduces the
+stored grades of S exactly. Then `uv run twm model check`, review, and commit the pin, the
+files and `reports/decisions/` together. Before the first publish that carries the decisions,
+apply `web/drizzle/0003_decisions.sql` to Neon (step 9 of "Setting up Neon"): without it the
+publish refuses (missing tables) and writes nothing.
+
 ## The owner's steps for E4
 
 1. **Push** the commit with `.github/workflows/pipeline.yml` from your own GitHub account (as
@@ -547,6 +633,8 @@ re-checked here where possible.
   `web/drizzle/0002_regression_stability.sql` adds `regression_stability` (step R1: the D2
   stability study for the methodology page; apply it to Neon the same way before the first
   publish that carries it, or that publish fails on the missing table and writes nothing).
+  `web/drizzle/0003_decisions.sql` adds the Decision Report Card's seven tables (step P3;
+  the same rule). `decisions.py` builds their rows.
 - `scripts/neon/roles.sql`, `scripts/neon/apply_roles.py`: the two Neon roles.
 - `.github/workflows/pipeline.yml`, `src/twm/pipeline/` (`schedule.py` the calendar,
   `runner.py` the stages and exit codes, `report.py` the job summary and the run's files): the
@@ -554,3 +642,6 @@ re-checked here where possible.
 - `.github/workflows/retrain.yml`, `src/twm/pins.py`, `config/production_models.yaml`,
   `artifacts/production_models/`: the approved model and its backtest snapshot
   (`twm model check|pin|restore-backtest|candidate`).
+- `src/twm/modules/decisions/production.py` (the grading pin, `twm decisions pin`),
+  `frozen.py` (the frozen history), `season.py` (`twm decisions grade-pinned`), `site.py` (the
+  published columns), `production_cli.py` (the two commands and `twm model check decisions`).

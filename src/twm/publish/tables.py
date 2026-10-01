@@ -23,6 +23,12 @@ How a publish treats each table (the reviewer's rules of 2026-09-28):
   reference a model version or a player that the current run does not have (model_versions,
   dim_team, dim_player).
 - **append**: one new row per run, never changed (pipeline_runs).
+- **seasons** (step P3, the Decision Report Card: :data:`DECISIONS`): decision_fourth,
+  decision_two_point, decision_clock, coach_season and coach_week hold two parts, split by the
+  approved grading's season S. The **history** (seasons before S) comes from the frozen,
+  pinned snapshot and is one hash unit (rewritten only when the snapshot changes); the
+  **season in progress** (S) is regraded with the pinned models on every run and is another
+  unit. The empty-replacement guard watches each part of each table.
 """
 
 from __future__ import annotations
@@ -30,7 +36,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-Mode = Literal["replace", "lists", "upsert", "append"]
+Mode = Literal["replace", "lists", "upsert", "append", "seasons"]
 
 
 @dataclass(frozen=True)
@@ -54,6 +60,14 @@ def _t(name: str, key: tuple[str, ...], mode: Mode, *cols: tuple[str, str]) -> T
 
 
 TS = "timestamptz"
+DP = "double precision"
+# coach_season / coach_week: the G3 aggregates (twm.modules.decisions.coach), in this order
+COACH_COUNTS = (
+    ("fourth_graded", "integer"), ("fourth_toss_ups", "integer"), ("fourth_wp_lost", DP),
+    ("fourth_wrong", "integer"), ("go_clear", "integer"), ("go_clear_went", "integer"),
+    ("went", "integer"), ("two_point_graded", "integer"), ("two_point_toss_ups", "integer"),
+    ("two_point_wp_lost", DP), ("two_point_wrong", "integer"), ("wp_lost", DP),
+)  # fmt: skip
 # Upserted columns that keep their first-published value when the row already exists: the
 # scheduled job rebuilds the backtest every run, which stamps each model version with a new
 # created_at; the version (its key) is the same model, so it was created when first published.
@@ -84,6 +98,7 @@ TABLES: dict[str, Table] = {
             ("draft_year", "integer"), ("draft_round", "integer"), ("draft_pick", "integer"),
             ("rookie_season", "integer"),
         ),
+        _t("dim_coach", ("coach_id",), "upsert", ("coach_id", "text"), ("name", "text")),
         _t(
             "radar_list", ("season", "week", "position", "kind"), "lists",
             ("season", "integer"), ("week", "integer"), ("position", "text"), ("kind", "text"),
@@ -208,15 +223,70 @@ TABLES: dict[str, Table] = {
             ("formula", "text"), ("explanation", "text"), ("verified", "text"),
             ("modules", "text[]"), ("model_output", "boolean"),
         ),
+        # step P3: the Decision Report Card (DECISIONS)
+        _t(
+            "decision_fourth", ("game_id", "play_id"), "seasons",
+            ("game_id", "text"), ("play_id", "integer"), ("season", "integer"),
+            ("week", "integer"), ("season_type", "text"), ("posteam", "text"),
+            ("defteam", "text"), ("coach_id", "text"), ("qtr", "integer"),
+            ("quarter_seconds", "integer"), ("score_differential", "integer"),
+            ("ydstogo", "integer"), ("yardline_100", "integer"), ("chosen", "text"),
+            ("recommended", "text"), ("grade", "text"), ("correct", "boolean"),
+            ("wp_go", DP), ("wp_fg", DP), ("wp_punt", DP), ("wp_lost", DP), ("p_convert", DP),
+            ("p_make", DP), ("outcome", "text"),
+        ),
+        _t(
+            "decision_two_point", ("game_id", "play_id"), "seasons",
+            ("game_id", "text"), ("play_id", "integer"), ("season", "integer"),
+            ("week", "integer"), ("season_type", "text"), ("posteam", "text"),
+            ("defteam", "text"), ("coach_id", "text"), ("qtr", "integer"),
+            ("quarter_seconds", "integer"), ("score_differential", "integer"),
+            ("chosen", "text"), ("recommended", "text"), ("grade", "text"),
+            ("correct", "boolean"), ("wp_kick", DP), ("wp_two_point", DP), ("wp_lost", DP),
+            ("result", "text"),
+        ),
+        _t(
+            "decision_clock", ("metric", "game_id", "team"), "seasons",
+            ("metric", "text"), ("season", "integer"), ("week", "integer"),
+            ("season_type", "text"), ("game_id", "text"), ("team", "text"), ("opp", "text"),
+            ("coach_id", "text"), ("play_id", "integer"), ("qtr", "integer"),
+            ("quarter_seconds", "integer"), ("down", "integer"), ("ydstogo", "integer"),
+            ("yardline_100", "integer"), ("score_differential", "integer"),
+            ("timeouts", "integer"), ("is_case", "boolean"), ("amount", DP), ("wp_left", DP),
+            ("desc", "text"), ("detail", "jsonb"),
+        ),
+        _t(
+            "coach_season", ("season", "coach_id"), "seasons",
+            ("season", "integer"), ("coach_id", "text"), ("team", "text"), ("games", "integer"),
+            *COACH_COUNTS, ("aggressiveness", DP), ("wp_lost_per_game", DP),
+            ("m1_candidates", "integer"), ("m1_cases", "integer"),
+            ("m1_timeouts_left", "integer"), ("m2_candidates", "integer"),
+            ("m2_cases", "integer"), ("m2_ep_left", DP), ("m2_wp_left", DP),
+            ("m3_decisive_games", "integer"), ("m3_cases", "integer"),
+            ("m3_seconds_wasted", DP),
+        ),
+        _t(
+            "coach_week", ("game_id", "coach_id"), "seasons",
+            ("game_id", "text"), ("coach_id", "text"), ("season", "integer"),
+            ("week", "integer"), ("season_type", "text"), ("team", "text"), ("opp", "text"),
+            *COACH_COUNTS,
+        ),
+        _t(
+            "decisions_track_record", ("source", "line"), "replace",
+            ("source", "text"), ("line", "integer"), ("section", "text"), ("scope", "text"),
+            ("subset", "text"), ("method", "text"), ("metric", "text"), ("value", DP),
+            ("lo", DP), ("hi", DP), ("n", "integer"), ("n_blocks", "integer"),
+        ),
     )
 }  # fmt: skip
 
 # Write order (parents before children); deletes run in the reverse order.
 WRITE_ORDER = (
-    "model_versions", "dim_team", "dim_player", "radar_list", "radar_pick", "radar_outcome",
-    "stream_list", "stream_pick", "stream_outcome", "regression_list", "regression_row",
-    "regression_outcome", "track_record", "stream_track_record", "regression_track_record",
-    "regression_stability",
+    "model_versions", "dim_team", "dim_player", "dim_coach", "radar_list", "radar_pick",
+    "radar_outcome", "stream_list", "stream_pick", "stream_outcome", "regression_list",
+    "regression_row", "regression_outcome", "track_record", "stream_track_record",
+    "regression_track_record", "regression_stability", "decision_fourth", "decision_two_point",
+    "decision_clock", "coach_season", "coach_week", "decisions_track_record",
     "tier_stats", "player_week_summary", "glossary", "site_meta", "pipeline_runs",
 )  # fmt: skip
 REPLACED = tuple(n for n in WRITE_ORDER if TABLES[n].mode == "replace")
@@ -266,7 +336,30 @@ FAMILIES: dict[str, Family] = {
 }  # fmt: skip
 # Replaced tables every module shares (published whatever modules a publish carries).
 SHARED = ("player_week_summary", "glossary")
+
+
+@dataclass(frozen=True)
+class SeasonSplit:
+    """The Decision Report Card's tables as a publish treats them (step P3; mode 'seasons'):
+    ``tables`` split at the approved grading's season S into the frozen ``history`` unit
+    (seasons < S) and the ``season`` unit (S); ``replaced``: its other replaced tables;
+    ``dims``: its upserted dimension; ``label``: how the summary names it."""
+
+    module: str
+    tables: tuple[str, ...]
+    history: str
+    season: str
+    replaced: tuple[str, ...]
+    dims: tuple[str, ...]
+    label: str
+
+
+DECISIONS = SeasonSplit("decisions", ("decision_fourth", "decision_two_point", "decision_clock",
+                                      "coach_season", "coach_week"),
+                        "decisions_history", "decisions_season", ("decisions_track_record",),
+                        ("dim_coach",), "decision report card")  # fmt: skip
 _owned = [n for f in FAMILIES.values() for n in (f.lists, f.rows, f.outcomes, *f.replaced)]
-assert set(_owned) | set(SHARED) | {"site_meta"} == {
+assert set(_owned) | set(SHARED) | {"site_meta"} | set(DECISIONS.replaced) == {
     n for n, t in TABLES.items() if t.mode in ("replace", "lists")
-}, "every replaced or list table belongs to one family, SHARED or site_meta"
+}, "every replaced or list table belongs to one family, SHARED, DECISIONS or site_meta"
+assert set(DECISIONS.tables) == {n for n, t in TABLES.items() if t.mode == "seasons"}

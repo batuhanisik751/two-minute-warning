@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from twm import __version__
+from twm.modules.decisions import production_cli as _decisions_pins  # noqa: F401 (P3 commands)
 from twm.modules.decisions.cli import decisions_app
 from twm.modules.streamer.cli import streamer_app
 
@@ -2020,7 +2021,8 @@ def _check_against_evaluation(store: Path, evaluation_csv: Path) -> list[str]:
 def model_check(
     module: str = typer.Argument(
         "all",
-        help="Module: waiver_radar, streamer, regression_watch, or all (every pinned module).",
+        help="Module: waiver_radar, streamer, regression_watch, decisions, or all (every "
+        "pinned module).",
     ),
     season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
     evaluation_csv: Path = typer.Option(
@@ -2036,7 +2038,9 @@ def model_check(
     Brier, calibration). The streamer's pins (K model, D/ST rule) are checked the same way
     against reports/streamer/backtest.csv (S2a), and Regression Watch's frozen parameters
     (sha256, version, and its record of the last backtest season against
-    reports/regression_watch/backtest.csv; D4a). Changes nothing."""
+    reports/regression_watch/backtest.csv; D4a), and the Decision Report Card's approved
+    grading and frozen history (P3: reports/decisions/{fourth_downs,clock}.csv). Changes
+    nothing."""
     import tempfile
 
     from twm import pins
@@ -2049,6 +2053,11 @@ def model_check(
         return
     if module.strip().lower().replace("-", "_") == "regression_watch":
         check_regression_pin(chosen)
+        return
+    if module.strip().lower() == "decisions":  # P3: the approved grading and frozen history
+        from twm.modules.decisions.production_cli import check_pin as check_decisions_pin
+
+        check_decisions_pin(chosen)
         return
     key = "waiver_radar" if module.strip().lower() == "all" else _module_or_exit(module)
     try:
@@ -2077,6 +2086,10 @@ def model_check(
         check_streamer_pins(chosen)
     if module.strip().lower() == "all" and "regression_watch" in pins.read_pins():
         check_regression_pin(chosen)
+    if module.strip().lower() == "all" and "decisions" in pins.read_pins():
+        from twm.modules.decisions.production_cli import check_pin as check_decisions_pin
+
+        check_decisions_pin(chosen)
 
 
 @model_app.command("restore-backtest")
@@ -2474,9 +2487,11 @@ def publish(
     ),
 ) -> None:
     """Publish the Waiver Radar, K and D/ST streamer and Regression Watch lists, their outcomes
-    and track records, the player pages and the glossary to Postgres, in one transaction
-    (docs/deploy.md). Reads the predictions store read-only (never writes it). Live lists
-    already published are never changed (frozen); everything else is replaced, except a table
+    and track records, the Decision Report Card (the frozen graded history and the season in
+    progress graded by `twm decisions grade-pinned`), the player pages and the glossary to
+    Postgres, in one transaction (docs/deploy.md). Reads the predictions store read-only
+    (never writes it). Live lists already published are never changed (frozen); the decisions'
+    history only when its pinned snapshot changes; everything else is replaced, except a table
     whose content is unchanged (not rewritten). Exit codes: 0 done, 1 refused or failed
     (nothing changed), 4 done but some live lists were skipped as incomplete (retry later), 5
     refused because a replaced table would shrink too much (the local inputs look missing;

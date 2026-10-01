@@ -40,7 +40,8 @@ import polars as pl
 from twm.config import FANTASY_POSITIONS
 
 MODULE = "waiver_radar"
-MODULES = ("waiver_radar", "streamer", "regression_watch")  # tables.FAMILIES
+# tables.FAMILIES, and (step P3) the Decision Report Card (tables.DECISIONS)
+MODULES = ("waiver_radar", "streamer", "regression_watch", "decisions")
 TOP_N = 25  # published picks per list (the weekly report's top 25: confidence.TOP_N)
 # nflverse gsis ids: "00-0034796" (most players) or "BAT138483" (older ids; checked: every
 # dim_player id in the 2026-09-28 warehouse matches one of the two)
@@ -95,6 +96,8 @@ class Inputs:
     streamer_csv: Path | None = None
     regression_csv: Path | None = None
     regression_stability_csv: Path | None = None
+    decisions_season_dir: Path | None = None  # `twm decisions grade-pinned`'s output
+    decisions_reports: Path | None = None  # reports/decisions
 
     @classmethod
     def default(cls, now: datetime | None = None) -> Inputs:
@@ -119,6 +122,8 @@ class Inputs:
             "streamer_csv": ROOT / "reports" / "streamer" / "backtest.csv",
             "regression_csv": ROOT / "reports" / "regression_watch" / "backtest.csv",
             "regression_stability_csv": ROOT / "reports" / "regression_watch" / "stability.csv",
+            "decisions_season_dir": ROOT / "data" / "decisions" / "season",
+            "decisions_reports": ROOT / "reports" / "decisions",
         }
         value = getattr(self, name)
         return Path(value) if value is not None else defaults[name]
@@ -150,6 +155,8 @@ class PublishData:
     meta: dict[str, str]
     data_as_of: datetime | None
     warnings: list[str] = field(default_factory=list)
+    # step P3: the Decision Report Card (twm.publish.decisions.DecisionData; None = not touched)
+    decisions: Any = None
 
     # the Waiver Radar's lists by their E2 names
     @property
@@ -876,6 +883,23 @@ def collect(inputs: Inputs) -> PublishData:
         tables.update(got.tables)
         extra.append(got)
     pws = with_ng(pws, None if frame is None else rl.ng_columns(frame))
+    dec = None
+    if "decisions" in inputs.modules:  # step P3: the frozen history + the season in progress
+        from twm.publish import decisions as dc
+
+        try:
+            dec = dc.collect_decisions(season, season_dir=inputs.path("decisions_season_dir"),
+                                       reports_dir=inputs.path("decisions_reports"))  # fmt: skip
+        except dc.DecisionsInputError as e:
+            raise PublishInputError(str(e)) from e
+        tables["dim_coach"], tables["decisions_track_record"] = dec.coaches, dec.track_record
+        weeks = dec.current["decision_fourth"]["week"]
+        meta.update({
+            "decisions_season": str(dec.season), "decisions_version": dec.version,
+            "decisions_history": "-".join(str(f(dec.history["coach_season"]["season"]))
+                                          for f in (min, max)),
+            "decisions_latest_week": "" if weeks.len() == 0 else str(weeks.max()),
+        })  # fmt: skip
     ids = families[MODULE].outcome_keys.get_column("gsis_id").to_list()
     ids += pws.get_column("gsis_id").to_list()
     if "regression_watch" in families:
@@ -914,7 +938,8 @@ def collect(inputs: Inputs) -> PublishData:
         "glossary": glossary(),
     })  # fmt: skip
     return PublishData(season=season, now=inputs.now, families=families, tables=tables,
-                       meta=meta, data_as_of=data_as_of)  # fmt: skip
+                       meta=meta, data_as_of=data_as_of, decisions=dec,
+                       warnings=list(dec.warnings) if dec is not None else [])  # fmt: skip
 
 
 # --------------------------------------------------------------------------------------
@@ -1132,6 +1157,11 @@ def validate(data: PublishData) -> list[str]:
     if pws.filter(~pl.col("team").is_in(list(teams))).height:
         problems.append("some player_week_summary rows name a team that is not a current "
                         "franchise")  # fmt: skip
+    # step P3: the Decision Report Card's rows
+    if data.decisions is not None:
+        from twm.publish import decisions as dc
+
+        problems += dc.problems(data.decisions)
     # 4. every list's model version is published with it
     known = set(t["model_versions"].get_column("model_version").to_list())
     for m, d in fam.items():

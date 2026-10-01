@@ -15,7 +15,12 @@ Regression Watch) with the same code:
 5. replace radar_outcome (the outcomes of every published pick, including the frozen live
    lists already in the target, plus the current season's dataset rows), track_record,
    tier_stats, player_week_summary, glossary and site_meta;
-6. append a 'success' pipeline_runs row, count the rows and measure the tables, commit.
+6. step P3, when the publish carries the Decision Report Card (``data.decisions``): upsert
+   dim_coach; its split tables (:data:`twm.publish.tables.DECISIONS`) as two units, the frozen
+   history (seasons before the approved grading's season) and the season in progress, each
+   replaced unless unchanged and each part watched by the guard; decisions_track_record like
+   the other replaced tables;
+7. append a 'success' pipeline_runs row, count the rows and measure the tables, commit.
 
 Any error rolls everything back; a 'failed' pipeline_runs row is then written in a new
 transaction (the error text scrubbed of the connection string). ``dry_run`` does all of it
@@ -35,7 +40,15 @@ from typing import Any
 import polars as pl
 
 from twm.publish.collect import PublishData
-from twm.publish.tables import FAMILIES, KEEP_ON_CONFLICT, SHARED, TABLES, Family, Table
+from twm.publish.tables import (
+    DECISIONS,
+    FAMILIES,
+    KEEP_ON_CONFLICT,
+    SHARED,
+    TABLES,
+    Family,
+    Table,
+)
 from twm.publish.target import Target, redact
 
 STAGE = "publish"
@@ -509,6 +522,39 @@ def shrink_problems(current: dict[str, int], new: dict[str, int], share: float) 
     return problems
 
 
+def split_parts(dec: Any) -> tuple[tuple[str, dict[str, pl.DataFrame]], ...]:
+    """The Decision Report Card's two units and their rows: (history, current)."""
+    return ((DECISIONS.history, dec.history), (DECISIONS.season, dec.current))
+
+
+def split_where(unit: str, season: int) -> str:
+    """The rows of ``unit`` in a split table: the history is every season before ``season``."""
+    op = "<" if unit == DECISIONS.history else ">="
+    return f"season {op} {int(season)}"
+
+
+def split_key(name: str, unit: str) -> str:
+    """'decision_fourth (history)' / 'decision_fourth (season)': the guard's and the counts'
+    name of one part of a split table."""
+    return f"{name} ({'history' if unit == DECISIONS.history else 'season'})"
+
+
+def split_counts(conn, season: int) -> dict[str, int]:
+    """Rows the target holds in each part of each split table."""
+    out = {}
+    for unit in (DECISIONS.history, DECISIONS.season):
+        where = split_where(unit, season)
+        for name in DECISIONS.tables:
+            row = conn.execute(f'SELECT count(*) FROM "{name}" WHERE {where}').fetchone()
+            out[split_key(name, unit)] = int(row[0])
+    return out
+
+
+def split_new_counts(dec: Any) -> dict[str, int]:
+    return {split_key(n, unit): part[n].height for unit, part in split_parts(dec)
+            for n in DECISIONS.tables}  # fmt: skip
+
+
 def stored_hashes(conn) -> dict[str, str]:
     rows = conn.execute(
         "SELECT key, value FROM site_meta WHERE key LIKE %s", [HASH_PREFIX + "%"]
@@ -615,12 +661,19 @@ def _publish(
         step("plan")
         # what the replaced tables will hold (computed before anything is written)
         frames, backs, replaced_weeks = _planned_frames(conn, data, mods, weeks)
+        dec = data.decisions
+        if dec is not None:
+            frames.update({n: t[n] for n in DECISIONS.replaced})
         new_counts = {n: f.height for n, f in frames.items()}
         for m, (back, back_rows) in backs.items():
             new_counts[FAMILIES[m].lists] = back.height
             new_counts[FAMILIES[m].rows] = back_rows.height
         # 1. the empty-replacement guard
         current = target_counts(conn, guarded(mods))
+        if dec is not None:
+            current.update(target_counts(conn, DECISIONS.replaced))
+            current.update(split_counts(conn, dec.season))
+            new_counts.update(split_new_counts(dec))
         problems = shrink_problems(current, new_counts, max_shrink_share)
         if problems and not allow_shrink:
             raise ShrinkError(
@@ -634,6 +687,8 @@ def _publish(
         step("guard")
         # 2. content hashes: an unchanged table is not rewritten
         plan_units = units(mods)
+        if dec is not None:
+            plan_units.update({n: (n,) for n in DECISIONS.replaced})
         hashes = {}
         for unit, names in plan_units.items():
             if len(names) == 2:  # a module's backtest lists
@@ -642,14 +697,24 @@ def _publish(
                                             back_rows.select(TABLES[names[1]].names))  # fmt: skip
             else:
                 hashes[unit] = content_hash(frames[unit].select(TABLES[unit].names))
+        if dec is not None:
+            for unit, part in split_parts(dec):
+                hashes[unit] = content_hash(*(part[n].select(TABLES[n].names)
+                                              for n in DECISIONS.tables))  # fmt: skip
         before = stored_hashes(conn)
 
         def same(unit: str) -> bool:
+            if unit in (DECISIONS.history, DECISIONS.season):
+                keys = [split_key(n, unit) for n in DECISIONS.tables]
+                return before.get(unit) == hashes[unit] and all(
+                    current[k] == new_counts[k] for k in keys)  # fmt: skip
             return before.get(unit) == hashes[unit] and all(
                 current[n] == new_counts[n] for n in plan_units[unit]
             )
 
-        for name in ("model_versions", "dim_team", "dim_player"):
+        dims = ("model_versions", "dim_team", "dim_player",
+                *(DECISIONS.dims if dec is not None else ()))  # fmt: skip
+        for name in dims:
             written[name] = _upsert(conn, TABLES[name], rows_of(t[name], TABLES[name]))
         step("upsert")
         for m in mods:  # backtest lists: replaced (unless unchanged)
@@ -685,6 +750,19 @@ def _publish(
                 continue
             written[unit] = _replace(conn, TABLES[unit], rows_of(frames[unit], TABLES[unit]))
         step("replace")
+        if dec is not None:  # step P3: the frozen history and the season in progress
+            for name in DECISIONS.tables:
+                written[name] = 0
+            for unit, part in split_parts(dec):
+                if same(unit):
+                    unchanged.append(unit)
+                    continue
+                where = split_where(unit, dec.season)
+                for name in reversed(DECISIONS.tables):
+                    conn.execute(f'DELETE FROM "{name}" WHERE {where}')
+                for name in DECISIONS.tables:
+                    written[name] += _copy(conn, TABLES[name], rows_of(part[name], TABLES[name]))
+        step("decisions")
         meta = dict(data.meta)
         meta.update(_latest_lists(conn))
         meta.update({HASH_PREFIX + u: h for u, h in before.items() if u not in hashes})
@@ -872,9 +950,14 @@ def summary_lines(result: PublishResult, target: Target) -> list[str]:
 
 def table_notes(result: PublishResult) -> dict[str, str]:
     """Per table: 'unchanged (not rewritten)' where the content hash matched."""
-    out = {}
+    out: dict[str, str] = {}
     plan = units(FAMILIES)
     for unit in result.unchanged:
+        if unit in (DECISIONS.history, DECISIONS.season):
+            part = "history" if unit == DECISIONS.history else "season in progress"
+            for n in DECISIONS.tables:
+                out[n] = (out[n] + "; " if n in out else "") + f"{part} unchanged (not rewritten)"
+            continue
         names = plan.get(unit, (unit,))
         for n in names:
             out[n] = "backtest rows unchanged (not rewritten)" if len(names) == 2 \

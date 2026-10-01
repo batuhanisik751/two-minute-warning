@@ -316,12 +316,64 @@ def player_games_history(
     as_of: datetime | None = None,
     rules: ScoringRules | None = None,
     positions: Sequence[str] | None = FANTASY_POSITIONS,
+    xfp: pl.DataFrame | None = None,
 ) -> pl.DataFrame:
     """Every player-game of ``seasons`` through ONE as-of view (default: the end of time, i.e.
     every built row), each with its ``available_at``. ``frame.filter(available_at <= t)`` equals
-    :func:`player_games_for` at ``t`` for every ``t`` up to ``as_of``."""
+    :func:`player_games_for` at ``t`` for every ``t`` up to ``as_of``.
+
+    ``xfp``: another source of expected points per player-game (:func:`with_xfp`; the own
+    walk-forward xFP of :mod:`.own_xfp`); None (the default) = ffopportunity's, unchanged."""
     with AsOfView(db, as_of or END_OF_TIME) as view:
-        return player_games_for(view, seasons, rules=rules, positions=positions)
+        frame = player_games_for(view, seasons, rules=rules, positions=positions)
+    return with_xfp(frame, xfp)
+
+
+# Frame columns another xFP source replaces: its expected points (all plays, garbage-time
+# plays) and the expected half of every component (the actual half stays the weekly line's).
+EXPECTED_COMPONENTS = tuple(c for c in COMPONENTS if c.endswith("_exp"))
+XFP_SOURCE_COLUMNS = ("game_id", "gsis_id", "xfp", "xfp_garbage", *EXPECTED_COMPONENTS,
+                      "yac_exp")  # fmt: skip
+
+
+def with_xfp(frame: pl.DataFrame, xfp: pl.DataFrame | None) -> pl.DataFrame:
+    """``frame`` with the expected points of another source: ``xfp`` has one row per
+    (game_id, gsis_id) with :data:`XFP_SOURCE_COLUMNS`, summed over the SAME plays as
+    ffopportunity's (D1's per-play SQL). A row keeps a NULL ``xfp`` where ffopportunity has no
+    row (so the studies keep the same games); ``xfp``, ``play_xfp``, ``xfp_garbage``, the
+    ``*_exp`` components and ``yac_exp`` are replaced, and ``fpoe``, ``xfp_ng``, ``fpoe_ng``
+    recomputed. None returns ``frame`` itself (the ffopportunity path is untouched)."""
+    if xfp is None:
+        return frame
+    d = FLOAT_DECIMALS
+    src = xfp.select(
+        "game_id", "gsis_id", *(pl.col(c).cast(pl.Float64).alias(f"_s_{c}")
+                                for c in XFP_SOURCE_COLUMNS[2:])
+    )  # fmt: skip
+    has = pl.col("xfp").is_not_null()
+    filled = [
+        pl.when(has).then(pl.col(f"_s_{c}").fill_null(0.0)).round(d).alias(c)
+        for c in ("xfp", "xfp_garbage", *EXPECTED_COMPONENTS)
+    ]
+    out = (
+        frame.join(src, on=["game_id", "gsis_id"], how="left", validate="m:1")
+        .with_columns(
+            *filled,
+            pl.col("_s_xfp").round(d).alias("play_xfp"),
+            pl.col("_s_yac_exp").round(d).alias("yac_exp"),
+        )
+        .with_columns(
+            (pl.col("fantasy_points") - pl.col("xfp")).round(d).alias("fpoe"),
+            (pl.col("xfp") - pl.col("xfp_garbage")).round(d).alias("xfp_ng"),
+            (
+                (pl.col("fantasy_points") - pl.col("points_garbage"))
+                - (pl.col("xfp") - pl.col("xfp_garbage"))
+            )
+            .round(d)
+            .alias("fpoe_ng"),
+        )
+    )
+    return _typed(out)
 
 
 def visible(frame: pl.DataFrame, as_of: datetime) -> pl.DataFrame:

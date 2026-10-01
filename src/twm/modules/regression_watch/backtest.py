@@ -454,14 +454,19 @@ def run_backtest(
 
 
 def load_inputs(
-    db: Path | str, last_season: int, weeks: Sequence[int] = ALL_WEEKS
+    db: Path | str,
+    last_season: int,
+    weeks: Sequence[int] = ALL_WEEKS,
+    *,
+    xfp: pl.DataFrame | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """The D1 history frame of 2009 .. ``last_season`` (through the as-of view at the end of
-    time; every row keeps its ``available_at``) and the as-of table."""
+    time; every row keeps its ``available_at``) and the as-of table. ``xfp``: another
+    expected-points source (``player_week.with_xfp``); None = ffopportunity's."""
     from twm.modules.regression_watch.player_week import player_games_history
 
     seasons = list(range(pj.FIRST_DATA_SEASON, last_season + 1))
-    return player_games_history(db, seasons), asof_table(db, seasons, weeks)
+    return player_games_history(db, seasons, xfp=xfp), asof_table(db, seasons, weeks)
 
 
 # --------------------------------------------------------------------------------------

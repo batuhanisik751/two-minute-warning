@@ -367,6 +367,37 @@ recomputes the file from the warehouse (about 10 s) and refuses when the record 
   whose tag was Legit has none); live lists already published are frozen and keep their rows
   (2026 week 3), so the site hides 'legit'.
 
+## Our own expected points, without hindsight (step H6-b, report only)
+
+ffopportunity's models were trained on many seasons, including seasons after some of the plays
+they score (PROJECT_SPEC 6.3). `src/twm/modules/regression_watch/own_xfp.py` re-estimates the
+same per-play expectations **walk-forward**: a play of season S gets them from models trained
+on 2006 .. S-1 only (the 2026 fold is the live model). Per pass: the catch probability, the
+yards after the catch if caught, the touchdown and interception probabilities; per carry: the
+yards and the touchdown probability (a kneel stays -1 yard, an aborted snap 0); per two-point
+try: its success rate. Inputs are the opportunity and the situation before the snap (air yards,
+yards to the end zone, down, distance, pass or run direction, quarter, score difference,
+scramble); never an nflfastR model column, and not the garbage-time flag (it is built from
+nflfastR's win probability). Each part is LightGBM or a spline GLM, whichever did better on the
+last training season. The predictions keep ffopportunity's column names, so D1's own query
+scores them (`play_expected_sql(pass_table=, rush_table=)`; no second copy of the weights).
+
+`reports/regression_watch/own_xfp.md` compares the two on the same plays and player-games, and
+reruns D2 and D3 with the own xFP in place of ffopportunity's (the same functions: the frame
+loaders take an `xfp=` source, `player_week.with_xfp`). Headline (2,000 season-block resamples):
+
+- per play, ffopportunity is closer on catches, touchdowns, interceptions and rushing yards
+  (most clearly in 2014-2020), as expected from a model that saw later seasons;
+- per player-game the two correlate 0.99; the own xFP is 0.36 lower on average (QB 1.06);
+- D2: FPOE/game repeats more with the own xFP (odd/even r, e.g. WR 0.11 -> 0.20, QB 0.10 ->
+  0.28), also within seasons;
+- D3: the projection's MAE is **lower** with the own xFP: -0.094 points per game (-0.129 to
+  -0.062); Sell-high and Buy-low hit rates do not differ beyond noise. The leakage did not
+  flatter the published backtest.
+
+Nothing switches automatically: the pinned parameters, the weekly list and the site still use
+ffopportunity. Switching is the owner's decision (then rerun D2/D3 and pin as usual).
+
 ## Commands
 
 ```
@@ -378,7 +409,8 @@ uv run twm regression project 2026 3 --position WR          # projections and ta
 uv run twm regression backtest                              # reports/regression_watch/backtest.md (+ .csv), about 20 s (= twm backtest regression_watch)
 uv run twm regression score                                 # the weekly list with the approved parameters (exit 3: data not ready)
 uv run twm regression pin                                   # approve the season's parameters (review, then commit)
+uv run twm regression own-xfp                               # own walk-forward xFP vs ffopportunity + D2/D3 reruns (reports/regression_watch/own_xfp.md; about 3 min the first time)
 uv run twm regression outcomes                              # grade stored lists of finished seasons
-uv run pytest tests/test_regression_watch.py tests/test_regression_stability.py tests/test_regression_projection.py tests/test_regression_weekly.py   # offline tests
+uv run pytest tests/test_regression_watch.py tests/test_regression_stability.py tests/test_regression_projection.py tests/test_regression_weekly.py tests/test_regression_own_xfp.py   # offline tests
 uv run pytest -m realdata -k regression                     # the checks on the real cache
 ```

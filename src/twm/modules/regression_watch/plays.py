@@ -173,10 +173,19 @@ def play_stats_sql(where: str = "TRUE") -> str:
     FROM roles r JOIN t ON t.game_id = r.game_id AND t.play_id = r.play_id"""
 
 
-def play_expected_sql(where: str = "TRUE") -> str:
+def play_expected_sql(
+    where: str = "TRUE",
+    *,
+    pass_table: str = "fact_opportunity_pass",
+    rush_table: str = "fact_opportunity_rush",
+) -> str:
     """One row per (play, player with an opportunity on it) of ``fact_opportunity_pass`` and
     ``fact_opportunity_rush`` rows matching ``where`` (SQL over their common columns: season,
     week, season_type, game_id, posteam).
+
+    ``pass_table`` / ``rush_table``: read the same columns from other tables instead (the own
+    walk-forward expectations of :mod:`.own_xfp`, same column names); the defaults give the
+    ffopportunity query unchanged.
 
     Columns: game_id, play_id, gsis_id, season, week, season_type, posteam, is_garbage_time
     (fact_play's, NULL when the play is not there), available_at, role ('passer', 'receiver',
@@ -230,8 +239,8 @@ def play_expected_sql(where: str = "TRUE") -> str:
 
     return "\n    UNION ALL\n    ".join(
         [
-            part("fact_opportunity_pass", "passer", "passer_player_id", passer, False),
-            part("fact_opportunity_pass", "receiver", "receiver_player_id", receiver, True),
-            part("fact_opportunity_rush", "rusher", "rusher_player_id", rusher, False),
+            part(pass_table, "passer", "passer_player_id", passer, False),
+            part(pass_table, "receiver", "receiver_player_id", receiver, True),
+            part(rush_table, "rusher", "rusher_player_id", rusher, False),
         ]
     )

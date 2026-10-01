@@ -102,14 +102,17 @@ def needed_columns() -> list[str]:
     return sorted(cols)
 
 
-def load_frame(db: Path | str | None, seasons: Sequence[int]) -> pl.DataFrame:
+def load_frame(
+    db: Path | str | None, seasons: Sequence[int], *, xfp: pl.DataFrame | None = None
+) -> pl.DataFrame:
     """The D1 frame of ``seasons`` (every row with its ``available_at``), read through the
-    as-of view at the end of time; ``db`` defaults to the configured warehouse."""
+    as-of view at the end of time; ``db`` defaults to the configured warehouse. ``xfp``:
+    another expected-points source (``player_week.with_xfp``); None = ffopportunity's."""
     from twm.config import settings
     from twm.modules.regression_watch.player_week import player_games_history
 
     path = Path(db) if db is not None else settings().path("warehouse")
-    return player_games_history(path, sorted({int(s) for s in seasons}))
+    return player_games_history(path, sorted({int(s) for s in seasons}), xfp=xfp)
 
 
 def study_games(

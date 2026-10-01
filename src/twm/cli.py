@@ -1433,6 +1433,67 @@ def regression_backtest(
     typer.echo(f"wrote {csv_path}")
 
 
+@regression_app.command("own-xfp")
+def regression_own_xfp(
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+    out: Path = typer.Option(
+        Path("reports/regression_watch/own_xfp.md"),
+        "--out",
+        help="Markdown file to write (relative paths are under the project root); a CSV with "
+        "the same name is written next to it.",
+    ),
+    end: int | None = typer.Option(
+        None, "--end", help="Last season of the D2/D3 reruns (default: current - 1)."
+    ),
+    workers: int = typer.Option(4, "--workers", help="Processes fitting folds in parallel."),
+    n_boot: int = typer.Option(2000, "--boot", help="Season-block resamples for intervals."),
+) -> None:
+    """Fit Regression Watch's own walk-forward xFP (one fold per season 2007 .. current, the
+    current one = the live model; saved under data/regression_watch/own_xfp/, folds already
+    current are reused), compare it with ffopportunity per play and per player-game, and rerun
+    D2's stability study and D3's backtest with it (PROJECT_SPEC 6.3). Report only: nothing
+    is pinned, stored or published."""
+    import time
+
+    import duckdb
+
+    from twm.asof import WarehouseTooOldError
+    from twm.config import ROOT, settings
+    from twm.modules.regression_watch import own_xfp as ox
+    from twm.modules.regression_watch.own_xfp_report import (
+        build_own_xfp_report,
+        recommendation,
+        write_own_xfp_report,
+    )
+    from twm.modules.regression_watch.stability_report import _built_at
+
+    path = _warehouse_or_exit(db)
+    current = settings().current_season
+    last = end if end is not None else current - 1
+    out_dir = ROOT / ox.OUT_DIR
+    say = lambda m: typer.echo(m, err=True)  # noqa: E731
+    try:
+        t0 = time.perf_counter()
+        ox.run_folds(path, current, out_dir, workers=workers, progress=say)
+        fit_s = time.perf_counter() - t0
+        report = build_own_xfp_report(
+            path, out_dir, last_fold=current, study_end=last, n_boot=n_boot, progress=say
+        )
+    except (LookupError, ValueError, WarehouseTooOldError, duckdb.Error) as e:
+        typer.echo(f"cannot build the own xFP report: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    target = out if out.is_absolute() else ROOT / out
+    csv_path = write_own_xfp_report(report, target, _built_at(path))
+    switch, why = recommendation(report)
+    for line in why:
+        typer.echo(line)
+    typer.echo("recommendation: " + ("switch to own xFP" if switch else "keep ffopportunity"))
+    secs = ", ".join(f"{k} {v:.0f} s" for k, v in report.seconds.items())
+    typer.echo(f"runtime: folds {fit_s:.0f} s, {secs}")
+    typer.echo(f"wrote {target}")
+    typer.echo(f"wrote {csv_path}")
+
+
 @regression_app.command("project")
 def regression_project(
     season: int = typer.Argument(..., help="Season, e.g. 2026."),

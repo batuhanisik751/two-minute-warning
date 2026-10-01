@@ -2745,5 +2745,31 @@ def league_report(
     raise typer.Exit(code=run_report(week))
 
 
+@league_app.command("trade")
+def league_trade(
+    give: list[str] = typer.Option(..., "--give", help="A player you give (repeat for more)."),
+    get: list[str] = typer.Option(..., "--get", help="A player you get (repeat for more)."),
+    week: int | None = typer.Option(
+        None,
+        help="Regression Watch's list week N (made after week N's games; default: the latest "
+        "stored at or before the synced ESPN week). The weeks after N are counted.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Print the numbers as JSON."),
+) -> None:
+    """The trade checker: for you and the partner, expected starting-lineup points
+    (QB/RB/WR/TE) before and after the trade, each week's best lineup by Regression Watch's
+    per-game projection (byes 0; K and D/ST kept fixed), split into regular-season and
+    fantasy-playoff weeks. The change, its 80% range and the share of simulated seasons that
+    gain all come from one simulation with the projection's real backtest misses (so the change
+    is the simulation's median, not after minus before); plus positional scarcity, bye overlap,
+    tags and ESPN statuses. Names match the last sync (case and punctuation ignored); --get
+    players are on one other team and/or free agents. Reads only; local output with player and
+    team names. Exit 2 when My League is off, nothing is synced, an input is missing or a name
+    does not resolve."""
+    from twm.league.commands import run_trade
+
+    raise typer.Exit(code=run_trade(give, get, week, as_json))
+
+
 if __name__ == "__main__":
     app()

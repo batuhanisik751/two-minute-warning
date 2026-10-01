@@ -1,6 +1,6 @@
 """`twm league radar`: the week's Waiver Radar and streamer lists restricted to the league's
 real free agents, and the drop candidates on the owner's roster (PROJECT_SPEC 8.3 feature 1;
-step F3). Reads only: data/league.duckdb (the latest sync), the predictions store and
+step F3). Reads only: data/league.duckdb (the newest synced week), the predictions store and
 (for a season average) the warehouse.
 
 - **The lists** are the stored lists of the approved models (``config/production_models.yaml``:
@@ -8,7 +8,7 @@ step F3). Reads only: data/league.duckdb (the latest sync), the predictions stor
   Radar's week N being the list made after week N's games. Nothing is re-scored: the chances
   are the lists' own, calibrated on config/scoring.yaml (a line says so when the league scores
   differently, :func:`scoring_note`).
-- **Free agents**: the latest sync's ``league_free_agents`` (ESPN's top 50 per position, free
+- **Free agents**: the newest week's ``league_free_agents`` (ESPN's top 50 per position, free
   agents and players on waivers), joined by gsis_id / ``DST-<team>``. A listed player who is a
   free agent keeps his list rank and chance; an ESPN free agent the list's pool does not hold
   is shown apart, "not in the pool", with no chance (never invented).
@@ -83,13 +83,13 @@ def stored_rows(
 
 @dataclass
 class LeagueView:
-    """What the latest sync says: free agents, every roster, the owner's team, the slots."""
+    """The newest synced week: free agents, every roster, the owner's team, the slots."""
 
     league_id: int
     season: int
     week: int  # the ESPN week the free agents were read for
     free_agents: pl.DataFrame
-    rosters: pl.DataFrame  # every team's roster (latest roster sync)
+    rosters: pl.DataFrame  # every team's roster (the newest synced week)
     my_team: int | None
     slots: dict[str, int] = field(default_factory=dict)  # ESPN slot label -> count
 
@@ -104,14 +104,14 @@ def _frame(con: duckdb.DuckDBPyConnection, sql: str, args: list[Any]) -> pl.Data
 
 
 def load_league(con: duckdb.DuckDBPyConnection) -> LeagueView:
-    """The latest sync's free agents and rosters (of the season the newest free-agent read
-    belongs to)."""
-    fa = store.latest(con, "league_free_agents")
+    """The free agents and rosters of the newest synced week (:func:`store.current`: a later
+    backfill of an older week never replaces them)."""
+    fa = store.current(con, "league_free_agents")
     if fa is None:
         raise PersonalUnavailableError(
             "My League: nothing synced yet: run `uv run twm league sync` first."
         )
-    ro = store.latest(con, "league_rosters", fa.season)
+    ro = store.current(con, "league_rosters", fa.season)
     cols = "espn_id, player_name, position, pro_team, entity_id"
     agents = _frame(con, f"SELECT {cols}, percent_owned, projected_points FROM "
                     "league_free_agents WHERE league_id = ? AND season = ? AND week = ?",
@@ -236,7 +236,7 @@ def build(
     pins_path: Path | None = None,
     warehouse: Path | None = None,
 ) -> PersonalRadar:
-    """The personalized lists and drop candidates of the latest sync (``week``: the lists'
+    """The personalized lists and drop candidates of the newest synced week (``week``: the lists'
     week, default the latest one stored at or before the sync's ESPN week)."""
     view = load_league(con)
     versions, notes = _pins(pins_path, view.season)

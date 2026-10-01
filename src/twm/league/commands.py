@@ -208,3 +208,34 @@ def run_report(
     if data.weeks is not None and data.weeks.warning:
         echo(f"  warning: {data.weeks.warning}")
     return 0
+
+
+def run_trade(
+    give: list[str], get: list[str], week: int | None, as_json: bool = False,
+    echo: Callable[[str], None] = typer.echo,
+) -> int:  # fmt: skip
+    """`twm league trade`: the trade checker (twm.league.trade; reads only, writes nothing)."""
+    from twm.league import store
+    from twm.league.personal import PersonalUnavailableError, scoring_note
+    from twm.league.trade import TradeError, run, text
+    from twm.league.trade import as_json as to_json
+
+    path = _synced_db(echo)
+    if path is None:
+        return EXIT_UNAVAILABLE
+    predictions, pins = lists_paths()
+    con = store.connect(path, read_only=True)
+    try:
+        res = run(con, predictions, paths()[1], give=give, get=get, week=week, pins_path=pins)
+        note = scoring_note(con)
+    except (TradeError, PersonalUnavailableError) as e:
+        echo(str(e))
+        return EXIT_UNAVAILABLE
+    finally:
+        con.close()
+    if as_json:
+        echo(to_json(res.check, res.data, res.sched))
+        return 0
+    for line in text(res.check, res.data, res.sched, note):
+        echo(line)
+    return 0

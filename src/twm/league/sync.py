@@ -84,6 +84,10 @@ def _rows(got: _Read) -> dict[str, list[dict]]:
     settings = {"team_count": s.team_count, "faab": s.faab, "acquisition_budget":
                 s.acquisition_budget, "current_week": s.current_week, "nfl_week": s.nfl_week,
                 "final_week": s.final_week}  # fmt: skip
+    playoffs = {"reg_season_count": s.reg_season_count, "reg_season_final_week":
+                s.reg_season_final_week, "playoff_team_count": s.playoff_team_count,
+                "playoff_matchup_period_length": s.playoff_matchup_period_length}  # fmt: skip
+    settings |= {k: v for k, v in playoffs.items() if v is not None}
     settings |= {f"slot:{k}": v for k, v in s.roster_slots.items()}
     settings |= {f"waiver:{k}": v for k, v in got.waiver.items()}
     box_players, matchups = [], []

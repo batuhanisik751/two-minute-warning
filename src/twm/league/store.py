@@ -214,11 +214,27 @@ class Partition:
 def latest(
     con: duckdb.DuckDBPyConnection, table: str, season: int | None = None
 ) -> Partition | None:
-    """The partition of ``table`` the newest sync wrote (of ``season`` when given), or None."""
+    """The partition of ``table`` the newest sync wrote (of ``season`` when given), or None:
+    for the season / league only (a backfill may be the newest sync; see :func:`current`)."""
     where, args = (" WHERE season = ?", [season]) if season is not None else ("", [])
     row = con.execute(
         f"SELECT league_id, season, week, synced_at FROM {table}{where} "
         "ORDER BY synced_at DESC, week DESC LIMIT 1", args
+    ).fetchone()  # fmt: skip
+    return None if row is None else Partition(int(row[0]), int(row[1]), int(row[2]), row[3])
+
+
+def current(
+    con: duckdb.DuckDBPyConnection, table: str, season: int | None = None
+) -> Partition | None:
+    """The NEWEST WEEK ``table`` holds (of the newest season, or of ``season``), as its latest
+    sync wrote it, or None. Every reader of the current rosters / free agents uses this, not
+    :func:`latest`: a backfill (`twm league sync --week 3` after week 4) is the latest sync
+    but never the current roster."""
+    where, args = (" WHERE season = ?", [season]) if season is not None else ("", [])
+    row = con.execute(
+        f"SELECT league_id, season, week, synced_at FROM {table}{where} "
+        "ORDER BY season DESC, week DESC, synced_at DESC LIMIT 1", args
     ).fetchone()  # fmt: skip
     return None if row is None else Partition(int(row[0]), int(row[1]), int(row[2]), row[3])
 

@@ -126,7 +126,7 @@ def gather(
 
     radar = build(con, predictions, week=week, limit=limit, pins_path=pins_path,
                   warehouse=warehouse)  # fmt: skip
-    fa = store.latest(con, "league_free_agents", radar.season)
+    fa = store.current(con, "league_free_agents", radar.season)
     assert fa is not None  # build() raised otherwise
     regret, regret_error = None, ""
     try:

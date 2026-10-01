@@ -48,6 +48,11 @@ class LeagueSettings:
     current_week: int
     nfl_week: int
     final_week: int
+    # the fantasy playoffs (base_settings.py; None when the library object lacks them)
+    reg_season_count: int | None = None  # regular-season matchup periods (l.4)
+    playoff_team_count: int | None = None  # l.8
+    playoff_matchup_period_length: int | None = None  # weeks per playoff matchup (l.17; 0 = unset)
+    reg_season_final_week: int | None = None  # the last week of the regular season (see below)
 
 
 @dataclass(frozen=True)
@@ -171,6 +176,25 @@ def _num(v: Any) -> float | None:
     return float(v) if isinstance(v, int | float) and not isinstance(v, bool) else None
 
 
+def _int(v: Any) -> int | None:
+    return int(v) if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+def _reg_final_week(s: Any) -> int | None:
+    """The last scoring period (week) of the last regular-season matchup period: espn-api's
+    matchup_periods (base_settings.py:5, ESPN's matchup period id -> its scoring periods, as
+    football/league.py:310 reads it) at reg_season_count; one week per matchup period when the
+    map does not list it (ESPN football's regular-season matchups last one week)."""
+    n = _int(getattr(s, "reg_season_count", None))
+    if n is None:
+        return None
+    periods = getattr(s, "matchup_periods", None)
+    weeks = periods.get(str(n), periods.get(n)) if isinstance(periods, dict) else None
+    if isinstance(weeks, list) and weeks and all(_int(w) is not None for w in weeks):
+        return max(int(w) for w in weeks)
+    return n
+
+
 def _norm_member(v: Any) -> str:
     return str(v or "").strip().strip("{}").upper()
 
@@ -235,6 +259,10 @@ class EspnClient:
             current_week=int(lg.current_week),
             nfl_week=int(lg.nfl_week),  # football/league.py:41
             final_week=int(lg.finalScoringPeriod),  # base_league.py:36
+            reg_season_count=_int(getattr(s, "reg_season_count", None)),
+            playoff_team_count=_int(getattr(s, "playoff_team_count", None)),
+            playoff_matchup_period_length=_int(getattr(s, "playoff_matchup_period_length", None)),
+            reg_season_final_week=_reg_final_week(s),
         )
 
     def raw_settings(self) -> RawSettings:

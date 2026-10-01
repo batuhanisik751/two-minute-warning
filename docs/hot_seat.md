@@ -237,3 +237,7 @@ Code: `models.py`, `backtest.py`, `evaluation.py`, `backtest_report.py`; command
   (ROC-AUC, PR-AUC, Brier, season-block bootstrap intervals with per-row season weights), top-5
   hit rate at week 12 and season end, firings per season, interims and censored rows apart, the
   two sensitivity runs (censored dropped; `resigned_under_pressure` positive), coefficients per fold.
+
+## Where the labels come from
+
+`data/manual/coach_departures.csv`: every departure type, date and source was researched from cited public pages (mostly each season's Wikipedia "NFL season" page and the coaches' own pages, URL and quote per row, step H1); on 2026-10-01 the owner accepted all of them as true in bulk rather than re-checking each row, and one row the research could not settle (2010 TEN, Jeff Fisher) was filled from his own page. Describe them that way wherever results are shown.

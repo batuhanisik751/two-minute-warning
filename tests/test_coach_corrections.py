@@ -188,11 +188,49 @@ def test_build_applies_the_file_before_the_coach_tables(raw, db_path):
     assert [(a["line"], a["kind"], a["games"]) for a in notes["coach_corrections"]] == [
         (2, "from_date", 1), (3, "rename", 1)]  # fmt: skip
     assert notes["n_coach_team_games_corrected"] == 2
-    # a row the schedule no longer needs stops the build; the previous warehouse stays
+    # a row of a built season that no longer fits stops the build; the previous warehouse stays
     _write(cc.corrections_path(), [{"kind": "rename", "coach_out": "Andy Reid",
                                     "coach_in": "Andrew Reid"},
-                                   {"kind": "rename", "coach_out": "Gone Coach",
-                                    "coach_in": "Other Coach"}])  # fmt: skip
-    with pytest.raises(cc.CoachCorrectionError, match="line 3 rename all: Gone Coach"):
+                                   {"kind": "from_date", "season": "2025", "team": "PHI",
+                                    "coach_out": "Nick Sirianni", "coach_in": "Interim Coach",
+                                    "from_date": "2025-12-31"}])  # fmt: skip
+    with pytest.raises(cc.CoachCorrectionError, match="line 3 .*matches no game"):
         wb.build_warehouse([2025], db_path=db_path)
     assert dict(wb.table_counts(db_path))["dim_coach"] == 4
+
+
+def test_a_partial_build_skips_rows_it_cannot_check_and_lists_them():
+    # the scheduled job builds from pipeline.build_start: a 2007 row and a 1999-2001 rename
+    # (no game of theirs is built) are skipped, not errors; the built season's rows still apply
+    rows = [
+        _row("from_date", 2007, "ATL", "Bobby Petrino", "Emmitt Thomas", "2007-12-10", line=2),
+        _row("rename", None, "IND", "Jim Mora", "Jim E. Mora", line=3),
+        _row("from_date", 2024, "NYJ", "Robert Saleh", "Jeff Ulbrich", "2024-10-08", line=4),
+    ]
+    out, applied = cc.apply_corrections(GAMES, rows, first_season=1999)
+    assert _coaches(out)["g3"] == ("Jeff Ulbrich", "Sean McDermott")
+    by_line = {a["line"]: a for a in applied}
+    assert by_line[2]["skipped"] == "its season is not in this build" and by_line[2]["games"] == 0
+    assert by_line[3]["skipped"] == "matches no game in this partial build"
+    assert "skipped" not in by_line[4] and by_line[4]["games"] == 2
+
+
+def test_a_full_build_still_rejects_a_stale_rename():
+    # a build that starts at the first season can check every row: no silent skips
+    rows = [_row("rename", None, "IND", "Jim Mora", "Jim E. Mora")]
+    with pytest.raises(cc.CoachCorrectionError, match="matches no game"):
+        cc.apply_corrections(GAMES, rows, first_season=2024)
+    with pytest.raises(cc.CoachCorrectionError, match="matches no game"):
+        cc.apply_corrections(GAMES, rows)
+
+
+def test_a_built_season_row_that_matches_nothing_is_still_an_error():
+    rows = [_row("season", 2024, "ARI", "Jonathan Gannon", "Mike LaFleur")]
+    with pytest.raises(cc.CoachCorrectionError, match="matches no game"):
+        cc.apply_corrections(GAMES, rows, first_season=1999)
+
+
+def test_every_row_skipped_returns_the_games_unchanged():
+    rows = [_row("from_date", 2007, "ATL", "Bobby Petrino", "Emmitt Thomas", "2007-12-10")]
+    out, applied = cc.apply_corrections(GAMES, rows, first_season=1999)
+    assert out.equals(GAMES) and applied[0]["skipped"]

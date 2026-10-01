@@ -519,7 +519,11 @@ def _build_fact_game(
     stats.notes["n_kickoff_estimated"] = int(sum(est))
     # H1b: the cited head-coach corrections, before any coach table reads these columns
     # (gameday is the US-Eastern date of the kickoff).
-    df, applied = cc.apply_corrections(df, cc.read_corrections(cc.corrections_path()))
+    df, applied = cc.apply_corrections(
+        df,
+        cc.read_corrections(cc.corrections_path()),
+        first_season=int(settings().seasons["pbp_start"]),
+    )
     stats.notes["coach_corrections"] = applied
     stats.notes["n_coach_team_games_corrected"] = sum(a["games"] for a in applied)
     for a in applied:

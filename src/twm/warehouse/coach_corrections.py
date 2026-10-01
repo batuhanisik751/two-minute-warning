@@ -24,8 +24,13 @@ Kinds (``coach_out`` exactly as the schedule spells it; ``coach_in`` as the sour
 Every row is matched against the schedule as published, and the build stops
 (:class:`CoachCorrectionError`) when a row matches no game, changes nothing (the schedule now
 agrees: remove the row), names a ``coach_out`` the schedule does not list for those games, or
-covers a team-game another row covers; also on a malformed or duplicate row. The manifest lists
-every applied row with the number of team-games it changed; ``available_at`` is not touched.
+covers a team-game another row covers; also on a malformed or duplicate row. A build of fewer
+seasons (the scheduled job builds from ``pipeline.build_start``) skips the rows it cannot check:
+a row whose ``season`` is outside the built range, and a season-less ``rename`` that matches no
+game when the build does not start at the first season (so stale season-less renames are caught
+only by a full build, the one run on the Mac when the file changes). The manifest lists every
+applied row with the number of team-games it changed, and every skipped row with ``skipped``;
+``available_at`` is not touched.
 """
 
 from __future__ import annotations
@@ -187,7 +192,7 @@ def _plan(c: Correction, s: pl.DataFrame) -> tuple[pl.DataFrame, str | None]:
 
 
 def apply_corrections(
-    games: pl.DataFrame, rows: list[Correction]
+    games: pl.DataFrame, rows: list[Correction], *, first_season: int | None = None
 ) -> tuple[pl.DataFrame, list[dict[str, Any]]]:
     """``games`` (game_id, season, gameday [US-Eastern date], home/away_team, home/away_coach)
     with the corrections applied, and one manifest entry per row (``games``: team-games
@@ -196,9 +201,19 @@ def apply_corrections(
     if not rows:
         return games, []
     s = _sides(games)
-    plans, problems = [], []
+    built = {int(x) for x in games["season"].unique().to_list()}
+    # only a build (first_season given) skips; a direct call checks every row strictly
+    ranged = first_season is not None and bool(built)
+    partial = ranged and min(built) > first_season
+    plans, problems, skipped = [], [], []
     for c in rows:
+        if ranged and c.season is not None and not min(built) <= c.season <= max(built):
+            skipped.append((c, "its season is not in this build"))
+            continue
         cov, problem = _plan(c, s)
+        if c.kind == "rename" and c.season is None and problem == "matches no game" and partial:
+            skipped.append((c, "matches no game in this partial build"))
+            continue
         changed = cov.filter(pl.col("new").ne_missing(pl.col("coach"))).height if not problem else 0
         if problem is None and not changed:
             problem = "changes nothing: the schedule already agrees (remove the row)"
@@ -219,17 +234,23 @@ def apply_corrections(
     if problems:
         raise CoachCorrectionError(f"{corrections_path()}: {len(problems)} row(s) do not fit "
                                    "the schedule: " + "; ".join(problems))  # fmt: skip
-    upd = pl.concat([cov.select("game_id", "side", "new") for _, cov, _ in plans])
     out = games
-    for side in ("home", "away"):
-        u = upd.filter(pl.col("side") == side)
-        mapping = dict(zip(u["game_id"].to_list(), u["new"].to_list(), strict=True))
-        col = f"{side}_coach"
-        out = out.with_columns(
-            pl.col("game_id").replace_strict(mapping, default=pl.col(col), return_dtype=pl.String)
-            .alias(col))  # fmt: skip
-    applied = [{"line": c.line, "kind": c.kind, "season": c.season, "team": c.team,
-                "coach_out": c.coach_out, "coach_in": c.coach_in,
-                "from_date": c.from_date.isoformat() if c.from_date else None, "games": n}
-               for c, _, n in plans]  # fmt: skip
-    return out, applied
+    if plans:
+        upd = pl.concat([cov.select("game_id", "side", "new") for _, cov, _ in plans])
+        for side in ("home", "away"):
+            u = upd.filter(pl.col("side") == side)
+            mapping = dict(zip(u["game_id"].to_list(), u["new"].to_list(), strict=True))
+            col = f"{side}_coach"
+            out = out.with_columns(
+                pl.col("game_id").replace_strict(mapping, default=pl.col(col),
+                                                 return_dtype=pl.String).alias(col))  # fmt: skip
+
+    def entry(c: Correction, n: int) -> dict[str, Any]:
+        day = c.from_date.isoformat() if c.from_date else None
+        return {"line": c.line, "kind": c.kind, "season": c.season, "team": c.team,
+                "coach_out": c.coach_out, "coach_in": c.coach_in, "from_date": day,
+                "games": n}  # fmt: skip
+
+    applied = [entry(c, n) for c, _, n in plans]
+    applied += [{**entry(c, 0), "skipped": why} for c, why in skipped]
+    return out, sorted(applied, key=lambda a: a["line"])

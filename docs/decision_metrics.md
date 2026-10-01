@@ -245,12 +245,157 @@ points after a touchdown made the lead 6, and going for it was over-valued late 
 half. G1b replaced the model (section "WP smoothness") and regraded every season from the
 stored inputs; reports/decisions/fourth_downs.md section 6 shows what changed.
 
+## Clock management (G4: `clock_inputs.py`, `clock.py`)
+
+Three limited metrics (spec 8.4 item 4). They were written here, with every threshold fixed in
+`config/settings.yaml` (`decisions.clock`), **before any season was graded**; a situation
+outside these definitions is never graded. `uv run twm decisions clock --season S` stores each
+season's candidates with their inputs under `data/decisions/clock/` (gitignored);
+`--report-only` writes reports/decisions/clock.md + .csv. Seasons 2006 on (regular season and
+playoffs); each case is credited to the head coach of the team it describes in that game
+(`fact_game.home_coach` / `away_coach`, as G3).
+
+**Snaps.** Rows of `fact_play` with a down (scrimmage plays and `no_play` penalty snaps), in
+`play_id` order. Timeouts are read from the pre-snap `posteam_timeouts_remaining` /
+`defteam_timeouts_remaining` of the snaps (a team used a timeout between two snaps when its
+count went down), never from where the timeout rows sit: in the warehouse a timeout row often
+comes after the snap it preceded. `T` = `game_seconds_remaining` at a snap.
+
+**Kneel arithmetic** (shared by metrics 1 and 3). From a snap with down `d` and the clock at
+`T`, the offense can kneel `n = 5 - d` times (downs `d` to 4); each kneel takes `p` seconds,
+and between two kneels the clock runs `g - p` more seconds unless the defense stops it with a
+timeout. Against a defense that uses `t` timeouts the kneels exhaust the clock when
+
+    T <= K(d, t) = n * p + max(0, n - 1 - t) * (g - p)
+
+(the last kneel must end the game: a 4th-down kneel with time left turns the ball over).
+`p` (`kneel_play`) and `g` (`kneel_cycle`) are measured point-in-time on the
+`decisions.clock.runoff_seasons` (5) seasons before S: the median game-clock seconds from a
+`qb_kneel` snap in the second or fourth quarter to the same offense's next snap in the same
+half, when only the defense's timeouts went down by one in between (`p`, about 2-3 s), or
+when neither team's did (`g`, about 38-40 s; 2006-2025 medians). The offense **can run out
+the clock unless the team uses its timeouts** when `K(d, t) < T <= K(d, 0)` with `t` >= 1 the
+team's timeouts: kneeling ends the game if the team calls none, but not if it calls them all.
+The window is the final `decisions.clock.final_window_seconds` (120: after the two-minute
+warning, so no automatic stoppage is left) of the fourth quarter.
+
+### 1. Timeouts unused in a lost one-score game (`timeouts_unused`)
+
+A team-game is a **case** when all of these hold:
+
+1. the game ended in regulation (no overtime snap) and the team lost by 1 to
+   `decisions.clock.one_score_margin` (8) points;
+2. the game's last scrimmage snap belongs to an opponent's drive (the team never got the ball
+   back), and that drive has a **run-out snap**: a scrimmage snap in the fourth quarter with
+   `T` <= 120 at which the opponent led and could run out the clock unless the team used its
+   timeouts (`K(d, t) < T <= K(d, 0)`, `t` >= 1, the team's timeouts at that snap);
+3. the team still held at least one timeout at the opponent's last snap of the game.
+
+Value: the timeouts left (1-3). Candidates (conditions 1 and 2) that used every timeout are
+counted, not cases. Context: the first run-out snap (clock, down and distance, field position,
+score, the team's timeouts, `K(d, 0)` and `K(d, t)`), the last snap, the final score, and
+metric 3's counted missed stops and seconds wasted on that drive. A case is a fact (the game
+was lost with timeouts in hand), not by itself a mistake: a timeout kept can be worthless when
+the opponent converts a first down after the team used the others (0 missed stops in metric 3).
+
+### 2. End-of-half passivity (`half_passivity`)
+
+First half only (the end of regulation is a win-probability question: a leading team that
+kneels is right, and a tied one plays for overtime).
+
+1. **Candidate drive**: the team had the ball at the first half's last scrimmage snap and its
+   drive's `fixed_drive_result` is `End of half` (no score, no turnover, no punt).
+2. **Passive tail**: the longest run of the drive's last snaps that are all kneels
+   (`qb_kneel`), designed runs (`play_type` = `run` with `qb_dropback` = 0 and
+   `qb_scramble` = 0: no pass was tried) or penalty snaps (`no_play`: the down is replayed)
+   during which the team called no timeout (its count at each tail snap equals its count at
+   the half's last snap).
+3. **Decision snap**: the tail's first kneel or designed run that is a 1st down with
+   `half_seconds_remaining` >= `decisions.clock.passivity_min_seconds` (40) and the team
+   holding >= `decisions.clock.passivity_min_timeouts` (1) timeout. No such snap: not a candidate (a tail
+   of 2nd and 3rd downs only is outside the definition: the EP table is for 1st downs).
+4. **EP of attacking** = G1b's `half_value(yardline_100, half_seconds_remaining)` at the
+   decision snap: the offense's points minus the other team's from a first-half 1st down to
+   halftime, measured on 1999-2005 (before every graded season: point-in-time). Kneeling's EP
+   is 0 (nobody scores), so **EP left on the table** = `half_value`. The table averages every
+   team that had the ball there, passive ones included, so it understates attacking: a
+   conservative reading.
+5. **Case** when EP left >= `decisions.clock.passivity_min_ep` = **1.0 point**; otherwise
+   counted as `ep_below_threshold`. Why 1.0 (fixed before grading): a third of a field goal
+   net of the turnover risk; at least 4.5 standard errors of the table's cells in this
+   region (0.13-0.22 points on 1999-2005); and in seconds and yards it means roughly the own
+   40 with a minute left or midfield with 40 s, never the usual touchback kneel (own 25: 0.1
+   to 0.4 points at 40-90 s). `missing_state` when the WP state cannot be scored.
+6. **WP left on the table** = WP(decision snap) - WP(start of the second half), both from
+   season S's own WP fold model (G1b). The second half starts with the same score, 3
+   timeouts each, the team that receives the second-half kickoff on a 1st and 10 at the
+   game's point-in-time kickoff spot (G3's `kick_yardline_100`), `kick_runoff` seconds into
+   the half; WP(decision snap) is the model's value of the state as it was (with the ball).
+
+### 3. Late timeouts when trailing: seconds wasted (`timeout_seconds_wasted`)
+
+**Heuristic** (the optimal use it is measured against): when the team trails late and the
+opponent can run out the clock unless the team uses its timeouts, the team should stop the
+clock with a timeout right after each opponent play that leaves the clock running, until it
+has none left. A timeout not used then lets the clock run for nothing: a timeout still held
+when the opponent's drive is over can no longer save that drive's seconds.
+
+1. **Intervals**: each opponent scrimmage snap `i` in the fourth quarter with `T_i` <= 120
+   whose next snap `i+1` (any snap with a down) is in the same opponent drive, while the team
+   trailed by 1 to `one_score_margin` (8) points and held `t` >= 1 timeouts at snap `i`.
+2. The play's own seconds `s` = the measured median for its type: `kneel_play` for kneels,
+   `play_seconds_run` for runs, `play_seconds_pass` for everything else (the 5 seasons before
+   S: snap to the same offense's next snap in the last 120 s of the second or fourth quarter
+   when only the defense's timeouts went down by one in between). The clock when the play
+   ended is `T_i - s`; the **runoff** = max(0, `T_i - T_{i+1} - s`): the seconds a timeout
+   called right after the play would have saved.
+3. **Decisive** interval: after the play, the opponent can run out the clock unless the team
+   uses its timeouts: `K(d', t - 1) < T_i - s <= K(d', -1)`, `d'` = the down at snap `i+1`.
+   After a play one more gap runs before snap `i+1` (the gap a timeout called now stops), so
+   the `n' = 5 - d'` remaining kneels have `n'` gaps: `K(d', -1)` = all of them run
+   (`K(d', 0) + g - p`); `K(d', t - 1)` = the team stops this gap and `t - 1` later ones.
+   *Correction (disclosed)*: the first written version read `K(d', t) < T_i - s <= K(d', 0)`,
+   which leaves out that gap and contradicts the sentence above (it calls a timeout decisive
+   when the opponent can kneel out anyway). Found by checking one case by hand after a first
+   test run on 2024-2026 (2025 week 1, HOU at LA: after a 1st-down kneel at 1:19, 2nd down,
+   one timeout: the kneels run out the clock whether or not it is used), before the full
+   grading; no threshold changed.
+4. **Missed stop**: a decisive interval where the team did not use a timeout (same count at
+   `i+1`) and the clock ran: runoff >= `decisions.clock.clock_ran_min_seconds` (10; smaller
+   gaps are incompletions, out-of-bounds plays, penalties: the clock was stopped anyway).
+5. **Seconds wasted** on an opponent drive = the sum of the runoffs of its first `k` missed
+   stops, `k` = the timeouts the team still held at the drive's last snap (those it never used
+   against the drive; stopping later intervals instead saves the same kind of seconds, so only
+   timeouts never used are counted). A **case** is a team-game with seconds wasted > 0 (the
+   sum over the opponent's drives in the window). Counted ex ante: how the drive ended (a
+   kneel-out, a punt, a score) is context, not a condition.
+
+Not counted (outside the definition): seconds before the opponent reaches a decisive state
+(they cost time, not a possession), anything before the two-minute warning, the team's own
+offense, two-score deficits, ties.
+
+### Stored inputs, attribution and aggregates (G4)
+
+Per season: `defense_snaps_<S>.parquet` (metrics 1 and 3: every opponent snap with a down
+in the window while the opponent led, its next snap's clock, down and timeouts, the drive and
+game context, the measured `p`, `g`, `s`), `half_passivity_<S>.parquet` (every candidate
+with its WP state, kickoff spot and runoff, the WP model version, its exclusion),
+`team_games_<S>.parquet` (every team-game with its head coach: the leaderboards' games) and
+`season_<S>.json` (the measured constants, the config, counts). `clock.verify` recomputes
+every output from the stored rows alone (the WP model loaded by version) and checks it is
+identical. Coach-season aggregates (a table parallel to G3's): cases and timeouts left
+(metric 1), cases, EP and WP left (metric 2), cases and seconds wasted (metric 3), per
+coach-season; the report lists league totals per season, the worst cases, a leaderboard per
+metric.
+
 ## Not graded (yet)
 
-Clock management (G4).
+Clock situations outside the three definitions above.
 
 ## Honesty note
 
 The option to train the conversion and field-goal models on only the last 10 or 5 seasons was added after a first walk-forward backtest had shown recent seasons under-predicted. Each fold still chooses its window on its validation season (S-1) only, but because the option itself was suggested by test-season results, the published 2006-2025 numbers for those two models are slightly optimistic. The 2026 season is their first clean test.
 
 G1b (the smoothed WP model): the smoothness limits were fixed before any fix was tried, and every candidate was chosen on the 2004-05 validation seasons only; but two later candidate rounds (the late-game hand-over and the redefined drive value) were prompted by looking at regraded seasons, and the pooled test log loss of a first refit was seen before them. The 2006-2025 WP and grading numbers are therefore slightly optimistic; 2026 is their first clean test.
+
+G4 (clock management): the definitions and every threshold were written before any season was graded. Two things were seen before the full grading and are disclosed: a structural count of metric 2's candidates on 2024 with the thresholds relaxed (first-half kneels with >= 40 s left are almost absent in 2024; nothing was changed), and a first test run on 2024-2026 whose one hand-checked case (2025 week 1, HOU at LA) exposed that metric 3's written formula contradicted its own words; the formula was corrected (section "3. Late timeouts"), metric 1 was kept exactly as written, and the report shows metric 3's missed stops next to each metric-1 case as context.

@@ -87,6 +87,14 @@ The chance that going for it on this down and distance works.
 - **Formula:** LightGBM on the go-for-it features, trained walk-forward (seasons < S)
 - **Source:** twm.modules.decisions.conversion
 
+### EP left on the table (end of half)
+
+How many points, net of the risk, a typical team got from that spot and clock.
+
+- **Name:** `passivity_ep_left`; **unit:** points; **used by:** decisions
+- **Formula:** G1b half_value(yardline_100, half_seconds_remaining) at the decision snap minus 0 (kneeling scores nothing): net points from a first-half 1st down to halftime, measured on 1999-2005
+- **Source:** twm.modules.decisions.clock
+
 ### EPA (expected points added) \*
 
 How much a single play helped or hurt the offense's scoring chances. A 30-yard catch on 3rd and 10 adds a lot; a sack on 1st down costs points.
@@ -94,6 +102,14 @@ How much a single play helped or hurt the offense's scoring chances. A 30-yard c
 - **Name:** `epa`; **unit:** points per play; **used by:** shared, decisions, hot_seat
 - **Formula:** nflfastR's expected points after the play minus before it, for the offense
 - **Source:** fact_play.epa
+
+### End-of-half passivity
+
+Running out the first half with time, timeouts and field position good enough that attacking was clearly worth points.
+
+- **Name:** `half_passivity`; **unit:** case (boolean) per first half; **used by:** decisions
+- **Formula:** a first-half drive that ended the half with a tail of kneels / designed runs (no team timeout, no pass) whose first 1st down had >= 40 s and >= 1 timeout; a case when half_value there >= decisions.clock.passivity_min_ep (1.0 point)
+- **Source:** twm.modules.decisions.clock
 
 ### Expected WP after a punt
 
@@ -458,6 +474,14 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Formula:** fact_opportunity_week.rush_yards_gained, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
 
+### Seconds wasted with timeouts in hand
+
+Clock the team let run when a timeout would have kept its last possession alive, while it kept timeouts it never used.
+
+- **Name:** `timeout_seconds_wasted`; **unit:** seconds per team-game; **used by:** decisions
+- **Formula:** while down 1-8 in the final 2:00, after an opponent play that leaves K(d', t - 1) < clock <= K(d', -1) (decisive), no team timeout and a runoff (next snap's gap minus the play's measured seconds) >= 10 s; per opponent drive the first k such runoffs, k = the timeouts the team still held at the drive's end
+- **Source:** twm.modules.decisions.clock
+
 ### Sell-high \*
 
 He has scored well above what his chances were worth, and the projection says it will fade: a good time to trade him away.
@@ -514,6 +538,14 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Formula:** fact_opportunity_week.rec_attempt: passes thrown to him (two-point tries excluded), from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
 
+### Timeouts unused in a lost one-score game
+
+The team lost a close game while the opponent ran out the clock, with timeouts still in its pocket. A fact, not always a mistake: see timeout_seconds_wasted.
+
+- **Name:** `timeouts_unused`; **unit:** timeouts (0-3) per team-game; **used by:** decisions
+- **Formula:** regulation loss by 1-8; the opponent's drive held the game's last snap and had a 4th-quarter snap with <= 120 s where K(d, t) < clock <= K(d, 0) (t >= 1 the team's timeouts); the team's timeouts at that drive's last snap; a case when >= 1
+- **Source:** twm.modules.decisions.clock
+
 ### Two-point rate
 
 How often a two-point try succeeds.
@@ -561,6 +593,14 @@ The offense's chance to win if it punts.
 - **Name:** `wp_punt`; **unit:** probability (0-1); **used by:** decisions
 - **Formula:** G2's punt_expected_wp with the measured kickoff spot after a return touchdown; only from yardlines punts come from
 - **Source:** twm.modules.decisions.grade
+
+### WP left on the table (end of half)
+
+What running out the half cost in win probability, by the model.
+
+- **Name:** `passivity_wp_left`; **unit:** probability (0-1; shown as WP points); **used by:** decisions
+- **Formula:** WP(decision snap) - WP(the second half's first snap: same score, 3 timeouts each, the receiving team at the kickoff spot), both from season S's own WP fold model
+- **Source:** twm.modules.decisions.clock
 
 ### WP lost
 
@@ -1819,6 +1859,14 @@ When a row of data became public. A prediction at an as-of time sees only rows w
 - **Name:** `available_at`; **unit:** UTC timestamp; **used by:** shared
 - **Formula:** per table rule in twm.warehouse.available (e.g. game data: estimated game end + 6 h); later when unsure
 - **Source:** every event table's available_at column
+
+### Kneel-out seconds K(d, t)
+
+The most clock an offense can burn by kneeling from this down; if it is at least the time left, the game is over unless the defense's timeouts cut it.
+
+- **Name:** `kneel_out_seconds`; **unit:** seconds; **used by:** decisions
+- **Formula:** n x p + max(0, n - 1 - t) x (g - p), n = 5 - down kneels, t = the defense's timeouts; p (kneel_play) and g (kneel_cycle) = median seconds from a kneel to the next snap with / without a defensive timeout between, measured on the 5 seasons before S
+- **Source:** twm.modules.decisions.clock
 
 ### PPR (points per reception)
 

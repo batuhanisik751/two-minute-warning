@@ -1326,6 +1326,56 @@ def _grade_entries() -> list[Entry]:
     ]  # fmt: skip
 
 
+def _clock_entries() -> list[Entry]:
+    """G4: the clock-management metrics (twm.modules.decisions.clock; definitions in
+    docs/decision_metrics.md, "Clock management"; thresholds in settings decisions.clock)."""
+    ck = "twm.modules.decisions.clock"
+    rows = [
+        ("kneel_out_seconds", "Kneel-out seconds K(d, t)", "concept", "seconds",
+         "n x p + max(0, n - 1 - t) x (g - p), n = 5 - down kneels, t = the defense's timeouts; "
+         "p (kneel_play) and g (kneel_cycle) = median seconds from a kneel to the next snap with "
+         "/ without a defensive timeout between, measured on the 5 seasons before S",
+         "The most clock an offense can burn by kneeling from this down; if it is at least the "
+         "time left, the game is over unless the defense's timeouts cut it."),
+        ("timeouts_unused", "Timeouts unused in a lost one-score game", "metric",
+         "timeouts (0-3) per team-game",
+         "regulation loss by 1-8; the opponent's drive held the game's last snap and had a "
+         "4th-quarter snap with <= 120 s where K(d, t) < clock <= K(d, 0) (t >= 1 the team's "
+         "timeouts); the team's timeouts at that drive's last snap; a case when >= 1",
+         "The team lost a close game while the opponent ran out the clock, with timeouts still "
+         "in its pocket. A fact, not always a mistake: see timeout_seconds_wasted."),
+        ("half_passivity", "End-of-half passivity", "metric", "case (boolean) per first half",
+         "a first-half drive that ended the half with a tail of kneels / designed runs (no team "
+         "timeout, no pass) whose first 1st down had >= 40 s and >= 1 timeout; a case when "
+         "half_value there >= decisions.clock.passivity_min_ep (1.0 point)",
+         "Running out the first half with time, timeouts and field position good enough that "
+         "attacking was clearly worth points."),
+        ("passivity_ep_left", "EP left on the table (end of half)", "metric", "points",
+         "G1b half_value(yardline_100, half_seconds_remaining) at the decision snap minus 0 "
+         "(kneeling scores nothing): net points from a first-half 1st down to halftime, "
+         "measured on 1999-2005",
+         "How many points, net of the risk, a typical team got from that spot and clock."),
+        ("passivity_wp_left", "WP left on the table (end of half)", "metric",
+         "probability (0-1; shown as WP points)",
+         "WP(decision snap) - WP(the second half's first snap: same score, 3 timeouts each, the "
+         "receiving team at the kickoff spot), both from season S's own WP fold model",
+         "What running out the half cost in win probability, by the model."),
+        ("timeout_seconds_wasted", "Seconds wasted with timeouts in hand", "metric",
+         "seconds per team-game",
+         "while down 1-8 in the final 2:00, after an opponent play that leaves K(d', t - 1) < "
+         "clock <= K(d', -1) (decisive), no team timeout and a runoff (next snap's gap minus the "
+         "play's measured seconds) >= 10 s; per opponent drive the first k such runoffs, k = "
+         "the timeouts the team still held at the drive's end",
+         "Clock the team let run when a timeout would have kept its last possession alive, "
+         "while it kept timeouts it never used."),
+    ]  # fmt: skip
+    return [
+        Entry(name=n, title=t, kind=k, modules=("decisions",), unit=u, formula=f,
+              explanation=e, source=ck, step="G4")
+        for n, t, k, u, f, e in rows
+    ]  # fmt: skip
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
     pool = _pool_texts()
@@ -1723,6 +1773,7 @@ def _entries() -> list[Entry]:
         *_decisions_entries(),
         *_submodel_entries(),
         *_grade_entries(),
+        *_clock_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
             name="weekly_pos_rank",

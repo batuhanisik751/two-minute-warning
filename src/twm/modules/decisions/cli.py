@@ -201,6 +201,66 @@ def grade(
     typer.echo(f"wrote {md} and {csv} [{time.perf_counter() - t0:.0f} s]")
 
 
+@decisions_app.command("clock")
+def clock_cmd(
+    season: list[int] = typer.Option(
+        None,
+        "--season",
+        help="Season(s) to grade (repeatable; 2006-2025 or the current season); default the "
+        "current season.",
+    ),
+    report_only: bool = typer.Option(
+        False, "--report-only", help="Grade nothing; write the report from the stored rows."
+    ),
+    no_report: bool = typer.Option(False, "--no-report", help="Grade only; skip the report."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse file (default from config)."),
+) -> None:
+    """The three clock-management metrics (G4; definitions in docs/decision_metrics.md):
+    timeouts unused in lost one-score games, end-of-half passivity, seconds wasted with
+    timeouts in hand when trailing late. Each season's candidates are stored with their inputs
+    under data/decisions/clock/ (reproducible), credited to the head coach; then
+    reports/decisions/clock.md + .csv from every stored season."""
+    import time
+
+    from twm.cli import _warehouse_or_exit
+    from twm.config import settings
+    from twm.modules.decisions import wp
+
+    seasons = sorted(set(season)) if season else [int(settings().current_season)]
+    allowed = wp.fold_seasons()
+    bad = [s for s in seasons if s not in allowed]
+    if bad:
+        raise typer.BadParameter(f"seasons must be within {min(allowed)}-{max(allowed)}; "
+                                 f"got {bad}")  # fmt: skip
+    from twm.modules.decisions import clock as ck
+
+    t0 = time.perf_counter()
+    if not report_only:
+        path = _warehouse_or_exit(db)
+        for i, s in enumerate(seasons, 1):
+            typer.echo(f"[{i}/{len(seasons)}] clock metrics {s}")
+            try:
+                summary = ck.clock_season(path, s, progress=typer.echo)
+            except (ValueError, wp.WpModelError) as e:
+                typer.echo(f"cannot grade {s}: {e}", err=True)
+                raise typer.Exit(code=1) from e
+            typer.echo(f"{s}: timeouts unused {summary['timeouts_unused_cases']}/"
+                       f"{summary['timeouts_unused_candidates']}, passivity "
+                       f"{summary['passivity_cases']}/{summary['passivity_candidates']}, late "
+                       f"timeouts {summary['late_cases']} games, "
+                       f"{summary['late_seconds_wasted']} s")  # fmt: skip
+    if no_report:
+        return
+    from twm.modules.decisions import clock_report
+
+    try:
+        md, csv = clock_report.write_report(progress=typer.echo)
+    except (FileNotFoundError, wp.WpModelError) as e:
+        typer.echo(f"cannot write the report: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    typer.echo(f"wrote {md} and {csv} [{time.perf_counter() - t0:.0f} s]")
+
+
 @decisions_app.command("wp-select")
 def wp_select_cmd(
     candidate: str = typer.Option(None, "--candidate", help="Candidate family to fit."),

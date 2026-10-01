@@ -174,3 +174,20 @@ decisions:
   platt_seasons: 3
   # coach leaderboards: coaches with at least this many games in the season
   leaderboard_min_games: 8
+  # clock-management metrics (step G4; fixed before any season was graded; definitions in
+  # docs/decision_metrics.md "Clock management", code in src/twm/modules/decisions/clock.py)
+  clock:
+    # metric 1 counts losses by 1..this; metric 3 counts deficits of 1..this
+    one_score_margin: 8
+    # metrics 1 and 3: the fourth quarter's last this-many seconds (after the two-minute warning)
+    final_window_seconds: 120
+    # kneel and play seconds are measured on this many seasons before the graded one
+    runoff_seasons: 5
+    # metric 3: the clock "ran" after a play when the runoff is at least this many seconds
+    clock_ran_min_seconds: 10
+    # metric 2: a passive end of half needs >= this many seconds and timeouts left ...
+    passivity_min_seconds: 40
+    passivity_min_timeouts: 1
+    # ... and attacking worth >= this many net points (G1b half_value; 1.0 = a third of a field
+    # goal, >= 4.5 standard errors of the table's cells there; never the usual touchback kneel)
+    passivity_min_ep: 1.0

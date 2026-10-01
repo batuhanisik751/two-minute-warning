@@ -383,9 +383,30 @@ class PublishConfig(BaseModel):
         return v
 
 
+class ClockConfig(BaseModel):
+    """``decisions.clock:`` the clock-management metrics (G4, docs/decision_metrics.md "Clock
+    management"); fixed before any season was graded."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # "one score": metric 1 counts losses by 1..this; metric 3 counts deficits of 1..this
+    one_score_margin: int = 8
+    # metrics 1 and 3 look at the fourth quarter's last this-many seconds (after the 2:00 warning)
+    final_window_seconds: int = 120
+    # kneel and play seconds are measured on this many seasons before the graded one
+    runoff_seasons: int = 5
+    # metric 3: an interval counts as the clock running when its runoff is at least this
+    clock_ran_min_seconds: int = 10
+    # metric 2: a passive end of half needs at least this many seconds and timeouts ...
+    passivity_min_seconds: int = 40
+    passivity_min_timeouts: int = 1
+    # ... and attacking worth at least this many net points (G1b half_value: "clearly positive")
+    passivity_min_ep: float = 1.0
+
+
 class DecisionsConfig(BaseModel):
     """``decisions:`` in settings.yaml: the fourth-down and two-point grades (G3,
-    docs/decision_metrics.md)."""
+    docs/decision_metrics.md) and the clock metrics (``clock``, G4)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -406,6 +427,8 @@ class DecisionsConfig(BaseModel):
     platt_seasons: int = 3
     # Coach leaderboards list coaches with at least this many games in the season.
     leaderboard_min_games: int = 8
+    # The clock-management metrics (G4).
+    clock: ClockConfig = ClockConfig()
 
     @field_validator("toss_up_margin", "punt_range_quantile")
     @classmethod

@@ -13,6 +13,7 @@
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as s from "../db/schema";
 import { seedDecisions } from "./seed-decisions";
+import { seedHotSeat } from "./seed-hot-seat";
 import { MODULES_SEED, seedModules } from "./seed-modules";
 
 export type SeedVariant = "full" | "empty";
@@ -295,6 +296,8 @@ export async function seed(db: Db, variant: SeedVariant): Promise<void> {
   await seedModules(db);
   // the Decision Report Card (tests/seed-decisions.ts)
   await seedDecisions(db);
+  // the Hot-Seat Meter (tests/seed-hot-seat.ts; needs the decisions seed's coaches)
+  await seedHotSeat(db);
 }
 
 function rotateFeatured<T extends { gsisId: string }>(pool: T[], at: number): T[] {

@@ -18,6 +18,7 @@ import { getRadarModel } from "@/lib/queries/radar";
 import { getTierStats, getTrackRows, type TrackRow } from "@/lib/queries/track";
 import { SITE_TERMS } from "@/lib/site-terms";
 import DecisionsSection from "@/components/methodology/DecisionsSection";
+import HotSeatSection from "@/components/methodology/HotSeatSection";
 import RegressionSection from "@/components/methodology/RegressionSection";
 import StreamerSection from "@/components/methodology/StreamerSection";
 import { headline, select, widestRange } from "@/lib/track";
@@ -383,7 +384,7 @@ export default async function MethodologyPage() {
   return (
     <>
       <PageHeader title="Methodology (draft)" kicker="How it works">
-        How the Waiver Radar, the K and D/ST streamer, Regression Watch and the Decision Report Card work, what data they use, how they were tested
+        How the Waiver Radar, the K and D/ST streamer, Regression Watch, the Decision Report Card and the Hot-Seat Meter work, what data they use, how they were tested
         and what the tests found. Every result on this page is read from the published track records, the priority table,
         the frozen parameters and the glossary; none is typed in by hand. Each module&apos;s results season by season, its
         calibration and its live lists are on <Link href="/track-record">the Track record page</Link>.
@@ -415,6 +416,9 @@ export default async function MethodologyPage() {
           </li>
           <li>
             <a href="#decisions">The Decision Report Card</a>
+          </li>
+          <li>
+            <a href="#hot-seat">The Hot-Seat Meter</a>
           </li>
           <li>
             <a href="#glossary">Glossary</a>
@@ -653,6 +657,8 @@ export default async function MethodologyPage() {
         <RegressionSection />
 
         <DecisionsSection />
+
+        <HotSeatSection />
 
         <section aria-labelledby="glossary">
           <h2 id="glossary" className="section-title scroll-mt-24">

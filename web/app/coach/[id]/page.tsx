@@ -6,10 +6,12 @@ import CoachChart from "@/components/decisions/CoachChart";
 import DecisionList from "@/components/decisions/DecisionList";
 import { CountCells, CountHeaders } from "@/components/decisions/Leaderboard";
 import { FoldTable } from "@/components/Fold";
+import CoachHotSeat from "@/components/hot-seat/CoachHotSeat";
 import Term from "@/components/Term";
 import { PageHeader } from "@/components/ui";
 import { isCoachId } from "@/lib/decisions";
 import { getBestCalls, getClockCases, getCoach, getDecisionsMeta, getWorstCalls, type CoachSeasonRow } from "@/lib/queries/decisions";
+import { getCoachHotSeat, getHotSeatMeta } from "@/lib/queries/hot-seat";
 
 // No loading.tsx above this route on purpose (as /player/[id]): an unknown id must answer with a
 // real 404 status, which needs notFound() before the response starts streaming.
@@ -66,11 +68,13 @@ export default async function CoachPage({ params }: PageProps<"/coach/[id]">) {
   if (!isCoachId(id)) notFound();
   const coach = await getCoach(id);
   if (!coach) notFound();
-  const [meta, worst, best, clock] = await Promise.all([
+  const [meta, worst, best, clock, hotSeat, hotSeatMeta] = await Promise.all([
     getDecisionsMeta(),
     getWorstCalls(null, id, null, WORST),
     getBestCalls(null, id, null, BEST),
     getClockCases(null, id),
+    getCoachHotSeat(id),
+    getHotSeatMeta(),
   ]);
   const s = coach.seasons;
   const span = s.length ? (s[0].season === s[s.length - 1].season ? `${s[0].season}` : `${s[0].season}–${s[s.length - 1].season}`) : null;
@@ -103,6 +107,7 @@ export default async function CoachPage({ params }: PageProps<"/coach/[id]">) {
           <p className="text-muted">No season row published for this coach.</p>
         )}
       </section>
+      <CoachHotSeat rows={hotSeat} name={coach.name} season={hotSeatMeta.latest?.season ?? null} />
       <section aria-labelledby="coach-worst-heading" className="mt-10">
         <h2 id="coach-worst-heading" className="section-title mb-2 scroll-mt-24">
           Worst calls

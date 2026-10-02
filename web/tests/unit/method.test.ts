@@ -11,6 +11,11 @@ import {
   CHANCE_RANGE_LEVEL,
   CLOCK,
   END_OF_HALF_SECONDS,
+  HOT_SEAT_DRIVERS,
+  HOT_SEAT_FIRST_WEEK,
+  HOT_SEAT_PHASES,
+  HOT_SEAT_RESEARCH,
+  HOT_SEAT_WINDOW_DAYS,
   LATE_GAME_Q4_SECONDS,
   LEADERBOARD_MIN_GAMES,
   POSITIONS,
@@ -102,4 +107,39 @@ test("the Decision Report Card's margin, exclusions, leaderboard and clock thres
   assert.equal(num("passivity_min_ep"), CLOCK.passivityMinEp);
   const report = read("src/twm/modules/decisions/decisions_report.py");
   assert.match(report, /need = min\(int\(c\["cfg"\]\.leaderboard_min_games\), int\(games\.max\(\) or 0\)\)/);
+});
+
+test("the Hot-Seat window, drivers and first week are the Python module's", () => {
+  const num = (file: string, name: string) => {
+    const m = read(`src/twm/modules/hot_seat/${file}`).match(new RegExp(`^${name}\\s*=\\s*(\\d+)`, "m"));
+    assert.ok(m, `${name} not found in ${file}`);
+    return Number(m[1]);
+  };
+  assert.equal(num("targets.py", "WINDOW_DAYS"), HOT_SEAT_WINDOW_DAYS);
+  assert.equal(num("production.py", "N_DRIVERS"), HOT_SEAT_DRIVERS);
+  assert.equal(num("weekly.py", "FIRST_WEEK"), HOT_SEAT_FIRST_WEEK);
+  assert.equal(HOT_SEAT_PHASES[0].from, HOT_SEAT_FIRST_WEEK);
+});
+
+test("the Hot-Seat research numbers are reports/hot_seat/research.csv's primary estimate", () => {
+  const [head, ...lines] = read("reports/hot_seat/research.csv").trim().split("\n");
+  const cols = head.split(",");
+  const row = (term: string) => {
+    const line = lines.find((l) => l.startsWith(`primary,${term},`));
+    assert.ok(line, `primary ${term} not found`);
+    const v = line.split(",");
+    return (c: string) => Number(v[cols.indexOf(c)]);
+  };
+  const r = row("fourth_down_wp_lost_per_game");
+  const R = HOT_SEAT_RESEARCH;
+  assert.equal(r("odds_ratio"), R.oddsRatio);
+  assert.equal(r("or_lo_classical"), R.classicalLo);
+  assert.equal(r("or_hi_classical"), R.classicalHi);
+  assert.equal(r("or_lo_bootstrap"), R.bootstrapLo);
+  assert.equal(r("or_hi_bootstrap"), R.bootstrapHi);
+  assert.equal(r("perm_p"), R.permP);
+  assert.equal(r("coach_seasons"), R.coachSeasons);
+  assert.equal(r("positive_coach_seasons"), R.positiveCoachSeasons);
+  assert.equal(r("n_seasons"), R.seasons);
+  assert.equal(row("wins_vs_expected")("odds_ratio"), R.winsVsExpectedOddsRatio);
 });

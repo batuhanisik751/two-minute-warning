@@ -4,6 +4,7 @@ import PickList from "@/components/PickList";
 import Term from "@/components/Term";
 import TopBoard from "@/components/TopBoard";
 import CoachOfWeekCard from "@/components/home/CoachOfWeekCard";
+import HotSeatCard from "@/components/home/HotSeatCard";
 import RegressionFlagsCard from "@/components/home/RegressionFlagsCard";
 import StreamersCard from "@/components/home/StreamersCard";
 import { EmptyState, KindBadge, Note, PosBadge } from "@/components/ui";
@@ -251,6 +252,8 @@ export default async function HomePage() {
       </div>
 
       <CoachOfWeekCard />
+
+      <HotSeatCard />
     </>
   );
 }

@@ -7,14 +7,15 @@ computed from anything but that database.
 
 | route | what it shows |
 |---|---|
-| `/` | this week: the scoreboard banner, each position's No. 1 ("top of the board"), the track-record headline, the newest live Waiver Radar list's top 5 per position plus a FLEX card, the Streamers card (the newest live K and D/ST lists' top 3), the Regression flags card (the newest live list's top 3 Sell-high and Buy-low) and the Coach of the week card (the newest graded week's best call against convention and its worst clear call; only while the current season has graded weeks); an empty state until the first live list exists |
+| `/` | this week: the scoreboard banner, each position's No. 1 ("top of the board"), the track-record headline, the newest live Waiver Radar list's top 5 per position plus a FLEX card, the Streamers card (the newest live K and D/ST lists' top 3), the Regression flags card (the newest live list's top 3 Sell-high and Buy-low) the Coach of the week card (the newest graded week's best call against convention and its worst clear call; only while the current season has graded weeks) and the Hot seat card (the top 5 of the current season's newest Hot-Seat list, live if that week has one, else labelled reconstructed); an empty state until the first live list exists |
 | `/waivers` | one list: position tabs (from the data, plus FLEX), season/week picker (the time machine), live or reconstructed label, chance with its range and meter, priority, reasons, outcomes, hit-rate badges per rank bucket |
 | `/waivers?pos=K`, `?pos=DST` | the K and D/ST streamer (tabs after FLEX once `stream_list` has lists): the same row layout, next game (home/away), chance of a top-N week with its range, priority, reasons, outcome (next week's finish and points); explained once (a one-week pick, no betting lines by design, the backtest in one sentence from `stream_track_record`); its own time machine |
 | `/regression` | Regression Watch: the week's Sell-high and Buy-low tables, a with/without garbage-time toggle (links, `gt=off`), the xFP-against-PPG scatter with its data table, the track record (MAE against season PPG and last 3; tag hit rates against base rates, and one sentence on the third tag that was tested and dropped); time machine over the published weeks |
 | `/player/[id]` | a player (nflverse `gsis_id`): header, weekly charts with data tables (the points/xFP chart with a garbage-time toggle), Radar history, Regression Watch history; 404 for an unknown id |
 | `/decisions` | the Decision Report Card (step W4): a season picker; the league's season in a few sentences; a short "how it works" box; the coach leaderboard (decisions, clear calls, wrong calls, WP lost per game, aggressiveness, clock cases; least WP lost per game first); toss-ups explained with the season's counts; the worst calls and the best calls against convention, each with the situation in words, every option's WP, what was chosen and what happened; the season's clock cases |
-| `/coach/[id]` | a head coach (`dim_coach.coach_id`, the name as a slug): the coach's seasons (table, and a small chart of WP lost per game and aggressiveness by season with its data table), worst calls, best calls against convention, clock cases; 404 for an unknown id |
-| `/methodology` | data sources, the point-in-time rule, leakage safeguards, how the Radar works, the results, the K and D/ST streamer (results from `stream_track_record`), Regression Watch (the stability study from `regression_stability`: split-half correlations by position with and without garbage time, the parts of efficiency, the shrinkage table r(g); the projection in words, the backtest results, the PROJECT_SPEC 6.3 limit), the Decision Report Card (our WP model against nflfastR and its smoothness limits, one line per sub-model against its simple baseline, the grading rules, the nfl4th benchmark, the clock metrics' definitions in plain words, every honesty note; from `decisions_track_record`), the full glossary, disclaimers |
+| `/coach/[id]` | a head coach (`dim_coach.coach_id`, the name as a slug): the coach's seasons (table, and a small chart of WP lost per game and aggressiveness by season with its data table), worst calls, best calls against convention, clock cases; the Hot-Seat history (this season's weekly estimates as a chart with its table; each past season's last estimate, rank and outcome); 404 for an unknown id |
+| `/hot-seat` | the Hot-Seat Meter (step H4b): a season/week picker over every list (the end-of-season snapshot named so); the default is the newest season's live list, else its newest reconstructed one, labelled; one row per head coach by estimated chance (a whole percent and a bar), the key numbers (record against the market's expected wins, point differential per game, tenure), the three drivers in words with their direction, a sparkline and the season's estimates in words, an interim flag, and what happened (final for reconstructed seasons, pending for live ones); "How to read this" with the early-season check (calibration by season phase and band, aggregated from the published rows), the labels' provenance and the fourth-down research in one sentence |
+| `/methodology` | data sources, the point-in-time rule, leakage safeguards, how the Radar works, the results, the K and D/ST streamer (results from `stream_track_record`), Regression Watch (the stability study from `regression_stability`: split-half correlations by position with and without garbage time, the parts of efficiency, the shrinkage table r(g); the projection in words, the backtest results, the PROJECT_SPEC 6.3 limit), the Decision Report Card (our WP model against nflfastR and its smoothness limits, one line per sub-model against its simple baseline, the grading rules, the nfl4th benchmark, the clock metrics' definitions in plain words, every honesty note; from `decisions_track_record`), the Hot-Seat Meter (labels and windows, features, the model and why, every model's backtest numbers with intervals, firings per season, calibration by phase, the research result, limits; from the `hot_seat_*` tables), the full glossary, disclaimers |
 
 Every page carries the skip link, the "Data as of" line (the Tuesday as-of of the current
 week's lists, and when the data was published), the disclaimer of PROJECT_SPEC 16 and the data
@@ -65,6 +66,9 @@ Queries per page:
 | `/decisions` | `decisions.getDecisionSeasons`, `decisions.getDecisionsMeta` (site_meta `decisions_*`), `decisions.getSeasonCoaches(season)`, `decisions.getWorstCalls`, `decisions.getBestCalls`, `decisions.getClockCases` |
 | `/coach/[id]` | `decisions.getCoach(id)` (dim_coach + coach_season), `decisions.getDecisionsMeta`, `decisions.getWorstCalls`, `decisions.getBestCalls`, `decisions.getClockCases` |
 | `/` (Coach of the week) | `decisions.getDecisionsMeta`, `meta.getSiteMeta`, `decisions.getWorstCalls(season, week)`, `decisions.getBestCalls(season, week)` |
+| `/hot-seat` | `hotSeat.getHotSeatIndex`, `hotSeat.getHotSeatList(season, week, kind)`, `hotSeat.getHotSeatTimeline(season)`, `hotSeat.getHotSeatCalibration` (a SQL aggregation of the reconstructed rows and final outcomes, interims left out) |
+| `/coach/[id]` (Hot-Seat history), `/` (Hot seat card) | `hotSeat.getCoachHotSeat(id)`, `hotSeat.getHotSeatMeta` (site_meta `hot_seat_latest_*`); `hotSeat.getHotSeatIndex`, `hotSeat.getHotSeatList`, `meta.getSiteMeta` |
+| `/methodology`, `/track-record` (Hot-Seat sections) | `hotSeat.getHotSeatTrack`, `hotSeat.getHotSeatFirings`, `hotSeat.getHotSeatModel`, `hotSeat.getHotSeatCalibration`, `hotSeat.getHotSeatLive` |
 
 The hit-rate badges on `/waivers` count, for the list's position, the picks and hits per rank
 in the reconstructed lists of **seasons before the list's own** with final outcomes (so a
@@ -118,6 +122,14 @@ has)` games (the report's rule), least WP lost per game first; the others are li
 The home card appears only while site_meta `decisions_season` is the current season and has a
 `decisions_latest_week` with a wrong clear call or a call against convention.
 
+**The Hot-Seat Meter** (step H4b; `lib/hot-seat.ts`, unit-tested): every number comes from the
+`hot_seat_*` tables H4a publishes or from `lib/method.ts` (the 30-day window, the 3 drivers, the
+first list week, the phases and bands of the early-season check, and step H5's research numbers,
+checked by `tests/unit/method.test.ts` against `src/twm/modules/hot_seat/` and
+`reports/hot_seat/research.csv`). Wording is careful on purpose (real people's jobs): an
+"estimated chance of being let go", never a prediction; outcomes say "Let go", "Not let go",
+"Left another way" or "Pending". The estimate bar uses a neutral chart colour.
+
 **Long lists and tables fold** (owner decision 2026-09-30; `lib/fold.ts`, `components/Fold.tsx`):
 more than 10 rows show the first 10 and a native `<details>` "Show all N" (no JavaScript,
 keyboard accessible; the words switch to "Show the first 10 only" while open). A ranked list
@@ -133,14 +145,14 @@ links into it) and navigation.
 |---|---|---|
 | types | `npm run typecheck` | nothing (`next typegen` + `tsc`) |
 | lint | `npm run lint` | nothing |
-| unit | `npm test` | nothing: formatting, rank buckets and badges, query-string parsing, track-record selection, database-URL guard rails, method constants vs the Python code, theme contrast (WCAG AA, both themes, incl. the strip, field and position colours), FLEX merge order and counts, the league shape, position tabs, team colours, the streamer's comparison sentence and cutoffs (`lib/streamer.ts`), Regression Watch's tag order, toggle, verdicts, dropped tags and shrinkage table (`lib/regression.ts`), the stability study's tables (`lib/stability.ts`), the fold rule (`lib/fold.ts`), the Decision Report Card's situation in words, options, leaderboard rule, totals and clock-case words (`lib/decisions.ts`) and its methodology picks (`lib/decisions-track.ts`) |
+| unit | `npm test` | nothing: formatting, rank buckets and badges, query-string parsing, track-record selection, database-URL guard rails, method constants vs the Python code, theme contrast (WCAG AA, both themes, incl. the strip, field and position colours), FLEX merge order and counts, the league shape, position tabs, team colours, the streamer's comparison sentence and cutoffs (`lib/streamer.ts`), Regression Watch's tag order, toggle, verdicts, dropped tags and shrinkage table (`lib/regression.ts`), the stability study's tables (`lib/stability.ts`), the fold rule (`lib/fold.ts`), the Decision Report Card's situation in words, options, leaderboard rule, totals and clock-case words (`lib/decisions.ts`) and its methodology picks (`lib/decisions-track.ts`), the Hot-Seat Meter's rounding, driver and outcome words, calibration grouping, timelines and track-record picks (`lib/hot-seat.ts`) |
 | migrations | `npm run db:check` | nothing (never connects) |
 | build | `npm run build` | nothing (no database at build time) |
 | smoke + accessibility + layout | `npm run test:smoke:run` | a build, the local Postgres server and Google Chrome (or `CHROME_PATH`) |
 
 `npm run test:smoke:run` (`tests/run-smoke.ts`) creates and seeds two throwaway databases on
 the local server (`twm_web_test`, `twm_web_test_empty`; `tests/setup-db.ts` applies
-`web/drizzle` with Drizzle's migrator and loads the fictional seed of `tests/seed.ts`, `tests/seed-modules.ts` and `tests/seed-decisions.ts`), starts
+`web/drizzle` with Drizzle's migrator and loads the fictional seed of `tests/seed.ts`, `tests/seed-modules.ts`, `tests/seed-decisions.ts` and `tests/seed-hot-seat.ts`), starts
 `next start` on each, runs `tests/smoke/*.test.ts` with `SMOKE_REQUIRE=1` and stops the
 servers. The suites fetch every page, check the key text (data-as-of line, disclaimer, credits,
 list rows, charts and their tables, 404s, empty states) and run axe-core inside jsdom on each
@@ -157,7 +169,7 @@ The setup refuses any database server that is not on this computer and any datab
 that does not start with `twm_web_test`.
 
 The **overlap check** (`tests/smoke/layout.test.ts`) loads every list page (home, each
-position, FLEX, reconstructed lists without chances, /decisions and the coach pages) in headless Chrome at 320, 360, 390, 414,
+position, FLEX, reconstructed lists without chances, /decisions, the coach pages and /hot-seat) in headless Chrome at 320, 360, 390, 414,
 600, 768, 800, 1024, 1280, 1440 and 1920 px. In every list row (`[data-row]`: pick rows, the
 column header row, the top-of-the-board cards, the Report Card's call and clock-case rows) it measures each line of text
 (`Range.getClientRects`, clipped by any ancestor that hides overflow) and fails when two text

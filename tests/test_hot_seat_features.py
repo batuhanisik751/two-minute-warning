@@ -601,12 +601,11 @@ def test_cli_writes_the_file_and_a_season_rebuild_keeps_the_others(world, tmp_pa
     assert again.height == first.height and again.equals(first)
 
 
-def test_hot_seat_terms_stay_off_the_published_glossary_until_the_page_ships():
+def test_hot_seat_terms_are_on_the_published_glossary_since_the_page_ships():
     from twm import registry
     from twm.publish import collect
 
     names = set(collect.glossary().get_column("name").to_list())
     hot = {e.name for e in registry.entries() if set(e.modules) == {"hot_seat"}}
-    assert hot and not hot & names
-    shared = {e.name for e in registry.entries() if "hot_seat" not in e.modules}
-    assert shared <= names
+    assert hot and hot <= names  # step H4b: the Hot-Seat pages use them
+    assert {e.name for e in registry.entries()} == names

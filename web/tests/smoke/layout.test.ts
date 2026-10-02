@@ -106,9 +106,9 @@ before(
     // every page that shows a list: home (half-width cards, the FLEX card, the top-of-the-board
     // row, the Streamers and Regression flags cards), the position lists, FLEX, reconstructed
     // lists without chances, the K and D/ST lists, every Regression Watch table, and the Decision
-    // Report Card's call and clock-case rows (/decisions, the coach pages, the home card), and
-    // /track-record's headline tiles and live rows
-    paths = set.routes.filter((r) => ["home", "waivers", "waivers-live", "waivers-flex", "waivers-backtest", "waivers-stream", "regression", "decisions", "coach", "track-record"].includes(r.kind)).map((r) => r.path);
+    // Report Card's call and clock-case rows (/decisions, the coach pages, the home card),
+    // /track-record's headline tiles and live rows, and the Hot-Seat rows (/hot-seat, the home card)
+    paths = set.routes.filter((r) => ["home", "waivers", "waivers-live", "waivers-flex", "waivers-backtest", "waivers-stream", "regression", "decisions", "coach", "track-record", "hot-seat"].includes(r.kind)).map((r) => r.path);
   },
   // two Chrome start attempts of up to 60 s each, plus the connection
   { timeout: 200_000 },

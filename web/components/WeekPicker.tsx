@@ -13,6 +13,7 @@ export default function WeekPicker({
   action = "/waivers",
   hidden,
   hrefFor,
+  weekName,
 }: {
   index: ListIndexRow[];
   chosen: ListKey;
@@ -20,6 +21,8 @@ export default function WeekPicker({
   action?: string;
   hidden?: Record<string, string>;
   hrefFor?: (w: WeekRef) => string;
+  /** a week's own name where "Week N" would mislead (the Hot-Seat end-of-season snapshot) */
+  weekName?: (w: WeekRef) => string | null;
 }) {
   const href = hrefFor ?? ((w: WeekRef) => waiversHref({ pos: position, season: w.season, week: w.week }));
   const fields = hidden ?? (position ? { pos: position } : {});
@@ -31,6 +34,10 @@ export default function WeekPicker({
   }
   const weekOptions = [...weeks.entries()].sort((a, b) => a[0] - b[0]);
   const { newer, older } = neighbors(index, chosen);
+  const named = (w: WeekRef) => {
+    const n = weekName?.(w);
+    return n ? `${w.season}, ${n.toLowerCase()}` : seasonWeek(w.season, w.week);
+  };
   const kinds = (k: Set<string>) =>
     k.has("live") && k.has("backtest") ? "live and reconstructed" : k.has("live") ? "live" : "reconstructed";
   return (
@@ -62,7 +69,7 @@ export default function WeekPicker({
           >
             {weekOptions.map(([w, k]) => (
               <option key={w} value={w}>
-                Week {w} ({kinds(k)})
+                {weekName?.({ season: chosen.season, week: w }) ?? `Week ${w}`} ({kinds(k)})
               </option>
             ))}
           </select>
@@ -78,12 +85,12 @@ export default function WeekPicker({
         {older ? (
           <Link href={href(older)} className="inline-flex min-h-11 items-center">
             <span aria-hidden="true">&larr;&nbsp;</span>
-            {seasonWeek(older.season, older.week)}
+            {named(older)}
           </Link>
         ) : null}
         {newer ? (
           <Link href={href(newer)} className="inline-flex min-h-11 items-center">
-            {seasonWeek(newer.season, newer.week)}
+            {named(newer)}
             <span aria-hidden="true">&nbsp;&rarr;</span>
           </Link>
         ) : null}

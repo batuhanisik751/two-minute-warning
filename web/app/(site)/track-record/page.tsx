@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Term from "@/components/Term";
 import DecisionsTrack from "@/components/track/DecisionsTrack";
+import HotSeatTrack from "@/components/track/HotSeatTrack";
 import RadarTrack from "@/components/track/RadarTrack";
 import RegressionTrackSection from "@/components/track/RegressionTrackSection";
 import StreamTrack from "@/components/track/StreamTrack";
@@ -15,6 +16,7 @@ const SECTIONS = [
   { id: "streamer", title: "K and D/ST streamer" },
   { id: "regression", title: "Regression Watch" },
   { id: "decisions", title: "Decision Report Card" },
+  { id: "hot-seat", title: "Hot-Seat Meter" },
 ] as const;
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
@@ -79,6 +81,9 @@ export default function TrackRecordPage() {
         </Section>
         <Section id="decisions" title={SECTIONS[3].title}>
           <DecisionsTrack />
+        </Section>
+        <Section id="hot-seat" title={SECTIONS[4].title}>
+          <HotSeatTrack />
         </Section>
       </div>
     </>

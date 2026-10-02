@@ -670,6 +670,11 @@
   background: var(--border-strong);
 }
 
+/* the Hot-Seat Meter's estimate: a neutral chart colour, never a heat colour */
+.meter-fill.meter-estimate {
+  background: var(--chart-a);
+}
+
 /* Motion only on hover or focus, and none for readers who ask for less motion. */
 @media (prefers-reduced-motion: no-preference) {
   .lift {

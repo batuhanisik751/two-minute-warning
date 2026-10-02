@@ -75,3 +75,37 @@ export const CLOCK = {
   passivityMinTimeouts: 1,
   passivityMinEp: 1.0,
 } as const;
+
+/** The Hot-Seat Meter (docs/hot_seat.md). The label window: a departure counts when it is announced
+ *  no later than this many days after the team's final game (src/twm/modules/hot_seat/targets.py
+ *  WINDOW_DAYS). */
+export const HOT_SEAT_WINDOW_DAYS = 30;
+/** Drivers shown per coach: the logistic regression's largest terms (production.py N_DRIVERS). */
+export const HOT_SEAT_DRIVERS = 3;
+/** The first weekly list's week (weekly.py FIRST_WEEK): a team needs a played game. */
+export const HOT_SEAT_FIRST_WEEK = 2;
+/** The early-season check on /hot-seat: season phases (weekly lists by week; the end-of-season
+ *  snapshot apart) and probability bands (lower edges, 0-1). Presentation choices of the site. */
+export const HOT_SEAT_PHASES = [
+  { key: "weeks_early", from: HOT_SEAT_FIRST_WEEK, to: 4 },
+  { key: "weeks_mid", from: 5, to: 9 },
+  { key: "weeks_late", from: 10, to: null },
+  { key: "end_of_season", from: null, to: null },
+] as const;
+export const HOT_SEAT_BANDS = [0, 0.1, 0.25, 0.5] as const;
+/** Step H5's primary estimate (reports/hot_seat/research.csv, spec primary): the odds ratio of
+ *  firing per standard deviation of fourth-down WP lost per game, with its classical and
+ *  season-bootstrap 95% intervals and the within-season permutation p-value; and the same
+ *  model's odds ratio for wins vs market expectation. Checked against the CSV by the unit test. */
+export const HOT_SEAT_RESEARCH = {
+  oddsRatio: 1.010865,
+  classicalLo: 0.757635,
+  classicalHi: 1.348733,
+  bootstrapLo: 0.716695,
+  bootstrapHi: 1.391814,
+  permP: 0.938062,
+  coachSeasons: 597,
+  positiveCoachSeasons: 86,
+  seasons: 20,
+  winsVsExpectedOddsRatio: 0.307077,
+} as const;

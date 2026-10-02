@@ -3,12 +3,13 @@
 import { POSITIONS } from "../../lib/method";
 import { SEED } from "../seed";
 import { DECISIONS_SEED } from "../seed-decisions";
+import { HOT_SEAT_SEED } from "../seed-hot-seat";
 import { MODULES_SEED } from "../seed-modules";
 import { DATA, fetchPage } from "./dom";
 
 export type Route = {
   path: string;
-  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record";
+  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record" | "hot-seat" | "coach-hot-seat";
 };
 
 export type RouteSet = {
@@ -63,6 +64,15 @@ function seedRoutes(): RouteSet {
       { path: `/decisions?season=${DECISIONS_SEED.past}`, kind: "decisions" },
       { path: "/decisions?season=2024", kind: "decisions" },
       ...[DECISIONS_SEED.featured, "avery-o-hollis", DECISIONS_SEED.coaches[3].id].map((id) => ({ path: `/coach/${id}`, kind: "coach" as const })),
+      // the Hot-Seat Meter: the default (this season's live list), its reconstructed week, the past
+      // season's end-of-season snapshot (final outcomes) and week 4 (the interim coach), the older
+      // season; a coach let go with no decisions rows, and the interim coach
+      { path: "/hot-seat", kind: "hot-seat" },
+      { path: `/hot-seat?season=${HOT_SEAT_SEED.season}&week=${HOT_SEAT_SEED.reconWeek}`, kind: "hot-seat" },
+      { path: `/hot-seat?season=${HOT_SEAT_SEED.past}&week=${HOT_SEAT_SEED.lastWeek}`, kind: "hot-seat" },
+      { path: `/hot-seat?season=${HOT_SEAT_SEED.past}&week=4`, kind: "hot-seat" },
+      { path: `/hot-seat?season=${HOT_SEAT_SEED.older}`, kind: "hot-seat" },
+      ...[HOT_SEAT_SEED.firedAfter, HOT_SEAT_SEED.interim].map((id) => ({ path: `/coach/${id}`, kind: "coach-hot-seat" as const })),
     ],
     missing: MISSING,
     notes: [],
@@ -130,6 +140,17 @@ async function realRoutes(): Promise<RouteSet> {
     if (!coaches.length) notes.push("no coach link on /decisions: no coach page was checked");
   } else {
     notes.push("no Decision Report Card season: /decisions and the coach pages were not checked");
+  }
+  // the Hot-Seat Meter: the default list, the oldest season, the first coach it links
+  const hd = (await fetchPage("/hot-seat")).doc;
+  const hs = Array.from(hd.querySelectorAll<HTMLOptionElement>("form[action='/hot-seat'] select[name=season] option")).map((o) => o.value);
+  if (hs.length) {
+    routes.push({ path: "/hot-seat", kind: "hot-seat" });
+    if (hs.length > 1) routes.push({ path: `/hot-seat?season=${hs[hs.length - 1]}`, kind: "hot-seat" });
+    const hc = hd.querySelector<HTMLAnchorElement>("[data-testid=hot-seat-row] a[href^='/coach/']")?.getAttribute("href");
+    if (hc && !routes.some((r) => r.path === hc)) routes.push({ path: hc, kind: "coach-hot-seat" });
+  } else {
+    notes.push("no Hot-Seat list: /hot-seat was not checked");
   }
   return { routes, missing: MISSING, notes };
 }

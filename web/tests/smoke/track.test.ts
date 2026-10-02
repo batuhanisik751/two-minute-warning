@@ -8,7 +8,7 @@ import { BASE, DATA, EMPTY_BASE, fetchPage, prose, serverUp, type Page } from ".
 import { foldCheck } from "./fold";
 
 const PATH = "/track-record";
-const MODULES = ["radar", "streamer", "regression", "decisions"];
+const MODULES = ["radar", "streamer", "regression", "decisions", "hot-seat"];
 let up = false;
 let emptyUp = false;
 let page: Page;

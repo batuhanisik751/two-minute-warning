@@ -221,8 +221,10 @@ def test_the_publish_family(tmp_path: Path, pinned) -> None:
 
     fam = FAMILIES["hot_seat"]
     assert fam.key == ("season", "week", "snapshot") and fam.row_id == "coach_id"
-    # published with every module; its glossary terms stay hidden until the web step
-    assert "hot_seat" in col.MODULES and "hot_seat" in col.UNPUBLISHED_MODULES
+    # published with every module; its glossary terms publish since the site step (H4b)
+    assert "hot_seat" in col.MODULES and "hot_seat" not in col.UNPUBLISHED_MODULES
+    published = set(col.glossary()["name"].to_list())
+    assert {"wins_vs_expected", "tenure_seasons", "is_interim"} <= published
     pm, _ = pinned
     store = tmp_path / "predictions.duckdb"
     hw.store_week(_run(pm, "live"), store)

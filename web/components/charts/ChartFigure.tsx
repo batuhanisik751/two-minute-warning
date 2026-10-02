@@ -15,6 +15,7 @@ export default function ChartFigure({
   series,
   columns,
   percent = false,
+  testId = "chart",
 }: {
   id: string;
   caption: string;
@@ -22,9 +23,11 @@ export default function ChartFigure({
   series: Series[];
   columns: Column[];
   percent?: boolean;
+  /** the figure's data-testid (another module's chart on the same page needs its own) */
+  testId?: string;
 }) {
   return (
-    <figure aria-labelledby={`${id}-caption`} className="rounded-lg border border-line bg-surface p-3" data-testid="chart">
+    <figure aria-labelledby={`${id}-caption`} className="rounded-lg border border-line bg-surface p-3" data-testid={testId}>
       <figcaption id={`${id}-caption`} className="mb-2 font-display text-lg font-bold tracking-wide uppercase">
         {caption}
       </figcaption>

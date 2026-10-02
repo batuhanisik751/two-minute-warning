@@ -303,5 +303,8 @@ approved model".
   `/coach/[id]` joins; indexed by coach for the timeline), `hot_seat_outcome` ('final' from
   the frozen backtest; 'pending' for live seasons until the owner labels them),
   `hot_seat_track_record` (backtest_metrics.csv row for row) and `hot_seat_firings`
-  (firings_per_season.csv). The glossary's Hot-Seat terms stay unpublished until the site
-  step (`publish.collect.UNPUBLISHED_MODULES`).
+  (firings_per_season.csv). The glossary's Hot-Seat terms publish since the site step (H4b:
+  `publish.collect.UNPUBLISHED_MODULES` is empty).
+- **On the site** (step H4b): `/hot-seat` (every list, the drivers in words, the early-season
+  check aggregated from the published rows), a Hot-Seat history on `/coach/[id]`, a home card,
+  and sections on `/methodology` and `/track-record` (web/README.md).

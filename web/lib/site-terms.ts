@@ -184,6 +184,30 @@ export const SITE_TERMS: Record<string, TermEntry> = {
       "fourth down, or went for two. The number is how much win probability that gained over the " +
       "best kicking option, by the model.",
   },
+  // The Hot-Seat Meter (docs/hot_seat.md). The window's length is stated on the pages
+  // (lib/method.ts HOT_SEAT_WINDOW_DAYS, checked against src/twm/modules/hot_seat/targets.py).
+  hot_seat_estimate: {
+    name: "hot_seat_estimate",
+    title: "Estimated chance",
+    explanation:
+      "The model's estimate of the chance that the head coach is let go (fired during or after the " +
+      "season, or a mutual parting) and that it is announced within a set number of days after his " +
+      "team's final game. An estimate from past seasons' patterns, not a prediction that it will happen.",
+  },
+  hot_seat_let_go: {
+    name: "hot_seat_let_go",
+    title: "Let go",
+    explanation:
+      "Fired during the season, fired after it, or a mutual parting, announced in the window. Other " +
+      "departures (retired, resigned, left for another job) are not counted as let go.",
+  },
+  hot_seat_driver: {
+    name: "hot_seat_driver",
+    title: "Drivers",
+    explanation:
+      "The three inputs that move this coach's estimate the most, up or down, compared with an average " +
+      "coach: the logistic regression's own terms (its weight times how far the value is from average).",
+  },
   wp_points: {
     name: "wp_points",
     title: "WP points",

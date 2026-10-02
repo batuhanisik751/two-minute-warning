@@ -274,9 +274,10 @@ approved model".
   (default week: the latest whose Tuesday as-of has passed): the H3a batch path up to the run
   time, point in time, for every current head coach; the probability of a positive departure
   announced by 30 days after the team's final game; the rank; the top 3 **drivers**: the
-  logistic regression's own terms, coefficient x standardized value (missing indicators
-  included), the 3 largest by absolute size, signed, with the raw value and the registry's
-  label (a row's terms sum to its log-odds minus the intercept). **Interim coaches** (took
+  logistic regression's own terms, coefficient x standardized value, each feature's value
+  term and its missing-indicator term summed into one (each feature listed once; "missing"
+  only when the row's value is null), the 3 largest by absolute size, signed, with the raw
+  value and the registry's label (a row's terms sum to its log-odds minus the intercept). **Interim coaches** (took
   over during the season, or the owner's file says so) are scored but flagged: "interim: the
   model was not trained on interims". Weeks 2 .. last-1 are `weekly` lists at the Tuesday
   as-of; the last regular-season week is the **end-of-season snapshot** instead (each team's

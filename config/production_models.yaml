@@ -15,7 +15,7 @@ board:
     seasons: 2007-2024
     predictions:
       file: artifacts/production_models/board/backtest-board_spec-1581a6da7602c3f7/predictions.parquet
-      sha256: 91af3f70ec1f7b0774d65b53344276810798097f9c1a487ff3eee25b64f19816
+      sha256: 17e7175d74f9c50394312a1c34bbd9b3c430fbf1b30fef8b6de19e13fb040407
       rows: 1674
     outcomes:
       file: artifacts/production_models/board/backtest-board_spec-1581a6da7602c3f7/outcomes.parquet
@@ -27,7 +27,7 @@ board:
       rows: 36
     current_board:
       file: artifacts/production_models/board/backtest-board_spec-1581a6da7602c3f7/current_board.parquet
-      sha256: d606f317f1a28261034e38215fd84370a115acada2f50e199dfb2c5fdacac3b9
+      sha256: ee1788b2f26a0bafb5b62fb78010c6e8a6f7ad27e3db4886abdfcb231fdecf9f
       rows: 94
     current_inputs:
       file: artifacts/production_models/board/backtest-board_spec-1581a6da7602c3f7/current_inputs.parquet
@@ -73,7 +73,7 @@ hot_seat:
     seasons: 2006-2025
     predictions:
       file: artifacts/production_models/hot_seat/backtest-logit-0ede038915531ea3/predictions.parquet
-      sha256: 61cb0d500d1c1a49adc0142e76e28b9fa01d3e077bf186d9dc5a2dcbbcbcfca1
+      sha256: 545b98de89cbb633042dd73fdb14c24ed554d15e9a712a2117f3894cc464fb4e
       rows: 10361
     outcomes:
       file: artifacts/production_models/hot_seat/backtest-logit-0ede038915531ea3/outcomes.parquet

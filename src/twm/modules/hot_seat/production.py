@@ -194,33 +194,44 @@ def _transform(prep: Any, x: pl.DataFrame, features: Sequence[str]) -> np.ndarra
     return np.asarray(z, dtype=np.float64)
 
 
-def _label(name: str) -> tuple[str, str]:
-    """(feature, plain-English label) of an input name, from the registry."""
-    from twm import registry
-
-    missing = name.startswith("missingindicator_")
-    feature = name.removeprefix("missingindicator_")
-    title = registry.get(feature).title
-    return feature, (f"{title} (missing)" if missing else title)
+def feature_terms(fitted: Any, x: pl.DataFrame) -> tuple[list[str], np.ndarray]:
+    """(features, terms): :func:`contribution_terms` with each feature's value term and its
+    ``missingindicator_<feature>`` term summed into one (an indicator term is nonzero even when
+    the value is present: its 0 is standardized), features in input order; a row's terms still
+    sum to its log-odds minus the intercept."""
+    _, names, terms = contribution_terms(fitted, x)
+    features: list[str] = []
+    for name in names:
+        f = name.removeprefix("missingindicator_")
+        if f not in features:
+            features.append(f)
+    merged = np.zeros((terms.shape[0], len(features)), dtype=np.float64)
+    for j, name in enumerate(names):
+        merged[:, features.index(name.removeprefix("missingindicator_"))] += terms[:, j]
+    return features, merged
 
 
 def drivers(fitted: Any, x: pl.DataFrame, n: int = N_DRIVERS) -> list[list[dict[str, Any]]]:
-    """Per row of ``x``: its ``n`` largest terms by absolute size (ties: input order), signed,
-    with the feature, its raw value (None for a missing indicator or a missing value) and the
-    registry's label."""
-    _, names, terms = contribution_terms(fitted, x)
+    """Per row of ``x``: its ``n`` largest features by the absolute size of their merged term
+    (:func:`feature_terms`; ties: input order), signed, each feature once, with its raw value,
+    ``missing`` = the row's value is null (label suffixed "(missing)") and the registry's
+    label."""
+    from twm import registry
+
+    features, terms = feature_terms(fitted, x)
     raw = x.select(list(fitted.features)).to_dicts()
     out = []
     for i, row in enumerate(raw):
-        order = sorted(range(len(names)), key=lambda j: (-abs(terms[i, j]), j))[:n]
+        order = sorted(range(len(features)), key=lambda j: (-abs(terms[i, j]), j))[:n]
         items = []
         for j in order:
-            feature, label = _label(names[j])
-            value = None if names[j].startswith("missingindicator_") else row.get(feature)
-            items.append({"feature": feature, "label": label,
+            feature, value = features[j], row.get(features[j])
+            missing = value is None or value != value  # null (or NaN): a Python bool
+            title = registry.get(feature).title
+            items.append({"feature": feature, "label": f"{title} (missing)" if missing else title,
                           "contribution": round(float(terms[i, j]), 6),
-                          "value": None if value is None else float(value),
-                          "missing": names[j].startswith("missingindicator_")})  # fmt: skip
+                          "value": None if missing else float(value),
+                          "missing": missing})  # fmt: skip
         out.append(items)
     return out
 

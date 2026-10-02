@@ -142,13 +142,42 @@ def test_drivers_sum_to_the_logit_minus_the_intercept(pinned) -> None:
     p = pm.raw(x)
     assert np.allclose(terms.sum(axis=1), np.log(p / (1 - p)) - intercept, atol=1e-9)
     assert "missingindicator_fourth_down_wp_lost_per_game" in inputs
+    features, merged = hp.feature_terms(pm.fitted, x)
+    assert features == list(FEATURES)  # one merged term per feature, input order
+    assert np.allclose(merged.sum(axis=1), np.log(p / (1 - p)) - intercept, atol=1e-9)
     ds = hp.drivers(pm.fitted, x)
     for i, row in enumerate(ds):
         assert len(row) == 3
         sizes = [abs(d["contribution"]) for d in row]
         assert sizes == sorted(sizes, reverse=True)
-        assert min(sizes) >= np.sort(np.abs(terms[i]))[-3] - 1e-6  # the 3 largest, signed
+        assert min(sizes) >= np.sort(np.abs(merged[i]))[-3] - 1e-6  # the 3 largest, signed
         assert all(d["label"] and d["feature"] in FEATURES for d in row)
+
+
+def test_drivers_merge_a_feature_and_its_missing_indicator(pinned) -> None:
+    """Each feature at most once per row (value term + indicator term summed); ``missing`` only
+    when the row's value is actually null (an indicator term is nonzero for present values)."""
+    pm, _ = pinned
+    rows = feature_rows().sort(list(KEYS))
+    x = rows.select(list(FEATURES))
+    f = "fourth_down_wp_lost_per_game"
+    features, merged = hp.feature_terms(pm.fitted, x)
+    ds = hp.drivers(pm.fitted, x, n=len(FEATURES))  # every feature, so f is always listed
+    for i, row in enumerate(ds):
+        names = [d["feature"] for d in row]
+        assert len(names) == len(set(names)) == len(FEATURES)
+        for d in row:
+            raw = x[d["feature"]][i]
+            assert d["missing"] is (raw is None)
+            assert d["value"] == (None if raw is None else float(raw))
+            assert d["label"].endswith(" (missing)") is d["missing"]
+            assert d["contribution"] == round(float(merged[i, features.index(d["feature"])]), 6)
+        assert sum(d["contribution"] for d in row) == pytest.approx(merged[i].sum(), abs=1e-5)
+    absent = [i for i in range(x.height) if x[f][i] is None]
+    assert len(absent) == 1 and next(d for d in ds[absent[0]] if d["feature"] == f)["missing"]
+    present = [d for i, row in enumerate(ds) if i not in absent for d in row if d["feature"] == f]
+    assert len(present) == x.height - 1 and not any(d["missing"] for d in present)
+    assert all(d["value"] is not None for d in present)
 
 
 def _run(pm, kind: str, *, shift: float = 0.0) -> hw.WeeklyRun:

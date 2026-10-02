@@ -178,6 +178,9 @@ def test_the_live_path_loads_and_never_fits(monkeypatch) -> None:
         assert table[f"{role}_version"].unique().to_list() == [models_[role].model_version]
         d = json.loads(table[f"{role}_drivers_json"][0])
         assert len(d) == bp.N_DRIVERS and {"feature", "label", "contribution"} <= set(d[0])
+        for text in table[f"{role}_drivers_json"].to_list():  # each feature once (web keys)
+            feats = [x["feature"] for x in json.loads(text)]
+            assert len(feats) == len(set(feats))
     assert table["ecr_rank"].null_count() == 1  # unranked: shown as such, never filled
 
 

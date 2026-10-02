@@ -53,6 +53,7 @@ def test_available_features_are_real_columns():
     (C3: twm.modules.waiver_radar.features), the streamer's (S1c:
     twm.modules.streamer.features) or the Hot-Seat's (H3a), or one of the per-game values
     it computes from warehouse columns (snap share = offense_pct, carry share, xFP, FPOE)."""
+    from twm.modules.board.features import FEATURES as BOARD_FEATURES
     from twm.modules.decisions.conversion import FEATURES as GO_FEATURES
     from twm.modules.decisions.fieldgoal import FEATURES as FG_FEATURES
     from twm.modules.decisions.wp_data import FEATURES as WP_FEATURES
@@ -64,7 +65,7 @@ def test_available_features_are_real_columns():
     cols = set().union(*warehouse_columns().values())
     computed = {"offense_snap_share", "carry_share", "xfp", "fpoe", *STREAMER_FEATURES,
                 *WP_FEATURES, *WP_SMOOTH, *GO_FEATURES, *FG_FEATURES,
-                *HOT_SEAT_FEATURES}  # fmt: skip
+                *HOT_SEAT_FEATURES, *BOARD_FEATURES}  # fmt: skip
     for e in rg.entries(kind="feature", status="available"):
         assert e.name in cols or e.name in computed or e.name in FEATURE_COLUMNS, e.name
     # every streamer feature is registered for the streamer, and nothing else is
@@ -80,6 +81,9 @@ def test_available_features_are_real_columns():
     hot_seat = {e.name for e in rg.REGISTRY.values() if e.kind == "feature"
                 and "hot_seat" in e.modules}  # fmt: skip
     assert hot_seat == set(HOT_SEAT_FEATURES)
+    # I1b: every board feature is registered for the board module, and nothing else is
+    board = {e.name for e in rg.REGISTRY.values() if e.kind == "feature" and "board" in e.modules}
+    assert board == set(BOARD_FEATURES)
 
 
 def test_every_waiver_radar_feature_is_registered():

@@ -692,6 +692,14 @@ What his chances were worth while the game was still in doubt.
 
 ## Features
 
+### 40-yard dash
+
+Straight-line speed.
+
+- **Name:** `combine_forty`; **unit:** seconds; **used by:** board
+- **Formula:** fact_combine.forty (his latest row)
+- **Source:** twm.modules.board.features
+
 ### A player ahead of him is out
 
 Someone who played ahead of him is out: the classic waiver opportunity.
@@ -710,6 +718,30 @@ Younger players are likelier to grow into a bigger role.
 - **Source:** twm.modules.waiver_radar.features; dim_player.birth_date
 - **Waiver Radar reason:** "Is {value:.0f} years old: younger players more often grow into a bigger role"
 
+### Age after the season
+
+How old he is when the season ends; production falls with age, at different ages by position.
+
+- **Name:** `age`; **unit:** years; **used by:** board
+- **Formula:** (February 1 after season S - dim_player.birth_date) / 365.25; NULL without a birth date
+- **Source:** twm.modules.board.features
+
+### Age at the draft
+
+Young draftees break out more often: they were productive in college earlier.
+
+- **Name:** `age_at_draft`; **unit:** years; **used by:** board
+- **Formula:** (first day of his draft - birth_date) / 365.25; his entry year's draft when undrafted (available.DRAFT_FIRST_DAY, 2000-2026)
+- **Source:** twm.modules.board.features
+
+### Aging curve
+
+What a typical player of his position and age keeps of his points per game next season, learned only from earlier seasons.
+
+- **Name:** `age_curve_ratio`; **unit:** ratio; **used by:** board
+- **Formula:** the position's quadratic fit of PPG(s+1) / PPG(s) on age over earlier season pairs (s + 1 <= S; top-48 in s, 6+ games in s+1; 50+ pairs), evaluated at his age (clipped to the fitted ages)
+- **Source:** twm.modules.board.features
+
 ### Air-yards share
 
 Air yards are how far the ball travels past the line of scrimmage before it is caught or falls. A big share means a player gets the deep, valuable looks.
@@ -718,6 +750,14 @@ Air yards are how far the ball travels past the line of scrimmage before it is c
 - **Formula:** player's receiving air yards / his team's air yards on all pass attempts (completions, incompletions and interceptions) in that game
 - **Source:** fact_player_week.air_yards_share
 - **Verified:** exact on all 4,419 2025 player-weeks with air yards (denominator from fact_play)
+
+### Air-yards share
+
+His share of the deep game.
+
+- **Name:** `air_yards_share_s`; **unit:** share (0-1); **used by:** board
+- **Formula:** his receiving air yards / his team's in his games of S
+- **Source:** twm.modules.board.features
 
 ### Air-yards share, last 3 games
 
@@ -728,6 +768,14 @@ How much of the team's downfield passing is aimed at him.
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.air_yards_share
 - **Waiver Radar reason:** "Got {value:.0%} of his team's air yards (throws down the field) over the last {weeks} games"
 
+### Broad jump
+
+Explosiveness.
+
+- **Name:** `combine_broad_jump`; **unit:** inches; **used by:** board
+- **Formula:** fact_combine.broad_jump
+- **Source:** twm.modules.board.features
+
 ### Bye in the next 3 weeks
 
 A bye costs a week of production.
@@ -736,6 +784,22 @@ A bye costs a week of production.
 - **Formula:** his team has no scheduled game in at least one of the calendar weeks N+1 to N+3 (capped at the last regular-season week)
 - **Source:** twm.modules.waiver_radar.features; fact_schedule, dim_week
 - **Waiver Radar reason:** "Has a bye week in the next 3 weeks" (when no: "No bye week in the next 3 weeks")
+
+### Career targets
+
+Mileage as a receiver.
+
+- **Name:** `career_targets`; **unit:** targets; **used by:** board
+- **Formula:** targets 1999 .. S
+- **Source:** twm.modules.board.features
+
+### Career touches
+
+Mileage: wear accumulated over a career.
+
+- **Name:** `career_touches`; **unit:** touches; **used by:** board
+- **Formula:** carries + receptions in every regular season 1999 .. S (a career before 1999 is cut)
+- **Source:** twm.modules.board.features
 
 ### Carry share
 
@@ -771,6 +835,22 @@ How long the coach has been in charge of this team.
 - **Name:** `tenure_seasons`; **unit:** seasons; **used by:** hot_seat
 - **Formula:** seasons of the coach's current stint with the team, this one included: consecutive seasons back from this one in which he coached it a game (coach_game, kickoff <= as-of)
 - **Source:** twm.modules.hot_seat.features
+
+### Combine height
+
+Size.
+
+- **Name:** `combine_height`; **unit:** inches; **used by:** board
+- **Formula:** fact_combine.height_in
+- **Source:** twm.modules.board.features
+
+### Combine weight
+
+Size.
+
+- **Name:** `combine_weight`; **unit:** pounds; **used by:** board
+- **Formula:** fact_combine.wt
+- **Source:** twm.modules.board.features
 
 ### Consecutive losing seasons
 
@@ -856,6 +936,14 @@ Which of the offense's four tries to gain the distance this is.
 - **Formula:** the down before the snap
 - **Source:** fact_play.down; twm.modules.decisions.wp_data
 
+### Draft pick
+
+Draft capital, finer than the round.
+
+- **Name:** `drafted_pick`; **unit:** overall pick; **used by:** board
+- **Formula:** dim_player.draft_pick; NULL undrafted
+- **Source:** twm.modules.board.features
+
 ### Draft round
 
 Teams give early picks more chances.
@@ -864,6 +952,22 @@ Teams give early picks more chances.
 - **Formula:** dim_player.draft_round; NULL when undrafted (see is_undrafted)
 - **Source:** twm.modules.waiver_radar.features; dim_player.draft_round
 - **Waiver Radar reason:** "Was drafted in round {value:.0f}: teams give higher draft picks more chances"
+
+### Draft round
+
+Teams give early picks more chances.
+
+- **Name:** `drafted_round`; **unit:** round (1-7); **used by:** board
+- **Formula:** dim_player.draft_round; NULL when undrafted
+- **Source:** twm.modules.board.features
+
+### Entering his third season
+
+Second-year (rookie season just ended) vs third-year player.
+
+- **Name:** `third_season`; **unit:** boolean; **used by:** board
+- **Formula:** S - entry year = 1
+- **Source:** twm.modules.board.features
 
 ### Era: long extra point (2015+)
 
@@ -880,6 +984,14 @@ Kickoff rules changed where drives start after a score.
 - **Name:** `era_kickoff_2023`; **unit:** boolean (0/1); **used by:** decisions
 - **Formula:** 1 for seasons 2023 and later (fair-catch touchbacks to the 25 in 2023, the dynamic kickoff from 2024)
 - **Source:** fact_play.season; twm.modules.decisions.wp_data
+
+### Expected points per game (own xFP)
+
+The points his opportunities were worth to an average player.
+
+- **Name:** `xfp_per_game_s`; **unit:** points per game; **used by:** board
+- **Formula:** sum of his own walk-forward xFP (Regression Watch, each season from models trained on earlier seasons) over the regular season of S / games_s; NULL before 2009
+- **Source:** twm.modules.board.features
 
 ### Extra-point attempts per game
 
@@ -993,6 +1105,14 @@ How much win probability the coach's fourth-down calls have cost per game.
 - **Formula:** sum of wp_lost on the team's clear (graded) fourth downs in its games to date / games to date, from the stored Decision Report Card grades (never regraded); NULL before 2006 or when one of the games has no grades
 - **Source:** twm.modules.hot_seat.features
 
+### Games played
+
+How many games he played (with a recorded play).
+
+- **Name:** `games_s`; **unit:** games; **used by:** board
+- **Formula:** regular-season games with a stat line in S
+- **Source:** twm.modules.board.features
+
 ### Games played this season
 
 How many games he has a stat line in so far.
@@ -1067,6 +1187,14 @@ Which half the play is in. Halftime resets timeouts and gives one team the ball.
 - **Name:** `half_number`; **unit:** 1, 2 or 3; **used by:** decisions
 - **Formula:** 1 = first half, 2 = second half, 3 = overtime (from fact_play.game_half)
 - **Source:** fact_play.game_half; twm.modules.decisions.wp_data
+
+### Head-coach departure
+
+A new head coach usually means a new offense and new roles.
+
+- **Name:** `hc_departure`; **unit:** boolean; **used by:** board
+- **Formula:** his S team (his last regular-season game's) has a departure with last_season S in data/manual/coach_departures.csv announced before the snapshot's date (a blank date counts for fired/mutual/interim types only)
+- **Source:** twm.modules.board.features
 
 ### Home game next week
 
@@ -1318,6 +1446,14 @@ How much evidence the matchup number rests on (little early in the season).
 - **Formula:** sum of the visible games of the next opponents used by opp_fp_allowed_next3
 - **Source:** twm.modules.waiver_radar.features; fact_game
 
+### PPG change
+
+A big jump is likely to give some back.
+
+- **Name:** `ppg_change`; **unit:** points per game; **used by:** board
+- **Formula:** ppg_s - PPG in S-1 (NULL without S-1)
+- **Source:** twm.modules.board.features
+
 ### PPG rank at his position
 
 Where his points per game rank at his position so far.
@@ -1326,6 +1462,14 @@ Where his points per game rank at his position so far.
 - **Formula:** rank of ppg_to_date within his roster position among roster players with a game (ties share the better rank; the candidate pool's ppg_pos_rank)
 - **Source:** twm.modules.waiver_radar.features; twm.modules.waiver_radar.pool
 - **Waiver Radar reason:** "Ranks No. {value:.0f} among {pos}s in points per game this season"
+
+### PPG rank at his position
+
+Where he finished; also the prior-season-rank baseline's only input.
+
+- **Name:** `pos_rank_s`; **unit:** rank; **used by:** board
+- **Formula:** rank by ppg_s among his position's players with 8+ games in S (ties: more points, then id); NULL under 8 games
+- **Source:** twm.modules.board.features
 
 ### Point differential per game
 
@@ -1343,6 +1487,22 @@ How many points the defense gives up; fewer points allowed earn more fantasy poi
 - **Formula:** mean points_allowed (the opponent's score minus 6 for each touchdown the team's own offense gave up on an interception or fumble return), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game); NULL for K rows
 - **Source:** twm.modules.streamer.features; fact_defense_week.points_allowed
 - **Streamer reason:** "Allows {value:.1f} points per game"
+
+### Points over expected per game
+
+Scoring beyond his opportunity, which tends not to last.
+
+- **Name:** `fpoe_per_game_s`; **unit:** points per game; **used by:** board
+- **Formula:** ppg_s - xfp_per_game_s
+- **Source:** twm.modules.board.features
+
+### Points per game
+
+His scoring rate last season.
+
+- **Name:** `ppg_s`; **unit:** points per game; **used by:** board
+- **Formula:** regular-season fantasy points in S (config/scoring.yaml) / games_s
+- **Source:** twm.modules.board.features
 
 ### Points per game this season
 
@@ -1394,6 +1554,14 @@ How the team did last year.
 - **Formula:** the team's regular-season wins last season (ties 0.5), whoever coached; NULL for a team without games last season
 - **Source:** twm.modules.hot_seat.features
 
+### Prior seasons
+
+Experience; the Cliff needs 3+, the Breakout 0 or 1.
+
+- **Name:** `prior_seasons`; **unit:** seasons; **used by:** board
+- **Formula:** S - fact_roster_week.entry_year (= years_exp): his seasons in the league before S
+- **Source:** twm.modules.board.features
+
 ### Pythagorean wins
 
 The wins a team 'deserves' from its points scored and allowed.
@@ -1409,6 +1577,14 @@ Positive: the team has been unlucky in close games; negative: lucky.
 - **Name:** `pythag_minus_wins`; **unit:** wins; **used by:** hot_seat
 - **Formula:** pythagorean_wins - reg_wins
 - **Source:** twm.modules.hot_seat.features
+
+### RYOE trend
+
+Negative: his running is losing its edge.
+
+- **Name:** `ngs_ryoe_trend`; **unit:** yards; **used by:** board
+- **Formula:** ngs_ryoe_per_att_s - the S-1 value
+- **Source:** twm.modules.board.features
 
 ### Ranked before the season
 
@@ -1481,6 +1657,14 @@ The team drafted its quarterback of the future: owners tend to be patient.
 - **Formula:** a QB (fact_roster_week.position) on the team's latest visible weekly roster of the season (status not CUT/RET/UFA/TRD) was a first-round pick of this year's draft (dim_player draft_round = 1, draft_year = season); NULL without a visible roster
 - **Source:** twm.modules.hot_seat.features
 
+### Rookie target share
+
+An early role is the strongest sign of a coming breakout.
+
+- **Name:** `target_share_rookie`; **unit:** share (0-1); **used by:** board
+- **Formula:** target share in his rookie season (entry year; S itself for a first-year player)
+- **Source:** twm.modules.board.features
+
 ### Routes proxy
 
 About how many pass plays he was on the field for: a stand-in for routes run, which nflverse does not publish.
@@ -1489,6 +1673,30 @@ About how many pass plays he was on the field for: a stand-in for routes run, wh
 - **Formula:** mean over the team's last 3 games of (team dropbacks in the game x his snap share in it); dropbacks = plays with qb_dropback = 1 that are not two-point tries (passes, sacks, scrambles) (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_play.qb_dropback, fact_snaps.offense_pct
 - **Waiver Radar reason:** "Was on the field for about {value:.0f} pass plays per game over the last {weeks} games"
+
+### Running back
+
+Position flag (QB is the case with every flag off). A category, not an identifier.
+
+- **Name:** `pos_rb`; **unit:** boolean; **used by:** board
+- **Formula:** his point-in-time position in S is RB
+- **Source:** twm.modules.board.features
+
+### Rush share
+
+His share of the running game.
+
+- **Name:** `rush_share_s`; **unit:** share (0-1); **used by:** board
+- **Formula:** his carries / his team's carries in his games of S
+- **Source:** twm.modules.board.features
+
+### Rush yards over expected per carry
+
+Yards gained beyond what the blocking and defenders' positions predicted.
+
+- **Name:** `ngs_ryoe_per_att_s`; **unit:** yards; **used by:** board
+- **Formula:** sum(rush_yards_over_expected) / sum(rush_attempts) over his weekly NGS rushing rows of S (games with 10+ carries; 2018 on: upstream has no RYOE for 2016-2017)
+- **Source:** twm.modules.board.features
 
 ### Sacks per game
 
@@ -1531,6 +1739,22 @@ Time left before halftime or the end of the game; drives the two-minute drill.
 - **Formula:** seconds left in the current half (or overtime period), before the snap
 - **Source:** fact_play.half_seconds_remaining; twm.modules.decisions.wp_data
 
+### Separation (Next Gen Stats)
+
+How open he gets at the catch point; falls as receivers lose speed.
+
+- **Name:** `ngs_separation_s`; **unit:** yards; **used by:** board
+- **Formula:** target-weighted mean of avg_separation over his weekly NGS receiving rows of S (games with 5+ targets; 2016 on)
+- **Source:** twm.modules.board.features
+
+### Separation trend
+
+Negative: he is getting less open than a year before.
+
+- **Name:** `ngs_separation_trend`; **unit:** yards; **used by:** board
+- **Formula:** ngs_separation_s - the S-1 value
+- **Source:** twm.modules.board.features
+
 ### Snap share
 
 How often a player was on the field when his team had the ball. Coaches reveal their plans through snaps before the box score does.
@@ -1539,6 +1763,14 @@ How often a player was on the field when his team had the ball. Coaches reveal t
 - **Formula:** fact_snaps.offense_pct: the player's offensive snaps divided by his team's offensive snaps in that game (Pro Football Reference, rounded to 0.01)
 - **Source:** fact_snaps.offense_pct (joined by fact_snaps.gsis_id)
 - **Waiver Radar reason:** "{player}'s snap share went from {prev:.0%} to {value:.0%}"
+
+### Snap share
+
+How much of the time he is on the field.
+
+- **Name:** `snap_pct_s`; **unit:** share (0-1); **used by:** board
+- **Formula:** mean fact_snaps.offense_pct over his regular-season games with an offensive snap in S (2013 on; NULL before)
+- **Source:** twm.modules.board.features
 
 ### Snap share change
 
@@ -1576,6 +1808,22 @@ His playing time over the whole season so far.
 - **Source:** twm.modules.waiver_radar.features; fact_snaps.offense_pct
 - **Waiver Radar reason:** "Has played {value:.0%} of his team's snaps this season"
 
+### Snap-share trend
+
+Negative: his role is shrinking.
+
+- **Name:** `snap_pct_trend`; **unit:** share (0-1); **used by:** board
+- **Formula:** snap_pct_s - the S-1 value
+- **Source:** twm.modules.board.features
+
+### Speed score
+
+Speed adjusted for size.
+
+- **Name:** `combine_speed_score`; **unit:** index (100 = average RB); **used by:** board
+- **Formula:** weight x 200 / forty^4 (Bill Barnwell's Speed Score, Football Outsiders 2008)
+- **Source:** twm.modules.board.features
+
 ### Spread x time left
 
 The pregame expectation fades as the game goes on; this lets the model weigh it less and less.
@@ -1611,6 +1859,14 @@ The share of his team's passes thrown to a player. Targets are the raw material 
 - **Verified:** equals targets / (sum of targets of the player's team that week) on 358,395 of 358,434 player-weeks 2006-2026
 - **Waiver Radar reason:** "{player} drew {value:.0%} of his team's targets"
 
+### Target share
+
+His share of the passing game.
+
+- **Name:** `target_share_s`; **unit:** share (0-1); **used by:** board
+- **Formula:** his targets / his team's targets in his games of S
+- **Source:** twm.modules.board.features
+
 ### Target share, last 3 games
 
 How much of the passing game goes to him lately.
@@ -1628,6 +1884,14 @@ The share of his team's passes thrown his way last game.
 - **Formula:** nflverse target_share in the team's last game, 0 without a stat line (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.target_share
 - **Waiver Radar reason:** "Drew {value:.0%} of his team's targets last game"
+
+### Team ANY/A (QB quality)
+
+How good his team's passing game was.
+
+- **Name:** `team_any_a`; **unit:** yards per attempt; **used by:** board
+- **Formula:** his S team's (passing yards + 20 x TD - 45 x INT - sack yards) / (attempts + sacks) in the regular season of S (Pro Football Reference's ANY/A; no model column)
+- **Source:** twm.modules.board.features
 
 ### Team EPA per play \*
 
@@ -1716,6 +1980,14 @@ The coach was already in charge when our data begins; his tenure is a minimum.
 - **Formula:** the current stint reaches the warehouse's first season (1999), so the true tenure may be longer than tenure_seasons
 - **Source:** twm.modules.hot_seat.features
 
+### Tight end
+
+Position flag.
+
+- **Name:** `pos_te`; **unit:** boolean; **used by:** board
+- **Formula:** his point-in-time position in S is TE
+- **Source:** twm.modules.board.features
+
 ### Took over mid-season
 
 The coach replaced someone during this season (usually an interim coach).
@@ -1723,6 +1995,22 @@ The coach replaced someone during this season (usually an interim coach).
 - **Name:** `took_over_mid_season`; **unit:** boolean; **used by:** hot_seat
 - **Formula:** the team's first played regular-season game this season had another coach
 - **Source:** twm.modules.hot_seat.features
+
+### Touches
+
+Workload; very heavy loads (350+ for a running back) often precede a decline.
+
+- **Name:** `touches_s`; **unit:** touches; **used by:** board
+- **Formula:** carries + receptions in S
+- **Source:** twm.modules.board.features
+
+### Touches per game
+
+Workload per game.
+
+- **Name:** `touches_per_game_s`; **unit:** touches per game; **used by:** board
+- **Formula:** touches_s / games_s
+- **Source:** twm.modules.board.features
 
 ### Undrafted
 
@@ -1732,6 +2020,14 @@ He was not drafted.
 - **Formula:** no draft round in dim_player at the as-of
 - **Source:** twm.modules.waiver_radar.features; dim_player.draft_round
 - **Waiver Radar reason:** "Went undrafted" (when no: "Was drafted: teams give drafted players more chances")
+
+### Undrafted
+
+Not drafted.
+
+- **Name:** `undrafted`; **unit:** boolean; **used by:** board
+- **Formula:** no draft round in dim_player
+- **Source:** twm.modules.board.features
 
 ### Vacated carry share
 
@@ -1777,6 +2073,14 @@ What having the ball here is worth before halftime (or the end), the other team'
 - **Formula:** half_value(yardline_100, half_seconds_remaining): the offense's points minus the defense's from a 1st down at this spot and clock until halftime, a fixed table measured on the 1999-2005 first halves (wp_data.HALF_VALUE_TABLE), read linearly in yards and log seconds; 0 when the half is over
 - **Source:** fact_play.yardline_100, fact_play.half_seconds_remaining; twm.modules.decisions.wp_data
 
+### Vertical jump
+
+Explosiveness.
+
+- **Name:** `combine_vertical`; **unit:** inches; **used by:** board
+- **Formula:** fact_combine.vertical
+- **Source:** twm.modules.board.features
+
 ### WOPR (weighted opportunity rating)
 
 One number that blends how often a player is targeted with how deep those targets are; a good summary of a receiver's opportunity.
@@ -1812,6 +2116,14 @@ Where experts ranked it last week.
 - **Source:** twm.modules.streamer.features; fact_ranking_kdst.pos_rank
 - **Streamer reason:** "Experts ranked {player} #{value:.0f} at {pos} last week"
 
+### Wide receiver
+
+Position flag.
+
+- **Name:** `pos_wr`; **unit:** boolean; **used by:** board
+- **Formula:** his point-in-time position in S is WR
+- **Source:** twm.modules.board.features
+
 ### Wind
 
 Wind pushes long kicks off line.
@@ -1836,6 +2148,22 @@ Positive: the team has won more than the market expected; negative: fewer.
 - **Formula:** reg_wins - expected_wins
 - **Source:** twm.modules.hot_seat.features
 
+### Yards per team pass attempt
+
+Production per team dropback: rewards both role and efficiency.
+
+- **Name:** `yards_per_team_pass_att_s`; **unit:** yards; **used by:** board
+- **Formula:** his receiving yards / his team's pass attempts in his games of S
+- **Source:** twm.modules.board.features
+
+### Yards per touch
+
+Efficiency with the ball.
+
+- **Name:** `yards_per_touch_s`; **unit:** yards; **used by:** board
+- **Formula:** (rushing + receiving yards) / touches in S; NULL under 20 touches
+- **Source:** twm.modules.board.features
+
 ### Yards to go
 
 The distance the offense still needs; 3rd and 1 is far better than 3rd and 12.
@@ -1851,6 +2179,14 @@ Field position: 1 = at the opponent's goal line, 99 = backed up at your own 1.
 - **Name:** `yardline_100`; **unit:** yards (1-99); **used by:** decisions
 - **Formula:** yards between the line of scrimmage and the opponent's goal line
 - **Source:** fact_play.yardline_100; twm.modules.decisions.wp_data
+
+### Yards-per-touch trend
+
+Negative: he is getting less out of each touch than before.
+
+- **Name:** `yards_per_touch_trend`; **unit:** yards; **used by:** board
+- **Formula:** yards_per_touch_s - the mean of the S-1 and S-2 values that exist
+- **Source:** twm.modules.board.features
 
 ### Years of experience
 
@@ -1897,6 +2233,30 @@ His best week at his position in the window. A label detail: never a model featu
 - **Name:** `best_rank`; **unit:** rank; **used by:** waiver_radar
 - **Formula:** min(weekly_pos_rank) over the window weeks (NULL if never ranked)
 - **Source:** twm.modules.waiver_radar.labels.label_rows
+
+### Breakout
+
+A young player who becomes a fantasy starter.
+
+- **Name:** `y_breakout`; **unit:** boolean; **used by:** board
+- **Formula:** top-24 WR / top-12 TE / top-24 RB in PPG with 8+ games in S+1 (Breakout population: WR/TE/RB with S - entry year 0 or 1, a game in S, not top-36 WR / top-12 TE / top-24 RB in S)
+- **Source:** twm.modules.board.populations
+
+### Cliff
+
+A veteran whose scoring falls by 30% or more.
+
+- **Name:** `y_cliff`; **unit:** boolean; **used by:** board
+- **Formula:** PPG in S+1 <= 70% of PPG in S with 6+ games in S+1 (Cliff population: 3+ prior seasons, top-36 PPG at his position with 8+ games in S); NULL when y_missed
+- **Source:** twm.modules.board.populations
+
+### Cliff or missed
+
+The sensitivity run: missing most of the next season counts as a cliff.
+
+- **Name:** `y_cliff_or_missed`; **unit:** boolean; **used by:** board
+- **Formula:** y_cliff OR y_missed
+- **Source:** twm.modules.board.populations
 
 ### FG label: the kick was good
 
@@ -1945,6 +2305,14 @@ The weeks whose results decide the label. A label detail: never a model feature.
 - **Name:** `window_weeks`; **unit:** list of week numbers; **used by:** waiver_radar
 - **Formula:** the first 3 regular-season weeks after the as-of week N in which the player's as-of team has a game (its bye weeks skipped), up to the last regular-season week (dim_week.is_last_reg_week)
 - **Source:** twm.modules.waiver_radar.labels.label_rows (fact_game)
+
+### Missed next season
+
+Injury, benching, release or retirement: kept apart from the Cliff (owner, 2026-10-02).
+
+- **Name:** `y_missed`; **unit:** boolean; **used by:** board
+- **Formula:** fewer than 6 games in S+1 (Cliff population)
+- **Source:** twm.modules.board.populations
 
 ### Rest-of-season PPG (actual)
 

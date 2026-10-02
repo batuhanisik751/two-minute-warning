@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from twm import __version__
+from twm.modules.board.cli import board_app
 from twm.modules.decisions import production_cli as _decisions_pins  # noqa: F401 (P3 commands)
 from twm.modules.decisions.cli import decisions_app
 from twm.modules.hot_seat import production_cli as _hot_seat_pins  # noqa: F401 (H4a commands)
@@ -324,6 +325,7 @@ app.add_typer(radar_app, name="radar")
 app.add_typer(streamer_app, name="streamer")  # S1b: K and D/ST (src/twm/modules/streamer/cli.py)
 app.add_typer(decisions_app, name="decisions")  # G1: own WP (src/twm/modules/decisions/cli.py)
 app.add_typer(hotseat_app, name="hotseat")  # H1: candidates + label check (modules/hot_seat/cli.py)
+app.add_typer(board_app, name="board")  # I1b: Cliff & Breakout (src/twm/modules/board/cli.py)
 
 
 def _warehouse_or_exit(db: Path | None) -> Path:

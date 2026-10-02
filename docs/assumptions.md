@@ -687,3 +687,23 @@ files written 2026-09-29 14:18 UTC) and on a full 1999-2026 build:
   2000-2025 5,363 of 5,546 (96.7%). The fit check drops 24 links (drafted another year, or a
   debut before the combine or more than 6 seasons after it) and 12 rows sharing one id. Details
   and per-season/position rates: docs/warehouse.md "Combine and Next Gen Stats".
+
+## 17. Cliff & Breakout Board (I1b, checked 2026-10-02)
+
+Checked on the full 1999-2026 build (details and definitions: `docs/board.md`):
+
+- **Games played** = regular-season games with a `fact_player_week` stat line. For the 2022-2024
+  top-36 players, 390 of 431 equal the games with an offensive snap; 41 differ by 1-3 games.
+- **Prior seasons** = S - `entry_year`, equal to `fact_roster_week.years_exp` on every 2002-2026
+  QB/RB/WR/TE row; every 2002-2025 player-season with a stat line has a roster position.
+- **End-of-season snapshot** = the latest `available_at` of the season's rows (the roster's
+  post-Super Bowl row decides): Tuesday after the Super Bowl 14:00 UTC (2016+), a week later for
+  2002-2015. Free agency and the draft come later every year.
+- **Head-coach departures, blank dates**: of the 117 dated fired / mutual / interim rows none was
+  announced on or after its season's snapshot (2 of the 17 dated rows of other types were), so a
+  blank date counts as known only for those types.
+- **NGS**: the week-0 season totals list only qualified leaders (receiving about 125 a season, 43+
+  targets; rushing about 50, 85+ carries); the board uses the weekly rows (games with 5+ targets or
+  10+ carries). RYOE is NULL upstream for 2016-2017.
+- **Market baseline**: preseason FantasyPros ECR exists from 2020 (the 2019 preseason pages were
+  scraped only from January 2020); it is expert consensus, not ADP.

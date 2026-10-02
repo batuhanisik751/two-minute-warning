@@ -1495,6 +1495,149 @@ def _clock_entries() -> list[Entry]:
     ]  # fmt: skip
 
 
+def _board_entries() -> list[Entry]:
+    """I1b: the Cliff & Breakout Board features (twm.modules.board.features; docs/board.md). One
+    row per QB/RB/WR/TE with a regular-season stat line in season S, read at the end-of-season
+    snapshot of S; "games" = regular-season games with a stat line; "in his games" = summed over
+    the team-games he played."""
+    bf = "twm.modules.board.features"
+    feats = [
+        ("pos_rb", "Running back", "boolean", "his point-in-time position in S is RB",
+         "Position flag (QB is the case with every flag off). A category, not an identifier."),
+        ("pos_wr", "Wide receiver", "boolean", "his point-in-time position in S is WR",
+         "Position flag."),
+        ("pos_te", "Tight end", "boolean", "his point-in-time position in S is TE",
+         "Position flag."),
+        ("age", "Age after the season", "years",
+         "(February 1 after season S - dim_player.birth_date) / 365.25; NULL without a birth date",
+         "How old he is when the season ends; production falls with age, at different ages by "
+         "position."),
+        ("age_curve_ratio", "Aging curve", "ratio",
+         "the position's quadratic fit of PPG(s+1) / PPG(s) on age over earlier season pairs "
+         "(s + 1 <= S; top-48 in s, 6+ games in s+1; 50+ pairs), evaluated at his age (clipped "
+         "to the fitted ages)",
+         "What a typical player of his position and age keeps of his points per game next "
+         "season, learned only from earlier seasons."),
+        ("prior_seasons", "Prior seasons", "seasons",
+         "S - fact_roster_week.entry_year (= years_exp): his seasons in the league before S",
+         "Experience; the Cliff needs 3+, the Breakout 0 or 1."),
+        ("games_s", "Games played", "games", "regular-season games with a stat line in S",
+         "How many games he played (with a recorded play)."),
+        ("ppg_s", "Points per game", "points per game",
+         "regular-season fantasy points in S (config/scoring.yaml) / games_s",
+         "His scoring rate last season."),
+        ("pos_rank_s", "PPG rank at his position", "rank",
+         "rank by ppg_s among his position's players with 8+ games in S (ties: more points, "
+         "then id); NULL under 8 games",
+         "Where he finished; also the prior-season-rank baseline's only input."),
+        ("ppg_change", "PPG change", "points per game", "ppg_s - PPG in S-1 (NULL without S-1)",
+         "A big jump is likely to give some back."),
+        ("touches_s", "Touches", "touches", "carries + receptions in S",
+         "Workload; very heavy loads (350+ for a running back) often precede a decline."),
+        ("touches_per_game_s", "Touches per game", "touches per game", "touches_s / games_s",
+         "Workload per game."),
+        ("career_touches", "Career touches", "touches",
+         "carries + receptions in every regular season 1999 .. S (a career before 1999 is cut)",
+         "Mileage: wear accumulated over a career."),
+        ("career_targets", "Career targets", "targets", "targets 1999 .. S",
+         "Mileage as a receiver."),
+        ("yards_per_touch_s", "Yards per touch", "yards",
+         "(rushing + receiving yards) / touches in S; NULL under 20 touches",
+         "Efficiency with the ball."),
+        ("yards_per_touch_trend", "Yards-per-touch trend", "yards",
+         "yards_per_touch_s - the mean of the S-1 and S-2 values that exist",
+         "Negative: he is getting less out of each touch than before."),
+    ]  # fmt: skip
+    feats += [
+        ("snap_pct_s", "Snap share", "share (0-1)",
+         "mean fact_snaps.offense_pct over his regular-season games with an offensive snap in S "
+         "(2013 on; NULL before)", "How much of the time he is on the field."),
+        ("snap_pct_trend", "Snap-share trend", "share (0-1)", "snap_pct_s - the S-1 value",
+         "Negative: his role is shrinking."),
+        ("ngs_separation_s", "Separation (Next Gen Stats)", "yards",
+         "target-weighted mean of avg_separation over his weekly NGS receiving rows of S (games "
+         "with 5+ targets; 2016 on)",
+         "How open he gets at the catch point; falls as receivers lose speed."),
+        ("ngs_separation_trend", "Separation trend", "yards", "ngs_separation_s - the S-1 value",
+         "Negative: he is getting less open than a year before."),
+        ("ngs_ryoe_per_att_s", "Rush yards over expected per carry", "yards",
+         "sum(rush_yards_over_expected) / sum(rush_attempts) over his weekly NGS rushing rows "
+         "of S (games with 10+ carries; 2018 on: upstream has no RYOE for 2016-2017)",
+         "Yards gained beyond what the blocking and defenders' positions predicted."),
+        ("ngs_ryoe_trend", "RYOE trend", "yards", "ngs_ryoe_per_att_s - the S-1 value",
+         "Negative: his running is losing its edge."),
+        ("xfp_per_game_s", "Expected points per game (own xFP)", "points per game",
+         "sum of his own walk-forward xFP (Regression Watch, each season from models trained on "
+         "earlier seasons) over the regular season of S / games_s; NULL before 2009",
+         "The points his opportunities were worth to an average player."),
+        ("fpoe_per_game_s", "Points over expected per game", "points per game",
+         "ppg_s - xfp_per_game_s", "Scoring beyond his opportunity, which tends not to last."),
+        ("hc_departure", "Head-coach departure", "boolean",
+         "his S team (his last regular-season game's) has a departure with last_season S in "
+         "data/manual/coach_departures.csv announced before the snapshot's date (a blank date "
+         "counts for fired/mutual/interim types only)",
+         "A new head coach usually means a new offense and new roles."),
+        ("target_share_s", "Target share", "share (0-1)",
+         "his targets / his team's targets in his games of S", "His share of the passing game."),
+        ("target_share_rookie", "Rookie target share", "share (0-1)",
+         "target share in his rookie season (entry year; S itself for a first-year player)",
+         "An early role is the strongest sign of a coming breakout."),
+        ("yards_per_team_pass_att_s", "Yards per team pass attempt", "yards",
+         "his receiving yards / his team's pass attempts in his games of S",
+         "Production per team dropback: rewards both role and efficiency."),
+        ("air_yards_share_s", "Air-yards share", "share (0-1)",
+         "his receiving air yards / his team's in his games of S", "His share of the deep game."),
+        ("rush_share_s", "Rush share", "share (0-1)",
+         "his carries / his team's carries in his games of S", "His share of the running game."),
+    ]  # fmt: skip
+    feats += [
+        ("drafted_round", "Draft round", "round (1-7)",
+         "dim_player.draft_round; NULL when undrafted", "Teams give early picks more chances."),
+        ("drafted_pick", "Draft pick", "overall pick", "dim_player.draft_pick; NULL undrafted",
+         "Draft capital, finer than the round."),
+        ("undrafted", "Undrafted", "boolean", "no draft round in dim_player", "Not drafted."),
+        ("age_at_draft", "Age at the draft", "years",
+         "(first day of his draft - birth_date) / 365.25; his entry year's draft when undrafted "
+         "(available.DRAFT_FIRST_DAY, 2000-2026)",
+         "Young draftees break out more often: they were productive in college earlier."),
+        ("combine_forty", "40-yard dash", "seconds", "fact_combine.forty (his latest row)",
+         "Straight-line speed."),
+        ("combine_weight", "Combine weight", "pounds", "fact_combine.wt", "Size."),
+        ("combine_height", "Combine height", "inches", "fact_combine.height_in", "Size."),
+        ("combine_vertical", "Vertical jump", "inches", "fact_combine.vertical", "Explosiveness."),
+        ("combine_broad_jump", "Broad jump", "inches", "fact_combine.broad_jump",
+         "Explosiveness."),
+        ("combine_speed_score", "Speed score", "index (100 = average RB)",
+         "weight x 200 / forty^4 (Bill Barnwell's Speed Score, Football Outsiders 2008)",
+         "Speed adjusted for size."),
+        ("team_any_a", "Team ANY/A (QB quality)", "yards per attempt",
+         "his S team's (passing yards + 20 x TD - 45 x INT - sack yards) / (attempts + sacks) "
+         "in the regular season of S (Pro Football Reference's ANY/A; no model column)",
+         "How good his team's passing game was."),
+        ("third_season", "Entering his third season", "boolean", "S - entry year = 1",
+         "Second-year (rookie season just ended) vs third-year player."),
+    ]  # fmt: skip
+    out = [Entry(name=n, title=t, kind="feature", modules=("board",), unit=u, formula=f,
+                 explanation=e, source=bf, step="I1b") for n, t, u, f, e in feats]  # fmt: skip
+    labels = [
+        ("y_cliff", "Cliff", "PPG in S+1 <= 70% of PPG in S with 6+ games in S+1 (Cliff "
+         "population: 3+ prior seasons, top-36 PPG at his position with 8+ games in S); NULL "
+         "when y_missed", "A veteran whose scoring falls by 30% or more."),
+        ("y_missed", "Missed next season", "fewer than 6 games in S+1 (Cliff population)",
+         "Injury, benching, release or retirement: kept apart from the Cliff (owner, 2026-10-02)."),
+        ("y_cliff_or_missed", "Cliff or missed", "y_cliff OR y_missed",
+         "The sensitivity run: missing most of the next season counts as a cliff."),
+        ("y_breakout", "Breakout", "top-24 WR / top-12 TE / top-24 RB in PPG with 8+ games in "
+         "S+1 (Breakout population: WR/TE/RB with S - entry year 0 or 1, a game in S, not "
+         "top-36 WR / top-12 TE / top-24 RB in S)",
+         "A young player who becomes a fantasy starter."),
+    ]  # fmt: skip
+    out += [Entry(name=n, title=t, kind="label", modules=("board",), unit="boolean", formula=f,
+                  explanation=e, source="twm.modules.board.populations", step="I1b")
+             for n, t, f, e in labels]  # fmt: skip
+    return out
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
     pool = _pool_texts()
@@ -1917,6 +2060,7 @@ def _entries() -> list[Entry]:
         *_grade_entries(),
         *_clock_entries(),
         *_hot_seat_entries(),
+        *_board_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
             name="weekly_pos_rank",

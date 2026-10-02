@@ -608,4 +608,5 @@ def test_hot_seat_terms_are_on_the_published_glossary_since_the_page_ships():
     names = set(collect.glossary().get_column("name").to_list())
     hot = {e.name for e in registry.entries() if set(e.modules) == {"hot_seat"}}
     assert hot and hot <= names  # step H4b: the Hot-Seat pages use them
-    assert {e.name for e in registry.entries()} == names
+    # every term except the board's (unpublished until its web step, I2)
+    assert {e.name for e in registry.entries() if set(e.modules) != {"board"}} == names

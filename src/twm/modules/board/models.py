@@ -56,11 +56,12 @@ def specs(features: tuple[str, ...], label: str) -> dict[str, Spec]:
     }  # fmt: skip
 
 
-def missed_specs() -> dict[str, Spec]:
-    """``y_missed``: the simple logit and the PPG-rank baseline."""
+def missed_specs(extra: tuple[str, ...] = ()) -> dict[str, Spec]:
+    """``y_missed``: the simple logit (+ ``extra``: the preseason features) and the PPG-rank
+    baseline."""
     return {
         "logit_simple": Spec("logit_simple", lambda: InnerCvLogit("logit_simple"),
-                             MISSED_FEATURES, "y_missed", "model"),
+                             (*MISSED_FEATURES, *extra), "y_missed", "model"),
         "base_ppg_rank": Spec("base_ppg_rank", lambda: InnerCvLogit("base_ppg_rank"),
                               BASELINE_FEATURES, "y_missed", "baseline"),
     }  # fmt: skip

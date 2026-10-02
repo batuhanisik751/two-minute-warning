@@ -15,7 +15,7 @@ DEPARTURES_CSV = "coach_departures.csv"
 REPORT_DIR = Path("reports/board")
 
 
-def _dataset(db: Path, progress) -> object:
+def _dataset(db: Path, progress, snapshot: str = "end_of_season") -> object:
     """Build the dataset (own xFP from Regression Watch's folds, departures from the owner's
     file) and write it to data/board/dataset.parquet."""
     from twm.config import ROOT, settings
@@ -28,8 +28,12 @@ def _dataset(db: Path, progress) -> object:
     deps = bf.read_departures(settings().path("manual") / DEPARTURES_CSV)
     progress(f"departures: {deps.rows.height} rows, {deps.n_blank_date} blank dates "
              f"({deps.n_blank_unknown} never counted as known)")  # fmt: skip
-    df = bd.build_dataset(db, xfp_games=xfp, departures=deps, progress=progress)
-    path = bd.write_dataset(df, ROOT / bd.OUT_DIR)
+    if snapshot == "preseason":  # step I2a
+        df = bd.build_preseason_dataset(db, xfp_games=xfp, departures=deps, progress=progress)
+        path = bd.write_dataset(df, ROOT / bd.OUT_DIR, "dataset_preseason.parquet")
+    else:
+        df = bd.build_dataset(db, xfp_games=xfp, departures=deps, progress=progress)
+        path = bd.write_dataset(df, ROOT / bd.OUT_DIR)
     progress(f"wrote {path} ({df.height} rows)")
     return df
 
@@ -63,6 +67,12 @@ def backtest_cmd(
         help="Reuse variants already evaluated on the same dataset "
         "(data/board/runs/); run one --variant at a time, then all to write the full reports.",
     ),
+    snapshot: str = typer.Option(
+        "end_of_season",
+        "--snapshot",
+        help="end_of_season (I1b) or preseason (I2a: 1 h before week 1 of S+1; also runs the "
+        "end-of-season variants for the comparison; writes reports/board/preseason_*).",
+    ),
 ) -> None:
     """Rebuild the dataset, run the walk-forward of every variant (snapshots 2007-2024, labels
     2008-2025) and write reports/board/{cliff,breakout}.md + csv."""
@@ -78,6 +88,8 @@ def backtest_cmd(
 
     t0 = time.perf_counter()
     say = lambda m: typer.echo(f"[{time.perf_counter() - t0:6.0f} s] {m}", err=True)  # noqa: E731
+    if snapshot not in bt.SNAPSHOTS:
+        raise typer.BadParameter(f"unknown snapshot {snapshot!r}; known: {bt.SNAPSHOTS}")
     known = bt.variants()
     bad = [v for v in variant if v not in known]
     if bad:
@@ -87,10 +99,19 @@ def backtest_cmd(
     assert isinstance(df, pl.DataFrame)
     cache = ROOT / "data/board/runs" if resume else None
     reps = br.run_all(df, path, tuple(variant) or None, progress=say, cache=cache)
+    prefix = ""
+    if snapshot == "preseason":
+        eos = {n: r.run.scored.select("season", "gsis_id", pl.col(f"p_{r.primary}").alias("p_eos"))
+               for n, r in reps.items()}  # fmt: skip
+        pre = _dataset(path, say, "preseason")
+        assert isinstance(pre, pl.DataFrame)
+        reps = br.run_all(pre, path, tuple(variant) or None, progress=say, cache=cache,
+                          snapshot="preseason", eos=eos)  # fmt: skip
+        prefix = "preseason_"
     con = duckdb.connect(str(path), read_only=True)
     try:  # names for the report's tables only (never a feature)
         names = con.sql("SELECT gsis_id, display_name FROM dim_player").pl()
     finally:
         con.close()
-    for p in br.write_reports(reps, out or ROOT / REPORT_DIR, names):
+    for p in br.write_reports(reps, out or ROOT / REPORT_DIR, names, prefix):
         typer.echo(f"wrote {p}")

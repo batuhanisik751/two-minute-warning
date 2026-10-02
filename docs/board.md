@@ -99,6 +99,42 @@ snapshot no offseason move has happened yet and the warehouse has only in-season
 (no point-in-time offseason roster), so the number would be zero or wrong; it belongs to I2's
 later snapshots, and only if a dated roster source exists.
 
+## Preseason snapshot (step I2a)
+
+Same rows and labels as the end-of-season snapshot of S, read one hour before the first
+regular-season week-1 kickoff of S+1 (`fact_game.kickoff_utc`; e.g. 2017-09-07 23:30 UTC for S =
+2016). Every feature above is recomputed through an `AsOfView` at that moment (only
+`hc_departure` can change: later-dated departures are now known), and these exist only now
+(module `twm.modules.board.preseason`, code `twm board backtest --snapshot preseason`):
+
+- **Week-1 chart**: `fact_depth_chart` rows of S+1 visible at the as-of: the daily pull with the
+  latest `dt` (2025 on), else the legacy week-1 REG chart (public the Wednesday before week 1).
+  `depth_rank` 1 = the starter of a slot: legacy ranks are per slot already (two or three WRs
+  share rank 1); a daily pull numbers a position's players across its slots (WR 1 .. 15), so its
+  rank is renumbered within the slot (`pos_slot`) in the pull's order. Week-1 rosters
+  (`fact_roster_week`) are public only after week 1 and are not used.
+- `dc_absent`: no row of his on any team's chart (cut, unsigned, retired, hurt; also every player
+  of a team whose chart is missing). Flagged, never dropped; every feature below is then NULL.
+- `team_change_s1`: his chart team (the one where he has his best offense rank) differs from his
+  S team (his last regular-season game's).
+- `depth_rank_s1`: his best depth rank among his offense slots of his position (RB: RB or HB);
+  NULL when he is listed only elsewhere (FB, KR).
+- `new_competitor_s1`: a teammate of the same position at his depth rank or ahead who was on none
+  of that team's regular-season weekly rosters of S (a rookie or an arrival).
+- `qb1_change_s1`: the team's S primary starter (most regular-season pass attempts for it in S;
+  ties: the lower id) is not among its best-ranked QBs on the chart.
+- `vacated_targets_share_s1` / `vacated_carries_share_s1`: the team's S regular-season targets /
+  carries by players with no row on its chart, over the team's S total (a daily row without a
+  `gsis_id` cannot be matched: that player counts as gone).
+- `hc_change_s1`: his chart team has a departure with `last_season` = S announced before the
+  as-of's date (blank dates: the `hc_departure` rule).
+
+NULL inputs get the models' missing indicators. The variants, folds, metrics and intervals are
+I1b's; every model except the PPG-rank baseline gets the eight features. `eos` in
+`reports/board/preseason_{cliff,breakout}.md` is the end-of-season report's primary model on the
+same rows, compared with paired season-block intervals; the ECR is the same preseason scrape,
+now taken about when this snapshot is.
+
 ## Models and evaluation
 
 - `logit`: L2 logistic regression = the Hot-Seat `InnerCvLogit` (the Radar's `LogitEstimator`;

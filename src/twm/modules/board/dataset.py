@@ -49,22 +49,54 @@ def build_dataset(
     """Features of every snapshot in ``seasons`` (default: every complete season) and labels."""
     say = progress or (lambda _m: None)
     done = complete_seasons(db)
-    seasons = sorted(seasons or done)
     parts = []
-    for s in seasons:
+    for s in sorted(seasons or done):
         with AsOfView(db, bs.snapshot_as_of(db, s)) as v:
             parts.append(bf.snapshot_features(v, s, xfp_games=xfp_games, departures=departures))
         say(f"snapshot {s}: {parts[-1].height} players")
-    rows = pl.concat(parts, how="vertical")
-    last = max(done)
+    return _labelled(db, pl.concat(parts, how="vertical"), max(done))
+
+
+def _labelled(db: Path | str, rows: pl.DataFrame, last: int) -> pl.DataFrame:
     # outcomes of S+1 for every S < last: the player seasons visible at the last snapshot
     with AsOfView(db, bs.snapshot_as_of(db, last)) as v:
         nxt = pop.outcomes(bs.player_seasons(v, last))
     return pop.add_labels(rows, nxt, last).sort("season", "gsis_id")
 
 
-def write_dataset(df: pl.DataFrame, out_dir: Path) -> Path:
+def build_preseason_dataset(
+    db: Path | str,
+    *,
+    xfp_games: pl.DataFrame | None,
+    departures: bf.Departures,
+    seasons: list[int] | None = None,
+    progress: Progress | None = None,
+) -> pl.DataFrame:
+    """Step I2a: the same rows and labels read at the PRESEASON snapshot of each S (one hour
+    before the first week-1 kickoff of S+1; :mod:`twm.modules.board.preseason`). A season whose
+    as-of has not passed yet is skipped."""
+    from datetime import UTC, datetime
+
+    from twm.modules.board import preseason as pre
+
+    say = progress or (lambda _m: None)
+    done = complete_seasons(db)
+    parts = []
+    for s in sorted(seasons or done):
+        try:
+            at = pre.preseason_as_of(db, s)
+        except bs.SeasonNotOverError:
+            continue
+        if at > datetime.now(UTC):
+            continue
+        with AsOfView(db, at) as v:
+            parts.append(pre.preseason_features(v, s, xfp_games=xfp_games, departures=departures))
+        say(f"preseason {s} ({at:%Y-%m-%d %H:%M} UTC): {parts[-1].height} players")
+    return _labelled(db, pl.concat(parts, how="vertical"), max(done))
+
+
+def write_dataset(df: pl.DataFrame, out_dir: Path, name: str = "dataset.parquet") -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "dataset.parquet"
+    path = out_dir / name
     df.write_parquet(path)
     return path

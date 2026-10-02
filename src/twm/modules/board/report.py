@@ -37,12 +37,14 @@ class VariantReport:
 
     def to_cache(self) -> dict:
         """Plain data only (the fitted models and the variant's estimator factories stay out)."""
-        return {"variant": self.run.variant.name, "scored": self.run.scored,
+        return {"variant": self.run.variant.name, "snapshot": self.run.variant.snapshot,
+                "scored": self.run.scored,
                 **{k: getattr(self, k) for k in self.CACHED}}  # fmt: skip
 
     @classmethod
     def from_cache(cls, d: dict) -> VariantReport:
-        run = bt.VariantRun(bt.variants()[d["variant"]], d["scored"])
+        snap = d.get("snapshot", "end_of_season")
+        run = bt.VariantRun(bt.variants(snap)[d["variant"]], d["scored"])
         return cls(run=run, **{k: d[k] for k in cls.CACHED})
 
     @property
@@ -102,9 +104,10 @@ def evaluate(run: bt.VariantRun, ranks: dict[int, pl.DataFrame]) -> VariantRepor
     run.scored = df
     models = v.models
     base = [m for m in models if v.specs[m].kind == "baseline"]
-    rows = ev.slice_table(df, models, base, "all")
+    eos = ["eos"] if "p_eos" in df.columns else []  # I2a: the end-of-season primary's score
+    rows = ev.slice_table(df, [*models, *eos], [*base, *eos], "all")
     era = df.filter(pl.col("season") >= ev.ECR_FIRST_SNAPSHOT, pl.col("p_ecr").is_not_null())
-    rows += ev.slice_table(era, [*models, "ecr"], [*base, "ecr"], "ecr_era")
+    rows += ev.slice_table(era, [*models, *eos, "ecr"], [*base, *eos, "ecr"], "ecr_era")
     metrics = pl.DataFrame(rows, infer_schema_length=None).with_columns(
         pl.lit(v.name).alias("variant")
     )
@@ -131,30 +134,43 @@ def run_all(
     names: tuple[str, ...] | None = None,
     progress: Progress | None = None,
     cache: Path | None = None,
+    snapshot: str = "end_of_season",
+    eos: dict[str, pl.DataFrame] | None = None,
 ) -> dict[str, VariantReport]:
     """Walk-forward and evaluation of every variant (``names``: a subset). With ``cache``, a
     variant already evaluated on the SAME dataset (its file name carries the dataset's hash) is
     loaded instead of refit, and every new one is saved there (``twm board backtest --resume``:
-    long runs can be split into short ones)."""
+    long runs can be split into short ones). ``eos`` (preseason, step I2a): per variant the
+    end-of-season run's (season, gsis_id, p_eos), compared on the same rows."""
     import hashlib
     import pickle
 
     say = progress or (lambda _m: None)
-    key = hashlib.sha256(dataset.write_ipc(None).getvalue()).hexdigest()[:16]
+    h = hashlib.sha256(dataset.write_ipc(None).getvalue())
+    for e in (eos or {}).values():
+        h.update(e.sort("season", "gsis_id").write_ipc(None).getvalue())
+    key = h.hexdigest()[:16]
+    tag = "" if snapshot == "end_of_season" else f"{snapshot}_"
     seasons = [s for s in bt.TEST_SEASONS if s >= ev.ECR_FIRST_SNAPSHOT]
     ranks: dict[int, pl.DataFrame] | None = None
     out = {}
-    for name, v in bt.variants().items():
+    for name, v in bt.variants(snapshot).items():
         if names and name not in names:
             continue
-        path = cache / f"{name}-{key}.pkl" if cache is not None else None
+        path = cache / f"{tag}{name}-{key}.pkl" if cache is not None else None
         if path is not None and path.exists():
             out[name] = VariantReport.from_cache(pickle.loads(path.read_bytes()))  # our own file
             say(f"{name}: reused {path.name}")
             continue
         if ranks is None:
             ranks = {s: be.ecr_ranks(db, s + 1) for s in seasons}
-        out[name] = evaluate(bt.run_variant(dataset, v, progress=say), ranks)
+        run = bt.run_variant(dataset, v, progress=say)
+        if eos is not None:
+            run.scored = run.scored.join(eos[name], on=["season", "gsis_id"], how="left")
+            gap = run.scored.get_column("p_eos").null_count()
+            if gap:
+                raise ValueError(f"{name}: {gap} preseason rows have no end-of-season score")
+        out[name] = evaluate(run, ranks)
         if path is not None:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(pickle.dumps(out[name].to_cache()))
@@ -192,7 +208,8 @@ def results_section(rep: VariantReport) -> list[str]:
     slices = (("all", "snapshots 2007-2024 (labels 2008-2025)"),
               ("ecr_era", "snapshots 2019-2024 (labels 2020-2025), with the ECR"))  # fmt: skip
     for sl, what in slices:
-        models = [*v.models, *(["ecr"] if sl == "ecr_era" else [])]
+        eos = ["eos"] if "eos" in set(m.get_column("model").to_list()) else []
+        models = [*v.models, *eos, *(["ecr"] if sl == "ecr_era" else [])]
         rows = [[f"`{mo}`", _ci(m, sl, mo, "pr_auc"), _ci(m, sl, mo, "p_at_10"),
                  _ci(m, sl, mo, "p_at_20"), _ci(m, sl, mo, "brier")] for mo in models]  # fmt: skip
         lines += [f"**{what}**", ""]
@@ -310,6 +327,19 @@ INTRO = {
         "(2020+ only; ECR, not ADP), scored as minus the ECR rank (unranked last).", "",
     ],
 }  # fmt: skip
+_PRE = (
+    "Step I2a: the same rows and labels as the end-of-season report, read at the PRESEASON "
+    "snapshot (one hour before the first week-1 kickoff of S+1, point in time): every I1b "
+    "feature plus the week-1 depth chart (team change, depth rank, new competition, QB1 change, "
+    "vacated targets and carries), a head-coach change of the week-1 team and a flag for players "
+    'on no week-1 chart (docs/board.md, "Preseason snapshot"). `eos` = the end-of-season '
+    "report's primary model on the same rows; the ECR (2020+) is now taken about when this "
+    "snapshot is (the last August/September scrape before week 1)."
+)
+PRESEASON_INTRO = {
+    "cliff": ["# Cliff backtest at the preseason snapshot (step I2a)", "", _PRE, ""],
+    "breakout": ["# Breakout backtest at the preseason snapshot (step I2a)", "", _PRE, ""],
+}
 CAVEATS = [
     "## Read before trusting", "",
     "- Intervals resample whole seasons (18 in `all`, 6 in `ecr_era`): the ECR-era intervals are "
@@ -325,26 +355,30 @@ CAVEATS = [
 ]  # fmt: skip
 
 
-def write_reports(reps: dict[str, VariantReport], out_dir: Path, names: pl.DataFrame) -> list[Path]:
-    """reports/board/{cliff,breakout}.md, {pop}.csv (metrics), {pop}_seasons.csv and
-    {pop}_features.csv for the populations with a variant in ``reps``."""
+def write_reports(
+    reps: dict[str, VariantReport], out_dir: Path, names: pl.DataFrame, prefix: str = ""
+) -> list[Path]:
+    """reports/board/{prefix}{cliff,breakout}.md, .csv (metrics), _seasons.csv and _features.csv
+    for the populations with a variant in ``reps`` (prefix "preseason_": step I2a)."""
+    intro = PRESEASON_INTRO if prefix else INTRO
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
     for pop, names_ in POPULATIONS.items():
         got = [reps[n] for n in names_ if n in reps]
         if not got:
             continue
-        lines = [*INTRO[pop], *population_table(reps, pop), "## Results", ""]
+        lines = [*intro[pop], *population_table(reps, pop), "## Results", ""]
         for rep in got:
             lines += results_section(rep) + features_section(rep) + calibration_section(rep)
             lines += disagreement_section(rep, names)
         lines += CAVEATS
-        md = out_dir / f"{pop}.md"
+        md = out_dir / f"{prefix}{pop}.md"
         md.write_text("\n".join(lines).rstrip() + "\n")
-        pl.concat([r.metrics for r in got], how="vertical").write_csv(out_dir / f"{pop}.csv")
+        metrics = pl.concat([r.metrics for r in got], how="vertical")
+        metrics.write_csv(out_dir / f"{prefix}{pop}.csv")
         pl.concat([r.seasons for r in got], how="diagonal").write_csv(
-            out_dir / f"{pop}_seasons.csv")  # fmt: skip
+            out_dir / f"{prefix}{pop}_seasons.csv")  # fmt: skip
         imp = [r.importance.with_columns(pl.lit(r.run.variant.name).alias("variant")) for r in got]
-        pl.concat(imp, how="vertical").write_csv(out_dir / f"{pop}_features.csv")
-        paths += [md, out_dir / f"{pop}.csv"]
+        pl.concat(imp, how="vertical").write_csv(out_dir / f"{prefix}{pop}_features.csv")
+        paths += [md, out_dir / f"{prefix}{pop}.csv"]
     return paths

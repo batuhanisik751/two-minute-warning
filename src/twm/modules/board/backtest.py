@@ -26,6 +26,7 @@ import polars as pl
 
 from twm.backtest.walkforward import WalkForwardResult, walk_forward
 from twm.modules.board import models as bm
+from twm.modules.board import preseason as pre
 from twm.modules.hot_seat.models import InnerCvLogit, Spec, neg_log_loss
 
 FIRST_TEST_SEASON = 2007
@@ -44,30 +45,39 @@ class Variant:
     ecr_kind: str  # how the ECR baseline scores the rows: "fall" or "rise"
     title: str
     positions: tuple[str, ...] = ()  # breakout: the positions of the rows (empty: all)
+    snapshot: str = "end_of_season"  # or "preseason" (I2a: + preseason.NEW_FEATURES)
 
     @property
     def models(self) -> list[str]:
         return list(self.specs)
 
 
-def variants() -> dict[str, Variant]:
-    cliff = bm.specs(bm.CLIFF_FEATURES, "y_cliff")
-    sens = bm.specs(bm.CLIFF_FEATURES, "y_cliff_or_missed")
+SNAPSHOTS = ("end_of_season", "preseason")
+
+
+def variants(snapshot: str = "end_of_season") -> dict[str, Variant]:
+    """The five variants; at the ``preseason`` snapshot every model (the PPG-rank baseline
+    excepted) also gets :data:`twm.modules.board.preseason.NEW_FEATURES` (step I2a)."""
+    if snapshot not in SNAPSHOTS:
+        raise ValueError(f"unknown snapshot {snapshot!r}")
+    x = pre.NEW_FEATURES if snapshot == "preseason" else ()
+    cliff = bm.specs((*bm.CLIFF_FEATURES, *x), "y_cliff")
+    sens = bm.specs((*bm.CLIFF_FEATURES, *x), "y_cliff_or_missed")
     return {
         v.name: v
         for v in (
             Variant("cliff_main", "cliff", "y_cliff", cliff, "fall",
-                    "Cliff (6+ games in S+1; main model)"),
-            Variant("cliff_missed", "cliff", "y_missed", bm.missed_specs(), "fall",
-                    "Missed most of S+1 (under 6 games)"),
+                    "Cliff (6+ games in S+1; main model)", snapshot=snapshot),
+            Variant("cliff_missed", "cliff", "y_missed", bm.missed_specs(x), "fall",
+                    "Missed most of S+1 (under 6 games)", snapshot=snapshot),
             Variant("cliff_sensitivity", "cliff", "y_cliff_or_missed", sens, "fall",
-                    "Cliff counting a missed season as a cliff (sensitivity)"),
+                    "Cliff counting a missed season as a cliff (sensitivity)", snapshot=snapshot),
             Variant("breakout_wr_te", "breakout", "y_breakout",
-                    bm.specs(bm.BREAKOUT_FEATURES, "y_breakout"), "rise", "Breakout WR/TE",
-                    ("WR", "TE")),
+                    bm.specs((*bm.BREAKOUT_FEATURES, *x), "y_breakout"), "rise", "Breakout WR/TE",
+                    ("WR", "TE"), snapshot),
             Variant("breakout_rb", "breakout", "y_breakout",
-                    bm.specs(bm.BREAKOUT_RB_FEATURES, "y_breakout"), "rise", "Breakout RB",
-                    ("RB",)),
+                    bm.specs((*bm.BREAKOUT_RB_FEATURES, *x), "y_breakout"), "rise", "Breakout RB",
+                    ("RB",), snapshot),
         )
     }  # fmt: skip
 

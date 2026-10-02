@@ -1290,6 +1290,38 @@ How many games the betting market expected the team to have won by now.
 - **Formula:** sum over the games to date of the team's pregame win probability: de-vigged closing moneylines p = (1/o_team) / (1/o_team + 1/o_opp) on decimal odds (American +150 -> 2.5, -200 -> 1.5); a game without both moneylines uses 1 / (1 + exp(-k x spread_line)) (home side; k fit by maximum likelihood on every played game of the seasons before, ties out); NULL if a game has neither
 - **Source:** twm.modules.hot_seat.features
 
+### New competition
+
+A rookie or an arrival shares his role.
+
+- **Name:** `new_competitor_s1`; **unit:** boolean; **used by:** board
+- **Formula:** a same-position teammate at his depth rank or ahead on that chart was on none of that team's regular-season weekly rosters of S
+- **Source:** twm.modules.board.preseason
+
+### New head coach (week-1 team)
+
+A new head coach on the team he will play for.
+
+- **Name:** `hc_change_s1`; **unit:** boolean; **used by:** board
+- **Formula:** his week-1 chart team has a departure with last_season S in coach_departures.csv announced before the as-of's date (blank dates: the hc_departure rule)
+- **Source:** twm.modules.board.preseason
+
+### New starting QB
+
+A new quarterback changes the targets.
+
+- **Name:** `qb1_change_s1`; **unit:** boolean; **used by:** board
+- **Formula:** the team's S primary starter (most regular-season pass attempts for it in S) is not among its best-ranked QBs on that chart
+- **Source:** twm.modules.board.preseason
+
+### New team
+
+He moved in the offseason.
+
+- **Name:** `team_change_s1`; **unit:** boolean; **used by:** board
+- **Formula:** his week-1 chart team (the team where he has his best offense rank) differs from his S team (his last regular-season game's)
+- **Source:** twm.modules.board.preseason
+
 ### New team this season
 
 He changed teams during the season (trade or signing).
@@ -1387,6 +1419,14 @@ Whether his next matchups are soft (above 1) or tough (below 1) for his position
 - **Formula:** mean over his team's next 3 scheduled opponents (fact_schedule weeks after N, byes skipped; the listed cancelled games count until played) of: fantasy points the opponent's defense allowed per game to his position group this season (visible games; the scorer's snap-count position of that game, else his latest roster position) / the league average per team-game for the group; an opponent without a visible game counts 1.0; NULL when his team has no game left. No betting lines (spec 6.4)
 - **Source:** twm.modules.waiver_radar.features; fact_schedule, fact_player_week, fact_snaps
 - **Waiver Radar reason:** "Soft schedule: his next opponents have allowed {value:.2f} times the average fantasy points to {pos}s"
+
+### Not on a week-1 depth chart
+
+Cut, unsigned, retired or hurt before the season starts.
+
+- **Name:** `dc_absent`; **unit:** boolean; **used by:** board
+- **Formula:** no row of his on any team's latest week-1 depth chart of S+1 visible 1 h before the first week-1 kickoff (fact_depth_chart; the other preseason features are then NULL)
+- **Source:** twm.modules.board.preseason
 
 ### Offense at home
 
@@ -2029,6 +2069,14 @@ Not drafted.
 - **Formula:** no draft round in dim_player
 - **Source:** twm.modules.board.features
 
+### Vacated carries
+
+Carries left behind by departed teammates.
+
+- **Name:** `vacated_carries_share_s1`; **unit:** share (0-1); **used by:** board
+- **Formula:** the same with carries
+- **Source:** twm.modules.board.preseason
+
 ### Vacated carry share
 
 Carries freed up by teammates who are out.
@@ -2064,6 +2112,14 @@ Targets freed up by players at his own position: the most direct path to more wo
 - **Formula:** vacated_target_share over unavailable teammates of his own position group only
 - **Source:** twm.modules.waiver_radar.features; as vacated_target_share
 - **Waiver Radar reason:** "{teammate} ({pos}) {why}: {value:.0%} of the team's targets are up for grabs at his position"
+
+### Vacated targets
+
+Targets left behind by departed teammates.
+
+- **Name:** `vacated_targets_share_s1`; **unit:** share (0-1); **used by:** board
+- **Formula:** the team's S regular-season targets by players absent from its week-1 chart / the team's S targets
+- **Source:** twm.modules.board.preseason
 
 ### Value of the ball before the half ends
 
@@ -2106,6 +2162,14 @@ Flags the games whose weather was filled in, so the model can treat them apart.
 - **Name:** `weather_missing`; **unit:** boolean (0/1); **used by:** decisions
 - **Formula:** 1 for an outdoor game whose temperature or wind is unknown even after the weather text (then imputed)
 - **Source:** fact_game.temp/wind, fact_play.weather; twm.modules.decisions.fieldgoal
+
+### Week-1 depth rank
+
+Starter or backup going in.
+
+- **Name:** `depth_rank_s1`; **unit:** rank (1 = starter); **used by:** board
+- **Formula:** his best depth_rank among his offense slots of his position (RB: RB/HB) on that chart; a daily pull's rank is renumbered within its slot
+- **Source:** twm.modules.board.preseason
 
 ### Weekly expert rank
 

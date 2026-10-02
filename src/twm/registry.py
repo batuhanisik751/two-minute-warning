@@ -1619,6 +1619,36 @@ def _board_entries() -> list[Entry]:
     ]  # fmt: skip
     out = [Entry(name=n, title=t, kind="feature", modules=("board",), unit=u, formula=f,
                  explanation=e, source=bf, step="I1b") for n, t, u, f, e in feats]  # fmt: skip
+    pre = [
+        ("dc_absent", "Not on a week-1 depth chart", "boolean",
+         "no row of his on any team's latest week-1 depth chart of S+1 visible 1 h before the "
+         "first week-1 kickoff (fact_depth_chart; the other preseason features are then NULL)",
+         "Cut, unsigned, retired or hurt before the season starts."),
+        ("team_change_s1", "New team", "boolean",
+         "his week-1 chart team (the team where he has his best offense rank) differs from his S "
+         "team (his last regular-season game's)", "He moved in the offseason."),
+        ("depth_rank_s1", "Week-1 depth rank", "rank (1 = starter)",
+         "his best depth_rank among his offense slots of his position (RB: RB/HB) on that chart; "
+         "a daily pull's rank is renumbered within its slot", "Starter or backup going in."),
+        ("new_competitor_s1", "New competition", "boolean",
+         "a same-position teammate at his depth rank or ahead on that chart was on none of that "
+         "team's regular-season weekly rosters of S", "A rookie or an arrival shares his role."),
+        ("qb1_change_s1", "New starting QB", "boolean",
+         "the team's S primary starter (most regular-season pass attempts for it in S) is not "
+         "among its best-ranked QBs on that chart", "A new quarterback changes the targets."),
+        ("vacated_targets_share_s1", "Vacated targets", "share (0-1)",
+         "the team's S regular-season targets by players absent from its week-1 chart / the "
+         "team's S targets", "Targets left behind by departed teammates."),
+        ("vacated_carries_share_s1", "Vacated carries", "share (0-1)",
+         "the same with carries", "Carries left behind by departed teammates."),
+        ("hc_change_s1", "New head coach (week-1 team)", "boolean",
+         "his week-1 chart team has a departure with last_season S in coach_departures.csv "
+         "announced before the as-of's date (blank dates: the hc_departure rule)",
+         "A new head coach on the team he will play for."),
+    ]  # fmt: skip
+    out += [Entry(name=n, title=t, kind="feature", modules=("board",), unit=u, formula=f,
+                  explanation=e, source="twm.modules.board.preseason", step="I2a")
+            for n, t, u, f, e in pre]  # fmt: skip
     labels = [
         ("y_cliff", "Cliff", "PPG in S+1 <= 70% of PPG in S with 6+ games in S+1 (Cliff "
          "population: 3+ prior seasons, top-36 PPG at his position with 8+ games in S); NULL "

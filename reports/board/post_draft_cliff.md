@@ -1,6 +1,17 @@
 # Cliff backtest at the post-draft snapshot (step I2b)
 
-Step I2b: the same rows and labels as the end-of-season report, read at the POST-DRAFT snapshot (00:00 UTC May 15 of S+1, the day the project's rule makes the draft public; point in time): every I1b feature (head-coach departures now known through the as-of) plus the draft capital his S team added at his position, a first-round rookie QB and a flag for picks with no known position (docs/board.md, "Post-draft snapshot"). Free-agency and trade moves are not observable point-in-time and are not features. `eos` = the end-of-season report's primary model on the same rows; the ECR (2020+) is still taken months later (the last August/September scrape before week 1), so it knows more than the model.
+Step I2b: the same rows and labels as the end-of-season report, read at the POST-DRAFT snapshot (00:00 UTC on 06-01 (MM-DD) of S+1, config `as_of.board.post_draft`, spec 6.1; point in time): every I1b feature (head-coach departures now known through the as-of) plus the draft capital his S team added at his position, a first-round rookie QB and a flag for picks with no known position (docs/board.md, "Post-draft snapshot"). Free-agency and trade moves are not observable point-in-time and are not features. `eos` = the end-of-season report's primary model on the same rows; the ECR (2020+) is still taken months later (the last August/September scrape before week 1), so it knows more than the model.
+
+ECR timing (negative = the ECR is public only after the as-of):
+
+| snapshot S | ECR scrape of S+1 | public at (UTC) | snapshot as-of (UTC) | ECR public before the as-of by (days) |
+|---|---|---|---|---|
+| 2019 | 2020-09-03 | 2020-09-04 00:00 | 2020-06-01 Mon 00:00 | -95.0 |
+| 2020 | 2021-09-03 | 2021-09-04 00:00 | 2021-06-01 Tue 00:00 | -95.0 |
+| 2021 | 2022-09-02 | 2022-09-03 00:00 | 2022-06-01 Wed 00:00 | -94.0 |
+| 2022 | 2023-09-01 | 2023-09-02 00:00 | 2023-06-01 Thu 00:00 | -93.0 |
+| 2023 | 2024-08-30 | 2024-08-31 00:00 | 2024-06-01 Sat 00:00 | -91.0 |
+| 2024 | 2025-08-29 | 2025-08-30 00:00 | 2025-06-01 Sun 00:00 | -90.0 |
 
 Rows and positives per test season (label season = S + 1): `cliff_main` 337 positives (13-29 a season); `cliff_missed` 251 positives (6-21 a season); `cliff_sensitivity` 588 positives (21-42 a season).
 

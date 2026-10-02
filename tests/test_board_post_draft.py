@@ -1,6 +1,6 @@
-"""Cliff & Breakout Board, post-draft snapshot (I2b): the as-of (May 15 of S+1, after the
-draft), a pick or a coach departure made public after it is invisible, each draft feature on a
-synthetic world, and determinism."""
+"""Cliff & Breakout Board, post-draft snapshot (I2b, I2-fix): the as-of (config
+``as_of.board.post_draft`` of S+1, never before the draft is public), a pick or a coach departure
+made public after it is invisible, each draft feature on a synthetic world, and determinism."""
 
 from __future__ import annotations
 
@@ -19,13 +19,17 @@ AS_OF = datetime(2021, 5, 15, tzinfo=UTC)
 PUBLIC = datetime(2021, 5, 15)  # dim_player.public_from of a 2021 pick (naive UTC)
 
 
-def test_post_draft_as_of_is_the_later_of_the_draft_end_and_the_public_day():
+def test_post_draft_as_of_is_the_config_day_and_never_before_the_draft_is_public():
     rules = AvailabilityRules()
-    assert pdr.post_draft_as_of(2020, rules) == AS_OF  # draft from 2021-04-29: May 15 is later
+    assert pdr.post_draft_as_of(2020) == datetime(2021, 6, 1, tzinfo=UTC)  # config "06-01"
+    assert pdr.post_draft_as_of(2020, "05-20", rules) == datetime(2021, 5, 20, tzinfo=UTC)
+    with pytest.raises(ValueError, match="before the 2021 draft is public"):
+        pdr.post_draft_as_of(2020, "05-14", rules)  # picks public from May 15
     early = replace(rules, draft_public_day=1)
-    assert pdr.post_draft_as_of(2020, early) == datetime(2021, 5, 2, tzinfo=UTC)  # 04-29 + 3
-    assert pdr.post_draft_as_of(2013, early) == datetime(2014, 5, 11, tzinfo=UTC)  # 05-08 + 3
-    assert pdr.post_draft_as_of(2040, rules) == datetime(2041, 5, 15, tzinfo=UTC)  # unlisted
+    assert pdr.post_draft_as_of(2020, "05-02", early) == datetime(2021, 5, 2, tzinfo=UTC)
+    with pytest.raises(ValueError):
+        pdr.post_draft_as_of(2020, "05-01", early)  # draft from 2021-04-29: over on 05-02
+    assert pdr.post_draft_as_of(2040, "05-15", rules) == datetime(2041, 5, 15, tzinfo=UTC)
 
 
 def _picks(rows: list[tuple]) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -102,11 +106,13 @@ def test_post_draft_features_are_deterministic_and_ignore_later_picks_and_depart
 
 
 @pytest.mark.realdata
-@pytest.mark.parametrize("snapshot", ["preseason", "post_draft"])
+@pytest.mark.parametrize(
+    "snapshot", ["preseason:tuesday_before_week_1", "preseason:week1_kickoff_eve", "post_draft"]
+)
 def test_later_snapshots_pass_the_leakage_harness_on_the_real_warehouse(snapshot: str):
-    """Deleting or scrambling everything not public at the 2016 preseason / post-draft as-of
-    (the 2017 games, later charts, later draft classes, today's positions ...) changes no
-    feature (the real warehouse, read only; I2a/I2b)."""
+    """Deleting or scrambling everything not public at the 2016 preseason (both anchors) /
+    post-draft as-of (the 2017 games, later charts, later draft classes, today's positions ...)
+    changes no feature (the real warehouse, read only; I2a/I2b/I2-fix)."""
     from twm.backtest.leakage import assert_future_invariant
     from twm.config import settings
     from twm.modules.board import preseason as pre
@@ -115,13 +121,19 @@ def test_later_snapshots_pass_the_leakage_harness_on_the_real_warehouse(snapshot
     if not db.exists():
         pytest.skip("no warehouse (run `twm build`)")
     deps = bf.read_departures(settings().path("manual") / "coach_departures.csv")
-    if snapshot == "preseason":
-        at, build = pre.preseason_as_of(db, 2016), pre.preseason_features
+    if snapshot.startswith("preseason"):
+        at, build = pre.preseason_as_of(db, 2016, snapshot.split(":")[1]), pre.preseason_features
     else:
         at, build = pdr.post_draft_as_of(2016), pdr.post_draft_features
     out = assert_future_invariant(
         lambda v: build(v, 2016, xfp_games=None, departures=deps), db, at, key=["gsis_id"]
     )
     assert out.height > 500 and out["snapshot"].unique().to_list() == [at.replace(tzinfo=None)]
-    extra = pre.NEW_FEATURES if snapshot == "preseason" else pdr.NEW_FEATURES
+    if snapshot == "preseason:tuesday_before_week_1":  # no legacy week-1 chart public yet
+        assert out["dc_team_chart_missing"].all() and out["dc_absent"].null_count() == out.height
+        return
+    extra = pre.NEW_FEATURES if snapshot.startswith("preseason") else pdr.NEW_FEATURES
     assert all(out[n].null_count() < out.height for n in extra)
+    if snapshot == "preseason:week1_kickoff_eve":  # 2017: MIA-TB moved to week 11
+        missing = out.filter(pl.col("dc_team_chart_missing"))
+        assert missing.height > 0 and set(missing["team"].to_list()) <= {"MIA", "TB"}

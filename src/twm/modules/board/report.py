@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 
@@ -202,6 +204,25 @@ def _table(header: list[str], rows: list[list[str]]) -> list[str]:
     return out + ["| " + " | ".join(r) + " |" for r in rows]
 
 
+def ecr_timing_notes(db: Path | str, as_of: Callable[[int], Any]) -> list[str]:
+    """Markdown: per ECR-era snapshot S, when the ECR scrape of S+1 became public vs this
+    snapshot's ``as_of(S)`` (aware UTC); a positive lead = public before the as-of."""
+    rows = []
+    for s in (s for s in bt.TEST_SEASONS if s >= ev.ECR_FIRST_SNAPSHOT):
+        got = be.scrape_public_at(db, s + 1)
+        at = as_of(s).astimezone(UTC).replace(tzinfo=None)
+        if got is None:
+            rows.append([str(s), "-", "-", f"{at:%Y-%m-%d %a %H:%M}", "-"])
+            continue
+        lead = (at - got[1]).total_seconds() / 86400
+        rows.append([str(s), got[0], f"{got[1]:%Y-%m-%d %H:%M}", f"{at:%Y-%m-%d %a %H:%M}",
+                     f"{lead:+.1f}"])  # fmt: skip
+    head = ["snapshot S", "ECR scrape of S+1", "public at (UTC)", "snapshot as-of (UTC)",
+            "ECR public before the as-of by (days)"]  # fmt: skip
+    return ["ECR timing (negative = the ECR is public only after the as-of):", "",
+            *_table(head, rows), ""]  # fmt: skip
+
+
 def results_section(rep: VariantReport) -> list[str]:
     v, m = rep.run.variant, rep.metrics
     lines = [f"### {v.title} (`{v.name}`, label `{v.label}`)", ""]
@@ -327,33 +348,61 @@ INTRO = {
         "(2020+ only; ECR, not ADP), scored as minus the ECR rank (unranked last).", "",
     ],
 }  # fmt: skip
-_PRE = (
-    "Step I2a: the same rows and labels as the end-of-season report, read at the PRESEASON "
-    "snapshot (one hour before the first week-1 kickoff of S+1, point in time): every I1b "
-    "feature plus the week-1 depth chart (team change, depth rank, new competition, QB1 change, "
-    "vacated targets and carries), a head-coach change of the week-1 team and a flag for players "
-    'on no week-1 chart (docs/board.md, "Preseason snapshot"). `eos` = the end-of-season '
-    "report's primary model on the same rows; the ECR (2020+) is now taken about when this "
-    "snapshot is (the last August/September scrape before week 1)."
-)
-PRESEASON_INTRO = {
-    "cliff": ["# Cliff backtest at the preseason snapshot (step I2a)", "", _PRE, ""],
-    "breakout": ["# Breakout backtest at the preseason snapshot (step I2a)", "", _PRE, ""],
-}
-_PD = (
-    "Step I2b: the same rows and labels as the end-of-season report, read at the POST-DRAFT "
-    "snapshot (00:00 UTC May 15 of S+1, the day the project's rule makes the draft public; "
-    "point in time): every I1b feature (head-coach departures now known through the as-of) plus "
-    "the draft capital his S team added at his position, a first-round rookie QB and a flag for "
-    'picks with no known position (docs/board.md, "Post-draft snapshot"). Free-agency and trade '
-    "moves are not observable point-in-time and are not features. `eos` = the end-of-season "
-    "report's primary model on the same rows; the ECR (2020+) is still taken months later (the "
-    "last August/September scrape before week 1), so it knows more than the model."
-)
-POST_DRAFT_INTRO = {
-    "cliff": ["# Cliff backtest at the post-draft snapshot (step I2b)", "", _PD, ""],
-    "breakout": ["# Breakout backtest at the post-draft snapshot (step I2b)", "", _PD, ""],
-}
+
+
+def _pre_intro(anchor: str) -> str:
+    from twm.config import settings
+
+    w = settings().as_of.weekly
+    when = {
+        "tuesday_before_week_1": f"the last {w.weekday.capitalize()} {w.time} UTC (config "
+        "`as_of.weekly`) before the first regular-season week-1 kickoff of S+1: spec 6.1's "
+        '"Tuesday before Week 1"',
+        "week1_kickoff_eve": "one hour before the first regular-season week-1 kickoff of S+1: "
+        "the step-I2a anchor, kept as the alternative",
+    }[anchor]
+    return (
+        f"Step I2a / I2-fix: the same rows and labels as the end-of-season report, read at the "
+        f"PRESEASON snapshot, anchor `{anchor}` ({when}; point in time): every I1b feature plus "
+        "the week-1 depth charts visible then (team change, depth rank, new competition, QB1 "
+        "change, vacated targets and carries), a head-coach change of the week-1 team, "
+        "`dc_absent` (on no chart while his team's chart is visible) and "
+        "`dc_team_chart_missing` (his team has no visible chart: `dc_absent` is then missing, "
+        'never a cut; docs/board.md, "Preseason snapshot"). `eos` = the end-of-season report\'s '
+        "primary model on the same rows; the ECR (2020+) is the last August/September scrape "
+        "before week 1 (when it became public vs this anchor: the table below)."
+    )
+
+
+def preseason_intro(anchor: str) -> dict[str, list[str]]:
+    t = {"cliff": "Cliff", "breakout": "Breakout"}
+    return {p: [f"# {n} backtest at the preseason snapshot, anchor {anchor} (step I2a / I2-fix)",
+                "", _pre_intro(anchor), ""] for p, n in t.items()}  # fmt: skip
+
+
+def _pd_intro() -> str:
+    from twm.config import settings
+
+    md = settings().as_of.board.post_draft
+    return (
+        "Step I2b: the same rows and labels as the end-of-season report, read at the POST-DRAFT "
+        f"snapshot (00:00 UTC on {md} (MM-DD) of S+1, config `as_of.board.post_draft`, spec "
+        "6.1; point in time): every I1b feature (head-coach departures now known through the "
+        "as-of) plus the draft capital his S team added at his position, a first-round rookie QB "
+        'and a flag for picks with no known position (docs/board.md, "Post-draft snapshot"). '
+        "Free-agency and trade moves are not observable point-in-time and are not features. "
+        "`eos` = the end-of-season report's primary model on the same rows; the ECR (2020+) is "
+        "still taken months later (the last August/September scrape before week 1), so it knows "
+        "more than the model."
+    )
+
+
+def post_draft_intro() -> dict[str, list[str]]:
+    t = {"cliff": "Cliff", "breakout": "Breakout"}
+    return {p: [f"# {n} backtest at the post-draft snapshot (step I2b)", "", _pd_intro(), ""]
+            for p, n in t.items()}  # fmt: skip
+
+
 CAVEATS = [
     "## Read before trusting", "",
     "- Intervals resample whole seasons (18 in `all`, 6 in `ecr_era`): the ECR-era intervals are "
@@ -370,19 +419,30 @@ CAVEATS = [
 
 
 def write_reports(
-    reps: dict[str, VariantReport], out_dir: Path, names: pl.DataFrame, prefix: str = ""
+    reps: dict[str, VariantReport],
+    out_dir: Path,
+    names: pl.DataFrame,
+    prefix: str = "",
+    notes: list[str] | None = None,
 ) -> list[Path]:
     """reports/board/{prefix}{cliff,breakout}.md, .csv (metrics), _seasons.csv and _features.csv
-    for the populations with a variant in ``reps`` (prefix "preseason_": step I2a;
-    "post_draft_": step I2b)."""
-    intro = {"preseason_": PRESEASON_INTRO, "post_draft_": POST_DRAFT_INTRO}.get(prefix, INTRO)
+    for the populations with a variant in ``reps`` (prefix: a preseason anchor's
+    :data:`~twm.modules.board.preseason.REPORT_PREFIX`, step I2a / I2-fix; "post_draft_": step
+    I2b). ``notes``: markdown lines placed after the intro (the ECR timing table)."""
+    from twm.modules.board.preseason import REPORT_PREFIX
+
+    anchors = {v: k for k, v in REPORT_PREFIX.items()}
+    if prefix in anchors:
+        intro = preseason_intro(anchors[prefix])
+    else:
+        intro = post_draft_intro() if prefix == "post_draft_" else INTRO
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
     for pop, names_ in POPULATIONS.items():
         got = [reps[n] for n in names_ if n in reps]
         if not got:
             continue
-        lines = [*intro[pop], *population_table(reps, pop), "## Results", ""]
+        lines = [*intro[pop], *(notes or []), *population_table(reps, pop), "## Results", ""]
         for rep in got:
             lines += results_section(rep) + features_section(rep) + calibration_section(rep)
             lines += disagreement_section(rep, names)

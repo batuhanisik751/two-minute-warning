@@ -1,10 +1,11 @@
 """The board's POST-DRAFT snapshot (step I2b, PROJECT_SPEC 8.6 / step I2).
 
-Same rows and labels as the end-of-season snapshot of S, read after the S+1 draft
-(:func:`post_draft_as_of`). Every I1b feature is recomputed through an
-:class:`~twm.asof.AsOfView` at that moment (``hc_departure`` then counts the departures announced
-by the as-of: the head-coach change of this snapshot), and the draft features below exist only
-now (docs/board.md "Post-draft snapshot" defines each). The picks are ``dim_player``'s draft
+Same rows and labels as the end-of-season snapshot of S, read after the S+1 draft, on config
+``as_of.board.post_draft`` (spec 6.1: June 1) of S+1 at 00:00 UTC (:func:`post_draft_as_of`).
+Every I1b feature is recomputed through an :class:`~twm.asof.AsOfView` at that moment
+(``hc_departure`` then counts the departures announced by the as-of: the head-coach change of
+this snapshot), and the draft features below exist only now (docs/board.md "Post-draft
+snapshot" defines each). The picks are ``dim_player``'s draft
 fields (public from ``draft_public_month_day`` of the draft year); a pick's position is his
 ``fact_combine`` position of that year (public from the draft's first day): ``dim_player``'s
 position is today's and hidden point-in-time.
@@ -43,18 +44,31 @@ NEW_FEATURES: tuple[str, ...] = (
 )  # fmt: skip
 
 
-def post_draft_as_of(season: int, rules: AvailabilityRules | None = None) -> datetime:
-    """00:00 UTC on the day after the last day of the ``season`` + 1 draft (its first day + 3
-    days), or later: a drafted player exists in ``dim_player`` only from
-    ``draft_public_month_day`` (May 15) of his draft year, so when that day is later (every
-    draft 2000-2026) the as-of is that day (aware UTC)."""
+def post_draft_as_of(
+    season: int, month_day: str | None = None, rules: AvailabilityRules | None = None
+) -> datetime:
+    """00:00 UTC on ``month_day`` (default: config ``as_of.board.post_draft``, spec 6.1 "June
+    1") of ``season`` + 1 (aware UTC). Refused when that is before the draft is complete and
+    public (the day after its last day = its first day + 3 days, and ``draft_public_month_day``):
+    a "post-draft" snapshot must see the draft."""
+    from twm.config import settings
+
     y = int(season) + 1
+    md = month_day or settings().as_of.board.post_draft
+    month, day = (int(x) for x in md.split("-"))
+    at = datetime(y, month, day, tzinfo=UTC)
     r = rules or AvailabilityRules.from_settings()
     public = datetime(y, r.draft_public_month, r.draft_public_day, tzinfo=UTC)
     first = DRAFT_FIRST_DAY.get(y)
-    if first is None:
-        return public
-    return max(datetime.combine(first + DAY_AFTER_LAST, time(0), UTC), public)
+    done = (
+        public
+        if first is None
+        else max(datetime.combine(first + DAY_AFTER_LAST, time.min, UTC), public)
+    )
+    if at < done:
+        raise ValueError(f"post-draft as-of {at:%Y-%m-%d} is before the {y} draft is public "
+                         f"({done:%Y-%m-%d}); check as_of.board.post_draft")  # fmt: skip
+    return at
 
 
 def draft_picks(view: Any, year: int) -> pl.DataFrame:

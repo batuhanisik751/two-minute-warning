@@ -99,22 +99,42 @@ snapshot no offseason move has happened yet and the warehouse has only in-season
 (no point-in-time offseason roster), so the number would be zero or wrong; it belongs to I2's
 later snapshots, and only if a dated roster source exists.
 
-## Preseason snapshot (step I2a)
+## Preseason snapshot (steps I2a, I2-fix)
 
-Same rows and labels as the end-of-season snapshot of S, read one hour before the first
-regular-season week-1 kickoff of S+1 (`fact_game.kickoff_utc`; e.g. 2017-09-07 23:30 UTC for S =
-2016). Every feature above is recomputed through an `AsOfView` at that moment (only
-`hc_departure` can change: later-dated departures are now known), and these exist only now
-(module `twm.modules.board.preseason`, code `twm board backtest --snapshot preseason`):
+Same rows and labels as the end-of-season snapshot of S, read at the preseason as-of of S+1. Two
+anchors (config `as_of.board.preseason`, module `twm.modules.board.preseason`, code
+`twm board backtest --snapshot preseason [--anchor ...]`):
 
-- **Week-1 chart**: `fact_depth_chart` rows of S+1 visible at the as-of: the daily pull with the
-  latest `dt` (2025 on), else the legacy week-1 REG chart (public the Wednesday before week 1).
-  `depth_rank` 1 = the starter of a slot: legacy ranks are per slot already (two or three WRs
-  share rank 1); a daily pull numbers a position's players across its slots (WR 1 .. 15), so its
-  rank is renumbered within the slot (`pos_slot`) in the pull's order. Week-1 rosters
-  (`fact_roster_week`) are public only after week 1 and are not used.
-- `dc_absent`: no row of his on any team's chart (cut, unsigned, retired, hurt; also every player
-  of a team whose chart is missing). Flagged, never dropped; every feature below is then NULL.
+- **`tuesday_before_week_1`** (the config default; spec 6.1 "the Tuesday before Week 1"): the
+  last `as_of.weekly` weekday/time (Tuesday 14:00 UTC) strictly before the first regular-season
+  week-1 kickoff of S+1 (`fact_game.kickoff_utc`); e.g. 2017-09-05 14:00 UTC for S = 2016, and
+  the day before a Wednesday opener (2012, 2026). It equals week 1's `dim_week.asof_weekly_utc`
+  minus 7 days in every season. Reports: `reports/board/preseason_{cliff,breakout}.*`.
+- **`week1_kickoff_eve`** (the step-I2a anchor, kept as the alternative): one hour before that
+  kickoff; e.g. 2017-09-07 23:30 UTC. Reports: `reports/board/preseason_kickoff_eve_*`.
+
+Every feature above is recomputed through an `AsOfView` at that moment (only `hc_departure` can
+change: later-dated departures are now known), and these exist only now:
+
+- **Week-1 chart**: `fact_depth_chart` rows of S+1 visible at the as-of: per team its daily pull
+  with the latest `dt` (2025 on), else the legacy week-1 REG chart (public the Wednesday 14:00
+  UTC before week 1: week 1's Tuesday as-of minus 6 days). The warehouse has no preseason chart
+  rows (legacy game types are REG and postseason only), so **at the Tuesday anchor no team has a
+  chart for S = 2002-2023**; S = 2024 and 2025 (daily pulls, every pull lists 32 teams) have all
+  32. At the kickoff eve every team has one except MIA and TB for S = 2016 (their week-1 game
+  moved to week 11; docs/assumptions.md section 18). `depth_rank` 1 = the starter of a slot:
+  legacy ranks are per slot already (two or three WRs share rank 1); a daily pull numbers a
+  position's players across its slots (WR 1 .. 15), so its rank is renumbered within the slot
+  (`pos_slot`) in the pull's order. Week-1 rosters (`fact_roster_week`) are public only after
+  week 1 and are not used.
+- `dc_absent`: no row of his on any team's chart **while his team's chart is visible** (his S
+  team's: his S+1 team is unknown when he is on no chart; cut, unsigned, retired, hurt). Flagged,
+  never dropped; every feature below is then NULL.
+- `dc_team_chart_missing`: no row of his on any chart and **no visible chart of his team** (a
+  Tuesday before the legacy charts publish, or a team whose week-1 game moved). `dc_absent` is
+  then NULL (the models' missing indicator), never true: a missing chart is not a cut. Player
+  rows chart-missing: 11,961 of 13,176 at the Tuesday anchor (all of 2002-2023), 33 at the
+  kickoff eve (2016 MIA/TB).
 - `team_change_s1`: his chart team (the one where he has his best offense rank) differs from his
   S team (his last regular-season game's).
 - `depth_rank_s1`: his best depth rank among his offense slots of his position (RB: RB or HB);
@@ -130,21 +150,45 @@ regular-season week-1 kickoff of S+1 (`fact_game.kickoff_utc`; e.g. 2017-09-07 2
   as-of's date (blank dates: the `hc_departure` rule).
 
 NULL inputs get the models' missing indicators. The variants, folds, metrics and intervals are
-I1b's; every model except the PPG-rank baseline gets the eight features. `eos` in
-`reports/board/preseason_{cliff,breakout}.md` is the end-of-season report's primary model on the
-same rows, compared with paired season-block intervals; the ECR is the same preseason scrape,
-now taken about when this snapshot is.
+I1b's; every model except the PPG-rank baseline gets the nine features. `eos` in the reports is
+the end-of-season report's primary model on the same rows, compared with paired season-block
+intervals. The ECR is the preseason scrape (the last August/September scrape before week 1's
+first game day); each report has a table of when it became public: for labels 2020-2025 at
+2020-09-04 .. 2025-08-30 00:00 UTC, 3.6 days before the Tuesday anchor (4.6 in 2020) and 6-7 days
+before the kickoff eve, so at both anchors the experts know nothing the snapshot could not.
 
-## Post-draft snapshot (step I2b)
+Results (2026-10-02 I2-fix run, primary models, PR-AUC with 95% season-block intervals,
+snapshots 2007-2024; ECR era = labels 2020-2025):
+
+| variant | Tuesday (default) | vs `eos` | ECR era vs ECR | kickoff eve | vs `eos` | ECR era vs ECR |
+|---|---|---|---|---|---|---|
+| Cliff main (logit) | 0.361 [0.319, 0.407] | -0.001 [-0.004, +0.000] | 0.408 vs 0.503: -0.094 [-0.149, -0.021] | 0.405 [0.354, 0.463] | +0.042 [+0.019, +0.067] | 0.459 vs 0.503: -0.043 [-0.129, +0.042] |
+| Missed (logit_simple) | 0.384 [0.330, 0.439] | +0.000 [-0.000, +0.000] | 0.352 vs 0.570: -0.217 [-0.375, -0.113] | 0.642 [0.585, 0.699] | +0.258 [+0.209, +0.308] | 0.634 vs 0.570: +0.064 [-0.051, +0.128] |
+| Cliff or missed (logit) | 0.535 [0.490, 0.579] | -0.000 [-0.001, +0.001] | 0.545 vs 0.689: -0.144 [-0.197, -0.079] | 0.673 [0.633, 0.709] | +0.138 [+0.117, +0.156] | 0.669 vs 0.689: -0.020 [-0.081, +0.032] |
+| Breakout WR/TE (logit) | 0.235 [0.170, 0.362] | -0.000 [-0.000, +0.000] | 0.343 vs 0.315: +0.028 [-0.080, +0.251] | 0.257 [0.187, 0.385] | +0.022 [-0.014, +0.054] | 0.352 vs 0.315: +0.037 [-0.050, +0.255] |
+| Breakout RB (logit) | 0.234 [0.146, 0.359] | +0.000 [+0.000, +0.000] | 0.335 vs 0.378: -0.043 [-0.466, +0.256] | 0.274 [0.189, 0.413] | +0.040 [-0.045, +0.116] | 0.302 vs 0.378: -0.075 [-0.331, +0.048] |
+
+In words: at the spec's Tuesday the warehouse has no week-1 chart for any training season, so
+the chart features are all missing, the models cannot learn them, and the Tuesday snapshot equals
+the end-of-season one (every difference within +/-0.001); the ECR, public 3-4 days earlier, wins
+on every Cliff variant. The chart's value shows only at the kickoff eve (Cliff +0.042, Missed
++0.258 over `eos`, a tie with the ECR), which needs the Wednesday chart. The kickoff-eve numbers
+equal I2a's to within 0.001: the only rows the new flag changes are 2016's 33 MIA/TB rows. A
+Tuesday snapshot with charts would need a dated chart source published before week 1's
+Wednesday (none in the warehouse before the 2025 daily pulls).
+
+## Post-draft snapshot (steps I2b, I2-fix)
 
 Same rows and labels as the end-of-season snapshot of S, read after the S+1 draft (module
 `twm.modules.board.post_draft`, code `twm board backtest --snapshot post_draft`). **As-of**:
-00:00 UTC on the day after the draft's last day, taken as its first day + 3 days because only
-first days are recorded (`available.DRAFT_FIRST_DAY`, docs/assumptions.md section 16), or later:
-`dim_player` shows a drafted player only from `availability.draft_public_month_day` (May 15) of
-his draft year, so its draft fields would be hidden before then. Every draft 2003-2026 began by
-May 8, so the as-of is **May 15 00:00 UTC of S+1** for every snapshot (the rule's date; it errs
-late, and is before the spec's June 1). Every I1b feature is recomputed at that moment; only
+00:00 UTC on config `as_of.board.post_draft` (spec 6.1: June 1, "06-01") of S+1. The code
+refuses a configured day before the draft is complete and public: the day after its last day
+(its first day + 3 days, because only first days are recorded: `available.DRAFT_FIRST_DAY`,
+docs/assumptions.md section 16) and `availability.draft_public_month_day` (May 15; `dim_player`
+shows a drafted player's draft fields only from then). I2b used that May 15 lower bound itself;
+the I2-fix rerun at June 1 gives the same dataset (0 of 13,176 rows differ in any feature: no
+departure was announced and no pick became public between May 15 and June 1) and the same
+metrics to the last digit. Every I1b feature is recomputed at that moment; only
 `hc_departure` changes (37 rows: NO 2011 and TB 2021, announced after the end-of-season
 snapshot). It is this snapshot's **head-coach change announced by the as-of** (his S team; no new
 column, never NULL). The new features (NULL when the S+1 draft has no pick visible at the as-of,
@@ -168,8 +212,9 @@ which never happens 2003-2026; NULL inputs get the models' missing indicators):
   transactions (weekly rosters exist only in season), so a move between the Super Bowl and the
   as-of is not observable point-in-time; it is not approximated.
 
-Results (2026-10-02 run; `reports/board/post_draft_{cliff,breakout}.md`, primary models, PR-AUC
-with 95% season-block intervals; `eos` = the end-of-season primary on the same rows, paired):
+Results (2026-10-02 run, unchanged by the I2-fix June 1 rerun;
+`reports/board/post_draft_{cliff,breakout}.md`, primary models, PR-AUC with 95% season-block
+intervals; `eos` = the end-of-season primary on the same rows, paired):
 
 | variant | post-draft PR-AUC | vs `eos` | ECR era (labels 2020-2025): vs ECR |
 |---|---|---|---|
@@ -234,11 +279,14 @@ gives some back), running back, fewer games, age and the aging curve, workload.
   on an idle Mac; `--resume` keeps each finished variant in `data/board/runs/` so a long run can be
   split.
 - `notebooks/05_cliff_breakout.ipynb`: the populations, labels and backtest, read from those files,
-  and the later snapshots' paired differences and top inputs (`reports/board/{post_draft,preseason}_*`).
+  and the later snapshots' paired differences and top inputs
+  (`reports/board/{post_draft,preseason,preseason_kickoff_eve}_*`).
 - `uv run twm board backtest --snapshot preseason|post_draft [--resume]`: also builds
   `data/board/dataset_{preseason,post_draft}.parquet` and writes `reports/board/{preseason,post_draft}_*`
   (the end-of-season variants run first, for the paired `eos` comparison).
+  `--snapshot preseason --anchor week1_kickoff_eve` builds `dataset_preseason_kickoff_eve.parquet`
+  and writes `reports/board/preseason_kickoff_eve_*` (default anchor: config).
 - Tests: `tests/test_board.py` (synthetic world in `tests/board_world.py`; the realdata test runs the
   leakage harness on the real warehouse at the 2016 snapshot), `tests/test_board_preseason.py`,
-  `tests/test_board_post_draft.py` (its realdata test runs the harness at the 2016 preseason and
-  post-draft as-ofs).
+  `tests/test_board_post_draft.py` (its realdata test runs the harness at the 2016 preseason, both
+  anchors, and post-draft as-ofs).

@@ -72,14 +72,16 @@ def build_preseason_dataset(
     departures: bf.Departures,
     seasons: list[int] | None = None,
     progress: Progress | None = None,
+    anchor: str | None = None,
 ) -> pl.DataFrame:
-    """Step I2a: the same rows and labels read at the PRESEASON snapshot of each S (one hour
-    before the first week-1 kickoff of S+1; :mod:`twm.modules.board.preseason`). A season whose
-    as-of has not passed yet is skipped."""
+    """Step I2a: the same rows and labels read at the PRESEASON snapshot of each S at ``anchor``
+    (default: config ``as_of.board.preseason``; :func:`~twm.modules.board.preseason.
+    preseason_as_of`). A season whose as-of has not passed yet is skipped."""
     from twm.modules.board import preseason as pre
 
-    return _later(db, "preseason", lambda s: pre.preseason_as_of(db, s), pre.preseason_features,
-                  xfp_games, departures, seasons, progress)  # fmt: skip
+    anchor = anchor or pre.default_anchor()
+    return _later(db, f"preseason[{anchor}]", lambda s: pre.preseason_as_of(db, s, anchor),
+                  pre.preseason_features, xfp_games, departures, seasons, progress)  # fmt: skip
 
 
 def build_post_draft_dataset(
@@ -90,9 +92,9 @@ def build_post_draft_dataset(
     seasons: list[int] | None = None,
     progress: Progress | None = None,
 ) -> pl.DataFrame:
-    """Step I2b: the same rows and labels read at the POST-DRAFT snapshot of each S (after the
-    S+1 draft; :mod:`twm.modules.board.post_draft`). A season whose as-of has not passed yet is
-    skipped."""
+    """Step I2b: the same rows and labels read at the POST-DRAFT snapshot of each S (config
+    ``as_of.board.post_draft`` of S+1; :mod:`twm.modules.board.post_draft`). A season whose
+    as-of has not passed yet is skipped."""
     from twm.modules.board import post_draft as pd_
 
     return _later(db, "post-draft", pd_.post_draft_as_of, pd_.post_draft_features, xfp_games,

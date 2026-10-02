@@ -18,6 +18,7 @@ Scores (higher = more likely the label): Cliff and y_missed: ECR rank in S+1 min
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 
@@ -74,3 +75,18 @@ def ecr_score(df: pl.DataFrame, kind: str) -> pl.Series:
     if kind == "rise":
         return (-df.get_column("ecr_fill")).cast(pl.Float64)
     raise ValueError(f"unknown ECR score kind {kind!r}")
+
+
+def scrape_public_at(db: Path | str, label_season: int) -> tuple[str, Any] | None:
+    """(scrape_date, available_at) of the preseason scrape :func:`ecr_ranks` reads for
+    ``label_season`` (None: no scrape); for the reports' timing table (step I2-fix)."""
+    s = int(label_season)
+    with AsOfView(db, weekly_as_of(db, s, 1)) as v:
+        got = v.sql(f"""
+            WITH pre_pages AS (
+                SELECT season, scrape_date, available_at FROM fact_ranking
+                WHERE season = {s} AND ecr_type = 'rp' AND page_kind = 'preseason'
+            ), pre_scrape AS ({ids.preseason_scrape_sql("pre_pages")})
+            SELECT CAST(p.scrape_date AS VARCHAR) AS d, max(p.available_at) AS at
+            FROM pre_pages p JOIN pre_scrape USING (season, scrape_date) GROUP BY 1""")
+    return (got["d"][0], got["at"][0]) if got.height else None

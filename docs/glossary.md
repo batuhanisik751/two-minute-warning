@@ -1444,12 +1444,20 @@ Whether his next matchups are soft (above 1) or tough (below 1) for his position
 - **Source:** twm.modules.waiver_radar.features; fact_schedule, fact_player_week, fact_snaps
 - **Waiver Radar reason:** "Soft schedule: his next opponents have allowed {value:.2f} times the average fantasy points to {pos}s"
 
+### No depth chart for his team yet
+
+We cannot tell yet whether he made the team: a missing chart, not a cut.
+
+- **Name:** `dc_team_chart_missing`; **unit:** boolean; **used by:** board
+- **Formula:** no row of his on any visible week-1 chart of S+1 AND no visible chart of his S team at the preseason as-of (legacy charts are public the Wednesday before week 1; a team whose week-1 game moved has none)
+- **Source:** twm.modules.board.preseason
+
 ### Not on a week-1 depth chart
 
 Cut, unsigned, retired or hurt before the season starts.
 
 - **Name:** `dc_absent`; **unit:** boolean; **used by:** board
-- **Formula:** no row of his on any team's latest week-1 depth chart of S+1 visible 1 h before the first week-1 kickoff (fact_depth_chart; the other preseason features are then NULL)
+- **Formula:** no row of his on any team's week-1 depth chart of S+1 visible at the preseason as-of (fact_depth_chart) while his S team's chart is visible; NULL when it is not (dc_team_chart_missing); the other preseason features are then NULL
 - **Source:** twm.modules.board.preseason
 
 ### Offense at home

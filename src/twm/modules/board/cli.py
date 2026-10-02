@@ -15,7 +15,9 @@ DEPARTURES_CSV = "coach_departures.csv"
 REPORT_DIR = Path("reports/board")
 
 
-def _dataset(db: Path, progress, snapshot: str = "end_of_season") -> object:
+def _dataset(
+    db: Path, progress, snapshot: str = "end_of_season", anchor: str | None = None
+) -> object:
     """Build the dataset (own xFP from Regression Watch's folds, departures from the owner's
     file) and write it to data/board/dataset.parquet."""
     from twm.config import ROOT, settings
@@ -29,10 +31,17 @@ def _dataset(db: Path, progress, snapshot: str = "end_of_season") -> object:
     progress(f"departures: {deps.rows.height} rows, {deps.n_blank_date} blank dates "
              f"({deps.n_blank_unknown} never counted as known)")  # fmt: skip
     if snapshot in ("preseason", "post_draft"):  # steps I2a / I2b
-        pre = snapshot == "preseason"
-        build = bd.build_preseason_dataset if pre else bd.build_post_draft_dataset
-        df = build(db, xfp_games=xfp, departures=deps, progress=progress)
-        path = bd.write_dataset(df, ROOT / bd.OUT_DIR, f"dataset_{snapshot}.parquet")
+        if snapshot == "preseason":
+            from twm.modules.board import preseason as pre
+
+            anchor = anchor or pre.default_anchor()
+            df = bd.build_preseason_dataset(db, xfp_games=xfp, departures=deps, progress=progress,
+                                            anchor=anchor)  # fmt: skip
+            name = pre.REPORT_PREFIX[anchor].rstrip("_")
+        else:
+            df = bd.build_post_draft_dataset(db, xfp_games=xfp, departures=deps, progress=progress)
+            name = snapshot
+        path = bd.write_dataset(df, ROOT / bd.OUT_DIR, f"dataset_{name}.parquet")
     else:
         df = bd.build_dataset(db, xfp_games=xfp, departures=deps, progress=progress)
         path = bd.write_dataset(df, ROOT / bd.OUT_DIR)
@@ -72,9 +81,16 @@ def backtest_cmd(
     snapshot: str = typer.Option(
         "end_of_season",
         "--snapshot",
-        help="end_of_season (I1b), preseason (I2a: 1 h before week 1 of S+1) or post_draft (I2b: "
-        "May 15 of S+1, after the draft); a later snapshot also runs the end-of-season variants "
+        help="end_of_season (I1b), preseason (I2a; --anchor) or post_draft (I2b: config "
+        "as_of.board.post_draft of S+1); a later snapshot also runs the end-of-season variants "
         "for the comparison and writes reports/board/<snapshot>_*.",
+    ),
+    anchor: str | None = typer.Option(
+        None,
+        "--anchor",
+        help="preseason only: tuesday_before_week_1 (reports/board/preseason_*) or "
+        "week1_kickoff_eve (reports/board/preseason_kickoff_eve_*); default: config "
+        "as_of.board.preseason.",
     ),
 ) -> None:
     """Rebuild the dataset, run the walk-forward of every variant (snapshots 2007-2024, labels
@@ -93,6 +109,11 @@ def backtest_cmd(
     say = lambda m: typer.echo(f"[{time.perf_counter() - t0:6.0f} s] {m}", err=True)  # noqa: E731
     if snapshot not in bt.SNAPSHOTS:
         raise typer.BadParameter(f"unknown snapshot {snapshot!r}; known: {bt.SNAPSHOTS}")
+    from twm.modules.board import preseason as pre_mod
+
+    if anchor is not None and (snapshot != "preseason" or anchor not in pre_mod.ANCHORS):
+        raise typer.BadParameter(f"--anchor is for --snapshot preseason, one of {pre_mod.ANCHORS}")
+    anchor = anchor or pre_mod.default_anchor()
     known = bt.variants()
     bad = [v for v in variant if v not in known]
     if bad:
@@ -102,19 +123,26 @@ def backtest_cmd(
     assert isinstance(df, pl.DataFrame)
     cache = ROOT / "data/board/runs" if resume else None
     reps = br.run_all(df, path, tuple(variant) or None, progress=say, cache=cache)
-    prefix = ""
+    prefix, notes = "", None
     if snapshot != "end_of_season":
         eos = {n: r.run.scored.select("season", "gsis_id", pl.col(f"p_{r.primary}").alias("p_eos"))
                for n, r in reps.items()}  # fmt: skip
-        pre = _dataset(path, say, snapshot)
+        pre = _dataset(path, say, snapshot, anchor)
         assert isinstance(pre, pl.DataFrame)
         reps = br.run_all(pre, path, tuple(variant) or None, progress=say, cache=cache,
                           snapshot=snapshot, eos=eos)  # fmt: skip
-        prefix = f"{snapshot}_"
+        if snapshot == "preseason":
+            prefix = pre_mod.REPORT_PREFIX[anchor]
+            notes = br.ecr_timing_notes(path, lambda s: pre_mod.preseason_as_of(path, s, anchor))
+        else:
+            from twm.modules.board import post_draft as pd_mod
+
+            prefix = f"{snapshot}_"
+            notes = br.ecr_timing_notes(path, pd_mod.post_draft_as_of)
     con = duckdb.connect(str(path), read_only=True)
     try:  # names for the report's tables only (never a feature)
         names = con.sql("SELECT gsis_id, display_name FROM dim_player").pl()
     finally:
         con.close()
-    for p in br.write_reports(reps, out or ROOT / REPORT_DIR, names, prefix):
+    for p in br.write_reports(reps, out or ROOT / REPORT_DIR, names, prefix, notes):
         typer.echo(f"wrote {p}")

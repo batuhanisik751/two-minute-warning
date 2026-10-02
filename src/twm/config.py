@@ -276,12 +276,15 @@ class EndOfSeasonAsOf(BaseModel):
 
 
 class BoardAsOf(BaseModel):
-    """``as_of.board``: the Cliff & Breakout Board's two snapshots (P3)."""
+    """``as_of.board``: the Cliff & Breakout Board's two snapshots (P3): ``post_draft`` = MM-DD
+    of S+1 at 00:00 UTC; ``preseason`` = an anchor name (twm.modules.board.preseason.ANCHORS):
+    ``tuesday_before_week_1`` (spec 6.1: the last ``as_of.weekly`` weekday/time before the first
+    week-1 kickoff of S+1) or ``week1_kickoff_eve`` (one hour before that kickoff; step I2a)."""
 
     model_config = ConfigDict(extra="forbid")
 
     post_draft: str
-    preseason: Literal["tuesday_before_week_1"]
+    preseason: Literal["tuesday_before_week_1", "week1_kickoff_eve"]
 
     @field_validator("post_draft")
     @classmethod

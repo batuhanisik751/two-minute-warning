@@ -1621,9 +1621,15 @@ def _board_entries() -> list[Entry]:
                  explanation=e, source=bf, step="I1b") for n, t, u, f, e in feats]  # fmt: skip
     pre = [
         ("dc_absent", "Not on a week-1 depth chart", "boolean",
-         "no row of his on any team's latest week-1 depth chart of S+1 visible 1 h before the "
-         "first week-1 kickoff (fact_depth_chart; the other preseason features are then NULL)",
+         "no row of his on any team's week-1 depth chart of S+1 visible at the preseason as-of "
+         "(fact_depth_chart) while his S team's chart is visible; NULL when it is not "
+         "(dc_team_chart_missing); the other preseason features are then NULL",
          "Cut, unsigned, retired or hurt before the season starts."),
+        ("dc_team_chart_missing", "No depth chart for his team yet", "boolean",
+         "no row of his on any visible week-1 chart of S+1 AND no visible chart of his S team "
+         "at the preseason as-of (legacy charts are public the Wednesday before week 1; a "
+         "team whose week-1 game moved has none)",
+         "We cannot tell yet whether he made the team: a missing chart, not a cut."),
         ("team_change_s1", "New team", "boolean",
          "his week-1 chart team (the team where he has his best offense rank) differs from his S "
          "team (his last regular-season game's)", "He moved in the offseason."),

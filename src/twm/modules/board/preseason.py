@@ -1,14 +1,19 @@
 """The board's PRESEASON snapshot (step I2a, PROJECT_SPEC 8.6 / step I2).
 
-Same rows and labels as the end-of-season snapshot of S (the season just completed), read later:
-one hour before the first regular-season week-1 kickoff of S+1 (:func:`preseason_as_of`). Every
-I1b feature is recomputed through an :class:`~twm.asof.AsOfView` at that moment, and the
-features below exist only now (docs/board.md "Preseason snapshot" defines each):
+Same rows and labels as the end-of-season snapshot of S (the season just completed), read later,
+at :func:`preseason_as_of`: by default (config ``as_of.board.preseason``, spec 6.1) the Tuesday
+14:00 UTC (config ``as_of.weekly``) before the first regular-season week-1 kickoff of S+1, or
+the alternative anchor one hour before that kickoff (:data:`ANCHORS`). Every I1b feature is
+recomputed through an :class:`~twm.asof.AsOfView` at that moment, and the features below exist
+only now (docs/board.md "Preseason snapshot" defines each):
 
-- the latest week-1 depth chart of S+1 visible at the as-of (:func:`week1_chart`): legacy weekly
-  charts (week 1, REG; public the Wednesday before week 1) or, 2025 on, the latest daily pull;
-- ``dc_absent``: on no team's week-1 chart (flagged, never dropped; every other feature below is
-  then NULL); ``team_change_s1``: his week-1 team differs from his S team;
+- the week-1 depth charts of S+1 visible at the as-of (:func:`week1_chart`): legacy weekly
+  charts (week 1, REG; public the Wednesday before week 1, so NOT at the Tuesday anchor) or, 2025
+  on, each team's latest daily pull;
+- ``dc_absent``: on no team's chart although his team's chart is visible (flagged, never dropped;
+  every other feature below is then NULL); ``dc_team_chart_missing``: on no chart and his team
+  has no visible chart (``dc_absent`` is then NULL: a missing chart is not a cut);
+  ``team_change_s1``: his week-1 team differs from his S team;
 - ``depth_rank_s1``: his best ``depth_rank`` among his offense slots of his position's group
   (:data:`GROUPS`) on that chart;
 - ``new_competitor_s1``: a teammate of the same group listed at his depth rank or ahead who was on
@@ -23,7 +28,7 @@ features below exist only now (docs/board.md "Preseason snapshot" defines each):
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -33,16 +38,43 @@ import polars as pl
 from twm.modules.board import features as bf
 from twm.modules.board.seasons import SeasonNotOverError
 
-LEAD = timedelta(hours=1)
+# Anchors of the preseason as-of (config ``as_of.board.preseason``; the default is the config's):
+# ``tuesday_before_week_1`` = spec 6.1, the last ``as_of.weekly`` weekday/time (Tuesday 14:00
+# UTC) strictly before the first regular-season week-1 kickoff of S+1; ``week1_kickoff_eve`` =
+# KICKOFF_EVE_LEAD before that kickoff (the step-I2a as-of, kept as the alternative).
+ANCHORS = ("tuesday_before_week_1", "week1_kickoff_eve")
+KICKOFF_EVE_LEAD = timedelta(hours=1)
+# reports/board/<prefix>{cliff,breakout}.* of each anchor
+REPORT_PREFIX = {
+    "tuesday_before_week_1": "preseason_", "week1_kickoff_eve": "preseason_kickoff_eve_",
+}  # fmt: skip
 GROUPS = {"QB": ("QB",), "RB": ("RB", "HB"), "WR": ("WR",), "TE": ("TE",)}
 NEW_FEATURES: tuple[str, ...] = (
-    "dc_absent", "team_change_s1", "depth_rank_s1", "new_competitor_s1", "qb1_change_s1",
-    "vacated_targets_share_s1", "vacated_carries_share_s1", "hc_change_s1",
+    "dc_absent", "dc_team_chart_missing", "team_change_s1", "depth_rank_s1", "new_competitor_s1",
+    "qb1_change_s1", "vacated_targets_share_s1", "vacated_carries_share_s1", "hc_change_s1",
 )  # fmt: skip
 
 
-def preseason_as_of(db: Path | str | duckdb.DuckDBPyConnection, season: int) -> datetime:
-    """One hour before the first regular-season week-1 kickoff of ``season`` + 1 (aware UTC)."""
+def default_anchor() -> str:
+    """The config's preseason anchor (``as_of.board.preseason``)."""
+    from twm.config import settings
+
+    return settings().as_of.board.preseason
+
+
+def weekday_time_before(moment: datetime, weekday: int, at: time) -> datetime:
+    """The last ``weekday`` (Monday = 0) at ``at`` (UTC) strictly before ``moment`` (aware UTC)."""
+    day = moment.astimezone(UTC).date()
+    for back in range(8):
+        d = day - timedelta(days=back)
+        cand = datetime.combine(d, at, UTC)
+        if d.weekday() == weekday and cand < moment:
+            return cand
+    raise AssertionError("unreachable: a weekday recurs within 8 days")
+
+
+def first_week1_kickoff(db: Path | str | duckdb.DuckDBPyConnection, season: int) -> datetime:
+    """The first regular-season week-1 kickoff of ``season`` + 1 (aware UTC)."""
     con = db if isinstance(db, duckdb.DuckDBPyConnection) else duckdb.connect(str(db), True)
     try:
         row = con.execute(
@@ -55,29 +87,51 @@ def preseason_as_of(db: Path | str | duckdb.DuckDBPyConnection, season: int) -> 
             con.close()
     if not row or row[0] is None:
         raise SeasonNotOverError(f"no week-1 kickoff of {int(season) + 1} in fact_game")
-    return row[0].replace(tzinfo=UTC) - LEAD
+    return row[0].replace(tzinfo=UTC)
+
+
+def preseason_as_of(
+    db: Path | str | duckdb.DuckDBPyConnection, season: int, anchor: str | None = None
+) -> datetime:
+    """The preseason as-of of snapshot ``season`` at ``anchor`` (default: the config's; see
+    :data:`ANCHORS`), aware UTC. The weekday and time come from config ``as_of.weekly``."""
+    from twm.config import settings
+    from twm.warehouse.weeks import AsOfRules
+
+    anchor = anchor or default_anchor()
+    kickoff = first_week1_kickoff(db, season)
+    if anchor == "week1_kickoff_eve":
+        return kickoff - KICKOFF_EVE_LEAD
+    if anchor == "tuesday_before_week_1":
+        r = AsOfRules.from_config(settings().as_of)
+        return weekday_time_before(kickoff, r.weekly_weekday, r.weekly_time)
+    raise ValueError(f"unknown preseason anchor {anchor!r}; known: {ANCHORS}")
 
 
 def week1_chart(view: Any, next_season: int) -> pl.DataFrame:
-    """(team, gsis_id, unit, position, pos_slot, depth_rank) of the latest week-1 depth chart of
-    ``next_season`` visible in ``view``: the daily pull with the latest ``dt`` when the season has
-    daily rows, else the legacy week-1 REG chart. ``depth_rank`` = 1 for the starter of each slot:
-    legacy ranks are per slot already (two or three WRs share rank 1); a daily pull numbers a
-    position's players across its slots (WR 1 .. 15), so its rank is renumbered within the slot
-    (``pos_slot``) in the pull's order."""
+    """(team, gsis_id, unit, position, pos_slot, depth_rank) of the week-1 depth charts of
+    ``next_season`` visible in ``view``: per team its daily pull with the latest ``dt`` when the
+    season has daily rows (the chart in force at the as-of), else the legacy week-1 REG chart. A
+    team with no visible chart has no row (:func:`chart_features` then flags its players
+    ``dc_team_chart_missing``). ``depth_rank`` = 1 for the starter of each slot: legacy ranks are
+    per slot already (two or three WRs share rank 1); a daily pull numbers a position's players
+    across its slots (WR 1 .. 15), so its rank is renumbered within the slot (``pos_slot``) in the
+    pull's order."""
     s1 = int(next_season)
     return view.sql(f"""
-        WITH d AS (SELECT max(dt) AS dt FROM fact_depth_chart
-                   WHERE season = {s1} AND source_format = 'daily')
+        WITH d AS (SELECT team, max(dt) AS dt FROM fact_depth_chart
+                   WHERE season = {s1} AND source_format = 'daily' AND team IS NOT NULL
+                   GROUP BY team),
+             n AS (SELECT count(*) AS n_daily FROM d)
         SELECT c.team, c.gsis_id, c.unit, c.position, c.pos_slot,
                CASE WHEN c.source_format = 'daily' THEN CAST(row_number() OVER (
                    PARTITION BY c.team, c.unit, c.position, c.pos_slot
                    ORDER BY c.depth_rank, c.gsis_id) AS INTEGER)
                ELSE c.depth_rank END AS depth_rank
-        FROM fact_depth_chart c, d
+        FROM fact_depth_chart c CROSS JOIN n LEFT JOIN d ON c.team = d.team
         WHERE c.season = {s1} AND c.gsis_id IS NOT NULL AND c.team IS NOT NULL
-          AND ((d.dt IS NOT NULL AND c.source_format = 'daily' AND c.dt = d.dt)
-            OR (d.dt IS NULL AND c.source_format = 'legacy' AND c.week = 1
+          AND ((c.source_format = 'daily' AND c.dt = d.dt)
+            OR (n.n_daily = 0 AND c.source_format = 'legacy' AND c.week = 1
                 AND c.game_type = 'REG'))
         ORDER BY c.team, c.unit, c.position, c.depth_rank, c.gsis_id""")
 
@@ -178,11 +232,19 @@ def chart_features(
         .select("gsis_id").unique().with_columns(pl.lit(1.0).alias("_comp"))
     )  # fmt: skip
     absent = c("team_s1").is_null()
+    # his team's chart is visible: his S team's (his S+1 team is unknown when he is on no chart;
+    # no S team: any team's). Not on a chart AND no chart of his team -> missing, never absent.
+    charted = sorted(chart.get_column("team").unique().to_list())
+    has_chart = (
+        pl.when(c("team").is_null()).then(pl.lit(bool(charted))).otherwise(c("team").is_in(charted))
+    )
     df = df.join(comp, on="gsis_id", how="left").join(
         teams.rename({"team": "team_s1"}), on="team_s1", how="left"
     )
     out = df.with_columns(
-        absent.alias("dc_absent"),
+        pl.when(~absent).then(False).when(has_chart).then(True).otherwise(None)
+        .alias("dc_absent"),
+        (absent & ~has_chart).alias("dc_team_chart_missing"),
         pl.when(absent).then(None).otherwise((c("team_s1") != c("team")).cast(pl.Float64))
         .alias("team_change_s1"),
         c("depth_rank_s1").cast(pl.Float64),

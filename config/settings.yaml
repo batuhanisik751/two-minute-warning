@@ -21,12 +21,15 @@ as_of:
     days_after: 1
     time: "12:00"
   # Cliff & Breakout Board snapshots of season S (docs/board.md): post_draft = this MM-DD of S+1
-  # at 00:00 UTC; preseason = tuesday_before_week_1 (the last as_of.weekly weekday/time before
-  # the first regular-season week-1 kickoff of S+1, spec 6.1) or week1_kickoff_eve (1 h before
-  # that kickoff, the step-I2a alternative; reports/board/preseason_kickoff_eve_*).
+  # at 00:00 UTC; preseason = week1_kickoff_eve (1 h before the first regular-season week-1
+  # kickoff of S+1; reports/board/preseason_*) or tuesday_before_week_1 (the last as_of.weekly
+  # weekday/time before that kickoff, spec 6.1; reports/board/preseason_tuesday_*).
+  # Owner decision 2026-10-02 (docs/progress.md, I2 board decisions (1)): the board's preseason
+  # model learns from the kickoff-eve anchor (the week-1 depth charts), a deliberate change from
+  # the spec's Tuesday, where no week-1 chart is public before 2024 and the snapshot adds nothing.
   board:
     post_draft: "06-01"
-    preseason: "tuesday_before_week_1"
+    preseason: "week1_kickoff_eve"
 
 # When does a warehouse row become public? (B2; docs/warehouse.md "When is a row available?")
 # Every event-table row gets an `available_at` (UTC) from these rules; a prediction at as_of may

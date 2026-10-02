@@ -36,6 +36,13 @@
       "when": 1790902401999,
       "tag": "0004_hot_seat",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790965248362,
+      "tag": "0005_board",
+      "breakpoints": true
     }
   ]
 }

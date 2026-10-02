@@ -300,8 +300,12 @@ approved model".
 - **Published** (migration `web/drizzle/0004_hot_seat.sql`): `hot_seat_list` (season, week,
   snapshot, kind), `hot_seat_row` (every coach: probability, rank, interim flag, drivers as
   JSON, the key features; `coach_id` = the decisions' slug of the coach's name, so
-  `/coach/[id]` joins; indexed by coach for the timeline), `hot_seat_outcome` ('final' from
-  the frozen backtest; 'pending' for live seasons until the owner labels them),
+  `/coach/[id]` joins; indexed by coach for the timeline; only the frozen backtest's lists
+  and the lists the job scores itself are published for good: a list reconstructed on the
+  owner's Mac only, like 2026 week 3 (scored 2026-10-02, after its window), is replaced away by
+  the next scheduled publish, by design: reviewer 2026-10-02, the first live list is week 4),
+  `hot_seat_outcome` ('final' from the frozen backtest; 'pending' for live seasons until the
+  owner labels them),
   `hot_seat_track_record` (backtest_metrics.csv row for row) and `hot_seat_firings`
   (firings_per_season.csv). The glossary's Hot-Seat terms publish since the site step (H4b:
   `publish.collect.UNPUBLISHED_MODULES` is empty).

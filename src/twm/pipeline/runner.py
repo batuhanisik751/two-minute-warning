@@ -355,11 +355,21 @@ def default_hooks() -> Hooks:
 
         hot, hot_pin = hot_seat.load_pinned(season)
         hot_rows = hot_seat.load_snapshot(hot_pin)["predictions"].height
+        # step I2c-a: the board's spec and its two models (sha256 first), its snapshot and the
+        # season's board frozen in it; the job never scores the board (its frozen data is
+        # published with every run)
+        from twm.modules.board import production as board
+
+        _, _, board_pin = board.load_pinned(season)
+        board_rows = board.load_snapshot(board_pin)["predictions"].height
+        board_now = board.load_current(board_pin)
+        board_rows += 0 if board_now is None else board_now["current_board"].height
         return (f"approved model {pm.model_version} ({pin.file}, sha256 {pin.sha256[:12]}...) "
                 f"and its backtest {pin.backtest_seasons} ({n:,} predictions); streamer "
                 f"{k.model_version} and {rule.model_version}; Regression Watch "
                 f"{params.model_version} ({xfp}); decisions {grading.model_version}; Hot-Seat "
-                f"{hot.model_version} (backtest {hot_rows:,} rows)")  # fmt: skip
+                f"{hot.model_version} (backtest {hot_rows:,} rows); board "
+                f"{board_pin.model_version} (backtest {board_rows:,} rows)")  # fmt: skip
 
     return Hooks(
         check_model=check_model,

@@ -357,9 +357,9 @@ def _pre_intro(anchor: str) -> str:
     when = {
         "tuesday_before_week_1": f"the last {w.weekday.capitalize()} {w.time} UTC (config "
         "`as_of.weekly`) before the first regular-season week-1 kickoff of S+1: spec 6.1's "
-        '"Tuesday before Week 1"',
+        '"Tuesday before Week 1", kept as the alternative',
         "week1_kickoff_eve": "one hour before the first regular-season week-1 kickoff of S+1: "
-        "the step-I2a anchor, kept as the alternative",
+        "the board's anchor (owner decision 2026-10-02)",
     }[anchor]
     return (
         f"Step I2a / I2-fix: the same rows and labels as the end-of-season report, read at the "

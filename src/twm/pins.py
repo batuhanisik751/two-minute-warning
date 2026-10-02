@@ -57,9 +57,12 @@ PIN_FILE = "production_models.yaml"
 ARTIFACT_DIR = Path("artifacts") / "production_models"
 BACKTEST_TABLES = ("predictions", "outcomes", "model_versions")
 # Every snapshot file a pin may name (S2a): a rule's frozen backtest is one hit-rate table;
-# P3: the Decision Report Card's frozen history (twm.modules.decisions.frozen.TABLES).
+# P3: the Decision Report Card's frozen history (twm.modules.decisions.frozen.TABLES); I2c-a:
+# the board of the pin's season, frozen when its as-of had passed at approval (its rows and the
+# input rows they were scored from; twm.modules.board.production.CURRENT_TABLES).
 DECISION_TABLES = ("fourth_downs", "two_point", "clock_cases", "team_games", "season_inputs")
-SNAPSHOT_TABLES = (*BACKTEST_TABLES, "hit_rates", *DECISION_TABLES)
+BOARD_TABLES = ("current_board", "current_inputs")
+SNAPSHOT_TABLES = (*BACKTEST_TABLES, "hit_rates", *DECISION_TABLES, *BOARD_TABLES)
 PARQUET_LEVEL = 19  # zstd level of the snapshot files (measured: 0.89 MB for 91,638 rows)
 FLOAT_TOLERANCE = 1.01e-6  # the evaluation CSV prints 6 decimals
 HEADER = """\

@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from twm import __version__
+from twm.modules.board import production_cli as _board_pins  # noqa: F401 (I2c-a commands)
 from twm.modules.board.cli import board_app
 from twm.modules.decisions import production_cli as _decisions_pins  # noqa: F401 (P3 commands)
 from twm.modules.decisions.cli import decisions_app
@@ -2161,7 +2162,7 @@ def _check_against_evaluation(store: Path, evaluation_csv: Path) -> list[str]:
 def model_check(
     module: str = typer.Argument(
         "all",
-        help="Module: waiver_radar, streamer, regression_watch, decisions, hot_seat, or all "
+        help="Module: waiver_radar, streamer, regression_watch, decisions, hot_seat, board, or all "
         "(every pinned module).",
     ),
     season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
@@ -2180,7 +2181,8 @@ def model_check(
     (sha256, version, and its record of the last backtest season against
     reports/regression_watch/backtest.csv; D4a), and the Decision Report Card's approved
     grading and frozen history (P3: reports/decisions/{fourth_downs,clock}.csv), and the
-    Hot-Seat Meter's live model and frozen backtest (H4a: reports/hot_seat/). Changes
+    Hot-Seat Meter's live model and frozen backtest (H4a: reports/hot_seat/), and the Cliff
+    board's two models and frozen backtest (I2c-a: reports/board/preseason_cliff.*). Changes
     nothing."""
     import tempfile
 
@@ -2204,6 +2206,11 @@ def model_check(
         from twm.modules.hot_seat.production_cli import check_pin as check_hot_seat_pin
 
         check_hot_seat_pin(chosen)
+        return
+    if module.strip().lower() == "board":  # I2c-a: the board's models + frozen backtest
+        from twm.modules.board.production_cli import check_pin as check_board_pin
+
+        check_board_pin(chosen)
         return
     key = "waiver_radar" if module.strip().lower() == "all" else _module_or_exit(module)
     try:
@@ -2240,6 +2247,10 @@ def model_check(
         from twm.modules.hot_seat.production_cli import check_pin as check_hot_seat_pin
 
         check_hot_seat_pin(chosen)
+    if module.strip().lower() == "all" and "board" in pins.read_pins():
+        from twm.modules.board.production_cli import check_pin as check_board_pin
+
+        check_board_pin(chosen)
 
 
 @model_app.command("restore-backtest")

@@ -974,3 +974,166 @@ export const hotSeatFirings = pgTable("hot_seat_firings", {
   censoredCoachSeasons: integer("censored_coach_seasons").notNull(),
   interimCoachSeasons: integer("interim_coach_seasons").notNull(),
 });
+
+// ---------------------------------------------------------------------------------------
+// Cliff board (step I2c-a)
+// ---------------------------------------------------------------------------------------
+
+/** One board per (season, week, snapshot, kind): the season S1 the board is for, week 0
+ * (made before week 1), snapshot 'preseason' (the kickoff eve of S1: one hour before its first
+ * week-1 kickoff; features of snapshot S = S1 - 1 point in time). model_version = the Cliff
+ * model's, missed_version = the missed-time model's. 'live' boards are frozen once published;
+ * 'backtest' boards (the frozen walk-forward of 2008 .. the season before the approved one, and
+ * any board scored after its as-of, e.g. 2026) are replaced. */
+export const boardList = pgTable(
+  "board_list",
+  {
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    snapshot: text("snapshot").notNull(),
+    kind: text("kind").notNull(),
+    asOf: tstz("as_of").notNull(),
+    modelVersion: text("model_version")
+      .notNull()
+      .references(() => modelVersions.modelVersion),
+    missedVersion: text("missed_version")
+      .notNull()
+      .references(() => modelVersions.modelVersion),
+    generatedAt: tstz("generated_at").notNull(),
+    incomplete: boolean("incomplete").notNull().default(false),
+    nPlayers: integer("n_players").notNull(),
+    note: text("note"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.week, t.snapshot, t.kind] }),
+    check("board_list_kind_check", sql`${t.kind} in ('live', 'backtest')`),
+    check("board_list_snapshot_check", sql`${t.snapshot} in ('preseason')`),
+  ],
+);
+
+/** Every Cliff player of a board (3+ prior seasons, top-36 PPG at his position in S), with
+ * two chances, each the model's own probability: cliff = 6+ games in S1 and a 30%+ drop in
+ * PPG; missed = under 6 games in S1; each with its rank in the board (1 = highest). ecr_rank =
+ * FantasyPros' preseason expert consensus position rank of S1 (NULL = unranked, or no ECR
+ * before 2020). team, position = his S ones. The key features follow (registry names,
+ * docs/glossary.md: *_s = season S, *_s1 = the week-1 depth chart of S1). cliff_drivers /
+ * missed_drivers = the 3 largest terms of each logistic regression (coef x standardized
+ * value), JSON [{feature, label, contribution, value, missing}]. */
+export const boardRow = pgTable(
+  "board_row",
+  {
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    snapshot: text("snapshot").notNull(),
+    kind: text("kind").notNull(),
+    gsisId: text("gsis_id")
+      .notNull()
+      .references(() => dimPlayer.gsisId),
+    team: text("team")
+      .notNull()
+      .references(() => dimTeam.teamAbbr),
+    position: text("position").notNull(),
+    asOf: tstz("as_of").notNull(),
+    cliffRank: integer("cliff_rank").notNull(),
+    cliffProbability: doublePrecision("cliff_probability").notNull(),
+    missedRank: integer("missed_rank").notNull(),
+    missedProbability: doublePrecision("missed_probability").notNull(),
+    ecrRank: integer("ecr_rank"),
+    age: doublePrecision("age"),
+    priorSeasons: integer("prior_seasons").notNull(),
+    gamesS: integer("games_s").notNull(),
+    ppgS: doublePrecision("ppg_s").notNull(),
+    posRankS: integer("pos_rank_s").notNull(),
+    ppgChange: doublePrecision("ppg_change"),
+    touchesPerGameS: doublePrecision("touches_per_game_s"),
+    depthRankS1: integer("depth_rank_s1"),
+    teamChangeS1: boolean("team_change_s1"),
+    dcAbsent: boolean("dc_absent"),
+    hcChangeS1: boolean("hc_change_s1"),
+    cliffDrivers: jsonb("cliff_drivers").notNull(),
+    missedDrivers: jsonb("missed_drivers").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.week, t.snapshot, t.kind, t.gsisId] }),
+    foreignKey({
+      name: "board_row_list_fk",
+      columns: [t.season, t.week, t.snapshot, t.kind],
+      foreignColumns: [boardList.season, boardList.week, boardList.snapshot, boardList.kind],
+    }),
+    index("board_row_gsis_id_idx").on(t.gsisId, t.season),
+    check("board_row_cliff_probability_check", sql`${t.cliffProbability} between 0 and 1`),
+    check("board_row_missed_probability_check", sql`${t.missedProbability} between 0 and 1`),
+    check("board_row_rank_check", sql`${t.cliffRank} >= 1 and ${t.missedRank} >= 1`),
+  ],
+);
+
+/** What happened in the board's season S1, per (season, week 0, player): regular-season games
+ * with a stat line and PPG (NULL without a game), y_cliff (NULL when he missed: under 6 games),
+ * y_missed; 'final' for the frozen backtest's boards, 'pending' (NULLs) for live seasons.
+ * Replaced on every publish. */
+export const boardOutcome = pgTable(
+  "board_outcome",
+  {
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    gsisId: text("gsis_id")
+      .notNull()
+      .references(() => dimPlayer.gsisId),
+    gamesS1: integer("games_s1"),
+    ppgS1: doublePrecision("ppg_s1"),
+    yCliff: boolean("y_cliff"),
+    yMissed: boolean("y_missed"),
+    labelStatus: text("label_status").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.week, t.gsisId] }),
+    index("board_outcome_gsis_id_idx").on(t.gsisId),
+    check("board_outcome_status_check", sql`${t.labelStatus} in ('final', 'pending')`),
+  ],
+);
+
+/** The board's walk-forward track record at the preseason snapshot: every row of
+ * reports/board/preseason_cliff.csv, then preseason_breakout.csv (line = the data row, from 1
+ * across both; research = the Breakout rows: Breakout is not on the site). Per variant
+ * (cliff_main, cliff_missed, cliff_sensitivity, breakout_wr_te, breakout_rb), slice ('all' =
+ * snapshots 2007-2024, 'ecr_era' = 2019-2024 with the ECR) and model (logit, logit_simple,
+ * lgbm, base_ppg_rank = last season's PPG rank, eos = the end-of-season model, ecr): PR-AUC,
+ * ROC-AUC, Brier, precision@10/20, and (vs set) paired differences, each with its season-block
+ * interval (lo, hi) and the share of resamples above zero. */
+export const boardTrackRecord = pgTable("board_track_record", {
+  line: integer("line").primaryKey(),
+  population: text("population").notNull(),
+  research: boolean("research").notNull(),
+  variant: text("variant").notNull(),
+  slice: text("slice").notNull(),
+  model: text("model").notNull(),
+  vs: text("vs"),
+  metric: text("metric").notNull(),
+  value: doublePrecision("value"),
+  lo: doublePrecision("lo"),
+  hi: doublePrecision("hi"),
+  shareAboveZero: doublePrecision("share_above_zero"),
+});
+
+/** Where the model and the market disagreed, per ECR-era board (2020-2025) and model
+ * (cliff_main logit, cliff_missed logit_simple): pick_group 'model_only' = in the model's
+ * top 10, not the ECR's; 'ecr_only' = the reverse; 'both'; players and how many had the label
+ * (hits). Rankings among the model's evaluated rows (reports/board/preseason_cliff.md). */
+export const boardDisagreement = pgTable(
+  "board_disagreement",
+  {
+    variant: text("variant").notNull(),
+    model: text("model").notNull(),
+    season: integer("season").notNull(),
+    pickGroup: text("pick_group").notNull(),
+    players: integer("players").notNull(),
+    hits: integer("hits").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.variant, t.season, t.pickGroup] }),
+    check(
+      "board_disagreement_group_check",
+      sql`${t.pickGroup} in ('model_only', 'ecr_only', 'both')`,
+    ),
+  ],
+);

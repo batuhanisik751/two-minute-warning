@@ -1,9 +1,10 @@
 """The board's PRESEASON snapshot (step I2a, PROJECT_SPEC 8.6 / step I2).
 
 Same rows and labels as the end-of-season snapshot of S (the season just completed), read later,
-at :func:`preseason_as_of`: by default (config ``as_of.board.preseason``, spec 6.1) the Tuesday
-14:00 UTC (config ``as_of.weekly``) before the first regular-season week-1 kickoff of S+1, or
-the alternative anchor one hour before that kickoff (:data:`ANCHORS`). Every I1b feature is
+at :func:`preseason_as_of`: by default (config ``as_of.board.preseason``; the owner's I2
+board decision) one hour before the first regular-season week-1 kickoff of S+1, or the alternative
+anchor, spec 6.1's Tuesday 14:00 UTC (config ``as_of.weekly``) before that kickoff
+(:data:`ANCHORS`). Every I1b feature is
 recomputed through an :class:`~twm.asof.AsOfView` at that moment, and the features below exist
 only now (docs/board.md "Preseason snapshot" defines each):
 
@@ -39,14 +40,15 @@ from twm.modules.board import features as bf
 from twm.modules.board.seasons import SeasonNotOverError
 
 # Anchors of the preseason as-of (config ``as_of.board.preseason``; the default is the config's):
-# ``tuesday_before_week_1`` = spec 6.1, the last ``as_of.weekly`` weekday/time (Tuesday 14:00
-# UTC) strictly before the first regular-season week-1 kickoff of S+1; ``week1_kickoff_eve`` =
-# KICKOFF_EVE_LEAD before that kickoff (the step-I2a as-of, kept as the alternative).
+# ``week1_kickoff_eve`` = KICKOFF_EVE_LEAD before the first regular-season week-1 kickoff of S+1
+# (the step-I2a as-of; the board's anchor, the owner's I2 decision); ``tuesday_before_week_1``
+# = spec 6.1, the last ``as_of.weekly`` weekday/time (Tuesday 14:00 UTC) strictly before that
+# kickoff (kept as the alternative: no week-1 chart is public then before 2024).
 ANCHORS = ("tuesday_before_week_1", "week1_kickoff_eve")
 KICKOFF_EVE_LEAD = timedelta(hours=1)
-# reports/board/<prefix>{cliff,breakout}.* of each anchor
+# reports/board/<prefix>{cliff,breakout}.* and data/board/dataset_<prefix>.parquet of each anchor
 REPORT_PREFIX = {
-    "tuesday_before_week_1": "preseason_", "week1_kickoff_eve": "preseason_kickoff_eve_",
+    "week1_kickoff_eve": "preseason_", "tuesday_before_week_1": "preseason_tuesday_",
 }  # fmt: skip
 GROUPS = {"QB": ("QB",), "RB": ("RB", "HB"), "WR": ("WR",), "TE": ("TE",)}
 NEW_FEATURES: tuple[str, ...] = (

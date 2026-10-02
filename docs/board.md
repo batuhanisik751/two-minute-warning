@@ -7,7 +7,9 @@ The board answers two offseason questions for fantasy drafts:
 
 I1b builds the populations, labels, features, models and an honest walk-forward backtest
 (`reports/board/cliff.md`, `reports/board/breakout.md`). The preseason (I2a) and post-draft (I2b)
-snapshots are below; the `/board` page is step I2c. Code: `src/twm/modules/board/`; run `uv run twm board backtest`.
+snapshots are below; the board in production (step I2c-a: the approved models, their frozen
+backtest, `twm board score`, the published tables) is "Production" at the end; the `/board`
+page is step I2c. Code: `src/twm/modules/board/`; run `uv run twm board backtest`.
 
 ## Season-level numbers
 
@@ -105,13 +107,17 @@ Same rows and labels as the end-of-season snapshot of S, read at the preseason a
 anchors (config `as_of.board.preseason`, module `twm.modules.board.preseason`, code
 `twm board backtest --snapshot preseason [--anchor ...]`):
 
-- **`tuesday_before_week_1`** (the config default; spec 6.1 "the Tuesday before Week 1"): the
-  last `as_of.weekly` weekday/time (Tuesday 14:00 UTC) strictly before the first regular-season
-  week-1 kickoff of S+1 (`fact_game.kickoff_utc`); e.g. 2017-09-05 14:00 UTC for S = 2016, and
-  the day before a Wednesday opener (2012, 2026). It equals week 1's `dim_week.asof_weekly_utc`
-  minus 7 days in every season. Reports: `reports/board/preseason_{cliff,breakout}.*`.
-- **`week1_kickoff_eve`** (the step-I2a anchor, kept as the alternative): one hour before that
-  kickoff; e.g. 2017-09-07 23:30 UTC. Reports: `reports/board/preseason_kickoff_eve_*`.
+- **`week1_kickoff_eve`** (the config default since step I2c-a; owner decision 2026-10-02, a
+  deliberate change from the spec's Tuesday, below): one hour before the first regular-season
+  week-1 kickoff of S+1 (`fact_game.kickoff_utc`); e.g. 2017-09-07 23:30 UTC for S = 2016.
+  Reports: `reports/board/preseason_{cliff,breakout}.*` (until I2c-a these were the
+  `preseason_kickoff_eve_*` files; regenerated with the same numbers: every CSV byte-identical,
+  each report's intro line reworded).
+- **`tuesday_before_week_1`** (spec 6.1 "the Tuesday before Week 1", kept as the alternative):
+  the last `as_of.weekly` weekday/time (Tuesday 14:00 UTC) strictly before that kickoff; e.g.
+  2017-09-05 14:00 UTC, and the day before a Wednesday opener (2012, 2026). It equals week 1's
+  `dim_week.asof_weekly_utc` minus 7 days in every season. Reports (kept):
+  `reports/board/preseason_tuesday_{cliff,breakout}.*` (until I2c-a: `preseason_*`).
 
 Every feature above is recomputed through an `AsOfView` at that moment (only `hc_departure` can
 change: later-dated departures are now known), and these exist only now:
@@ -160,7 +166,7 @@ before the kickoff eve, so at both anchors the experts know nothing the snapshot
 Results (2026-10-02 I2-fix run, primary models, PR-AUC with 95% season-block intervals,
 snapshots 2007-2024; ECR era = labels 2020-2025):
 
-| variant | Tuesday (default) | vs `eos` | ECR era vs ECR | kickoff eve | vs `eos` | ECR era vs ECR |
+| variant | Tuesday (alternative) | vs `eos` | ECR era vs ECR | kickoff eve (default) | vs `eos` | ECR era vs ECR |
 |---|---|---|---|---|---|---|
 | Cliff main (logit) | 0.361 [0.319, 0.407] | -0.001 [-0.004, +0.000] | 0.408 vs 0.503: -0.094 [-0.149, -0.021] | 0.405 [0.354, 0.463] | +0.042 [+0.019, +0.067] | 0.459 vs 0.503: -0.043 [-0.129, +0.042] |
 | Missed (logit_simple) | 0.384 [0.330, 0.439] | +0.000 [-0.000, +0.000] | 0.352 vs 0.570: -0.217 [-0.375, -0.113] | 0.642 [0.585, 0.699] | +0.258 [+0.209, +0.308] | 0.634 vs 0.570: +0.064 [-0.051, +0.128] |
@@ -280,13 +286,83 @@ gives some back), running back, fewer games, age and the aging curve, workload.
   split.
 - `notebooks/05_cliff_breakout.ipynb`: the populations, labels and backtest, read from those files,
   and the later snapshots' paired differences and top inputs
-  (`reports/board/{post_draft,preseason,preseason_kickoff_eve}_*`).
+  (`reports/board/{post_draft,preseason,preseason_tuesday}_*`).
 - `uv run twm board backtest --snapshot preseason|post_draft [--resume]`: also builds
   `data/board/dataset_{preseason,post_draft}.parquet` and writes `reports/board/{preseason,post_draft}_*`
-  (the end-of-season variants run first, for the paired `eos` comparison).
-  `--snapshot preseason --anchor week1_kickoff_eve` builds `dataset_preseason_kickoff_eve.parquet`
-  and writes `reports/board/preseason_kickoff_eve_*` (default anchor: config).
+  (the end-of-season variants run first, for the paired `eos` comparison; preseason = the
+  config's anchor, the kickoff eve). `--snapshot preseason --anchor tuesday_before_week_1`
+  builds `dataset_preseason_tuesday.parquet` and writes `reports/board/preseason_tuesday_*`.
 - Tests: `tests/test_board.py` (synthetic world in `tests/board_world.py`; the realdata test runs the
   leakage harness on the real warehouse at the 2016 snapshot), `tests/test_board_preseason.py`,
   `tests/test_board_post_draft.py` (its realdata test runs the harness at the 2016 preseason, both
   anchors, and post-draft as-ofs).
+
+## Production (step I2c-a)
+
+Owner decisions (2026-10-02, docs/progress.md): the board's preseason model learns from the
+kickoff-eve anchor; Breakout is NOT on the site (it did not beat last season's PPG rank: its
+backtest rows are published as `research` rows of the track record only); `/board` shows the Cliff
+and missed-time chances side by side with FantasyPros' preseason ECR, with the disagreements and
+how past ones (2020-2025) turned out. Code: `src/twm/modules/board/{production,live,
+production_cli}.py`, `src/twm/publish/board_lists.py`.
+
+- **Models** (`production.ROLES`): `cliff` = `cliff_main`'s logit (`y_cliff`) and `missed` =
+  `cliff_missed`'s simple logit (`y_missed`), both with the preseason features. The board of
+  season S1 uses the folds the walk-forward would use for snapshot S = S1 - 1: every labelled
+  snapshot 2002 .. S - 1 (`production_fold`, `fit_fold`), C by the inner walk-forward; the
+  model's own probability. For 2026: Cliff `logit-9633152d93661796` (C 0.01, 1,825 rows, 440
+  positive), missed `logit_simple-072eba13c3d7830f` (C 0.1, 2,165 rows, 340 positive).
+- **Pin** `board` (`model: board_spec`): a JSON spec naming both model files by version and
+  sha256 with the board's season, snapshot and anchor (`board_spec-1581a6da7602c3f7`); a pickle
+  is opened only after its sha256 matched; the pin is refused when config's preseason anchor is
+  not the approved one. **Frozen backtest**: both models' walk-forward on snapshots 2007-2024
+  (the boards of 2008-2025), refit with the backtest's own code and refused unless each fold's
+  scores equal the walk-forward's: every Cliff player of each board (1,674 rows: the Cliff
+  model's evaluation rows are those with 6+ games in S+1, as in the report, but a board shows
+  every Cliff player), both chances and ranks (1 = highest, ties by id), the ECR position rank
+  (only from a scrape public by the as-of: 2020-2025 were public 6-7 days before), the key
+  features, each model's top 3 drivers (coef x standardized value, the Hot-Seat code); outcomes;
+  36 fold versions. `twm model check board` reproduces `preseason_cliff.csv`'s rows of both
+  models (values, intervals and shares, to 1e-9), `preseason_cliff_seasons.csv` and the
+  disagreement tables of `preseason_cliff.md`. `uv run twm board pin` writes it all.
+- **The season's board in the pin** (reviewer decision 2026-10-02): when the pin season's as-of
+  has passed at approval (2026: yes), `twm board pin` scores that board with the saved model
+  files and freezes it in the pin's snapshot: `current_board` (the board's rows, kind
+  'backtest' = reconstructed, outcomes pending) and `current_inputs` (the input rows it was
+  scored from), each with its sha256 and rows in config/production_models.yaml. Every publish
+  takes it from the pin (a store's reconstruction of the same season is dropped), so a fresh
+  runner's publish never shrinks it away; `twm model check board` re-scores the frozen inputs
+  with the pinned models and must reproduce both chances to 1e-9 (ranks and versions exactly);
+  `twm board score` on the Mac says whether its board matches the pinned one.
+- **Scoring** `uv run twm board score [--season S1]`: the Cliff rows of snapshot S1 - 1 at the
+  pinned anchor (point in time), scored by the pinned models (nothing fitted), stored in the
+  predictions store as two rows per player (rank_group `cliff` / `missed`, week 0 = before week
+  1). 'live' only when run on the real clock between the as-of and the kickoff (append-only),
+  else 'backtest' (reconstructed). Exit 3 before the as-of. The scheduled job has no board
+  stage (its preflight loads the pin); every publish carries the pinned boards and a live
+  board from the store (frozen in the target once published).
+- **Next August** (the 2027 board): the pin for 2027 can be approved once the 2026 labels are
+  final, but before the kickoff eve its board's as-of has not passed, so the pin holds no
+  season board; the owner runs `uv run twm board score` on the Mac between the kickoff eve
+  and the kickoff (stored 'live', published by the next publish from the Mac and frozen in the
+  target from then on). A board published earlier from the latest daily depth chart (owner
+  decision (1)) and a once-a-season scoring stage in the scheduled job are later steps (I6).
+- **Published** (migration `web/drizzle/0005_board.sql`): `board_list` (season S1, week 0,
+  snapshot 'preseason', kind, as-of, both model versions), `board_row` (player, his S team and
+  position, both chances and ranks, `ecr_rank`, age, prior seasons, games, PPG and rank in S,
+  PPG change, touches per game, week-1 depth rank, team change, `dc_absent`, coach change, both
+  drivers), `board_outcome` (games and PPG in S1, `y_cliff`, `y_missed`; 'final' / 'pending'),
+  `board_track_record` (`preseason_cliff.csv` then `preseason_breakout.csv` row for row) and
+  `board_disagreement` (per ECR-era board and model: the model's and the ECR's top-10 picks,
+  both, and how many had the label). The glossary's board terms stay unpublished until the
+  web step (`publish.collect.UNPUBLISHED_MODULES`).
+
+**The 2026 board** (scored 2026-10-02, after its as-of, Wed 2026-09-09 23:20 UTC, and frozen
+in the pin: published as reconstructed, kind 'backtest'; outcomes pending until the 2026 season
+ends): 94
+Cliff players. Top 10 by the Cliff chance (missed-time chance and rank; preseason ECR position
+rank, scrape of 2026-09-04): Darren Waller TE 79.0% (67.3%, #2; TE33), Kenny Gainwell RB 66.0%
+(9.9%; RB32), Jake Tonges TE 63.0% (14.9%; TE40), Josh Jacobs RB 56.7% (43.6%, #4; RB47), Dawson
+Knox TE 55.6% (11.3%; TE47), Tyler Higbee TE 51.4% (30.1%; TE48), Zach Ertz TE 50.8% (83.4%, #1;
+TE64), Christian McCaffrey RB 47.2% (2.7%; RB3), George Kittle TE 41.3% (7.1%; TE10), Rico
+Dowdle RB 40.7% (8.3%; RB29).

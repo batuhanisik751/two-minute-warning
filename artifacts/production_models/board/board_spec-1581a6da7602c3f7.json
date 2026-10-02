@@ -1,0 +1,26 @@
+{
+ "anchor": "week1_kickoff_eve",
+ "format": 1,
+ "model_version": "board_spec-1581a6da7602c3f7",
+ "models": {
+  "cliff": {
+   "file": "artifacts/production_models/board/logit-9633152d93661796.joblib",
+   "label": "y_cliff",
+   "model": "logit",
+   "sha256": "867b27da592d4ee3d8c132140398ecbf9bd359c4a223c2cd99e25086936f301a",
+   "variant": "cliff_main",
+   "version": "logit-9633152d93661796"
+  },
+  "missed": {
+   "file": "artifacts/production_models/board/logit_simple-072eba13c3d7830f.joblib",
+   "label": "y_missed",
+   "model": "logit_simple",
+   "sha256": "9ba8f19dffa88fd81237229fc4d5ecd8f0ae15126b386c968867843e84e40d41",
+   "variant": "cliff_missed",
+   "version": "logit_simple-072eba13c3d7830f"
+  }
+ },
+ "module": "board",
+ "season": 2026,
+ "snapshot": "preseason"
+}

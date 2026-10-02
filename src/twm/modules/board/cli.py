@@ -88,8 +88,8 @@ def backtest_cmd(
     anchor: str | None = typer.Option(
         None,
         "--anchor",
-        help="preseason only: tuesday_before_week_1 (reports/board/preseason_*) or "
-        "week1_kickoff_eve (reports/board/preseason_kickoff_eve_*); default: config "
+        help="preseason only: week1_kickoff_eve (reports/board/preseason_*) or "
+        "tuesday_before_week_1 (reports/board/preseason_tuesday_*); default: config "
         "as_of.board.preseason.",
     ),
 ) -> None:

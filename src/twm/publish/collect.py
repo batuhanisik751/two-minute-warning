@@ -41,7 +41,7 @@ from twm.config import FANTASY_POSITIONS
 
 MODULE = "waiver_radar"
 # tables.FAMILIES, and (step P3) the Decision Report Card (tables.DECISIONS)
-MODULES = ("waiver_radar", "streamer", "regression_watch", "decisions", "hot_seat")
+MODULES = ("waiver_radar", "streamer", "regression_watch", "decisions", "hot_seat", "board")
 TOP_N = 25  # published picks per list (the weekly report's top 25: confidence.TOP_N)
 # nflverse gsis ids: "00-0034796" (most players) or "BAT138483" (older ids; checked: every
 # dim_player id in the 2026-09-28 warehouse matches one of the two)
@@ -99,6 +99,7 @@ class Inputs:
     decisions_season_dir: Path | None = None  # `twm decisions grade-pinned`'s output
     decisions_reports: Path | None = None  # reports/decisions
     hot_seat_reports: Path | None = None  # reports/hot_seat (step H4a)
+    board_reports: Path | None = None  # reports/board (step I2c-a)
 
     @classmethod
     def default(cls, now: datetime | None = None) -> Inputs:
@@ -126,6 +127,7 @@ class Inputs:
             "decisions_season_dir": ROOT / "data" / "decisions" / "season",
             "decisions_reports": ROOT / "reports" / "decisions",
             "hot_seat_reports": ROOT / "reports" / "hot_seat",
+            "board_reports": ROOT / "reports" / "board",
         }
         value = getattr(self, name)
         return Path(value) if value is not None else defaults[name]
@@ -803,7 +805,8 @@ def model_versions(store: Path, versions: Sequence[str]) -> pl.DataFrame:
 
 
 # Modules with registry entries but no page on the site yet: their terms stay out of the published
-# glossary until the module ships (Hot-Seat until step H4b; the board until its web step, I2).
+# glossary until the module ships (Hot-Seat until step H4b; the board until its web step, I2c:
+# its tables publish from step I2c-a on, its terms only with the page).
 UNPUBLISHED_MODULES: frozenset[str] = frozenset({"board"})
 
 
@@ -898,6 +901,14 @@ def collect(inputs: Inputs) -> PublishData:
             families["hot_seat"], tables[hs.TRACK_TABLE] = got.data, got.track_record
             tables.update(got.tables)
             extra.append(got)
+        if "board" in inputs.modules:  # step I2c-a: stored boards + the frozen backtest
+            from twm.publish import board_lists as bl
+
+            got = bl.collect_board(inputs.store, inputs.path("board_reports"), season,
+                                   inputs.now, con)  # fmt: skip
+            families["board"], tables[bl.TRACK_TABLE] = got.data, got.track_record
+            tables.update(got.tables)
+            extra.append(got)
         data_as_of, meta = data_freshness(con, season, inputs.now)
     finally:
         con.close()
@@ -934,6 +945,8 @@ def collect(inputs: Inputs) -> PublishData:
     ids += pws.get_column("gsis_id").to_list()
     if "regression_watch" in families:
         ids += families["regression_watch"].rows.get_column("gsis_id").to_list()
+    if "board" in families:
+        ids += families["board"].rows.get_column("gsis_id").to_list()
     names = pl.concat([names, pws.select("gsis_id", pl.col("player_display_name").alias("name"))])
     con = _duck(inputs.warehouse)
     try:
@@ -944,6 +957,8 @@ def collect(inputs: Inputs) -> PublishData:
 
     wanted = [v for m, f in families.items() for v in
               f.lists.get_column(FAMILIES[m].version).to_list()]  # fmt: skip
+    if "board" in families:  # a board list names its missed-time model too
+        wanted += families["board"].lists.get_column("missed_version").to_list()
     versions = model_versions(inputs.store, wanted)
     more = [e.versions for e in extra if e.versions.height]
     if more:
@@ -1146,6 +1161,37 @@ def _hot_seat_problems(d: ListData, teams: set[str], coaches: set[str]) -> list[
     return problems
 
 
+def _board_problems(d: ListData, teams: set[str], players: set[str],
+                    versions: set[str]) -> list[str]:  # fmt: skip
+    """The board's lists (step I2c-a): one row per player, both ranks 1..n, both chances in
+    [0, 1], known teams, players and both model versions, drivers present."""
+    rows = d.rows
+    key = ["season", "week", "snapshot", "kind"]
+    problems = _list_problems("board", d.lists, rows.rename({"cliff_rank": "rank"}), key,
+                              positions=None, pool="n_players", row_id="gsis_id", ranked=True,
+                              top=None)  # fmt: skip
+    problems += _list_problems("board (missed)", d.lists, rows.rename({"missed_rank": "rank"}),
+                               key, positions=None, pool="n_players", row_id="gsis_id",
+                               ranked=True, top=None)  # fmt: skip
+    odd = d.lists.filter(pl.col("snapshot") != "preseason")
+    if odd.height:
+        problems.append(f"unknown board snapshots: {odd['snapshot'].unique().to_list()}")
+    for c in ("cliff_probability", "missed_probability"):
+        out = rows.filter(pl.col(c).is_null() | pl.col(c).is_nan() | (pl.col(c) < 0)
+                          | (pl.col(c) > 1))  # fmt: skip
+        if out.height:
+            problems.append(f"{out.height} board rows have a {c} outside [0, 1]")
+    problems += _team_problems("board rows", rows, teams)
+    if rows.filter(~pl.col("gsis_id").is_in(list(players))).height:
+        problems.append("some board rows name a player missing from dim_player")
+    unknown = set(d.lists.get_column("missed_version").to_list()) - versions
+    if unknown:
+        problems.append(f"board lists of unknown missed-time model versions: {sorted(unknown)[:3]}")
+    if rows.filter(pl.col("cliff_drivers").is_null() | pl.col("missed_drivers").is_null()).height:
+        problems.append("some board rows have no drivers")
+    return problems
+
+
 def validate(data: PublishData) -> list[str]:
     """Plain-English problems (empty = publishable): see docs/deploy.md "What is checked"."""
     from twm.publish.tables import FAMILIES
@@ -1197,6 +1243,9 @@ def validate(data: PublishData) -> list[str]:
         dim = t.get("dim_coach")
         coaches = set(dim.get_column("coach_id").to_list()) if dim is not None else set()
         problems += _hot_seat_problems(fam["hot_seat"], teams, coaches)
+    if "board" in fam:
+        known_v = set(t["model_versions"].get_column("model_version").to_list())
+        problems += _board_problems(fam["board"], teams, players, known_v)
     # 3. every player named exists; the weekly summary is clean
     for name, df in (("picks", picks), ("player_week_summary", t["player_week_summary"])):
         missing = df.filter(~pl.col("gsis_id").is_in(players))

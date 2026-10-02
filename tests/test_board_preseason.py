@@ -48,8 +48,9 @@ def test_preseason_as_of_both_anchors_and_the_config_default():
     assert pre.preseason_as_of(con, 2020, "week1_kickoff_eve") == AS_OF
     # the Tuesday 14:00 UTC (config as_of.weekly) before the Friday-UTC opener
     assert pre.preseason_as_of(con, 2020, "tuesday_before_week_1") == TUESDAY
-    assert pre.default_anchor() == "tuesday_before_week_1"  # config/settings.yaml
-    assert pre.preseason_as_of(con, 2020) == TUESDAY
+    # config/settings.yaml (owner decision 2026-10-02: the board learns from the kickoff eve)
+    assert pre.default_anchor() == "week1_kickoff_eve"
+    assert pre.preseason_as_of(con, 2020) == AS_OF
     with pytest.raises(SeasonNotOverError):
         pre.preseason_as_of(con, 2021)
     with pytest.raises(ValueError, match="unknown preseason anchor"):
@@ -214,17 +215,35 @@ def test_the_anchor_dates_come_from_the_config(monkeypatch):
     real = config.settings()
     a = real.as_of.model_copy(update={
         "weekly": config.WeeklyAsOf(weekday="monday", time="09:30"),
-        "board": config.BoardAsOf(post_draft="06-15", preseason="week1_kickoff_eve"),
+        "board": config.BoardAsOf(post_draft="06-15", preseason="tuesday_before_week_1"),
     })  # fmt: skip
     fake = real.model_copy(update={"as_of": a})
     monkeypatch.setattr(config, "settings", lambda: fake)
     con = _games()
-    assert pre.default_anchor() == "week1_kickoff_eve"
-    assert pre.preseason_as_of(con, 2020) == AS_OF
-    monday = pre.preseason_as_of(con, 2020, "tuesday_before_week_1")
+    assert pre.default_anchor() == "tuesday_before_week_1"
+    monday = pre.preseason_as_of(con, 2020)
     assert monday == datetime(2021, 9, 6, 9, 30, tzinfo=UTC)
+    assert pre.preseason_as_of(con, 2020, "week1_kickoff_eve") == AS_OF
     assert pdr.post_draft_as_of(2020) == datetime(2021, 6, 15, tzinfo=UTC)
     for mod in (pre, pdr):
         src = Path(mod.__file__).read_text()
         assert not re.search(r"\b(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\b", src), mod.__name__
         assert not re.search(r"datetime\(\d{4}|time\(\d", src), mod.__name__
+
+
+def test_the_config_default_is_the_kickoff_eve_and_its_reports_are_preseason_star():
+    """Step I2c-a: the config switch (owner decision 2026-10-02). The default anchor's reports
+    are reports/board/preseason_*, the Tuesday's preseason_tuesday_*; each report names its
+    anchor in its title."""
+    from twm.config import ROOT
+
+    assert pre.default_anchor() == "week1_kickoff_eve"
+    assert pre.REPORT_PREFIX == {"week1_kickoff_eve": "preseason_",
+                                 "tuesday_before_week_1": "preseason_tuesday_"}  # fmt: skip
+    yaml_text = (ROOT / "config" / "settings.yaml").read_text()
+    assert "Owner decision 2026-10-02" in yaml_text
+    for anchor, prefix in pre.REPORT_PREFIX.items():
+        for pop in ("cliff", "breakout"):
+            first = (ROOT / "reports/board" / f"{prefix}{pop}.md").read_text().splitlines()[0]
+            assert f"anchor {anchor} " in first, (prefix, pop)
+    assert not list((ROOT / "reports/board").glob("preseason_kickoff_eve_*"))

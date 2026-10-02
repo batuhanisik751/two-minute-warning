@@ -11,9 +11,11 @@ How a publish treats each table (the reviewer's rules of 2026-09-28):
   derived from local files and can always be rebuilt (track_record, tier_stats, glossary,
   player_week_summary, site_meta, radar_outcome; step P2: stream_outcome, regression_outcome,
   stream_track_record, regression_track_record; step R1: regression_stability; step H4a:
-  hot_seat_outcome, hot_seat_track_record, hot_seat_firings).
+  hot_seat_outcome, hot_seat_track_record, hot_seat_firings; step I2c-a: board_outcome,
+  board_track_record, board_disagreement).
 - **lists**: radar_list / radar_pick (and, step P2, stream_list / stream_pick and
-  regression_list / regression_row; step H4a: hot_seat_list / hot_seat_row, with the same
+  regression_list / regression_row; step H4a: hot_seat_list / hot_seat_row; step I2c-a:
+  board_list / board_row, with the same
   code: :data:`FAMILIES`) hold two kinds of list. 'backtest' lists (reconstructed)
   are replaced like the tables above. 'live' lists (made in real time) are **frozen**: a live
   list is inserted only when its (season, week, position) is not in the target yet and is never
@@ -224,6 +226,43 @@ TABLES: dict[str, Table] = {
             ("positives_end_of_season", "integer"), ("censored_coach_seasons", "integer"),
             ("interim_coach_seasons", "integer"),
         ),
+        # step I2c-a: the Cliff board (FAMILIES["board"]; week 0 = before week 1 of the season)
+        _t(
+            "board_list", ("season", "week", "snapshot", "kind"), "lists",
+            ("season", "integer"), ("week", "integer"), ("snapshot", "text"), ("kind", "text"),
+            ("as_of", TS), ("model_version", "text"), ("missed_version", "text"),
+            ("generated_at", TS), ("incomplete", "boolean"), ("n_players", "integer"),
+            ("note", "text"),
+        ),
+        _t(
+            "board_row", ("season", "week", "snapshot", "kind", "gsis_id"), "lists",
+            ("season", "integer"), ("week", "integer"), ("snapshot", "text"), ("kind", "text"),
+            ("gsis_id", "text"), ("team", "text"), ("position", "text"), ("as_of", TS),
+            ("cliff_rank", "integer"), ("cliff_probability", DP), ("missed_rank", "integer"),
+            ("missed_probability", DP), ("ecr_rank", "integer"), ("age", DP),
+            ("prior_seasons", "integer"), ("games_s", "integer"), ("ppg_s", DP),
+            ("pos_rank_s", "integer"), ("ppg_change", DP), ("touches_per_game_s", DP),
+            ("depth_rank_s1", "integer"), ("team_change_s1", "boolean"),
+            ("dc_absent", "boolean"), ("hc_change_s1", "boolean"), ("cliff_drivers", "jsonb"),
+            ("missed_drivers", "jsonb"),
+        ),
+        _t(
+            "board_outcome", ("season", "week", "gsis_id"), "replace",
+            ("season", "integer"), ("week", "integer"), ("gsis_id", "text"),
+            ("games_s1", "integer"), ("ppg_s1", DP), ("y_cliff", "boolean"),
+            ("y_missed", "boolean"), ("label_status", "text"),
+        ),
+        _t(  # reports/board/preseason_cliff.csv then preseason_breakout.csv, row for row
+            "board_track_record", ("line",), "replace",
+            ("line", "integer"), ("population", "text"), ("research", "boolean"),
+            ("variant", "text"), ("slice", "text"), ("model", "text"), ("vs", "text"),
+            ("metric", "text"), ("value", DP), ("lo", DP), ("hi", DP), ("share_above_zero", DP),
+        ),
+        _t(  # the frozen backtest's model-vs-ECR top-10 picks per ECR-era board
+            "board_disagreement", ("variant", "season", "pick_group"), "replace",
+            ("variant", "text"), ("model", "text"), ("season", "integer"), ("pick_group", "text"),
+            ("players", "integer"), ("hits", "integer"),
+        ),
         _t(
             "track_record",
             ("module", "label", "excl_rostered", "model", "scope", "scope_value", "season_from",
@@ -323,7 +362,8 @@ WRITE_ORDER = (
     "radar_outcome", "stream_list", "stream_pick", "stream_outcome", "regression_list",
     "regression_row", "regression_outcome", "track_record", "stream_track_record",
     "regression_track_record", "regression_stability", "hot_seat_list", "hot_seat_row",
-    "hot_seat_outcome", "hot_seat_track_record", "hot_seat_firings", "decision_fourth",
+    "hot_seat_outcome", "hot_seat_track_record", "hot_seat_firings", "board_list", "board_row",
+    "board_outcome", "board_track_record", "board_disagreement", "decision_fourth",
     "decision_two_point",
     "decision_clock", "coach_season", "coach_week", "decisions_track_record",
     "tier_stats", "player_week_summary", "glossary", "site_meta", "pipeline_runs",
@@ -375,6 +415,10 @@ FAMILIES: dict[str, Family] = {
                ("season", "week", "snapshot"), "coach_id", "rank", "model_version",
                "hot_seat_backtest_lists", ("hot_seat_track_record", "hot_seat_firings"),
                "hot_seat_", "hot seat"),
+        Family("board", "board_list", "board_row", "board_outcome",
+               ("season", "week", "snapshot"), "gsis_id", "cliff_rank", "model_version",
+               "board_backtest_lists", ("board_track_record", "board_disagreement"), "board_",
+               "board"),
     )
 }  # fmt: skip
 # Replaced tables every module shares (published whatever modules a publish carries).

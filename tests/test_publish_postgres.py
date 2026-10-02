@@ -620,7 +620,7 @@ def publish_all(target: tg.Target, inputs, modules: dict | None = None, *, live:
 
     data = pm.add_modules(col.collect(inputs), **(modules or {}))
     if not live:
-        for m in ("streamer", "regression_watch", "hot_seat"):
+        for m in ("streamer", "regression_watch", "hot_seat", "board"):
             f = data.families[m]
             f.lists = f.lists.filter(pl.col("kind") != "live")
             f.rows = f.rows.filter(pl.col("kind") != "live")
@@ -746,7 +746,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                 owner.execute((ROOT / "scripts" / "neon" / "roles.sql").read_text())
             assert mg.apply_migrations(owner) == ["0001_streamer_regression_watch",
                                                   "0002_regression_stability",
-                                                  "0003_decisions", "0004_hot_seat"]  # fmt: skip
+                                                  "0003_decisions", "0004_hot_seat",
+                                                  "0005_board"]  # fmt: skip
         job = tg.resolve("local", env={tg.LOCAL_ENV: make_conninfo(
             url, user="twm_job", password=roles["twm_job"])}, env_file=NO_ENV_FILE)  # fmt: skip
         syn = ps.build(tmp_path / "syn", live_weeks=(3,))
@@ -756,7 +757,9 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
         with psycopg.connect(web, autocommit=True) as conn:
             for t in ("stream_list", "stream_pick", "regression_row", "regression_track_record",
                       "regression_stability", "hot_seat_list", "hot_seat_row",
-                      "hot_seat_outcome", "hot_seat_track_record", "hot_seat_firings"):  # fmt: skip
+                      "hot_seat_outcome", "hot_seat_track_record", "hot_seat_firings",
+                      "board_list", "board_row", "board_outcome", "board_track_record",
+                      "board_disagreement"):  # fmt: skip
                 assert conn.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] > 0
             for t in ("dim_coach", "decision_fourth", "coach_season", "decisions_track_record"):
                 conn.execute(f'SELECT count(*) FROM "{t}"')  # P3 tables: readable by the site
@@ -905,3 +908,37 @@ def test_the_hot_seat_lists_follow_the_families_rules(db: tg.Target, tmp_path: P
     res = publish_all(db, syn.inputs, {"hot_seat": {"shift": 0.2}}, replace_live=[(2026, 3)])
     assert {d.label: d.action for d in res.live}["hot seat 2026-W03 weekly"] == "replace"
     assert rows(db, live)[0][1] == pytest.approx(before[0][1] + 0.2)
+
+
+def test_the_board_lists_follow_the_families_rules(db: tg.Target, tmp_path: Path) -> None:
+    """Step I2c-a: the Cliff board (week 0, 'preseason') follows the families' rules: a live
+    board is frozen, backtest boards and the track record are replaced and guarded."""
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    first = publish_all(db, syn.inputs)
+    c = first.counts
+    assert (c["board_list"], c["board_row"], c["board_outcome"]) == (2, 8, 8)
+    assert (c["board_track_record"], c["board_disagreement"]) == (3, 3)
+    assert {d.label: d.action for d in first.live}["board 2026-W00 preseason"] == "insert"
+    meta = dict(rows(db, "SELECT key, value FROM site_meta"))
+    assert meta["board_latest_live_list_season"] == "2026"
+    assert rows(db, "SELECT missed_version FROM board_list WHERE kind = 'live'") == [
+        ("logit_simple-bdlive",)]  # fmt: skip
+    assert rows(db, "SELECT cliff_drivers->0->>'feature', ecr_rank FROM board_row WHERE kind = "
+                    "'live' AND cliff_rank = 4") == [("age", None)]  # fmt: skip
+    live = "SELECT gsis_id, cliff_probability FROM board_row WHERE kind = 'live' ORDER BY 1"
+    before = rows(db, live)
+    res = publish_all(db, syn.inputs)
+    assert {"board_backtest_lists", "board_outcome", "board_track_record",
+            "board_disagreement"} <= set(res.unchanged)  # fmt: skip
+    res = publish_all(db, syn.inputs, {"board": {"shift": 0.2}})
+    assert {d.label: d.action for d in res.live}["board 2026-W00 preseason"] == "kept"
+    res = publish_all(db, syn.inputs, live=False)
+    assert rows(db, live) == before and not any("no outcome row" in w for w in res.warnings)
+    content = dump(db)
+    with pytest.raises(wr.PublishError, match="board_track_record would go from 3 to 1"):
+        publish_all(db, syn.inputs, {"board": {"n_track": 1}})
+    with pytest.raises(wr.PublishError, match=r"board_row \(backtest rows\) would go from 4"):
+        publish_all(db, syn.inputs, {"board": {"backtest": ()}})
+    assert dump(db) == content
+    res = publish_all(db, syn.inputs, {"board": {"shift": 0.2}}, replace_live=[(2026, 0)])
+    assert {d.label: d.action for d in res.live}["board 2026-W00 preseason"] == "replace"

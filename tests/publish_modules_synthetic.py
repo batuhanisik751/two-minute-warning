@@ -153,9 +153,10 @@ def stability(n: int = 4) -> pl.DataFrame:
 
 
 def add_modules(data: PublishData, **kw) -> PublishData:
-    """``data`` (the Radar's synthetic publish) with the streamer's, Regression Watch's and
-    the Hot-Seat Meter's lists; ``streamer=`` / ``regression=`` / ``stability=`` /
-    ``hot_seat=`` pass keyword arguments to each builder (``hot_seat=None``: left out)."""
+    """``data`` (the Radar's synthetic publish) with the streamer's, Regression Watch's, the
+    Hot-Seat Meter's and the board's lists; ``streamer=`` / ``regression=`` / ``stability=`` /
+    ``hot_seat=`` / ``board=`` pass keyword arguments to each builder (``hot_seat=None`` /
+    ``board=None``: left out)."""
     st, st_versions, st_track = streamer(**kw.get("streamer", {}))
     rw, rw_versions, rw_track = regression(data.tables["dim_player"], **kw.get("regression", {}))
     data.families["streamer"], data.families["regression_watch"] = st, rw
@@ -169,9 +170,15 @@ def add_modules(data: PublishData, **kw) -> PublishData:
         old = data.tables.get("dim_coach")
         both = [old, hs_tables["dim_coach"]] if old is not None else [hs_tables["dim_coach"]]
         data.tables["dim_coach"] = pl.concat(both).unique("coach_id").sort("coach_id")
+    bd_versions: list[dict] = []
+    if kw.get("board", {}) is not None:  # step I2c-a
+        bd, bd_versions, bd_track, bd_tables = board(data.tables["dim_player"],
+                                                     **kw.get("board", {}))  # fmt: skip
+        data.families["board"], data.tables["board_track_record"] = bd, bd_track
+        data.tables.update(bd_tables)
     mv = data.tables["model_versions"]
-    extra = pl.DataFrame([*st_versions, *rw_versions, *hs_versions], schema=mv.schema,
-                         orient="row")  # fmt: skip
+    extra = pl.DataFrame([*st_versions, *rw_versions, *hs_versions, *bd_versions],
+                         schema=mv.schema, orient="row")  # fmt: skip
     data.tables["model_versions"] = pl.concat([mv, extra]).unique(
         "model_version", keep="first", maintain_order=True)  # fmt: skip
     return data
@@ -236,3 +243,66 @@ def hot_seat(
                            orient="row")  # fmt: skip
     return (ListData(lists_df, rows_df, out, keys), list(versions.values()), track,
             {"hot_seat_firings": firings, "dim_coach": coaches})  # fmt: skip
+
+
+def board(
+    players: pl.DataFrame, *, backtest: tuple[int, ...] = (2025,), live: bool = True,
+    shift: float = 0.0, n_track: int = 3,
+) -> tuple[ListData, list[dict], pl.DataFrame, dict[str, pl.DataFrame]]:  # fmt: skip
+    """(lists, versions, track record, {board_disagreement}) of the Cliff board (step I2c-a)
+    over four of ``players``: one board (week 0, 'preseason') per backtest season and the live
+    season's; ``shift`` raises the live board's first Cliff chance."""
+    from twm.publish import board_lists as pb
+
+    who = players.filter(pl.col("position").is_in(["QB", "RB", "WR", "TE"])).head(4)
+    boards = [(s, "backtest") for s in backtest] + ([(LIVE_SEASON, "live")] if live else [])
+    lists, rows, versions = [], [], {}
+    for s, kind in boards:
+        tag = "live" if kind == "live" else str(s)
+        cv, mv = f"logit-bd{tag}", f"logit_simple-bd{tag}"
+        versions[cv] = _version(cv, "board", "logit", "y_cliff", s - 1)
+        versions[mv] = _version(mv, "board", "logit_simple", "y_missed", s - 1)
+        lists.append({"season": s, "week": 0, "snapshot": "preseason", "kind": kind,
+                      "as_of": datetime(s, 9, 9, 23, tzinfo=UTC), "model_version": cv,
+                      "missed_version": mv, "generated_at": CREATED, "incomplete": False,
+                      "n_players": who.height, "note": None})  # fmt: skip
+        for i, (gsis, pos) in enumerate(who.select("gsis_id", "position").iter_rows()):
+            p = 0.6 - 0.1 * i + (shift if kind == "live" and i == 0 else 0.0)
+            drv = '[{"feature": "age", "label": "Age", "contribution": 0.4, "value": 30.0, ' \
+                  '"missing": false}]'  # fmt: skip
+            rows.append({
+                "season": s, "week": 0, "snapshot": "preseason", "kind": kind, "gsis_id": gsis,
+                "team": TEAMS[i % 4], "position": pos, "as_of": datetime(s, 9, 9, 23, tzinfo=UTC),
+                "cliff_rank": i + 1, "cliff_probability": p, "missed_rank": 4 - i,
+                "missed_probability": 0.1 + 0.05 * i, "ecr_rank": None if i == 3 else 5 + i,
+                "age": 28.0 + i, "prior_seasons": 4 + i, "games_s": 15, "ppg_s": 14.0 - i,
+                "pos_rank_s": 6 + i, "ppg_change": 1.5, "touches_per_game_s": 12.0,
+                "depth_rank_s1": 1, "team_change_s1": False, "dc_absent": False,
+                "hc_change_s1": i == 2, "cliff_drivers": drv, "missed_drivers": drv,
+            })  # fmt: skip
+    lists_df = pl.DataFrame(lists, schema=pb.LIST_SCHEMA, orient="row")
+    rows_df = pl.DataFrame(rows, schema=pb.ROW_SCHEMA, orient="row")
+    keys = rows_df.select("season", "week", "gsis_id").unique()
+    done = pl.col("season") < LIVE_SEASON
+    out = keys.with_columns(
+        pl.when(done).then(14).alias("games_s1"), pl.when(done).then(9.0).alias("ppg_s1"),
+        pl.when(done).then(pl.col("gsis_id") == who["gsis_id"][0]).alias("y_cliff"),
+        pl.when(done).then(False).alias("y_missed"),
+        pl.when(done).then(pl.lit("final")).otherwise(pl.lit("pending")).alias("label_status"),
+    ).select(list(pb.OUTCOME_SCHEMA)).cast(pb.OUTCOME_SCHEMA).sort("season", "gsis_id")  # fmt: skip
+    track = pl.DataFrame([
+        {"line": i + 1, "population": "cliff", "research": False, "variant": "cliff_main",
+         "slice": "all", "model": "logit", "vs": None, "metric": "pr_auc", "value": 0.4,
+         "lo": 0.35, "hi": 0.46, "share_above_zero": None} for i in range(n_track)],
+        schema={"line": pl.Int32, "population": pl.String, "research": pl.Boolean,
+                "variant": pl.String, "slice": pl.String, "model": pl.String, "vs": pl.String,
+                "metric": pl.String, "value": pl.Float64, "lo": pl.Float64, "hi": pl.Float64,
+                "share_above_zero": pl.Float64}, orient="row")  # fmt: skip
+    dis = pl.DataFrame(
+        [{"variant": "cliff_main", "model": "logit", "season": 2025, "pick_group": g,
+          "players": 3, "hits": 1} for g in ("both", "ecr_only", "model_only")],
+        schema={"variant": pl.String, "model": pl.String, "season": pl.Int32,
+                "pick_group": pl.String, "players": pl.Int32, "hits": pl.Int32},
+        orient="row")  # fmt: skip
+    return (ListData(lists_df, rows_df, out, keys), list(versions.values()), track,
+            {"board_disagreement": dis})  # fmt: skip

@@ -4,6 +4,35 @@
 # snapshot named here, after checking every file's sha256. Written by `uv run twm model pin`
 # (or copied from the retrain workflow's artifact after review); change it only by committing
 # a reviewed model.
+board:
+  season: 2026
+  model_version: board_spec-1581a6da7602c3f7
+  file: artifacts/production_models/board/board_spec-1581a6da7602c3f7.json
+  sha256: af82890658def2e579e617b456d9a1dbaf8ea2f5bce8586c8283a274d5eb6691
+  model: board_spec
+  approved: '2026-10-02'
+  backtest:
+    seasons: 2007-2024
+    predictions:
+      file: artifacts/production_models/board/backtest-board_spec-1581a6da7602c3f7/predictions.parquet
+      sha256: 91af3f70ec1f7b0774d65b53344276810798097f9c1a487ff3eee25b64f19816
+      rows: 1674
+    outcomes:
+      file: artifacts/production_models/board/backtest-board_spec-1581a6da7602c3f7/outcomes.parquet
+      sha256: 8e96c51dcf3f9e58ec8c922e46998ad6a59b325cd962edd097ae8bc29360b8fb
+      rows: 1674
+    model_versions:
+      file: artifacts/production_models/board/backtest-board_spec-1581a6da7602c3f7/model_versions.parquet
+      sha256: 04bd1a27014d64b2f0d7ccabe5705d463136e6d84c52d9c523dd1d80bbfff465
+      rows: 36
+    current_board:
+      file: artifacts/production_models/board/backtest-board_spec-1581a6da7602c3f7/current_board.parquet
+      sha256: d606f317f1a28261034e38215fd84370a115acada2f50e199dfb2c5fdacac3b9
+      rows: 94
+    current_inputs:
+      file: artifacts/production_models/board/backtest-board_spec-1581a6da7602c3f7/current_inputs.parquet
+      sha256: f7f694582bca81b80a7530207afd85072ba6123f1b96f77a6110644a1e6f62a0
+      rows: 94
 decisions:
   season: 2026
   model_version: grading-100604cddaabf068

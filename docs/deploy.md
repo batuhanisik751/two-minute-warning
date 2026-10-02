@@ -59,7 +59,9 @@ Radar (`radar_list`, `radar_pick`, `radar_outcome`), the K and D/ST streamer (`s
 (`regression_list`, `regression_row`, `regression_outcome`, `regression_track_record`,
 `regression_stability`) and (step H4a) the Hot-Seat Meter (`hot_seat_list`, `hot_seat_row`,
 `hot_seat_outcome`, `hot_seat_track_record`, `hot_seat_firings`; its coaches go into
-`dim_coach` with the decisions' slugs), with the same rules for all four (the code is shared:
+`dim_coach` with the decisions' slugs) and (step I2c-a) the Cliff board (`board_list`,
+`board_row`, `board_outcome`, `board_track_record`, `board_disagreement`; week 0), with the
+same rules for all of them (the code is shared:
 `src/twm/publish/tables.py` `FAMILIES`), and (step P3) the Decision Report Card (`dim_coach`,
 `decision_fourth`, `decision_two_point`, `decision_clock`, `coach_season`, `coach_week`,
 `decisions_track_record`; `tables.py` `DECISIONS`).
@@ -84,6 +86,12 @@ Radar (`radar_list`, `radar_pick`, `radar_outcome`), the K and D/ST streamer (`s
    incomplete data, it is skipped (exit code 4, so a scheduled job can try again later);
    `--allow-incomplete` publishes it anyway, marked as incomplete. To replace one published
    live week on purpose: `--replace-live 2026-W04` (it prints what it replaces).
+   Only two kinds of list are published for good: the frozen ones pinned with the approved
+   models (each module's backtest; step I2c-a: the board of the pin's season too, when it was
+   frozen at approval) and the ones the scheduled job scores itself. A reconstructed list
+   stored only on your Mac (e.g. Hot-Seat 2026 week 3, scored after its window) is published by
+   a publish from your Mac and replaced away by the next scheduled one (a fresh runner's store
+   does not have it); that is intended (reviewer, 2026-10-02).
 4. **Everything else is rebuilt** from the local files on every run: the backtest lists, the
    outcomes (of every published pick, including frozen live lists, plus every player of the
    current season's dataset), the track record, the tier table, the player summaries, the
@@ -620,6 +628,37 @@ then commit the pin and the files together. Before the first publish that carrie
 Hot-Seat Meter, apply `web/drizzle/0004_hot_seat.sql` to Neon (step 9 of "Setting up Neon"):
 without it the publish refuses (missing tables) and writes nothing.
 
+### The Cliff board's approved models (step I2c-a)
+
+The board (owner, 2026-10-02: Cliff and missed-time chances at the kickoff-eve preseason
+snapshot; Breakout not on the site) is pinned as `board` (`model: board_spec`, the decisions'
+pattern for more than one model; docs/board.md "Production"):
+
+- the **spec** `artifacts/production_models/board/<version>.json` (the pin's file): the board's
+  season, snapshot and anchor, and both models by version, file and sha256;
+- the **models** `logit-<hash>.joblib` (Cliff, `y_cliff`) and `logit_simple-<hash>.joblib`
+  (missed time, `y_missed`): the walk-forward folds of the snapshot before the season (trained
+  on every earlier labelled snapshot), opened only after their sha256 matched the spec;
+- the **season's board**, when its as-of (the kickoff eve) had passed at approval (2026: yes):
+  `current_board` (94 players, reconstructed, outcomes pending) and `current_inputs` (the rows
+  it was scored from), so every publish, a fresh runner's included, carries it;
+- the **frozen backtest** `backtest-<version>/`: both models' walk-forward on snapshots
+  2007-2024 (the boards of 2008-2025: 1,674 rows with both chances, ranks, the ECR rank, key
+  features and the top 3 drivers of each), the outcomes and one `model_versions` row per fold
+  and model (36).
+
+`uv run twm model check board` (or no argument) checks it all and that the snapshot reproduces
+`reports/board/preseason_cliff.csv` (both models' rows: values and intervals),
+`preseason_cliff_seasons.csv` and the disagreement tables of `preseason_cliff.md`, and that
+re-scoring the frozen season's board inputs with the pinned models gives the frozen board (to
+1e-9). The job's preflight loads the pin (and the season's board); **no stage scores the
+board**: each publish carries the pinned boards (and a live board from your Mac's store, frozen
+once published). To approve for a new season: `uv run twm board backtest --snapshot
+preseason`, then `uv run twm board pin`; an approval before the kickoff eve (next August) pins
+no season board, which is then scored live with `uv run twm board score` (a once-a-season job
+stage is a later step, I6; docs/board.md "Production"). Apply `web/drizzle/0005_board.sql` to
+Neon before the first publish that carries the board.
+
 ## The owner's steps for E4
 
 1. **Push** the commit with `.github/workflows/pipeline.yml` from your own GitHub account (as
@@ -675,7 +714,8 @@ re-checked here where possible.
   `web/drizzle/0003_decisions.sql` adds the Decision Report Card's seven tables (step P3;
   the same rule). `decisions.py` builds their rows. `web/drizzle/0004_hot_seat.sql` adds the
   Hot-Seat Meter's five tables (step H4a; the same rule); `hot_seat_lists.py` builds their
-  rows.
+  rows. `web/drizzle/0005_board.sql` adds the Cliff board's five tables (step I2c-a; the same
+  rule); `board_lists.py` builds their rows.
 - `scripts/neon/roles.sql`, `scripts/neon/apply_roles.py`: the two Neon roles.
 - `.github/workflows/pipeline.yml`, `src/twm/pipeline/` (`schedule.py` the calendar,
   `runner.py` the stages and exit codes, `report.py` the job summary and the run's files): the
@@ -689,3 +729,6 @@ re-checked here where possible.
 - `src/twm/modules/hot_seat/production.py` (the Hot-Seat pin and frozen backtest, `twm hotseat
   pin`), `weekly.py` (`twm hotseat score`), `production_cli.py` (the two commands and
   `twm model check hot_seat`).
+- `src/twm/modules/board/production.py` (the board's spec, models and frozen backtest, `twm
+  board pin`), `live.py` (`twm board score`), `production_cli.py` (the two commands and
+  `twm model check board`).

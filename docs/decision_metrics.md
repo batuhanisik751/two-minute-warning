@@ -220,7 +220,7 @@ Fourth downs and two-point tries with at most `decisions.late_game.q4_seconds` (
 left in the 4th quarter, and every one in overtime (`decisions.late_game.overtime`), are not
 graded: they are counted and reported as "late game, not graded" (exclusion `late_game`, after
 `end_of_half` in the rule order, so the last 10 s stay `end_of_half`), never priced, never
-published as graded decisions and never credited to a coach. 2006-2025: 4,685 fourth downs
+published as graded decisions and never credited to a coach. 2006-2025: 4,685 fourth downs (reports/decisions/fourth_downs.md totals also include 2026 to date)
 (206-279 per season, 10-42 of them in overtime) and 1,409 tries (52-86 per season); per-season
 counts in reports/decisions/fourth_downs.md, section 1 (CSV table `late_game`). The first
 half's last 2:00 is still graded. The clock-management metrics below are rule-defined, not

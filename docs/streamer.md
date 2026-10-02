@@ -242,8 +242,8 @@ week 4 on use the new table.
   above has a range of a few points, and one unusual season can move the pooled result.
 - **The pool is an estimate** of your waiver wire (see above): where FantasyPros rostership
   exists (late 2020 on), 93-100% of pool rows were rostered in fewer than half of leagues.
-- **Scoring and league shape**: ESPN default scoring (docs/scoring.md) with yards-allowed tiers
-  off, and a 12-team league with one K and one D/ST. Other settings change who counts as a top
+- **Scoring and league shape**: ESPN default scoring (docs/scoring.md) with the owner's league's
+  nine D/ST yards-allowed tiers (since step C1), and a 12-team league with one K and one D/ST. Other settings change who counts as a top
   12 and would need a new backtest.
 - **Gaps in the data**: no kicker pool in week 1 of 2012-2015 (rosters of that era are only
   published after the games), no answer for bye weeks or after the last regular-season week,

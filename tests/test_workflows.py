@@ -163,3 +163,23 @@ def test_the_decisions_are_graded_with_the_pins_and_history_is_never_regraded() 
                    "load_fold_model"):  # fmt: skip
         assert needle not in publish, needle
     assert "load_snapshot" in publish and "load_pinned_spec" in publish
+
+
+def test_the_hot_seat_is_scored_with_its_pin_after_the_decisions() -> None:
+    """H4a: the job scores the Hot-Seat list with the approved model only (never a backtest,
+    a pin or a refit), after the season's grades its decision-quality feature reads, before
+    the one publish; the preflight loads its pin (sha256) before any download."""
+    text = (WORKFLOWS / "pipeline.yml").read_text()
+    code = (ROOT / "src" / "twm" / "pipeline" / "runner.py").read_text()
+    for needle in ('"hotseat", "backtest"', '"hotseat", "pin"', "hotseat backtest",
+                   "hotseat pin", '"hotseat", "features"'):  # fmt: skip
+        assert needle not in text and needle not in code, needle
+    assert '["hotseat", "score"]' in code and "hot_seat.load_pinned(season)" in code
+    stages = code[code.index("def _stages(") :]
+    order = ["for module in MODULE_SCORES", "r.decisions()", "for module in LATE_SCORES",
+             "r.publish()"]  # fmt: skip
+    at = [stages.index(s) for s in order]
+    assert at == sorted(at), order
+    weekly = (ROOT / "src" / "twm" / "modules" / "hot_seat" / "weekly.py").read_text()
+    for needle in ("fit_fold", "train_live", ".fit(", "walk_forward"):
+        assert needle not in weekly, needle

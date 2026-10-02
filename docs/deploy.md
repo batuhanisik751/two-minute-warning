@@ -57,9 +57,12 @@ is written or nothing is. One publish carries every module's lists (step P2): th
 Radar (`radar_list`, `radar_pick`, `radar_outcome`), the K and D/ST streamer (`stream_list`,
 `stream_pick`, `stream_outcome`, `stream_track_record`) and Regression Watch
 (`regression_list`, `regression_row`, `regression_outcome`, `regression_track_record`,
-`regression_stability`), with the same rules for all three (the code is shared: `src/twm/publish/tables.py` `FAMILIES`),
-and (step P3) the Decision Report Card (`dim_coach`, `decision_fourth`, `decision_two_point`,
-`decision_clock`, `coach_season`, `coach_week`, `decisions_track_record`; `tables.py` `DECISIONS`).
+`regression_stability`) and (step H4a) the Hot-Seat Meter (`hot_seat_list`, `hot_seat_row`,
+`hot_seat_outcome`, `hot_seat_track_record`, `hot_seat_firings`; its coaches go into
+`dim_coach` with the decisions' slugs), with the same rules for all four (the code is shared:
+`src/twm/publish/tables.py` `FAMILIES`), and (step P3) the Decision Report Card (`dim_coach`,
+`decision_fourth`, `decision_two_point`, `decision_clock`, `coach_season`, `coach_week`,
+`decisions_track_record`; `tables.py` `DECISIONS`).
 
 1. **Target check.** `--target local` uses `TWM_LOCAL_DATABASE_URL` (default: the container
    above) and refuses any host that is not this computer. `--target remote` uses
@@ -328,6 +331,7 @@ it; the run's log shows every one):
 | regression_score, regression_export | only when a list is due: `twm regression score` with the approved frozen parameters and the pinned own xFP live models (step H6-b2: the season's plays are valued with them; nothing is fitted); the same rules. Weeks 1-2 store nothing (nobody has 3 games) |
 | decisions_backtest | `twm model check decisions` (step P3): the approved grading (spec and fold models, sha256 before anything is opened) and its frozen 2006-2025 history (sha256, rows, `reports/decisions/fourth_downs.csv` and `clock.csv` reproduced). History is never regraded on the runner |
 | decisions | `twm decisions grade-pinned`: every fourth down, try and clock case of the season so far graded with the pinned models and inputs (nothing trained; nothing measured on earlier seasons: the runner's warehouse starts in 2012). Every run, whether or not a list is due (games of the weekend get graded the next night); the job summary's "Decisions" line counts them |
+| hotseat_score, hotseat_export | only when a list is due (step H4a): `twm hotseat score` with the approved Hot-Seat model (its pin and frozen backtest are loaded, sha256 first, in preflight; nothing is fitted). After `decisions` because the decision-quality feature reads the season grades it just made. The same not-ready rules (exit 3; also when the end-of-season snapshot is not due yet). Week 1 stores nothing (the first list is week 2). After the last regular-season week's as-of, when no other list is due, it scores the end-of-season snapshot (week = the last week; a stored live snapshot is kept on later nights) |
 | publish | ONE `twm publish --target remote` for every module when the `DATABASE_URL` secret exists, otherwise skipped with a warning (so the pipeline can be rehearsed before Neon exists); it also runs after a not-ready score, so outcomes and player pages stay fresh |
 
 **How a run ends** (the job's colour and GitHub's email follow the exit code):
@@ -590,6 +594,32 @@ files and `reports/decisions/` together. Before the first publish that carries t
 apply `web/drizzle/0003_decisions.sql` to Neon (step 9 of "Setting up Neon"): without it the
 publish refuses (missing tables) and writes nothing.
 
+### The Hot-Seat Meter's approved model (step H4a)
+
+The owner chose the L2 logistic regression (2026-10-01, docs/progress.md). It is pinned as a
+sixth entry, `hot_seat` (`model: logit`), next to the others (their entries and files stay
+byte-identical):
+
+- the **model** `artifacts/production_models/hot_seat/<version>.joblib` (8.6 KB): the
+  walk-forward fold of the season (trained on every verified labelled row 2002-2025, C chosen
+  by the inner walk-forward), the Radar's production-model bundle; opened only after its
+  sha256 matched the pin;
+- the **frozen backtest** `backtest-<version>/` (zstd level 19, 0.6 MB): the verified H3b run's
+  logit predictions of 2006-2025 (10,361 rows, each with its rank, coach name, the key
+  features and the top 3 drivers), their outcomes (10,361) and one `model_versions` row per
+  fold (20). The runner never recomputes it.
+
+`uv run twm model check` (no argument, or `hot_seat`) checks the pin, the model file and the
+snapshot, which must reproduce `reports/hot_seat/backtest_metrics.csv` (main, logit, the
+model's own probability: every slice's ROC-AUC, PR-AUC, Brier, counts and top-5 hit rates)
+and `firings_per_season.csv`. To approve for a new season, on your Mac after
+`twm hotseat backtest --labels verified`: `uv run twm hotseat pin` refits the logit
+walk-forward and refuses unless it gives the verified run's probabilities, freezes it,
+refuses unless the reports are reproduced, trains the season's fold and pins both. Review,
+then commit the pin and the files together. Before the first publish that carries the
+Hot-Seat Meter, apply `web/drizzle/0004_hot_seat.sql` to Neon (step 9 of "Setting up Neon"):
+without it the publish refuses (missing tables) and writes nothing.
+
 ## The owner's steps for E4
 
 1. **Push** the commit with `.github/workflows/pipeline.yml` from your own GitHub account (as
@@ -643,7 +673,9 @@ re-checked here where possible.
   stability study for the methodology page; apply it to Neon the same way before the first
   publish that carries it, or that publish fails on the missing table and writes nothing).
   `web/drizzle/0003_decisions.sql` adds the Decision Report Card's seven tables (step P3;
-  the same rule). `decisions.py` builds their rows.
+  the same rule). `decisions.py` builds their rows. `web/drizzle/0004_hot_seat.sql` adds the
+  Hot-Seat Meter's five tables (step H4a; the same rule); `hot_seat_lists.py` builds their
+  rows.
 - `scripts/neon/roles.sql`, `scripts/neon/apply_roles.py`: the two Neon roles.
 - `.github/workflows/pipeline.yml`, `src/twm/pipeline/` (`schedule.py` the calendar,
   `runner.py` the stages and exit codes, `report.py` the job summary and the run's files): the
@@ -654,3 +686,6 @@ re-checked here where possible.
 - `src/twm/modules/decisions/production.py` (the grading pin, `twm decisions pin`),
   `frozen.py` (the frozen history), `season.py` (`twm decisions grade-pinned`), `site.py` (the
   published columns), `production_cli.py` (the two commands and `twm model check decisions`).
+- `src/twm/modules/hot_seat/production.py` (the Hot-Seat pin and frozen backtest, `twm hotseat
+  pin`), `weekly.py` (`twm hotseat score`), `production_cli.py` (the two commands and
+  `twm model check hot_seat`).

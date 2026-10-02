@@ -5,7 +5,8 @@ same exit codes and the same files as when the owner types it):
 
 1. **preflight** (here): the approved models load (``config/production_models.yaml``: file,
    sha256 and version checked; the Radar's, the streamer's, Regression Watch's parameters with
-   its own xFP live models and the decisions' grading with its fold models); where the
+   its own xFP live models, the decisions' grading with its fold models and the Hot-Seat
+   model with its frozen backtest); where the
    publish goes and, for Neon, which CA bundle checks its certificate.
 2. **gate** (here, :func:`twm.pipeline.schedule.gate`): offseason days without a run stop here.
 3. **ingest**: ``twm ingest --start <season> --force`` (the nightly refresh: the current season
@@ -42,7 +43,11 @@ same exit codes and the same files as when the owner types it):
 15. **decisions**: ``twm decisions grade-pinned``: every fourth down, try and clock case of the
     season so far graded with the pinned models and inputs (nothing trained, nothing measured on
     earlier seasons); every run, whether or not a list is due.
-16. **publish**: ``twm publish`` (remote when ``DATABASE_URL`` is set, else skipped with a
+16. **hotseat_score** / **hotseat_export** (step H4a; only when a list is due): ``twm hotseat
+    score`` with the approved Hot-Seat model (sha256 checked in preflight; loaded, never fitted),
+    after **decisions** because its decision-quality feature reads the season grades just made;
+    the same not-ready rules (the end-of-season snapshot not due yet = exit code 3).
+17. **publish**: ``twm publish`` (remote when ``DATABASE_URL`` is set, else skipped with a
     warning), ONE publish for every module, also after a not-ready score, so outcomes and player
     pages stay fresh.
 
@@ -83,13 +88,19 @@ TIMEOUTS = {"ingest": 25 * 60, "build": 15 * 60, "dataset": 15 * 60, "backtest":
             "score": 15 * 60, "streamer_dataset": 15 * 60, "streamer_backtest": 10 * 60,
             "streamer_score": 15 * 60, "regression_backtest": 10 * 60,
             "regression_score": 15 * 60, "decisions_backtest": 10 * 60, "decisions": 15 * 60,
-            "publish": 15 * 60}  # fmt: skip
+            "hotseat_score": 15 * 60, "publish": 15 * 60}  # fmt: skip
 # The modules scored after the Radar (step P2): stage, the `twm` command, the report's title.
 MODULE_SCORES = {
     "streamer": ("streamer_score", ["streamer", "score"], "streamer"),
     "regression_watch": ("regression_score", ["regression", "score"], "regression_watch"),
 }
+# Scored after the decisions (step H4a: the Hot-Seat features read the season's pinned grades).
+LATE_SCORES = {"hot_seat": ("hotseat_score", ["hotseat", "score"], "hot_seat")}
 INGEST_RETRY_WAIT_S = 60.0
+
+
+def _scores() -> dict[str, tuple[str, list[str], str]]:
+    return {**MODULE_SCORES, **LATE_SCORES}
 
 
 # --------------------------------------------------------------------------------------
@@ -339,10 +350,16 @@ def default_hooks() -> Hooks:
         from twm.modules.decisions.production import load_pinned as load_pinned_grading
 
         grading = load_pinned_grading(season)[0]
+        # step H4a: the Hot-Seat model (sha256 before the pickle is opened) and its snapshot
+        from twm.modules.hot_seat import production as hot_seat
+
+        hot, hot_pin = hot_seat.load_pinned(season)
+        hot_rows = hot_seat.load_snapshot(hot_pin)["predictions"].height
         return (f"approved model {pm.model_version} ({pin.file}, sha256 {pin.sha256[:12]}...) "
                 f"and its backtest {pin.backtest_seasons} ({n:,} predictions); streamer "
                 f"{k.model_version} and {rule.model_version}; Regression Watch "
-                f"{params.model_version} ({xfp}); decisions {grading.model_version}")  # fmt: skip
+                f"{params.model_version} ({xfp}); decisions {grading.model_version}; Hot-Seat "
+                f"{hot.model_version} (backtest {hot_rows:,} rows)")  # fmt: skip
 
     return Hooks(
         check_model=check_model,
@@ -551,11 +568,26 @@ class _Run:
         except Exception as e:
             self.fail("plan", f"cannot read the season's weeks from the warehouse: {e}", t0)
             return None
+        self.windows = list(windows)
         p = sc.plan_week(self.now, self.season, windows, self.s.pipeline, week=self.opts.week)
         self.res.plan, self.res.week = p.reason, p.week
         self.res.attempt = p.attempt_text(self.now)
         self.add("plan", "ok", t0, p.reason + (f"; {self.res.attempt}" if self.res.attempt else ""))
         return p
+
+    def hot_seat_plan(self, p: sc.Plan) -> sc.Plan:
+        """The Hot-Seat list's plan (step H4a): the Radar's; once the last regular-season
+        week's as-of has passed (no other list follows it), that week = the end-of-season
+        snapshot, with the same retry deadline (`twm hotseat score` keeps a stored live
+        snapshot on later nights)."""
+        if p.week is not None or not getattr(self, "windows", None):
+            return p
+        last = max(self.windows, key=lambda w: w.week)
+        if last.as_of > self.now:
+            return p
+        end = sc.deadline(last.as_of, self.s.pipeline)
+        return sc.Plan(p.season, last.week, f"week {last.week}: the end-of-season snapshot",
+                       as_of=last.as_of, deadline=end)  # fmt: skip
 
     def _state(self, module: str, key: str, value: str | None = None) -> str:
         """The Radar's ``score`` / ``list_kind`` or another module's (``res.modules``)."""
@@ -574,11 +606,13 @@ class _Run:
         the last attempt and 'late' from it on; any other failure stops the run."""
         t0 = time.perf_counter()
         radar = module == "waiver_radar"
-        stage, cmd, stem = ("score", ["radar", "score"], "") if radar else MODULE_SCORES[module]
+        stage, cmd, stem = ("score", ["radar", "score"], "") if radar else _scores()[module]
         who = "" if radar else f"{module.replace('_', ' ')}: "
         if p.week is None:
             self.add(stage, "skipped", t0, p.reason)
             return True
+        if module in LATE_SCORES:  # its week can differ from the Radar's (end of season)
+            self._state(module, "week", str(p.week))
         name = f"{stem + '-' if stem else ''}{self.season}-W{p.week:02d}.md"
         report = self.out / "reports" / name
         args = [*cmd, "--season", str(self.season), "--week", str(p.week),
@@ -618,7 +652,7 @@ class _Run:
             return
         t0 = time.perf_counter()
         radar = module == "waiver_radar"
-        stage = "export" if radar else MODULE_SCORES[module][0].replace("score", "export")
+        stage = "export" if radar else _scores()[module][0].replace("score", "export")
         what = "list" if radar else f"{module.replace('_', ' ')} list"
         except_text = f"the {what} could not be exported to the run's files"
         try:
@@ -772,5 +806,12 @@ def _stages(r: _Run) -> None:
         "(sha256, rows, reports/decisions/{fourth_downs,clock}.csv); history never regraded",
     )  # fmt: skip
     ok = ok and r.decisions()
+    # step H4a: the Hot-Seat list, after the grades its decision-quality feature reads
+    for module in LATE_SCORES:
+        if ok and p is not None:
+            hp = r.hot_seat_plan(p)
+            ok = r.score(hp, module)
+            if ok:
+                r.export(hp, module)
     if ok and p is not None:
         r.publish()

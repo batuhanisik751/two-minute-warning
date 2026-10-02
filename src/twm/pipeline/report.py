@@ -51,10 +51,12 @@ def summary_markdown(result: Any) -> str:
         kind = f", stored as '{r.list_kind}'" if r.list_kind else ""
         facts.append(("List", f"week {r.week}: {r.score}{kind}" + (
             f" ({r.attempt})" if r.attempt else "")))  # fmt: skip
-    titles = {"streamer": "K and D/ST streamer", "regression_watch": "Regression Watch"}
+    titles = {"streamer": "K and D/ST streamer", "regression_watch": "Regression Watch",
+              "hot_seat": "Hot-Seat Meter"}  # fmt: skip
     for module, m in (getattr(r, "modules", None) or {}).items():
         kind = f", stored as '{m['list_kind']}'" if m.get("list_kind") else ""
-        facts.append((titles.get(module, module), f"week {r.week}: {m.get('score')}{kind}"))
+        week = m.get("week") or r.week
+        facts.append((titles.get(module, module), f"week {week}: {m.get('score')}{kind}"))
     if getattr(r, "decisions", ""):  # step P3: the season in progress's grades
         facts.append(("Decisions", r.decisions))
     facts.append(("Publish", r.publish + (f" to {r.target}" if r.target else "")))

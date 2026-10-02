@@ -1,4 +1,4 @@
-# Hot-Seat Meter: point-in-time features (step H3a), labels and models (step H3b)
+# Hot-Seat Meter: point-in-time features (step H3a), labels and models (step H3b), production (step H4a)
 
 PROJECT_SPEC 8.5. The features (H3a) come first; the labels and the models (H3b) are in the last
 two sections.
@@ -248,3 +248,60 @@ docs/research_decisions_vs_firings.md.
 ## Where the labels come from
 
 `data/manual/coach_departures.csv`: every departure type, date and source was researched from cited public pages (mostly each season's Wikipedia "NFL season" page and the coaches' own pages, URL and quote per row, step H1); on 2026-10-01 the owner accepted all of them as true in bulk rather than re-checking each row, and one row the research could not settle (2010 TEN, Jeff Fisher) was filled from his own page. Describe them that way wherever results are shown.
+
+## Production (step H4a)
+
+Code: `production.py` (the pin and the frozen backtest), `weekly.py` (the weekly list),
+`production_cli.py` (`twm hotseat pin|score`, `twm model check hot_seat`); publish:
+`src/twm/publish/hot_seat_lists.py`; deploy notes: docs/deploy.md "The Hot-Seat Meter's
+approved model".
+
+- **The live model** (owner, 2026-10-01): the L2 logistic regression (`logit`). For season S
+  it is exactly the walk-forward fold of test season S: every non-interim verified labelled
+  row of 2002 .. S-1, C chosen inside the fit by the inner walk-forward (as in the backtest).
+  The model's own probability is the primary one; the harness's isotonic calibrator is not
+  kept. Pinned 2026-10-02: `logit-0ede038915531ea3`, C 0.1 (inner seasons 2022-2025), 12,068
+  training rows (2,010 positive rows). `uv run twm hotseat pin` refits the logit walk-forward
+  first and refuses unless every probability equals the verified run's
+  (`data/hot_seat/backtest_predictions.parquet`); the live path only loads the file (sha256
+  before the pickle is opened) and never fits.
+- **The frozen backtest** (pinned with it): the verified run's logit predictions of 2006-2025
+  (10,361 rows: rank, coach name, key features, top 3 drivers), their outcomes and one model
+  version per fold (20). `twm model check hot_seat` checks that it reproduces
+  `reports/hot_seat/backtest_metrics.csv` (main, logit, its own probability) and
+  `firings_per_season.csv`. The published time machine (the backtest lists) is this file.
+- **The weekly list** `uv run twm hotseat score [--season S] [--week N] [--now ...]`
+  (default week: the latest whose Tuesday as-of has passed): the H3a batch path up to the run
+  time, point in time, for every current head coach; the probability of a positive departure
+  announced by 30 days after the team's final game; the rank; the top 3 **drivers**: the
+  logistic regression's own terms, coefficient x standardized value (missing indicators
+  included), the 3 largest by absolute size, signed, with the raw value and the registry's
+  label (a row's terms sum to its log-odds minus the intercept). **Interim coaches** (took
+  over during the season, or the owner's file says so) are scored but flagged: "interim: the
+  model was not trained on interims". Weeks 2 .. last-1 are `weekly` lists at the Tuesday
+  as-of; the last regular-season week is the **end-of-season snapshot** instead (each team's
+  row at its own `last_game_end` as-of; the last week's Tuesday row is not scored, as in the
+  backtest). The snapshot is due once every team's last game is public (exit code 3 before),
+  so a frozen list never misses a team. Freshness: Regression Watch's checks (exit code 3).
+- **Live or reconstructed**: the Radar's rule: `live` only on the real clock between the
+  as-of and the next week's first kickoff (the end-of-season snapshot: until the first playoff
+  kickoff). The snapshot can be scored after Black Monday (the job runs on Tuesday); its
+  features stay point in time at each team's own as-of.
+- **Store**: `predictions` rows (`module` hot_seat, `entity_type` coach, `entity_id` the
+  warehouse coach id, `rank_group` the snapshot, `score` the probability, `reasons_json`:
+  team, coach name, interim flag, drivers, key features). A live list is append-only: a
+  re-run of a stored live list (same version, season, week, snapshot), live or
+  reconstructed, keeps the stored one. Report: `reports/hot_seat/weekly/<season>-W<nn>.md`.
+- **The job**: stage `hotseat_score` after `decisions` (the decision-quality feature reads
+  the season grades it makes), preflight loads the pin and the snapshot (sha256), one publish.
+  It scores the week the other lists score; once the last regular-season week's Tuesday as-of
+  has passed (no other list follows it) it scores the end-of-season snapshot on each night of
+  the season window, with the same retry deadline; a stored live snapshot is kept.
+- **Published** (migration `web/drizzle/0004_hot_seat.sql`): `hot_seat_list` (season, week,
+  snapshot, kind), `hot_seat_row` (every coach: probability, rank, interim flag, drivers as
+  JSON, the key features; `coach_id` = the decisions' slug of the coach's name, so
+  `/coach/[id]` joins; indexed by coach for the timeline), `hot_seat_outcome` ('final' from
+  the frozen backtest; 'pending' for live seasons until the owner labels them),
+  `hot_seat_track_record` (backtest_metrics.csv row for row) and `hot_seat_firings`
+  (firings_per_season.csv). The glossary's Hot-Seat terms stay unpublished until the site
+  step (`publish.collect.UNPUBLISHED_MODULES`).

@@ -12,6 +12,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
   doublePrecision,
   foreignKey,
   index,
@@ -828,3 +829,148 @@ export const decisionsTrackRecord = pgTable(
   },
   (t) => [primaryKey({ columns: [t.source, t.line] })],
 );
+
+// ---------------------------------------------------------------------------------------
+// The Hot-Seat Meter (step H4a)
+// ---------------------------------------------------------------------------------------
+
+/** One Hot-Seat list per (season, week, snapshot, kind): snapshot 'weekly' (the Tuesday as-of
+ * of weeks 2 .. the week before the last) or 'end_of_season' (week = the last regular-season
+ * week; each team's row after its last regular-season game, as_of = the latest team's).
+ * 'live' lists are frozen once published; 'backtest' lists (2006 .. the season before the
+ * approved model's) come from the frozen walk-forward backtest and are replaced. */
+export const hotSeatList = pgTable(
+  "hot_seat_list",
+  {
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    snapshot: text("snapshot").notNull(),
+    kind: text("kind").notNull(),
+    asOf: tstz("as_of").notNull(),
+    modelVersion: text("model_version")
+      .notNull()
+      .references(() => modelVersions.modelVersion),
+    generatedAt: tstz("generated_at").notNull(),
+    incomplete: boolean("incomplete").notNull().default(false),
+    nCoaches: integer("n_coaches").notNull(),
+    note: text("note"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.week, t.snapshot, t.kind] }),
+    check("hot_seat_list_kind_check", sql`${t.kind} in ('live', 'backtest')`),
+    check(
+      "hot_seat_list_snapshot_check",
+      sql`${t.snapshot} in ('weekly', 'end_of_season')`,
+    ),
+  ],
+);
+
+/** Every scored head coach of each list (coach_id = the site's slug, as in dim_coach and
+ * /coach/[id]), ranked by probability: the chance that his departure (fired in or after the
+ * season, or a mutual parting) is announced by 30 days after the team's final game, the
+ * model's own probability. as_of = the row's own (end of season: the team's). drivers = the 3
+ * largest terms of the logistic regression (coef x standardized value), JSON
+ * [{feature, label, contribution, value, missing}]. is_interim: took over during the season
+ * (scored, but the model was not trained on interims). The key features the page shows
+ * follow (the H3a names, docs/glossary.md). A coach's timeline = his rows across lists. */
+export const hotSeatRow = pgTable(
+  "hot_seat_row",
+  {
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    snapshot: text("snapshot").notNull(),
+    kind: text("kind").notNull(),
+    coachId: text("coach_id")
+      .notNull()
+      .references(() => dimCoach.coachId),
+    team: text("team")
+      .notNull()
+      .references(() => dimTeam.teamAbbr),
+    asOf: tstz("as_of").notNull(),
+    rank: integer("rank").notNull(),
+    probability: doublePrecision("probability").notNull(),
+    isInterim: boolean("is_interim").notNull(),
+    drivers: jsonb("drivers").notNull(),
+    regGamesPlayed: integer("reg_games_played").notNull(),
+    regWins: doublePrecision("reg_wins").notNull(),
+    expectedWins: doublePrecision("expected_wins"),
+    winsVsExpected: doublePrecision("wins_vs_expected"),
+    pointDiffPerGame: doublePrecision("point_diff_per_game"),
+    tenureSeasons: integer("tenure_seasons"),
+    divisionRank: integer("division_rank"),
+    prevSeasonWins: doublePrecision("prev_season_wins"),
+    consecutiveLosingSeasons: integer("consecutive_losing_seasons"),
+    fourthDownWpLostPerGame: doublePrecision("fourth_down_wp_lost_per_game"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.week, t.snapshot, t.kind, t.coachId] }),
+    foreignKey({
+      name: "hot_seat_row_list_fk",
+      columns: [t.season, t.week, t.snapshot, t.kind],
+      foreignColumns: [hotSeatList.season, hotSeatList.week, hotSeatList.snapshot, hotSeatList.kind],
+    }),
+    index("hot_seat_row_coach_id_idx").on(t.coachId, t.season, t.week),
+    check("hot_seat_row_probability_check", sql`${t.probability} between 0 and 1`),
+    check("hot_seat_row_rank_check", sql`${t.rank} >= 1`),
+  ],
+);
+
+/** What happened, per (season, week, coach): departed = a positive departure announced in
+ * the window (on or after the row's day, by 30 days after the final game), censored = another
+ * departure in that span (e.g. resigned under pressure); 'final' for the frozen backtest's
+ * rows (labels: cited public-source research accepted by the owner), 'pending' (NULLs) for
+ * live seasons. Replaced on every publish. */
+export const hotSeatOutcome = pgTable(
+  "hot_seat_outcome",
+  {
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    coachId: text("coach_id")
+      .notNull()
+      .references(() => dimCoach.coachId),
+    departed: boolean("departed"),
+    censored: boolean("censored"),
+    departureType: text("departure_type"),
+    announced: date("announced"),
+    labelStatus: text("label_status").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.week, t.coachId] }),
+    index("hot_seat_outcome_coach_id_idx").on(t.coachId),
+    check("hot_seat_outcome_status_check", sql`${t.labelStatus} in ('final', 'pending')`),
+  ],
+);
+
+/** The Hot-Seat walk-forward backtest's track record: every row of
+ * reports/hot_seat/backtest_metrics.csv (line = the CSV's data row, from 1): per variant
+ * (main, censored_dropped, rup_positive), model, probability ('prob' = the model's own,
+ * 'prob_iso' = the isotonic-calibrated one) and slice ('all', 'week_02' .. 'week_17',
+ * 'end_of_season'): ROC-AUC, PR-AUC, Brier and the top-5 hit rates, with the season-block
+ * bootstrap interval (lo, hi) and the rows, positives and seasons behind it. */
+export const hotSeatTrackRecord = pgTable("hot_seat_track_record", {
+  line: integer("line").primaryKey(),
+  variant: text("variant").notNull(),
+  model: text("model").notNull(),
+  prob: text("prob").notNull(),
+  slice: text("slice").notNull(),
+  metric: text("metric").notNull(),
+  value: doublePrecision("value"),
+  lo: doublePrecision("lo"),
+  hi: doublePrecision("hi"),
+  nRows: integer("n_rows").notNull(),
+  nPos: integer("n_pos").notNull(),
+  nSeasons: integer("n_seasons").notNull(),
+});
+
+/** Head-coach departures per season, row for row from reports/hot_seat/firings_per_season.csv
+ * (coach-seasons; interims counted apart): positive departures, of them fired in season,
+ * positives on the week-12 and end-of-season rows, censored coach-seasons, interims. */
+export const hotSeatFirings = pgTable("hot_seat_firings", {
+  season: integer("season").primaryKey(),
+  positiveDepartures: integer("positive_departures").notNull(),
+  firedInSeason: integer("fired_in_season").notNull(),
+  positivesWeek12: integer("positives_week_12").notNull(),
+  positivesEndOfSeason: integer("positives_end_of_season").notNull(),
+  censoredCoachSeasons: integer("censored_coach_seasons").notNull(),
+  interimCoachSeasons: integer("interim_coach_seasons").notNull(),
+});

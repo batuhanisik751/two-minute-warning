@@ -1,6 +1,7 @@
-"""Small made-up streamer and Regression Watch lists for `twm publish` tests (step P2), added to
-the Waiver Radar's synthetic publish data (tests/publish_synthetic.py): backtest lists of two
-seasons and one live week, their outcomes, model versions and track records. Deterministic."""
+"""Small made-up streamer, Regression Watch and (step H4a) Hot-Seat lists for `twm publish`
+tests (step P2), added to the Waiver Radar's synthetic publish data (tests/publish_synthetic.py):
+backtest lists of two seasons and one live week, their outcomes, model versions and track
+records. Deterministic."""
 
 from __future__ import annotations
 
@@ -11,6 +12,9 @@ import polars as pl
 from tests.publish_synthetic import TEAMS
 from twm.modules.regression_watch.weekly import early_note
 from twm.publish.collect import ListData, PublishData
+from twm.publish.hot_seat_lists import LIST_SCHEMA as HS_LIST
+from twm.publish.hot_seat_lists import OUTCOME_SCHEMA as HS_OUT
+from twm.publish.hot_seat_lists import ROW_SCHEMA as HS_ROW
 from twm.publish.regression_lists import LIST_SCHEMA as RW_LIST
 from twm.publish.regression_lists import OUTCOME_SCHEMA as RW_OUT
 from twm.publish.regression_lists import ROW_SCHEMA as RW_ROW
@@ -149,16 +153,86 @@ def stability(n: int = 4) -> pl.DataFrame:
 
 
 def add_modules(data: PublishData, **kw) -> PublishData:
-    """``data`` (the Radar's synthetic publish) with the streamer's and Regression Watch's
-    lists; ``streamer=`` / ``regression=`` / ``stability=`` pass keyword arguments to each
-    builder."""
+    """``data`` (the Radar's synthetic publish) with the streamer's, Regression Watch's and
+    the Hot-Seat Meter's lists; ``streamer=`` / ``regression=`` / ``stability=`` /
+    ``hot_seat=`` pass keyword arguments to each builder (``hot_seat=None``: left out)."""
     st, st_versions, st_track = streamer(**kw.get("streamer", {}))
     rw, rw_versions, rw_track = regression(data.tables["dim_player"], **kw.get("regression", {}))
     data.families["streamer"], data.families["regression_watch"] = st, rw
     data.tables["stream_track_record"], data.tables["regression_track_record"] = st_track, rw_track
     data.tables["regression_stability"] = stability(**kw.get("stability", {}))
+    hs_versions: list[dict] = []
+    if kw.get("hot_seat", {}) is not None:
+        hs, hs_versions, hs_track, hs_tables = hot_seat(**kw.get("hot_seat", {}))
+        data.families["hot_seat"], data.tables["hot_seat_track_record"] = hs, hs_track
+        data.tables["hot_seat_firings"] = hs_tables["hot_seat_firings"]
+        old = data.tables.get("dim_coach")
+        both = [old, hs_tables["dim_coach"]] if old is not None else [hs_tables["dim_coach"]]
+        data.tables["dim_coach"] = pl.concat(both).unique("coach_id").sort("coach_id")
     mv = data.tables["model_versions"]
-    extra = pl.DataFrame([*st_versions, *rw_versions], schema=mv.schema, orient="row")
+    extra = pl.DataFrame([*st_versions, *rw_versions, *hs_versions], schema=mv.schema,
+                         orient="row")  # fmt: skip
     data.tables["model_versions"] = pl.concat([mv, extra]).unique(
         "model_version", keep="first", maintain_order=True)  # fmt: skip
     return data
+
+
+HS_COACHES = [("coach-a", "Coach A"), ("coach-b", "Coach B"), ("coach-c", "Coach C"),
+              ("coach-d", "Coach D")]  # fmt: skip
+
+
+def hot_seat(
+    *, backtest: tuple[int, ...] = (2025,), live: bool = True, shift: float = 0.0,
+    incomplete: bool = False, n_track: int = 3,
+) -> tuple[ListData, list[dict], pl.DataFrame, dict[str, pl.DataFrame]]:  # fmt: skip
+    """(lists, versions, track record, {hot_seat_firings, dim_coach}) of the Hot-Seat Meter
+    over four coaches: weekly week 3 and the end-of-season snapshot (week 18) of each backtest
+    season, the live week 3; ``shift`` raises the live list's first probability."""
+    weeks = [(s, w, snap, "backtest") for s in backtest
+             for w, snap in ((3, "weekly"), (18, "end_of_season"))]  # fmt: skip
+    weeks += [(LIVE_SEASON, LIVE_WEEK, "weekly", "live")] if live else []
+    lists, rows, versions = [], [], {}
+    for s, w, snap, kind in weeks:
+        version = f"logit-hs{'live' if kind == 'live' else s}"
+        versions[version] = _version(version, "hot_seat", "logit", "y", s)
+        lists.append({"season": s, "week": w, "snapshot": snap, "kind": kind,
+                      "as_of": datetime(s, 9, 22, 14, tzinfo=UTC), "model_version": version,
+                      "generated_at": CREATED, "incomplete": incomplete and kind == "live",
+                      "n_coaches": len(HS_COACHES), "note": None})  # fmt: skip
+        for i, (coach, _) in enumerate(HS_COACHES):
+            p = 0.6 - 0.1 * i + (shift if kind == "live" and i == 0 else 0.0)
+            rows.append({
+                "season": s, "week": w, "snapshot": snap, "kind": kind, "coach_id": coach,
+                "team": TEAMS[i % 4], "as_of": datetime(s, 9, 22, 14, tzinfo=UTC), "rank": i + 1,
+                "probability": p, "is_interim": i == 3,
+                "drivers": '[{"feature": "wins_vs_expected", "label": "Wins vs market '
+                           'expectation", "contribution": 0.5, "value": -1.0, "missing": false}]',
+                "reg_games_played": 3, "reg_wins": 1.0, "expected_wins": 1.5,
+                "wins_vs_expected": -0.5, "point_diff_per_game": -3.0, "tenure_seasons": 2,
+                "division_rank": 3, "prev_season_wins": 7.0, "consecutive_losing_seasons": 1,
+                "fourth_down_wp_lost_per_game": 0.01,
+            })  # fmt: skip
+    lists_df = pl.DataFrame(lists, schema=HS_LIST, orient="row")
+    rows_df = pl.DataFrame(rows, schema=HS_ROW, orient="row")
+    keys = rows_df.select("season", "week", "coach_id").unique()
+    done = pl.col("season") < LIVE_SEASON
+    out = keys.with_columns(
+        pl.when(done).then(pl.col("coach_id") == "coach-a").alias("departed"),
+        pl.when(done).then(False).alias("censored"),
+        pl.when(done & (pl.col("coach_id") == "coach-a")).then(pl.lit("fired_after_season"))
+        .alias("departure_type"), pl.lit(None, dtype=pl.Date).alias("announced"),
+        pl.when(done).then(pl.lit("final")).otherwise(pl.lit("pending")).alias("label_status"),
+    ).cast(HS_OUT).sort("season", "week", "coach_id")  # fmt: skip
+    track = _table("hot_seat_track_record", [
+        {"line": i + 1, "variant": "main", "model": "logit", "prob": "prob",
+         "slice": f"week_{i + 2:02d}", "metric": "roc_auc", "value": 0.78, "lo": 0.7,
+         "hi": 0.85, "n_rows": 600, "n_pos": 100, "n_seasons": 20}
+        for i in range(n_track)])  # fmt: skip
+    firings = _table("hot_seat_firings", [
+        {"season": s, "positive_departures": 6, "fired_in_season": 2, "positives_week_12": 5,
+         "positives_end_of_season": 6, "censored_coach_seasons": 1, "interim_coach_seasons": 2}
+        for s in (2024, 2025)])  # fmt: skip
+    coaches = pl.DataFrame(HS_COACHES, schema={"coach_id": pl.String, "name": pl.String},
+                           orient="row")  # fmt: skip
+    return (ListData(lists_df, rows_df, out, keys), list(versions.values()), track,
+            {"hot_seat_firings": firings, "dim_coach": coaches})  # fmt: skip

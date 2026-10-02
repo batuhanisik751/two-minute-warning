@@ -712,8 +712,9 @@ def _publish(
                 current[n] == new_counts[n] for n in plan_units[unit]
             )
 
+        # dim_coach: the decisions' coaches and (step H4a) the Hot-Seat Meter's
         dims = ("model_versions", "dim_team", "dim_player",
-                *(DECISIONS.dims if dec is not None else ()))  # fmt: skip
+                *(DECISIONS.dims if dec is not None or "dim_coach" in t else ()))  # fmt: skip
         for name in dims:
             written[name] = _upsert(conn, TABLES[name], rows_of(t[name], TABLES[name]))
         step("upsert")

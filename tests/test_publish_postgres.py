@@ -613,14 +613,14 @@ def test_a_model_version_keeps_its_first_created_at(db: tg.Target) -> None:
 
 def publish_all(target: tg.Target, inputs, modules: dict | None = None, *, live: bool = True,
                 **kwargs) -> wr.PublishResult:  # fmt: skip
-    """The Radar's synthetic publish plus the streamer's and Regression Watch's lists
-    (tests/publish_modules_synthetic.py); ``live=False``: a fresh runner, whose store has no
+    """The Radar's synthetic publish plus the streamer's, Regression Watch's and the Hot-Seat
+    lists (tests/publish_modules_synthetic.py); ``live=False``: a fresh runner, whose store has no
     live list of those modules (their outcomes stay available, as the datasets keep them)."""
     from tests import publish_modules_synthetic as pm
 
     data = pm.add_modules(col.collect(inputs), **(modules or {}))
     if not live:
-        for m in ("streamer", "regression_watch"):
+        for m in ("streamer", "regression_watch", "hot_seat"):
             f = data.families[m]
             f.lists = f.lists.filter(pl.col("kind") != "live")
             f.rows = f.rows.filter(pl.col("kind") != "live")
@@ -746,7 +746,7 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                 owner.execute((ROOT / "scripts" / "neon" / "roles.sql").read_text())
             assert mg.apply_migrations(owner) == ["0001_streamer_regression_watch",
                                                   "0002_regression_stability",
-                                                  "0003_decisions"]  # fmt: skip
+                                                  "0003_decisions", "0004_hot_seat"]  # fmt: skip
         job = tg.resolve("local", env={tg.LOCAL_ENV: make_conninfo(
             url, user="twm_job", password=roles["twm_job"])}, env_file=NO_ENV_FILE)  # fmt: skip
         syn = ps.build(tmp_path / "syn", live_weeks=(3,))
@@ -755,7 +755,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
         web = make_conninfo(url, user="twm_web", password=roles["twm_web"])
         with psycopg.connect(web, autocommit=True) as conn:
             for t in ("stream_list", "stream_pick", "regression_row", "regression_track_record",
-                      "regression_stability"):  # fmt: skip
+                      "regression_stability", "hot_seat_list", "hot_seat_row",
+                      "hot_seat_outcome", "hot_seat_track_record", "hot_seat_firings"):  # fmt: skip
                 assert conn.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] > 0
             for t in ("dim_coach", "decision_fourth", "coach_season", "decisions_track_record"):
                 conn.execute(f'SELECT count(*) FROM "{t}"')  # P3 tables: readable by the site
@@ -862,3 +863,45 @@ def test_the_season_in_progress_is_replaced_and_the_history_guarded(
     res = publish_decisions(db, syn.inputs, replace(dec, history=small), allow_shrink=True)
     assert rows(db, "SELECT DISTINCT season FROM coach_season ORDER BY 1") == [(2024,), (2025,)]
     assert any("decision_fourth (history)" in w for w in res.warnings)
+
+
+# --------------------------------------------------------------------------------------
+# Step H4a: the Hot-Seat Meter (the same families and guards as the other modules)
+# --------------------------------------------------------------------------------------
+
+
+def test_the_hot_seat_lists_follow_the_families_rules(db: tg.Target, tmp_path: Path) -> None:
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    first = publish_all(db, syn.inputs)
+    c = first.counts
+    assert (c["hot_seat_list"], c["hot_seat_row"], c["hot_seat_outcome"]) == (3, 12, 12)
+    assert (c["hot_seat_track_record"], c["hot_seat_firings"]) == (3, 2)
+    assert {d.label: d.action for d in first.live}["hot seat 2026-W03 weekly"] == "insert"
+    meta = dict(rows(db, "SELECT key, value FROM site_meta"))
+    assert meta["hot_seat_latest_live_list_week"] == "3"
+    assert rows(db, "SELECT coach_id, name FROM dim_coach WHERE coach_id = 'coach-a'") == [
+        ("coach-a", "Coach A")]  # fmt: skip
+    assert rows(db, "SELECT drivers->0->>'feature', is_interim FROM hot_seat_row WHERE kind = "
+                    "'live' AND rank = 4") == [("wins_vs_expected", True)]  # fmt: skip
+    live = "SELECT coach_id, probability FROM hot_seat_row WHERE kind = 'live' ORDER BY rank"
+    before = rows(db, live)
+    # an unchanged second run rewrites nothing of the module
+    res = publish_all(db, syn.inputs)
+    assert {"hot_seat_backtest_lists", "hot_seat_outcome", "hot_seat_track_record",
+            "hot_seat_firings"} <= set(res.unchanged)  # fmt: skip
+    # a live list is frozen: a different local one is kept out; a fresh runner keeps it
+    res = publish_all(db, syn.inputs, {"hot_seat": {"shift": 0.2}})
+    assert {d.label: d.action for d in res.live}["hot seat 2026-W03 weekly"] == "kept"
+    res = publish_all(db, syn.inputs, live=False)
+    assert rows(db, live) == before and not any("no outcome row" in w for w in res.warnings)
+    # the backtest lists and the track record are guarded against shrinking
+    content = dump(db)
+    with pytest.raises(wr.PublishError, match="hot_seat_track_record would go from 3 to 1"):
+        publish_all(db, syn.inputs, {"hot_seat": {"n_track": 1}})
+    with pytest.raises(wr.PublishError, match=r"hot_seat_row \(backtest rows\) would go from 8"):
+        publish_all(db, syn.inputs, {"hot_seat": {"backtest": ()}})
+    assert dump(db) == content
+    # --replace-live replaces the module's list of that week
+    res = publish_all(db, syn.inputs, {"hot_seat": {"shift": 0.2}}, replace_live=[(2026, 3)])
+    assert {d.label: d.action for d in res.live}["hot seat 2026-W03 weekly"] == "replace"
+    assert rows(db, live)[0][1] == pytest.approx(before[0][1] + 0.2)

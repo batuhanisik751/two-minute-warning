@@ -33,6 +33,27 @@ decisions:
       file: artifacts/production_models/decisions/history-grading-100604cddaabf068/season_inputs.parquet
       sha256: 4fc8833da3ea536bb9244f8c40b58a0fe18d6f59cbfda77ff52fe3e7dee6c7cd
       rows: 20
+hot_seat:
+  season: 2026
+  model_version: logit-0ede038915531ea3
+  file: artifacts/production_models/hot_seat/logit-0ede038915531ea3.joblib
+  sha256: fbaa29c406e727286375fd009ef5f76d0bc4f5e09c836efacc80d6c0380dc246
+  model: logit
+  approved: '2026-10-02'
+  backtest:
+    seasons: 2006-2025
+    predictions:
+      file: artifacts/production_models/hot_seat/backtest-logit-0ede038915531ea3/predictions.parquet
+      sha256: 61cb0d500d1c1a49adc0142e76e28b9fa01d3e077bf186d9dc5a2dcbbcbcfca1
+      rows: 10361
+    outcomes:
+      file: artifacts/production_models/hot_seat/backtest-logit-0ede038915531ea3/outcomes.parquet
+      sha256: 88efa37a123c35864bbaf37e5560e48959e3e26508bc66371dcf2cd8a45a8072
+      rows: 10361
+    model_versions:
+      file: artifacts/production_models/hot_seat/backtest-logit-0ede038915531ea3/model_versions.parquet
+      sha256: d3770a0961413a65ba445e389c229f312eae1829954eae3ca6cbe6e1e6174848
+      rows: 20
 regression_watch:
   season: 2026
   model_version: zero_flat_all-9d98d6f251ee054c

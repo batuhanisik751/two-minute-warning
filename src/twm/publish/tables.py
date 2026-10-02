@@ -10,10 +10,11 @@ How a publish treats each table (the reviewer's rules of 2026-09-28):
 - **replace**: every row is deleted and written again in the publish transaction: the rows are
   derived from local files and can always be rebuilt (track_record, tier_stats, glossary,
   player_week_summary, site_meta, radar_outcome; step P2: stream_outcome, regression_outcome,
-  stream_track_record, regression_track_record; step R1: regression_stability).
+  stream_track_record, regression_track_record; step R1: regression_stability; step H4a:
+  hot_seat_outcome, hot_seat_track_record, hot_seat_firings).
 - **lists**: radar_list / radar_pick (and, step P2, stream_list / stream_pick and
-  regression_list / regression_row, with the same code: :data:`FAMILIES`) hold two kinds of
-  list. 'backtest' lists (reconstructed)
+  regression_list / regression_row; step H4a: hot_seat_list / hot_seat_row, with the same
+  code: :data:`FAMILIES`) hold two kinds of list. 'backtest' lists (reconstructed)
   are replaced like the tables above. 'live' lists (made in real time) are **frozen**: a live
   list is inserted only when its (season, week, position) is not in the target yet and is never
   deleted or changed by a normal publish (``--replace-live SEASON-Wnn`` is the owner's explicit
@@ -187,6 +188,42 @@ TABLES: dict[str, Table] = {
             ("hi", "double precision"), ("var_signal", "double precision"),
             ("var_noise", "double precision"), ("prior_mean", "double precision"),
         ),
+        # step H4a: the Hot-Seat Meter (FAMILIES["hot_seat"]; the coach is the site's slug)
+        _t(
+            "hot_seat_list", ("season", "week", "snapshot", "kind"), "lists",
+            ("season", "integer"), ("week", "integer"), ("snapshot", "text"), ("kind", "text"),
+            ("as_of", TS), ("model_version", "text"), ("generated_at", TS),
+            ("incomplete", "boolean"), ("n_coaches", "integer"), ("note", "text"),
+        ),
+        _t(
+            "hot_seat_row", ("season", "week", "snapshot", "kind", "coach_id"), "lists",
+            ("season", "integer"), ("week", "integer"), ("snapshot", "text"), ("kind", "text"),
+            ("coach_id", "text"), ("team", "text"), ("as_of", TS), ("rank", "integer"),
+            ("probability", DP), ("is_interim", "boolean"), ("drivers", "jsonb"),
+            ("reg_games_played", "integer"), ("reg_wins", DP), ("expected_wins", DP),
+            ("wins_vs_expected", DP), ("point_diff_per_game", DP), ("tenure_seasons", "integer"),
+            ("division_rank", "integer"), ("prev_season_wins", DP),
+            ("consecutive_losing_seasons", "integer"), ("fourth_down_wp_lost_per_game", DP),
+        ),
+        _t(
+            "hot_seat_outcome", ("season", "week", "coach_id"), "replace",
+            ("season", "integer"), ("week", "integer"), ("coach_id", "text"),
+            ("departed", "boolean"), ("censored", "boolean"), ("departure_type", "text"),
+            ("announced", "date"), ("label_status", "text"),
+        ),
+        _t(  # reports/hot_seat/backtest_metrics.csv row for row
+            "hot_seat_track_record", ("line",), "replace",
+            ("line", "integer"), ("variant", "text"), ("model", "text"), ("prob", "text"),
+            ("slice", "text"), ("metric", "text"), ("value", DP), ("lo", DP), ("hi", DP),
+            ("n_rows", "integer"), ("n_pos", "integer"), ("n_seasons", "integer"),
+        ),
+        _t(  # reports/hot_seat/firings_per_season.csv row for row
+            "hot_seat_firings", ("season",), "replace",
+            ("season", "integer"), ("positive_departures", "integer"),
+            ("fired_in_season", "integer"), ("positives_week_12", "integer"),
+            ("positives_end_of_season", "integer"), ("censored_coach_seasons", "integer"),
+            ("interim_coach_seasons", "integer"),
+        ),
         _t(
             "track_record",
             ("module", "label", "excl_rostered", "model", "scope", "scope_value", "season_from",
@@ -285,7 +322,9 @@ WRITE_ORDER = (
     "model_versions", "dim_team", "dim_player", "dim_coach", "radar_list", "radar_pick",
     "radar_outcome", "stream_list", "stream_pick", "stream_outcome", "regression_list",
     "regression_row", "regression_outcome", "track_record", "stream_track_record",
-    "regression_track_record", "regression_stability", "decision_fourth", "decision_two_point",
+    "regression_track_record", "regression_stability", "hot_seat_list", "hot_seat_row",
+    "hot_seat_outcome", "hot_seat_track_record", "hot_seat_firings", "decision_fourth",
+    "decision_two_point",
     "decision_clock", "coach_season", "coach_week", "decisions_track_record",
     "tier_stats", "player_week_summary", "glossary", "site_meta", "pipeline_runs",
 )  # fmt: skip
@@ -332,6 +371,10 @@ FAMILIES: dict[str, Family] = {
                "regression_backtest_lists", ("regression_track_record", "regression_stability"),
                "regression_",
                "regression watch"),
+        Family("hot_seat", "hot_seat_list", "hot_seat_row", "hot_seat_outcome",
+               ("season", "week", "snapshot"), "coach_id", "rank", "model_version",
+               "hot_seat_backtest_lists", ("hot_seat_track_record", "hot_seat_firings"),
+               "hot_seat_", "hot seat"),
     )
 }  # fmt: skip
 # Replaced tables every module shares (published whatever modules a publish carries).

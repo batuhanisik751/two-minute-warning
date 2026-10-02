@@ -9,6 +9,7 @@ import typer
 from twm import __version__
 from twm.modules.decisions import production_cli as _decisions_pins  # noqa: F401 (P3 commands)
 from twm.modules.decisions.cli import decisions_app
+from twm.modules.hot_seat import production_cli as _hot_seat_pins  # noqa: F401 (H4a commands)
 from twm.modules.hot_seat.cli import hotseat_app
 from twm.modules.streamer.cli import streamer_app
 
@@ -2158,8 +2159,8 @@ def _check_against_evaluation(store: Path, evaluation_csv: Path) -> list[str]:
 def model_check(
     module: str = typer.Argument(
         "all",
-        help="Module: waiver_radar, streamer, regression_watch, decisions, or all (every "
-        "pinned module).",
+        help="Module: waiver_radar, streamer, regression_watch, decisions, hot_seat, or all "
+        "(every pinned module).",
     ),
     season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
     evaluation_csv: Path = typer.Option(
@@ -2176,7 +2177,8 @@ def model_check(
     against reports/streamer/backtest.csv (S2a), and Regression Watch's frozen parameters
     (sha256, version, and its record of the last backtest season against
     reports/regression_watch/backtest.csv; D4a), and the Decision Report Card's approved
-    grading and frozen history (P3: reports/decisions/{fourth_downs,clock}.csv). Changes
+    grading and frozen history (P3: reports/decisions/{fourth_downs,clock}.csv), and the
+    Hot-Seat Meter's live model and frozen backtest (H4a: reports/hot_seat/). Changes
     nothing."""
     import tempfile
 
@@ -2195,6 +2197,11 @@ def model_check(
         from twm.modules.decisions.production_cli import check_pin as check_decisions_pin
 
         check_decisions_pin(chosen)
+        return
+    if module.strip().lower().replace("-", "_") == "hot_seat":  # H4a: the live model + backtest
+        from twm.modules.hot_seat.production_cli import check_pin as check_hot_seat_pin
+
+        check_hot_seat_pin(chosen)
         return
     key = "waiver_radar" if module.strip().lower() == "all" else _module_or_exit(module)
     try:
@@ -2227,6 +2234,10 @@ def model_check(
         from twm.modules.decisions.production_cli import check_pin as check_decisions_pin
 
         check_decisions_pin(chosen)
+    if module.strip().lower() == "all" and "hot_seat" in pins.read_pins():
+        from twm.modules.hot_seat.production_cli import check_pin as check_hot_seat_pin
+
+        check_hot_seat_pin(chosen)
 
 
 @model_app.command("restore-backtest")

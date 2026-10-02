@@ -41,7 +41,7 @@ from twm.config import FANTASY_POSITIONS
 
 MODULE = "waiver_radar"
 # tables.FAMILIES, and (step P3) the Decision Report Card (tables.DECISIONS)
-MODULES = ("waiver_radar", "streamer", "regression_watch", "decisions")
+MODULES = ("waiver_radar", "streamer", "regression_watch", "decisions", "hot_seat")
 TOP_N = 25  # published picks per list (the weekly report's top 25: confidence.TOP_N)
 # nflverse gsis ids: "00-0034796" (most players) or "BAT138483" (older ids; checked: every
 # dim_player id in the 2026-09-28 warehouse matches one of the two)
@@ -98,6 +98,7 @@ class Inputs:
     regression_stability_csv: Path | None = None
     decisions_season_dir: Path | None = None  # `twm decisions grade-pinned`'s output
     decisions_reports: Path | None = None  # reports/decisions
+    hot_seat_reports: Path | None = None  # reports/hot_seat (step H4a)
 
     @classmethod
     def default(cls, now: datetime | None = None) -> Inputs:
@@ -124,6 +125,7 @@ class Inputs:
             "regression_stability_csv": ROOT / "reports" / "regression_watch" / "stability.csv",
             "decisions_season_dir": ROOT / "data" / "decisions" / "season",
             "decisions_reports": ROOT / "reports" / "decisions",
+            "hot_seat_reports": ROOT / "reports" / "hot_seat",
         }
         value = getattr(self, name)
         return Path(value) if value is not None else defaults[name]
@@ -829,6 +831,17 @@ def glossary() -> pl.DataFrame:
 # --------------------------------------------------------------------------------------
 
 
+def merge_coaches(current: pl.DataFrame | None, more: pl.DataFrame) -> pl.DataFrame:
+    """dim_coach rows of the decisions (``current``, may be None) and the Hot-Seat Meter
+    (``more``): one row per coach id; :class:`PublishInputError` when an id has two names."""
+    frames = [f.select("coach_id", "name") for f in (current, more) if f is not None]
+    both = pl.concat(frames).unique().sort("coach_id")
+    clash = both.filter(pl.col("coach_id").is_duplicated())
+    if clash.height:
+        raise PublishInputError(f"coach ids with two names: {clash.rows()[:4]}")
+    return both
+
+
 def radar(inputs: Inputs) -> tuple[ListData, pl.DataFrame]:
     """The Waiver Radar's lists and outcomes (module docstring) and its dataset's (gsis_id,
     name) for player names."""
@@ -876,6 +889,15 @@ def collect(inputs: Inputs) -> PublishData:
             )  # fmt: skip
             families["streamer"], tables["stream_track_record"] = got.data, got.track_record
             extra.append(got)
+        hot_coaches = None
+        if "hot_seat" in inputs.modules:  # step H4a: live lists + the frozen backtest
+            from twm.publish import hot_seat_lists as hs
+
+            got, hot_coaches = hs.collect_hot_seat(inputs.store, inputs.path("hot_seat_reports"),
+                                                   season, inputs.now, con)  # fmt: skip
+            families["hot_seat"], tables[hs.TRACK_TABLE] = got.data, got.track_record
+            tables.update(got.tables)
+            extra.append(got)
         data_as_of, meta = data_freshness(con, season, inputs.now)
     finally:
         con.close()
@@ -906,6 +928,8 @@ def collect(inputs: Inputs) -> PublishData:
                                           for f in (min, max)),
             "decisions_latest_week": "" if weeks.len() == 0 else str(weeks.max()),
         })  # fmt: skip
+    if hot_coaches is not None:  # the Hot-Seat coaches join the decisions' (same slugs)
+        tables["dim_coach"] = merge_coaches(tables.get("dim_coach"), hot_coaches)
     ids = families[MODULE].outcome_keys.get_column("gsis_id").to_list()
     ids += pws.get_column("gsis_id").to_list()
     if "regression_watch" in families:
@@ -1099,6 +1123,29 @@ def _regression_problems(d: ListData, teams: set[str], players: set[str]) -> lis
     return problems
 
 
+def _hot_seat_problems(d: ListData, teams: set[str], coaches: set[str]) -> list[str]:
+    """The Hot-Seat lists: keys, snapshots, every coach ranked 1..n, probabilities within
+    [0, 1], teams and coaches known, the drivers present."""
+    rows = d.rows
+    problems = _list_problems("Hot-Seat", d.lists, rows, ["season", "week", "snapshot", "kind"],
+                              positions=None, pool="n_coaches", row_id="coach_id",
+                              ranked=True, top=None)  # fmt: skip
+    odd = d.lists.filter(~pl.col("snapshot").is_in(["weekly", "end_of_season"]))
+    if odd.height:
+        problems.append(f"unknown Hot-Seat snapshots: {odd['snapshot'].unique().to_list()}")
+    out = rows.filter(pl.col("probability").is_null() | pl.col("probability").is_nan()
+                      | (pl.col("probability") < 0) | (pl.col("probability") > 1))  # fmt: skip
+    if out.height:
+        problems.append(f"{out.height} Hot-Seat rows have a probability outside [0, 1]")
+    problems += _team_problems("Hot-Seat rows", rows, teams)
+    unknown = rows.filter(pl.col("coach_id").is_null() | ~pl.col("coach_id").is_in(list(coaches)))
+    if unknown.height:
+        problems.append(f"{unknown.height} Hot-Seat rows name a coach missing from dim_coach")
+    if rows.filter(pl.col("drivers").is_null()).height:
+        problems.append("some Hot-Seat rows have no drivers")
+    return problems
+
+
 def validate(data: PublishData) -> list[str]:
     """Plain-English problems (empty = publishable): see docs/deploy.md "What is checked"."""
     from twm.publish.tables import FAMILIES
@@ -1146,6 +1193,10 @@ def validate(data: PublishData) -> list[str]:
         problems += _streamer_problems(fam["streamer"], teams)
     if "regression_watch" in fam:
         problems += _regression_problems(fam["regression_watch"], teams, players)
+    if "hot_seat" in fam:
+        dim = t.get("dim_coach")
+        coaches = set(dim.get_column("coach_id").to_list()) if dim is not None else set()
+        problems += _hot_seat_problems(fam["hot_seat"], teams, coaches)
     # 3. every player named exists; the weekly summary is clean
     for name, df in (("picks", picks), ("player_week_summary", t["player_week_summary"])):
         missing = df.filter(~pl.col("gsis_id").is_in(players))

@@ -73,15 +73,19 @@ def build_preseason_dataset(
     seasons: list[int] | None = None,
     progress: Progress | None = None,
     anchor: str | None = None,
+    at: datetime | None = None,
 ) -> pl.DataFrame:
     """Step I2a: the same rows and labels read at the PRESEASON snapshot of each S at ``anchor``
     (default: config ``as_of.board.preseason``; :func:`~twm.modules.board.preseason.
-    preseason_as_of`). A season whose as-of has not passed yet is skipped."""
+    preseason_as_of`). A season whose as-of has not passed yet is skipped. ``at`` (step I6b,
+    the live board's as-of, :mod:`twm.modules.board.live_publish`): read every S at it instead."""
     from twm.modules.board import preseason as pre
 
     anchor = anchor or pre.default_anchor()
-    return _later(db, f"preseason[{anchor}]", lambda s: pre.preseason_as_of(db, s, anchor),
-                  pre.preseason_features, xfp_games, departures, seasons, progress)  # fmt: skip
+    when = (lambda s: at) if at is not None else (lambda s: pre.preseason_as_of(db, s, anchor))
+    name = f"preseason[{anchor if at is None else f'{at:%Y-%m-%d %H:%M} UTC'}]"
+    return _later(db, name, when, pre.preseason_features, xfp_games, departures, seasons,
+                  progress)  # fmt: skip
 
 
 def build_post_draft_dataset(

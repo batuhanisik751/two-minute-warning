@@ -183,3 +183,23 @@ def test_the_hot_seat_is_scored_with_its_pin_after_the_decisions() -> None:
     weekly = (ROOT / "src" / "twm" / "modules" / "hot_seat" / "weekly.py").read_text()
     for needle in ("fit_fold", "train_live", ".fit(", "walk_forward"):
         assert needle not in weekly, needle
+
+
+def test_the_live_board_is_scored_with_its_pin_once_before_the_publish() -> None:
+    """I6b: the job's board_score stage scores the season's live board with the approved models
+    only (never a backtest, a pin or a refit), after the Hot-Seat list and before the one
+    publish, gated by its window; the board's preflight still loads its pin."""
+    text = (WORKFLOWS / "pipeline.yml").read_text()
+    code = (ROOT / "src" / "twm" / "pipeline" / "runner.py").read_text()
+    for needle in ('"board", "backtest"', '"board", "pin"', "board backtest", "board pin",
+                   '"board", "dataset"'):  # fmt: skip
+        assert needle not in text and needle not in code, needle
+    assert '["board", "score", "--season", str(self.season), "--live-publish"]' in code
+    assert "board.load_pinned(season)" in code and "self.hooks.board_window(" in code
+    stages = code[code.index("def _stages(") :]
+    order = ["for module in LATE_SCORES", "r.board()", "r.publish()"]
+    at = [stages.index(s) for s in order]
+    assert at == sorted(at), order
+    live = (ROOT / "src" / "twm" / "modules" / "board" / "live.py").read_text()
+    for needle in ("fit_fold", "train_live", ".fit(", "walk_forward", "approve("):
+        assert needle not in live, needle

@@ -27,9 +27,16 @@ as_of:
   # Owner decision 2026-10-02 (docs/progress.md, I2 board decisions (1)): the board's preseason
   # model learns from the kickoff-eve anchor (the week-1 depth charts), a deliberate change from
   # the spec's Tuesday, where no week-1 chart is public before 2024 and the snapshot adds nothing.
+  # live_publish (step I6b, docs/offseason.md): when the season's LIVE board is scored and
+  # published (the job's board_score stage): "week1_kickoff_eve" (the anchor above; a one-hour
+  # window the 10:47 UTC nightly cannot hit: run `twm board score --live-publish` on the Mac or
+  # dispatch the Pipeline in that hour), a fixed "MM-DD" of S+1 at 00:00 UTC, or
+  # "days_before_week1: N" (00:00 UTC N days before the week-1 kickoff's date); each team's
+  # latest daily depth chart visible then. The owner picks it next summer.
   board:
     post_draft: "06-01"
     preseason: "week1_kickoff_eve"
+    live_publish: "week1_kickoff_eve"
 
 # When does a warehouse row become public? (B2; docs/warehouse.md "When is a row available?")
 # Every event-table row gets an `available_at` (UTC) from these rules; a prediction at as_of may

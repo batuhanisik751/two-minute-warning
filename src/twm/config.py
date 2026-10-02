@@ -280,17 +280,37 @@ class BoardAsOf(BaseModel):
     of S+1 at 00:00 UTC; ``preseason`` = an anchor name (twm.modules.board.preseason.ANCHORS):
     ``week1_kickoff_eve`` (one hour before the first week-1 kickoff of S+1; the board's anchor,
     owner decision 2026-10-02) or ``tuesday_before_week_1`` (spec 6.1: the last ``as_of.weekly``
-    weekday/time before that kickoff)."""
+    weekday/time before that kickoff). ``live_publish`` (step I6b): when the season's LIVE
+    board is scored (the job's ``board_score`` stage, ``twm board score --live-publish``):
+    ``week1_kickoff_eve`` (default: the preseason anchor), a fixed ``MM-DD`` of S+1 at 00:00
+    UTC, or ``days_before_week1: N`` (00:00 UTC N days before the first week-1 kickoff's date);
+    each team's latest daily depth chart visible then (docs/offseason.md)."""
 
     model_config = ConfigDict(extra="forbid")
 
     post_draft: str
     preseason: Literal["tuesday_before_week_1", "week1_kickoff_eve"]
+    live_publish: str = "week1_kickoff_eve"
 
     @field_validator("post_draft")
     @classmethod
     def _month_day(cls, v: str) -> str:
         return _check_month_day("as_of.board.post_draft", v)
+
+    @field_validator("live_publish", mode="before")
+    @classmethod
+    def _live_publish(cls, v: Any) -> str:
+        if isinstance(v, Mapping) and set(v) == {"days_before_week1"}:
+            v = f"days_before_week1: {v['days_before_week1']}"
+        text = str(v).strip()
+        if text == "week1_kickoff_eve":
+            return text
+        if text.startswith("days_before_week1:"):
+            n = text.split(":", 1)[1].strip()
+            if not n.isdigit() or not 0 <= int(n) <= 60:
+                raise ValueError(f"as_of.board.live_publish {text!r}: N must be 0..60 days")
+            return f"days_before_week1: {int(n)}"
+        return _check_month_day("as_of.board.live_publish", text)
 
 
 class AsOfConfig(BaseModel):

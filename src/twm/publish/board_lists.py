@@ -70,8 +70,10 @@ OUTCOME_SCHEMA: dict[str, Any] = {
     "ppg_s1": pl.Float64, "y_cliff": pl.Boolean, "y_missed": pl.Boolean,
     "label_status": pl.String,
 }  # fmt: skip
-# the common layout of a board's rows before publishing (ROW_SCHEMA + list bookkeeping)
-WIDE = (*ROW_SCHEMA, "model_version", "missed_version", "created_at", "incomplete", "is_current")
+# the common layout of a board's rows before publishing (ROW_SCHEMA + list bookkeeping; ``note``:
+# the live board's list note, step I6b, NULL elsewhere)
+WIDE = (*ROW_SCHEMA, "model_version", "missed_version", "created_at", "incomplete", "is_current",
+        "note")  # fmt: skip
 
 
 def _shown() -> list[pl.Expr]:
@@ -112,6 +114,7 @@ def frozen_lists(season: int, created: datetime) -> tuple[pl.DataFrame, dict[str
         pl.col("cliff_version").alias("model_version"), "missed_version",
         pl.lit(created, dtype=pl.Datetime("us")).alias("created_at"),
         pl.lit(False).alias("incomplete"), pl.lit(True).alias("is_current"),
+        pl.lit(None, dtype=pl.String).alias("note"),
     )  # fmt: skip
     return rows, snap
 
@@ -150,6 +153,7 @@ def store_rows(store: Path, season: int) -> pl.DataFrame:
         pl.Series("cliff_drivers", [json.dumps(r["drivers"]) for r in recs], dtype=pl.String),
         pl.Series("missed_drivers", [json.dumps(r["drivers"]) for r in miss], dtype=pl.String),
         "model_version", "missed_version", "created_at", "incomplete", "is_current",
+        pl.Series("note", [r.get("note") for r in recs], dtype=pl.String),
     )  # fmt: skip
 
 
@@ -159,8 +163,10 @@ def board_lists(rows: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
     if rows.height == 0:
         return pl.DataFrame(schema=LIST_SCHEMA), pl.DataFrame(schema=ROW_SCHEMA)
     lists = list_table(rows, LIST_KEY, pool="n_players").join(
-        rows.group_by(list(LIST_KEY)).agg(pl.col("missed_version").first()), on=list(LIST_KEY)
-    ).with_columns(pl.lit(None, dtype=pl.String).alias("note"))  # fmt: skip
+        rows.group_by(list(LIST_KEY)).agg(pl.col("missed_version").first(),
+                                          pl.col("note").drop_nulls().first()),
+        on=list(LIST_KEY),
+    )  # fmt: skip
     out = rows.with_columns(pl.col("as_of").dt.replace_time_zone("UTC"))
     lists = lists.select(list(LIST_SCHEMA)).cast(LIST_SCHEMA)  # type: ignore[arg-type]
     out = out.select(list(ROW_SCHEMA)).cast(ROW_SCHEMA)  # type: ignore[arg-type]

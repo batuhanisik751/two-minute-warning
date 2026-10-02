@@ -345,8 +345,12 @@ production_cli}.py`, `src/twm/publish/board_lists.py`.
   final, but before the kickoff eve its board's as-of has not passed, so the pin holds no
   season board; the owner runs `uv run twm board score` on the Mac between the kickoff eve
   and the kickoff (stored 'live', published by the next publish from the Mac and frozen in the
-  target from then on). A board published earlier from the latest daily depth chart (owner
-  decision (1)) and a once-a-season scoring stage in the scheduled job are later steps (I6).
+  target from then on). Step I6b (docs/offseason.md step 5): config `as_of.board.live_publish`
+  (default `week1_kickoff_eve`; or `"MM-DD"`, or `"days_before_week1: N"`, from each team's
+  latest daily depth chart then, owner decision (1)) sets the live as-of; `uv run twm board
+  score --live-publish` scores it only while its window (as-of to kickoff) is open, and the
+  job's once-a-season `board_score` stage runs it (skipped outside the window or when a live
+  board is stored); the list's `note` (`board_list.note`) names the as-of and the depth chart.
 - **Published** (migration `web/drizzle/0005_board.sql`): `board_list` (season S1, week 0,
   snapshot 'preseason', kind, as-of, both model versions), `board_row` (player, his S team and
   position, both chances and ranks, `ecr_rank`, age, prior seasons, games, PPG and rank in S,
@@ -375,7 +379,7 @@ player, by the chance of a Cliff: both chances side by side as whole percents (n
 last season's team, PPG, position rank and games, age, the preseason ECR (2020 on), the three
 drivers of each chance in words, and the outcome once final. "How to read this": what each
 chance means, the timing (the kickoff eve; a live board published earlier from the latest daily
-depth chart must say so in `board_list.note`, step I6), calibration by band (aggregated in SQL
+depth chart says so in `board_list.note`, step I6b), calibration by band (aggregated in SQL
 from the reconstructed rows and final outcomes) and the disagreement record from
 `board_disagreement`. Breakout is not a list: /methodology states its result from the
 `research` rows (words computed from the intervals). Home: a "Cliff watch" card (top 5).

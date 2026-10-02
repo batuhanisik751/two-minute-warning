@@ -47,7 +47,11 @@ same exit codes and the same files as when the owner types it):
     score`` with the approved Hot-Seat model (sha256 checked in preflight; loaded, never fitted),
     after **decisions** because its decision-quality feature reads the season grades just made;
     the same not-ready rules (the end-of-season snapshot not due yet = exit code 3).
-17. **publish**: ``twm publish`` (remote when ``DATABASE_URL`` is set, else skipped with a
+17. **board_score** (step I6b; once a season): ``twm board score --live-publish``, the season's
+    LIVE Cliff board with the pinned models, only while its window is open (config
+    ``as_of.board.live_publish``: from that as-of to the first week-1 kickoff) and no live board
+    is stored; skipped otherwise. The list's note names the depth chart it read.
+18. **publish**: ``twm publish`` (remote when ``DATABASE_URL`` is set, else skipped with a
     warning), ONE publish for every module, also after a not-ready score, so outcomes and player
     pages stay fresh.
 
@@ -88,7 +92,7 @@ TIMEOUTS = {"ingest": 25 * 60, "build": 15 * 60, "dataset": 15 * 60, "backtest":
             "score": 15 * 60, "streamer_dataset": 15 * 60, "streamer_backtest": 10 * 60,
             "streamer_score": 15 * 60, "regression_backtest": 10 * 60,
             "regression_score": 15 * 60, "decisions_backtest": 10 * 60, "decisions": 15 * 60,
-            "hotseat_score": 15 * 60, "publish": 15 * 60}  # fmt: skip
+            "hotseat_score": 15 * 60, "board_score": 15 * 60, "publish": 15 * 60}  # fmt: skip
 # The modules scored after the Radar (step P2): stage, the `twm` command, the report's title.
 MODULE_SCORES = {
     "streamer": ("streamer_score", ["streamer", "score"], "streamer"),
@@ -269,6 +273,10 @@ class Hooks:
     ca_bundle: Callable[[], str] = lambda: ca_bundle()  # noqa: E731
     # step P3: season -> one line on the season in progress's grades (decisions_summary)
     decisions_summary: Callable[[int], str] = lambda s: decisions_summary(s)  # noqa: E731
+    # step I6b: (season, now) -> (the live board is due, why): its window (config
+    # as_of.board.live_publish) is open and no live board of the season is stored
+    board_window: Callable[[int, datetime], tuple[bool, str]] = (
+        lambda s, now: (False, "the board's window was not checked"))  # fmt: skip
 
 
 def decisions_summary(season: int, folder: Path | None = None) -> str:
@@ -325,6 +333,26 @@ def missing_cache(season: int) -> list[str]:
     return out
 
 
+def board_window(season: int, now: datetime) -> tuple[bool, str]:
+    """Whether the job scores the season's LIVE Cliff board now (step I6b): its window (config
+    ``as_of.board.live_publish``, :func:`twm.modules.board.live_publish.window`) is open and the
+    store holds no live board of the season (append-only; the target freezes the first one it
+    receives, so a fresh runner scoring again on a later night of the window changes nothing)."""
+    from twm import predictions as pr
+    from twm.config import settings
+    from twm.modules.board import live as bl
+    from twm.modules.board import live_publish as lp
+
+    w = lp.window(settings().path("warehouse"), season, now)
+    if not w.open:
+        return False, f"the {season} live board: {w.reason}"
+    kept = bl.live_rows(pr.default_path(), season)
+    if kept:
+        return False, (f"the {season} live board is already stored ({kept} rows): kept "
+                       "(append-only)")  # fmt: skip
+    return True, f"the {season} live board: {w.reason}"
+
+
 def default_hooks() -> Hooks:
     from twm import pins
     from twm.config import settings
@@ -356,8 +384,8 @@ def default_hooks() -> Hooks:
         hot, hot_pin = hot_seat.load_pinned(season)
         hot_rows = hot_seat.load_snapshot(hot_pin)["predictions"].height
         # step I2c-a: the board's spec and its two models (sha256 first), its snapshot and the
-        # season's board frozen in it; the job never scores the board (its frozen data is
-        # published with every run)
+        # season's board frozen in it (published with every run); step I6b: the board_score
+        # stage scores the season's live board with them once, in its window
         from twm.modules.board import production as board
 
         _, _, board_pin = board.load_pinned(season)
@@ -384,6 +412,7 @@ def default_hooks() -> Hooks:
         ),
         resolve_target=tg.resolve,
         record_failure=wr.record_failure_at,
+        board_window=board_window,
     )
 
 
@@ -700,6 +729,39 @@ class _Run:
         self.add("decisions", "ok", t0, text, code=0, logs=[self.rel(log)])
         return True
 
+    def board(self) -> bool:
+        """The season's LIVE Cliff board (step I6b), once a season while its window is open
+        (:func:`board_window`): ``twm board score --live-publish`` (the pinned models, nothing
+        fitted; append-only). Skipped outside the window, when a live board is stored, or when
+        the command finds the window closed meanwhile (exit code 3); any other failure stops
+        the run."""
+        t0 = time.perf_counter()
+        try:
+            due, why = self.hooks.board_window(self.season, self.now)
+        except Exception as e:
+            self.fail("board_score", f"cannot read the live board's window: {e}", t0)
+            return False
+        if not due:
+            self.add("board_score", "skipped", t0, why)
+            return True
+        args = ["board", "score", "--season", str(self.season), "--live-publish"]
+        if self.opts.now is not None:
+            args += ["--now", self.opts.now.isoformat()]
+        code, log = self.cli("board_score", args)
+        if code == SCORE_NOT_READY:
+            self.add("board_score", "skipped", t0, f"{why}; then: {_tail(log, 3)}", code=code,
+                     logs=[self.rel(log)])  # fmt: skip
+            return True
+        if code != 0:
+            self.fail("board_score", f"`twm board score --live-publish` exited with {code}", t0,
+                      code=code, logs=[log])  # fmt: skip
+            return False
+        kind = "backtest" if self.opts.now is not None else "live"
+        self.res.modules["board"] = {"score": "scored", "list_kind": kind,
+                                     "week": "0 (the preseason board)"}  # fmt: skip
+        self.add("board_score", "ok", t0, why, code=0, logs=[self.rel(log)])
+        return True
+
     def publish(self) -> bool:
         t0 = time.perf_counter()
         if self.target is None:
@@ -823,5 +885,8 @@ def _stages(r: _Run) -> None:
             ok = r.score(hp, module)
             if ok:
                 r.export(hp, module)
+    # step I6b: the season's live Cliff board, once a season while its window is open
+    if ok and p is not None:
+        ok = r.board()
     if ok and p is not None:
         r.publish()

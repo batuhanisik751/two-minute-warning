@@ -14,6 +14,7 @@ from twm.modules.decisions.cli import decisions_app
 from twm.modules.hot_seat import production_cli as _hot_seat_pins  # noqa: F401 (H4a commands)
 from twm.modules.hot_seat.cli import hotseat_app
 from twm.modules.streamer.cli import streamer_app
+from twm.offseason_cli import offseason_app
 from twm.timemachine.cli import timemachine_app
 
 app = typer.Typer(help="Two-Minute Warning pipeline.", no_args_is_help=True)
@@ -329,6 +330,7 @@ app.add_typer(decisions_app, name="decisions")  # G1: own WP (src/twm/modules/de
 app.add_typer(hotseat_app, name="hotseat")  # H1: candidates + label check (modules/hot_seat/cli.py)
 app.add_typer(board_app, name="board")  # I1b: Cliff & Breakout (src/twm/modules/board/cli.py)
 app.add_typer(timemachine_app, name="timemachine")  # I3a: reproducibility check
+app.add_typer(offseason_app, name="offseason")  # I6b: the yearly routine (docs/offseason.md)
 
 
 def _warehouse_or_exit(db: Path | None) -> Path:

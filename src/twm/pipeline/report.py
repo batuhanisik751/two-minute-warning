@@ -52,7 +52,7 @@ def summary_markdown(result: Any) -> str:
         facts.append(("List", f"week {r.week}: {r.score}{kind}" + (
             f" ({r.attempt})" if r.attempt else "")))  # fmt: skip
     titles = {"streamer": "K and D/ST streamer", "regression_watch": "Regression Watch",
-              "hot_seat": "Hot-Seat Meter"}  # fmt: skip
+              "hot_seat": "Hot-Seat Meter", "board": "Cliff board"}  # fmt: skip
     for module, m in (getattr(r, "modules", None) or {}).items():
         kind = f", stored as '{m['list_kind']}'" if m.get("list_kind") else ""
         week = m.get("week") or r.week

@@ -149,8 +149,9 @@ def test_a_full_run_in_season(tmp_path: Path) -> None:
              "export", "streamer_dataset", "streamer_backtest", "regression_backtest",
              "streamer_score", "streamer_export", "regression_score", "regression_export",
              "decisions_backtest", "decisions", "hotseat_score", "hotseat_export",
-             "publish"]  # fmt: skip
+             "board_score", "publish"]  # fmt: skip
     assert [s.name for s in res.stages] == order
+    assert res.stage("board_score").status == "skipped"  # step I6b: outside its window
     assert res.week == 3 and res.list_kind == "live" and res.publish == "published"
     out = tmp_path / "run"
     summary = (out / "summary.md").read_text()

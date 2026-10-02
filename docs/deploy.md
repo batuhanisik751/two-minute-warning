@@ -354,6 +354,7 @@ it; the run's log shows every one):
 | decisions_backtest | `twm model check decisions` (step P3): the approved grading (spec and fold models, sha256 before anything is opened) and its frozen 2006-2025 history (sha256, rows, `reports/decisions/fourth_downs.csv` and `clock.csv` reproduced). History is never regraded on the runner |
 | decisions | `twm decisions grade-pinned`: every fourth down, try and clock case of the season so far graded with the pinned models and inputs (nothing trained; nothing measured on earlier seasons: the runner's warehouse starts in 2012). Every run, whether or not a list is due (games of the weekend get graded the next night); the job summary's "Decisions" line counts them |
 | hotseat_score, hotseat_export | only when a list is due (step H4a): `twm hotseat score` with the approved Hot-Seat model (its pin and frozen backtest are loaded, sha256 first, in preflight; nothing is fitted). After `decisions` because the decision-quality feature reads the season grades it just made. The same not-ready rules (exit 3; also when the end-of-season snapshot is not due yet). Week 1 stores nothing (the first list is week 2). After the last regular-season week's as-of, when no other list is due, it scores the end-of-season snapshot (week = the last week; a stored live snapshot is kept on later nights) |
+| board_score | once a season (step I6b; docs/offseason.md step 5): `twm board score --live-publish` with the approved board models while the live board's window is open (config `as_of.board.live_publish`, from its as-of to the first week-1 kickoff) and no live board is stored; skipped otherwise (the summary says why; exit 3 from the command = the window closed meanwhile, also skipped). Stored 'live', append-only; its note names the depth chart |
 | publish | ONE `twm publish --target remote` for every module when the `DATABASE_URL` secret exists, otherwise skipped with a warning (so the pipeline can be rehearsed before Neon exists); it also runs after a not-ready score, so outcomes and player pages stay fresh |
 
 **How a run ends** (the job's colour and GitHub's email follow the exit code):
@@ -665,12 +666,14 @@ pattern for more than one model; docs/board.md "Production"):
 `reports/board/preseason_cliff.csv` (both models' rows: values and intervals),
 `preseason_cliff_seasons.csv` and the disagreement tables of `preseason_cliff.md`, and that
 re-scoring the frozen season's board inputs with the pinned models gives the frozen board (to
-1e-9). The job's preflight loads the pin (and the season's board); **no stage scores the
-board**: each publish carries the pinned boards (and a live board from your Mac's store, frozen
-once published). To approve for a new season: `uv run twm board backtest --snapshot
+1e-9). The job's preflight loads the pin (and the season's board); each publish carries the
+pinned boards and a live board from the store (frozen once published). Step I6b: the
+once-a-season `board_score` stage scores the season's live board with the pin while its window
+(config `as_of.board.live_publish`) is open (docs/offseason.md step 5). To approve for a new season: `uv run twm board backtest --snapshot
 preseason`, then `uv run twm board pin`; an approval before the kickoff eve (next August) pins
-no season board, which is then scored live with `uv run twm board score` (a once-a-season job
-stage is a later step, I6; docs/board.md "Production"). Apply `web/drizzle/0005_board.sql` to
+no season board, which is then scored live (`uv run twm board score --live-publish` or the
+job's `board_score` stage; docs/board.md "Production"). The yearly routine for every module:
+docs/offseason.md. Apply `web/drizzle/0005_board.sql` to
 Neon before the first publish that carries the board.
 
 ## The owner's steps for E4

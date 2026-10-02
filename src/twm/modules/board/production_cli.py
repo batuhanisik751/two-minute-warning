@@ -130,13 +130,20 @@ def score_cmd(
         None, "--now", help="Pretend it is this UTC time (ISO); the board is then never 'live'."
     ),
     top: int = typer.Option(10, "--top", help="Players printed."),
+    live_publish: bool = typer.Option(
+        False,
+        "--live-publish",
+        help="The season's live board (step I6b; the job's board_score stage): as-of = config "
+        "as_of.board.live_publish, only while its window is open (exit 3 otherwise), the list's "
+        "note names the depth chart.",
+    ),
 ) -> None:
     """The Cliff board of a season (snapshot season - 1 at its preseason as-of) with the
     APPROVED models (config/production_models.yaml `board`: sha256 checked before a file is
     opened; nothing fitted): every Cliff player's chance of a cliff and of missing most of the
     season, both ranks, the ECR rank and the top 3 drivers. Exit 3 before the as-of. Stored as
     'live' only when scored between the as-of and the kickoff; a stored live board is never
-    overwritten (docs/board.md "Production")."""
+    overwritten (docs/board.md "Production"). ``--live-publish``: docs/offseason.md."""
     from twm import pins
     from twm import predictions as pr
     from twm.cli import _clock, _display_path, _project_path, _warehouse_or_exit
@@ -156,11 +163,22 @@ def score_cmd(
         typer.echo(f"not usable: {e}", err=True)
         raise typer.Exit(code=1) from None
     say = lambda m: typer.echo(m, err=True)  # noqa: E731
+    at, note, rule = None, None, spec["anchor"]
+    if live_publish:
+        from twm.modules.board import live_publish as lp
+
+        w = lp.window(path, s, clock)
+        typer.echo(f"the {s} live board's window ({w.rule}): {w.reason}", err=True)
+        if not w.open:
+            raise typer.Exit(code=bl.EXIT_NOT_READY)
+        at, note, rule = w.as_of, lp.board_note(path, s, w.as_of, w.rule), w.rule
+        typer.echo(f"note: {note}", err=True)
     try:
         xfp = src.own_xfp_history(path, s - 1, progress=say)
         deps = bf.read_departures(settings().path("manual") / DEPARTURES_CSV)
         run = bl.run_board(path, s, models=models, anchor=spec["anchor"], now=clock,
-                           real_clock=now is None, xfp_games=xfp, departures=deps)  # fmt: skip
+                           real_clock=now is None, xfp_games=xfp, departures=deps, as_of=at,
+                           note=note)  # fmt: skip
     except bl.NotDueError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=bl.EXIT_NOT_READY) from e
@@ -175,7 +193,7 @@ def score_cmd(
         raise typer.Exit(code=1) from e
     kind = "live" if run.kind == "live" else "reconstructed: scored after its as-of"
     typer.echo(f"{s} board (snapshot {s - 1}), as-of {run.as_of:%a %Y-%m-%d %H:%M} UTC "
-               f"({spec['anchor']}): '{run.kind}' ({kind}) board of {run.table.height} Cliff "
+               f"({rule}): '{run.kind}' ({kind}) board of {run.table.height} Cliff "
                f"players with {pin.model_version}")  # fmt: skip
     con = __import__("duckdb").connect(str(path), read_only=True)
     try:  # names for this printout only
@@ -198,7 +216,10 @@ def score_cmd(
     except pins.PinError as e:
         typer.echo(f"not usable: {e}", err=True)
         raise typer.Exit(code=1) from None
-    if current is not None:  # the pin froze this board at approval: the publish uses that one
+    if current is not None and run.kind == "live":  # step I6b: published beside the pin's
+        typer.echo("the pin also holds this season's reconstructed board: the publish carries "
+                   "both, this one labelled live")  # fmt: skip
+    elif current is not None:  # the pin froze this board at approval: the publish uses that one
         same = bp.same_board(run.table, current["current_board"])
         typer.echo("matches the board frozen in the pin (which every publish carries)" if same
                    else "WARNING: differs from the board frozen in the pin; every publish carries "

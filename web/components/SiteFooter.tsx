@@ -14,7 +14,7 @@
 // No FTN credit: ftn_charting and participation are downloaded but no published number
 // uses them.
 import Link from "next/link";
-import { DISCLAIMER } from "@/lib/site";
+import { DISCLAIMER, REPO_URL } from "@/lib/site";
 
 export default function SiteFooter() {
   return (
@@ -36,7 +36,7 @@ export default function SiteFooter() {
         </p>
         <p>
           No NFL or team logos are used. Code under the MIT license on{" "}
-          <a href="https://github.com/batuhanisik751/two-minute-warning">GitHub</a>. How it
+          <a href={REPO_URL}>GitHub</a>. How it
           works: <Link href="/methodology">Methodology</Link>.
         </p>
       </div>

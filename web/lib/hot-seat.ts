@@ -2,6 +2,7 @@
 // outcomes in words, the early-season calibration grid and the weekly timelines. Unit-tested in
 // tests/unit/hot-seat.test.ts. The wording is careful on purpose: these are real people's jobs.
 import { HOT_SEAT_BANDS, HOT_SEAT_PHASES, HOT_SEAT_WINDOW_DAYS, TRACK_INTERVAL_LEVEL } from "./method";
+import { docUrl } from "./site";
 
 const MINUS = "−";
 
@@ -264,7 +265,7 @@ export function hotSeatHref(q: { season?: number; week?: number; kind?: string }
 }
 
 /** The write-up of the fourth-down research (step H5), in the public repository. */
-export const RESEARCH_URL = "https://github.com/batuhanisik751/two-minute-warning/blob/main/docs/research_decisions_vs_firings.md";
+export const RESEARCH_URL = docUrl("docs/research_decisions_vs_firings.md");
 
 export type TrackCellRow = { variant: string; model: string; prob: string; slice: string; metric: string; value: number | null; lo: number | null; hi: number | null; nRows: number; nPos: number; nSeasons: number };
 export type TrackCell = { value: number; lo: number | null; hi: number | null; nRows: number; nPos: number; nSeasons: number };

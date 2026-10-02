@@ -125,6 +125,16 @@ record only.
 |---|---|---|---|---|
 | `logit` - `base_ppg_rank` | +0.006 [-0.061, 0.099] | +0.000 [-0.039, 0.039] | +0.014 [-0.014, 0.039] | 0.56 |
 
+Source: `reports/board/preseason_breakout.md`, "Breakout RB (`breakout_rb`, label `y_breakout`)"
+**Breakout RB (research note, not on the site):** for running backs the model was narrowly
+ahead of last season's PPG rank on PR-AUC, +0.088 [0.009, 0.183] (precision@10 +0.028 [-0.011,
+0.067]), but on a small population, after testing several groups and snapshots, so the owner's
+decision stands: kept off the site, to be re-checked after another season.
+
+| difference | PR-AUC | precision@10 | precision@20 | share of resamples > 0 (PR-AUC) |
+|---|---|---|---|---|
+| `logit` - `base_ppg_rank` | +0.088 [0.009, 0.183] | +0.028 [-0.011, 0.067] | +0.008 [-0.008, 0.025] | 0.98 |
+
 ## Calibration
 
 Source: `reports/board/preseason_cliff.md`, "Calibration of `logit` (its own probability; 10 equal-count bins, every test season)"

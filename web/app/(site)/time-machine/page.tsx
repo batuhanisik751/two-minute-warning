@@ -29,10 +29,11 @@ import {
   type ModuleId,
 } from "@/lib/time-machine";
 import { pageMetadata } from "@/lib/seo";
+import { docUrl } from "@/lib/site";
 
 export const metadata = pageMetadata("/time-machine", "Time machine", "The time machine: pick a published week and see what every module said then, from the stored lists, with what happened afterwards.");
 
-const REPRO_URL = "https://github.com/batuhanisik751/two-minute-warning/blob/main/docs/timemachine.md";
+const REPRO_URL = docUrl("docs/timemachine.md");
 
 function Intro() {
   return (

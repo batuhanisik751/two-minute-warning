@@ -19,13 +19,14 @@ import { getTierStats, getTrackRows, type TrackRow } from "@/lib/queries/track";
 import { SITE_TERMS } from "@/lib/site-terms";
 import DecisionsSection from "@/components/methodology/DecisionsSection";
 import BoardSection from "@/components/methodology/BoardSection";
+import ModelCards from "@/components/methodology/ModelCards";
 import HotSeatSection from "@/components/methodology/HotSeatSection";
 import RegressionSection from "@/components/methodology/RegressionSection";
 import StreamerSection from "@/components/methodology/StreamerSection";
 import { headline, select, widestRange } from "@/lib/track";
 import { pageMetadata } from "@/lib/seo";
 
-export const metadata = pageMetadata("/methodology", "Methodology (draft)", "How Two-Minute Warning works: the data sources, the point-in-time rule, every model and its backtest, the limits, the disclaimers and the full glossary.");
+export const metadata = pageMetadata("/methodology", "Methodology", "How Two-Minute Warning works: the data sources, the point-in-time rule, every model and its backtest, the limits, the disclaimers and the full glossary.");
 
 const SCOPES = ["pooled", "diff", "position", "position_diff", "experts", "experts_diff", "calibration_fixed"];
 const MODEL_ORDER = ["logit", "lgbm", "baseline_ecr", "baseline_last_points", "baseline_snap_delta"];
@@ -385,7 +386,7 @@ export default async function MethodologyPage() {
 
   return (
     <>
-      <PageHeader title="Methodology (draft)" kicker="How it works">
+      <PageHeader title="Methodology" kicker="How it works">
         How the Waiver Radar, the K and D/ST streamer, Regression Watch, the Decision Report Card and the Hot-Seat Meter work, what data they use, how they were tested
         and what the tests found. Every result on this page is read from the published track records, the priority table,
         the frozen parameters and the glossary; none is typed in by hand. Each module&apos;s results season by season, its
@@ -424,6 +425,9 @@ export default async function MethodologyPage() {
           </li>
           <li>
             <a href="#board">The Cliff board</a>
+          </li>
+          <li>
+            <a href="#model-cards">Model cards</a>
           </li>
           <li>
             <a href="#glossary">Glossary</a>
@@ -679,6 +683,8 @@ export default async function MethodologyPage() {
         <HotSeatSection />
 
         <BoardSection />
+
+        <ModelCards />
 
         <section aria-labelledby="glossary">
           <h2 id="glossary" className="section-title scroll-mt-24">

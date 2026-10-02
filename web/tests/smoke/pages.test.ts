@@ -3,7 +3,7 @@
 // list rows, charts with their tables, and real 404s.
 import assert from "node:assert/strict";
 import { before, describe, test } from "node:test";
-import { CREDITS, DISCLAIMER } from "../../lib/site";
+import { CREDITS, DISCLAIMER, MODEL_CARDS, docUrl } from "../../lib/site";
 import { SEED } from "../seed";
 import { BASE, DATA, fetchPage, normalise, prose, serverUp, text, type Page } from "./dom";
 import { foldCheck } from "./fold";
@@ -408,9 +408,13 @@ describe("/methodology", () => {
   test("sources, point-in-time rule, results from the track record, the full glossary", (t) => {
     if (!up) return t.skip(`no server at ${BASE}`);
     const m = main(pages.get("/methodology")!);
-    for (const id of ["sources", "point-in-time", "leakage", "radar", "results", "glossary", "disclaimers"]) {
+    for (const id of ["sources", "point-in-time", "leakage", "radar", "results", "model-cards", "glossary", "disclaimers"]) {
       assert.ok(m.querySelector(`#${id}`), `section #${id}`);
     }
+    // one link per model card, to the repository on GitHub (I6a)
+    const cards = [...m.querySelectorAll("[data-testid=model-card-links] a")].map((a) => a.getAttribute("href"));
+    assert.deepEqual(cards, MODEL_CARDS.map((c) => docUrl(`docs/model_cards/${c.file}`)));
+    assert.ok(m.querySelector('a[href="#model-cards"]'), "on-this-page link to the model cards");
     // every credit and every other source is named in the sources section (I5)
     const sources = text(m.querySelector("#sources")!.closest("section")!);
     for (const c of [...CREDITS, "nfl4th", "Next Gen Stats", "Combine", "betting lines"]) assert.ok(sources.includes(c), `sources: ${c}`);

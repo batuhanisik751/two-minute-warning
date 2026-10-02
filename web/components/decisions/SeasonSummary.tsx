@@ -1,21 +1,25 @@
 import Term from "@/components/Term";
-import { leagueTotals, wpPoints } from "@/lib/decisions";
+import { callTotals, leagueTotals, wpPoints } from "@/lib/decisions";
 import { fmtInt, pct } from "@/lib/format";
 import { TOSS_UP_MARGIN } from "@/lib/method";
 
 type League = ReturnType<typeof leagueTotals>;
+type Calls = ReturnType<typeof callTotals>;
 
 const share = (n: number, of: number) => (of > 0 ? ` (${pct(n / of)})` : "");
 
-/** The league's season in a few sentences, every number summed from coach_season. */
-export function SeasonSummary({ name, league }: { name: string; league: League }) {
+/** The league's season in a few sentences, every number summed from coach_season (or one
+ *  week's, summed from coach_week: the time machine, a level-3 heading inside its section). */
+export function SeasonSummary({ name, league, level = 2 }: { name: string; league: Calls; level?: 2 | 3 }) {
+  const H = level === 3 ? "h3" : "h2";
+  const id = level === 3 ? "week-summary-heading" : "season-heading";
   const clear = league.fourthGraded + league.twoPointGraded;
   const tossUps = league.fourthTossUps + league.twoPointTossUps;
   return (
-    <section aria-labelledby="season-heading" className="rounded-xl border border-line bg-surface p-4 sm:p-5" data-testid="season-summary">
-      <h2 id="season-heading" className="section-title">
+    <section aria-labelledby={id} className="rounded-xl border border-line bg-surface p-4 sm:p-5" data-testid="season-summary">
+      <H id={id} className={level === 3 ? "display text-xl uppercase" : "section-title"}>
         The league, {name}
-      </h2>
+      </H>
       <p className="mt-3">
         {fmtInt(league.coaches)} head coaches, {fmtInt(league.teamGames)} team-games. {fmtInt(clear + tossUps)}{" "}
         <Term name="decisions_graded">decisions</Term> priced: <strong className="tnum">{fmtInt(clear)}</strong>{" "}

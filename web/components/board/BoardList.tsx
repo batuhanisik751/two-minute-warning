@@ -16,13 +16,16 @@ type Props = {
   label: string;
   /** show what really happened (final) or "Pending" */
   showOutcome: boolean;
+  /** the time machine's compact form: who, the two chances and what happened (no last season or
+   *  drivers) */
+  compact?: boolean;
 };
 
 /** One row per player, by the Cliff chance: who, the two chances side by side (never added), the
  *  experts' rank, last season, the drivers in plain words and (when known) what happened. Rows are
  *  measured by the layout check ([data-row], [data-cell]) and lay out by their container; the
  *  list folds after 10. */
-export default function BoardList({ rows, marks, ecr, label, showOutcome }: Props) {
+export default function BoardList({ rows, marks, ecr, label, showOutcome, compact = false }: Props) {
   return (
     <div className="@container">
       <FoldList
@@ -30,7 +33,7 @@ export default function BoardList({ rows, marks, ecr, label, showOutcome }: Prop
         className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface"
         testId="board-list"
         items={rows.map((r) => (
-          <Row key={r.gsisId} r={r} mark={marks.get(r.gsisId) ?? null} ecr={ecr} showOutcome={showOutcome} />
+          <Row key={r.gsisId} r={r} mark={marks.get(r.gsisId) ?? null} ecr={ecr} showOutcome={showOutcome} compact={compact} />
         ))}
       />
     </div>
@@ -75,7 +78,7 @@ function LastSeason({ r, ecr }: { r: BoardEntry; ecr: boolean }) {
   );
 }
 
-function Row({ r, mark, ecr, showOutcome }: { r: BoardEntry; mark: Disagree | null; ecr: boolean; showOutcome: boolean }) {
+function Row({ r, mark, ecr, showOutcome, compact }: { r: BoardEntry; mark: Disagree | null; ecr: boolean; showOutcome: boolean; compact: boolean }) {
   return (
     <li
       data-row=""
@@ -106,9 +109,13 @@ function Row({ r, mark, ecr, showOutcome }: { r: BoardEntry; mark: Disagree | nu
         </div>
       </div>
       <div data-cell="details" className="col-start-2 row-start-3 min-w-0 space-y-2 @2xl:row-start-2">
-        <LastSeason r={r} ecr={ecr} />
-        <Drivers title="What moves the Cliff chance most" drivers={r.cliffDrivers} who={r.name} />
-        <Drivers title="What moves the missed-time chance most" drivers={r.missedDrivers} who={r.name} />
+        {compact ? null : (
+          <>
+            <LastSeason r={r} ecr={ecr} />
+            <Drivers title="What moves the Cliff chance most" drivers={r.cliffDrivers} who={r.name} />
+            <Drivers title="What moves the missed-time chance most" drivers={r.missedDrivers} who={r.name} />
+          </>
+        )}
         {showOutcome ? (
           <p className="text-sm" data-testid="outcome">
             <span className="font-medium">What happened: </span>

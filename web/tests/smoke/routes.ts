@@ -10,7 +10,7 @@ import { DATA, fetchPage } from "./dom";
 
 export type Route = {
   path: string;
-  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record" | "hot-seat" | "coach-hot-seat" | "board";
+  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record" | "hot-seat" | "coach-hot-seat" | "board" | "time-machine";
 };
 
 export type RouteSet = {
@@ -82,6 +82,15 @@ function seedRoutes(): RouteSet {
       { path: `/board?season=${BOARD_SEED.past[1]}`, kind: "board" },
       { path: `/board?season=${BOARD_SEED.past[0]}&pos=TE`, kind: "board" },
       { path: `/board?season=${BOARD_SEED.noEcr}`, kind: "board" },
+      // the time machine: the default (the live week), the live preseason board, a past week
+      // with every list module (and the Hot-Seat not covered), the end-of-season snapshot week,
+      // a past preseason with final outcomes, a week nothing covers (falls back)
+      { path: "/time-machine", kind: "time-machine" },
+      { path: `/time-machine?season=${BOARD_SEED.season}&week=0`, kind: "time-machine" },
+      { path: `/time-machine?season=${bt.season}&week=${bt.week}`, kind: "time-machine" },
+      { path: `/time-machine?season=${HOT_SEAT_SEED.past}&week=${HOT_SEAT_SEED.lastWeek}`, kind: "time-machine" },
+      { path: `/time-machine?season=${BOARD_SEED.past[0]}&week=0`, kind: "time-machine" },
+      { path: "/time-machine?season=1999&week=1", kind: "time-machine" },
     ],
     missing: MISSING,
     notes: [],
@@ -171,6 +180,16 @@ async function realRoutes(): Promise<RouteSet> {
     if (tab) routes.push({ path: tab, kind: "board" });
   } else {
     notes.push("no board: /board was not checked");
+  }
+  // the time machine: the default week, the oldest season, a past season's preseason and week 5
+  const td = (await fetchPage("/time-machine")).doc;
+  const ts = Array.from(td.querySelectorAll<HTMLOptionElement>("form[action='/time-machine'] select[name=season] option")).map((o) => o.value);
+  if (ts.length) {
+    routes.push({ path: "/time-machine", kind: "time-machine" });
+    if (ts.length > 1) routes.push({ path: `/time-machine?season=${ts[ts.length - 1]}`, kind: "time-machine" });
+    if (ts[1]) routes.push({ path: `/time-machine?season=${ts[1]}&week=0`, kind: "time-machine" }, { path: `/time-machine?season=${ts[1]}&week=5`, kind: "time-machine" });
+  } else {
+    notes.push("no week published: /time-machine was not checked");
   }
   return { routes, missing: MISSING, notes };
 }

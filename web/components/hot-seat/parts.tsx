@@ -1,7 +1,10 @@
 // Small shared pieces of the Hot-Seat Meter (server components). Neutral on purpose: a grey-blue
 // bar, no heat colours, no icons that judge; the text is always the source of truth.
-import { MiniLabel } from "@/components/ui";
-import { outcomeWords, wholePct, type OutcomeRow } from "@/lib/hot-seat";
+import Term from "@/components/Term";
+import { MiniLabel, Note } from "@/components/ui";
+import { fmtInt } from "@/lib/format";
+import { outcomeWords, wholePct, type OutcomeRow, type hotSeatTally } from "@/lib/hot-seat";
+import { HOT_SEAT_WINDOW_DAYS } from "@/lib/method";
 
 /** The estimate as a whole percent with a bar under it (hidden from screen readers). */
 export function EstimateCell({ probability, size = "big", label = "Estimated chance" }: { probability: number; size?: "big" | "small"; label?: string }) {
@@ -38,5 +41,23 @@ export function InterimFlag() {
       <span className="inline-flex items-center rounded border-[1.5px] border-line-strong px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap">Interim</span>
       <span className="text-muted">the model was not trained on interim coaches</span>
     </span>
+  );
+}
+
+/** A list's "What happened" line: pending until the season's departures are labelled, else how
+ *  many of its coaches were let go (lib/hot-seat hotSeatTally). */
+export function HotSeatWhatHappened({ tally }: { tally: ReturnType<typeof hotSeatTally> }) {
+  const { final, letGo, pending } = tally;
+  return pending ? (
+    <Note>
+      <span data-testid="outcomes-pending">
+        What happened: pending until the season&apos;s departures are labelled. The list is not graded before then.
+      </span>
+    </Note>
+  ) : (
+    <p className="text-sm" data-testid="outcomes-final">
+      <strong>What happened:</strong> {fmtInt(letGo)} of these {fmtInt(final)} coaches {letGo === 1 ? "was" : "were"}{" "}
+      <Term name="hot_seat_let_go">let go</Term> by {HOT_SEAT_WINDOW_DAYS} days after the season.
+    </p>
   );
 }

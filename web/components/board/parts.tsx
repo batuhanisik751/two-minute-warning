@@ -1,6 +1,10 @@
 // Small shared pieces of the Cliff board (server components). Neutral on purpose: grey-blue bars,
 // quiet tags, no alarm colours; the text is always the source of truth.
-import { boardOutcomeWords, disagreeWords, type BoardOutcome, type Disagree, type RankRow } from "@/lib/board";
+import Term from "@/components/Term";
+import { Note } from "@/components/ui";
+import { boardOutcomeWords, disagreeWords, type BoardOutcome, type Disagree, type RankRow, type boardTally } from "@/lib/board";
+import { fmtInt } from "@/lib/format";
+import { BOARD_MIN_GAMES } from "@/lib/method";
 
 /** What happened in the board's season (final) or "Pending", as a quiet tag with its words. */
 export function BoardOutcomeTag({ outcome, ppgS, long = false }: { outcome: BoardOutcome | null; ppgS: number; long?: boolean }) {
@@ -26,5 +30,20 @@ export function DisagreeTag({ d, position, r }: { d: Disagree; position: string;
       </span>{" "}
       <span className="text-muted">({w.long})</span>
     </span>
+  );
+}
+
+/** A board's "What happened" line: pending until the season is over, else how many had a Cliff
+ *  and how many missed time (lib/board boardTally). */
+export function BoardWhatHappened({ tally }: { tally: ReturnType<typeof boardTally> }) {
+  return tally.pending ? (
+    <Note>
+      <span data-testid="outcomes-pending">What happened: pending until the season is over. The board is not graded before then.</span>
+    </Note>
+  ) : (
+    <p className="text-sm" data-testid="outcomes-final">
+      <strong>What happened:</strong> {fmtInt(tally.cliffs)} of the {fmtInt(tally.judged)} players who played {BOARD_MIN_GAMES} or more games had a{" "}
+      <Term name="y_cliff">Cliff</Term>; {fmtInt(tally.missed)} of all {fmtInt(tally.final)} <Term name="y_missed">missed time</Term>.
+    </p>
   );
 }

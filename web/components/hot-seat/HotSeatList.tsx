@@ -15,12 +15,15 @@ type Props = {
   label: string;
   /** show what really happened (final) or "Pending" */
   showOutcome?: boolean;
+  /** the time machine's compact form: who, the estimate and what happened (no key numbers,
+   *  drivers or timeline) */
+  compact?: boolean;
 };
 
 /** One row per head coach, by estimated chance: who, the key numbers, the three drivers in plain
  *  words, the season's timeline and (when known) what happened. Rows are measured by the layout
  *  check ([data-row], [data-cell]) and lay out by their container; the list folds after 10. */
-export default function HotSeatList({ rows, timelines, weeks, label, showOutcome = true }: Props) {
+export default function HotSeatList({ rows, timelines, weeks, label, showOutcome = true, compact = false }: Props) {
   return (
     <div className="@container">
       <FoldList
@@ -28,7 +31,7 @@ export default function HotSeatList({ rows, timelines, weeks, label, showOutcome
         className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface"
         testId="hot-seat-list"
         items={rows.map((r) => (
-          <Row key={r.coachId} r={r} points={timelines.get(r.coachId) ?? []} weeks={weeks} showOutcome={showOutcome} />
+          <Row key={r.coachId} r={r} points={timelines.get(r.coachId) ?? []} weeks={weeks} showOutcome={showOutcome} compact={compact} />
         ))}
       />
     </div>
@@ -62,7 +65,7 @@ function KeyNumbers({ r }: { r: HotSeatEntry }) {
   );
 }
 
-function Row({ r, points, weeks, showOutcome }: { r: HotSeatEntry; points: TimelinePoint[]; weeks: [number, number]; showOutcome: boolean }) {
+function Row({ r, points, weeks, showOutcome, compact }: { r: HotSeatEntry; points: TimelinePoint[]; weeks: [number, number]; showOutcome: boolean; compact: boolean }) {
   return (
     <li
       data-row=""
@@ -86,8 +89,8 @@ function Row({ r, points, weeks, showOutcome }: { r: HotSeatEntry; points: Timel
         <EstimateCell probability={r.probability} />
       </div>
       <div data-cell="details" className="col-start-2 row-start-3 min-w-0 space-y-1.5 @2xl:row-start-2">
-        <KeyNumbers r={r} />
-        {r.drivers.length ? (
+        {compact ? null : <KeyNumbers r={r} />}
+        {!compact && r.drivers.length ? (
           <ul aria-label={`What moves ${r.name}'s estimate most`} className="space-y-0.5 text-sm" data-testid="drivers">
             {r.drivers.map((d) => (
               <li key={d.feature} className="break-words">
@@ -97,12 +100,14 @@ function Row({ r, points, weeks, showOutcome }: { r: HotSeatEntry; points: Timel
             ))}
           </ul>
         ) : null}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          {points.length ? <Sparkline data={points.map((p) => ({ week: p.week, value: p.probability }))} weeks={weeks} /> : null}
-          <span className="min-w-0 text-muted" data-testid="timeline-words">
-            This season: {timelineWords(points)}
-          </span>
-        </div>
+        {compact ? null : (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            {points.length ? <Sparkline data={points.map((p) => ({ week: p.week, value: p.probability }))} weeks={weeks} /> : null}
+            <span className="min-w-0 text-muted" data-testid="timeline-words">
+              This season: {timelineWords(points)}
+            </span>
+          </div>
+        )}
         {showOutcome ? (
           <p className="text-sm" data-testid="outcome">
             <span className="font-medium">What happened: </span>

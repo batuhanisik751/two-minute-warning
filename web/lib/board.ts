@@ -166,6 +166,21 @@ export function boardDriverValue(d: Driver): string {
 export type BoardOutcome = { gamesS1: number | null; ppgS1: number | null; yCliff: boolean | null; yMissed: boolean | null; labelStatus: string };
 export type OutcomeTone = "cliff" | "missed" | "held" | "pending";
 
+/** What happened to a board's players: how many have a final outcome, how many of those were
+ *  judged for a Cliff (played enough games) and had one, how many missed time, how many are
+ *  pending (the board page and the time machine say it the same way). */
+export function boardTally(rows: readonly { outcome: BoardOutcome | null }[]): { final: number; judged: number; cliffs: number; missed: number; pending: number } {
+  const final = rows.filter((r) => r.outcome?.labelStatus === "final" && r.outcome.yMissed !== null);
+  const judged = final.filter((r) => r.outcome?.yCliff !== null);
+  return {
+    final: final.length,
+    judged: judged.length,
+    cliffs: judged.filter((r) => r.outcome?.yCliff).length,
+    missed: final.filter((r) => r.outcome?.yMissed).length,
+    pending: rows.length - final.length,
+  };
+}
+
 /** What happened in the board's season, in words: missed time (fewer than BOARD_MIN_GAMES games),
  *  a Cliff (a drop of at least BOARD_CLIFF_DROP in points per game), no Cliff, or pending. */
 export function boardOutcomeWords(o: BoardOutcome | null, ppgS: number): { tone: OutcomeTone; short: string; long: string } {

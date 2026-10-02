@@ -133,6 +133,13 @@ export const DEPARTURE_WORDS: Record<string, string> = {
 export type OutcomeRow = { departed: boolean | null; censored: boolean | null; departureType: string | null; announced: string | null; labelStatus: string };
 export type OutcomeTone = "let-go" | "not-let-go" | "other" | "pending";
 
+/** What happened to a list's coaches: how many have a final outcome, how many of those were let
+ *  go, how many are still pending (the list page and the time machine say it the same way). */
+export function hotSeatTally(rows: readonly { outcome: OutcomeRow | null }[]): { final: number; letGo: number; pending: number } {
+  const final = rows.filter((r) => r.outcome?.labelStatus === "final" && r.outcome.departed !== null);
+  return { final: final.length, letGo: final.filter((r) => r.outcome?.departed).length, pending: rows.length - final.length };
+}
+
 /** What really happened, in careful words: let go (fired or a mutual parting) within the window,
  *  another departure (not counted as let go), not let go, or pending (live seasons). */
 export function outcomeWords(o: OutcomeRow | null): { tone: OutcomeTone; short: string; long: string } {

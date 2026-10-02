@@ -248,8 +248,11 @@ export function coachTotals(c: CoachCounts): { decisions: number; clear: number;
   return { decisions: clear + tossUps, clear, tossUps, wrong: c.fourthWrong + c.twoPointWrong, clockCases: c.m1Cases + c.m2Cases + c.m3Cases };
 }
 
-/** Sums of a season's coach rows (the league's season): every count, plus the clear go calls. */
-export function leagueTotals<T extends CoachCounts & { goClear: number; goClearWent: number; games: number; wpLost: number }>(rows: readonly T[]) {
+type CallCounts = Omit<CoachCounts, "m1Cases" | "m2Cases" | "m3Cases"> & { goClear: number; goClearWent: number; games: number; wpLost: number };
+
+/** Sums of coach rows (a season's coach_season rows, or one week's coach_week rows: one per coach
+ *  and game, games = 1): every decision count, plus the clear go calls. */
+export function callTotals<T extends CallCounts>(rows: readonly T[]) {
   const sum = (f: (r: T) => number) => rows.reduce((a, r) => a + f(r), 0);
   return {
     coaches: rows.length,
@@ -262,8 +265,12 @@ export function leagueTotals<T extends CoachCounts & { goClear: number; goClearW
     goClear: sum((r) => r.goClear),
     goClearWent: sum((r) => r.goClearWent),
     wpLost: sum((r) => r.wpLost),
-    clockCases: sum((r) => r.m1Cases + r.m2Cases + r.m3Cases),
   };
+}
+
+/** Sums of a season's coach rows (the league's season): every count, plus the clear go calls. */
+export function leagueTotals<T extends CoachCounts & CallCounts>(rows: readonly T[]) {
+  return { ...callTotals(rows), clockCases: rows.reduce((a, r) => a + r.m1Cases + r.m2Cases + r.m3Cases, 0) };
 }
 
 /** A coach id is dim_coach's slug of the name ("andy-reid", "bill-o-brien"). */

@@ -17,9 +17,9 @@ const iso = (v: string | Date) => new Date(v).toISOString();
 export type BoardKey = { season: number; kind: "live" | "backtest" };
 
 /** Every published board, newest season first; live first within a season. */
-async function getBoardIndexRaw(): Promise<(BoardKey & { nPlayers: number })[]> {
+async function getBoardIndexRaw(): Promise<(BoardKey & { week: number; nPlayers: number })[]> {
   const rows = await db()
-    .select({ season: boardList.season, kind: boardList.kind, nPlayers: boardList.nPlayers })
+    .select({ season: boardList.season, kind: boardList.kind, week: boardList.week, nPlayers: boardList.nPlayers })
     .from(boardList)
     .orderBy(desc(boardList.season), desc(sql`${boardList.kind} = 'live'`));
   return rows.map((r) => ({ ...r, kind: kindOf(r.kind) }));

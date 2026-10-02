@@ -14,6 +14,8 @@ export default function WeekPicker({
   hidden,
   hrefFor,
   weekName,
+  weekNote,
+  submit = "Show list",
 }: {
   index: ListIndexRow[];
   chosen: ListKey;
@@ -23,6 +25,10 @@ export default function WeekPicker({
   hrefFor?: (w: WeekRef) => string;
   /** a week's own name where "Week N" would mislead (the Hot-Seat end-of-season snapshot) */
   weekName?: (w: WeekRef) => string | null;
+  /** the words in brackets after a week (default: its kinds of list; the time machine's
+   *  decisions-only weeks have none) */
+  weekNote?: (w: WeekRef) => string | null;
+  submit?: string;
 }) {
   const href = hrefFor ?? ((w: WeekRef) => waiversHref({ pos: position, season: w.season, week: w.week }));
   const fields = hidden ?? (position ? { pos: position } : {});
@@ -69,7 +75,7 @@ export default function WeekPicker({
           >
             {weekOptions.map(([w, k]) => (
               <option key={w} value={w}>
-                {weekName?.({ season: chosen.season, week: w }) ?? `Week ${w}`} ({kinds(k)})
+                {weekName?.({ season: chosen.season, week: w }) ?? `Week ${w}`} ({weekNote?.({ season: chosen.season, week: w }) ?? kinds(k)})
               </option>
             ))}
           </select>
@@ -78,7 +84,7 @@ export default function WeekPicker({
           type="submit"
           className="min-h-11 rounded-md bg-accent px-4 text-sm font-semibold text-on-accent hover:opacity-90"
         >
-          Show list
+          {submit}
         </button>
       </form>
       <nav aria-label="Neighbouring weeks" className="flex gap-3 text-sm">

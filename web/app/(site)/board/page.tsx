@@ -4,7 +4,8 @@ import HowToRead from "@/components/board/HowToRead";
 import SeasonPicker from "@/components/decisions/SeasonPicker";
 import Term from "@/components/Term";
 import { EmptyState, KindBadge, Note, PageHeader } from "@/components/ui";
-import { boardHref, boardKindWords, disagreements, ecrSeason, hasEcr } from "@/lib/board";
+import { BoardWhatHappened } from "@/components/board/parts";
+import { boardHref, boardKindWords, boardTally, disagreements, ecrSeason, hasEcr } from "@/lib/board";
 import { fmtInt, fmtUtc } from "@/lib/format";
 import { BOARD_CLIFF_DROP, BOARD_MIN_GAMES, BOARD_MIN_PRIOR, BOARD_TOP_PPG } from "@/lib/method";
 import { parseInt4, parseKind } from "@/lib/params";
@@ -126,11 +127,7 @@ function PositionFilter({ positions, current, season, kind }: { positions: strin
 }
 
 function Body({ header, rows, pos }: { header: BoardHeader; rows: BoardEntry[]; pos: string | null }) {
-  const final = rows.filter((r) => r.outcome?.labelStatus === "final" && r.outcome.yMissed !== null);
-  const judged = final.filter((r) => r.outcome?.yCliff !== null);
-  const cliffs = judged.filter((r) => r.outcome?.yCliff).length;
-  const missed = final.filter((r) => r.outcome?.yMissed).length;
-  const pending = rows.length - final.length;
+  const tally = boardTally(rows);
   const live = header.kind === "live";
   const ecr = hasEcr(rows);
   const marks = disagreements(rows);
@@ -153,20 +150,11 @@ function Body({ header, rows, pos }: { header: BoardHeader; rows: BoardEntry[]; 
             </span>
           </Note>
         ) : null}
-        {pending ? (
-          <Note>
-            <span data-testid="outcomes-pending">What happened: pending until the season is over. The board is not graded before then.</span>
-          </Note>
-        ) : (
-          <p className="text-sm" data-testid="outcomes-final">
-            <strong>What happened:</strong> {fmtInt(cliffs)} of the {fmtInt(judged.length)} players who played {BOARD_MIN_GAMES} or more games had a{" "}
-            <Term name="y_cliff">Cliff</Term>; {fmtInt(missed)} of all {fmtInt(final.length)} <Term name="y_missed">missed time</Term>.
-          </p>
-        )}
+        <BoardWhatHappened tally={tally} />
       </div>
       <div className="mt-4">
         {shown.length ? (
-          <BoardList rows={shown} marks={marks} ecr={ecr} label={`Cliff board ${header.season}${pos ? `, ${pos}` : ""}, ${live ? "live" : "reconstructed"}`} showOutcome={final.length > 0} />
+          <BoardList rows={shown} marks={marks} ecr={ecr} label={`Cliff board ${header.season}${pos ? `, ${pos}` : ""}, ${live ? "live" : "reconstructed"}`} showOutcome={tally.final > 0} />
         ) : (
           <p className="text-muted">This board has no players at this position.</p>
         )}

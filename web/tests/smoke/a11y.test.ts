@@ -52,7 +52,7 @@ before(
     }
     if (EMPTY_BASE) {
       emptyUp = await serverUp(EMPTY_BASE);
-      for (const r of ["/", "/waivers", "/methodology", "/regression", "/decisions", "/track-record"]) {
+      for (const r of ["/", "/waivers", "/methodology", "/regression", "/decisions", "/track-record", "/hot-seat", "/board", "/time-machine"]) {
         found.set(`empty:${r}`, await runAxe((await fetchPage(r, EMPTY_BASE)).html, EMPTY_BASE));
       }
     }

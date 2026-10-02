@@ -278,6 +278,20 @@ password out of chats, commit messages and command lines.
    covered automatically by the default privileges, but repeating it costs nothing). If Neon
    refuses to change an existing role's password on a repeat run, the script says so and
    still applies the grants.
+10. **Search engines** (step I5; only when you decide to make the site public). By default the site
+    asks not to be indexed: `robots.txt` disallows everything and every page says
+    `noindex, nofollow`, which matches it being behind Vercel Authentication. Two Vercel
+    environment variables (no secrets; `vercel env add <NAME> production`, or the dashboard)
+    change that, read by `web/lib/seo.ts`:
+    - `SITE_URL`: the public origin, e.g. `https://<your domain>`, used for the canonical links,
+      the Open Graph URLs and `/sitemap.xml`. Without it the site uses Vercel's production
+      domain (`VERCEL_PROJECT_PRODUCTION_URL`, set by Vercel).
+    - `SITE_PUBLIC=true`: `robots.txt` allows crawling (except `/league`) and names the sitemap,
+      and pages become indexable. Set it only together with turning Vercel Authentication off:
+      crawlers cannot read a protected site anyway.
+
+    Environment variables take effect on the next deployment (redeploy after changing them).
+    To go private again, remove `SITE_PUBLIC` (or set it to anything but `true`) and redeploy.
 
 ## The scheduled pipeline (GitHub Actions, step E4)
 

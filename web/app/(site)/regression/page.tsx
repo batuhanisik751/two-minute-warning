@@ -11,8 +11,9 @@ import { chooseList, parseInt4, parseKind } from "@/lib/params";
 import { getSiteMeta } from "@/lib/queries/meta";
 import { getRegressionIndex, getRegressionList, getRegressionTrack, type RegressionListData } from "@/lib/queries/regression";
 import { TAGS, parseGarbage, regressionHref, signed, statsOf, tagRows, tagTitle, type RegressionRow, type Tag } from "@/lib/regression";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = { title: "Regression Watch" };
+export const metadata = pageMetadata("/regression", "Regression Watch", "Regression Watch: the week's sell-high and buy-low players, from expected fantasy points against points per game, with or without garbage time, and its track record.");
 
 const GROUPS: ScatterGroup[] = [
   { key: "sell_high", name: "Sell-high", color: "var(--chart-b)", shape: "triangle" },

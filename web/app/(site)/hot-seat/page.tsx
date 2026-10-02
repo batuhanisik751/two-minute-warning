@@ -10,8 +10,9 @@ import { hotSeatHref, hotSeatTally, listName, mergeTimeline, type TimelinePoint 
 import { HOT_SEAT_WINDOW_DAYS } from "@/lib/method";
 import { chooseList, parseInt4, parseKind, type ListKey, type WeekRef } from "@/lib/params";
 import { getHotSeatCalibration, getHotSeatIndex, getHotSeatList, getHotSeatTimeline, type HotSeatEntry, type HotSeatHeader, type HotSeatKey } from "@/lib/queries/hot-seat";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = { title: "Hot-Seat Meter" };
+export const metadata = pageMetadata("/hot-seat", "Hot-Seat Meter", "The Hot-Seat Meter: each NFL head coach's estimated chance of being let go, week by week, the drivers in words, and how past seasons' estimates turned out.");
 
 const SUBJECT = "the Hot-Seat Meter";
 

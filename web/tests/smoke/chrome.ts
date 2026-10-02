@@ -93,6 +93,11 @@ export class Tab {
     await this.evaluate("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))");
   }
 
+  /** A raw DevTools call on this tab (the performance measurement, tests/perf.ts). */
+  cdp<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    return this.send<T>(method, params);
+  }
+
   async setColorScheme(scheme: "light" | "dark"): Promise<void> {
     await this.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }] });
   }

@@ -13,6 +13,7 @@ import { getPlayerHistory } from "@/lib/queries/radar";
 import { getPlayerRegressionHistory } from "@/lib/queries/regression";
 import RegressionHistory from "@/components/RegressionHistory";
 import { parseGarbage } from "@/lib/regression";
+import { pageMetadata } from "@/lib/seo";
 
 // No loading.tsx above this route on purpose: an unknown id must answer with a real 404
 // status, which needs notFound() before the response starts streaming.
@@ -21,7 +22,12 @@ export async function generateMetadata({ params }: PageProps<"/player/[id]">): P
   const { id } = await params;
   if (!isGsisId(id)) return { title: "Player not found" };
   const p = await getPlayer(id);
-  return { title: p ? p.name : "Player not found" };
+  if (!p) return { title: "Player not found" };
+  return pageMetadata(
+    `/player/${id}`,
+    p.name,
+    `${p.name}: weekly fantasy points against expected points, snap and target shares, and his Waiver Radar and Regression Watch history.`,
+  );
 }
 
 const points = (v: number | null) => (v === null ? "no data" : fmtPoints(v));

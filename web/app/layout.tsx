@@ -5,6 +5,7 @@ import DataAsOf from "@/components/DataAsOf";
 import NavLinks from "@/components/NavLinks";
 import SiteFooter from "@/components/SiteFooter";
 import ThemeToggle from "@/components/ThemeToggle";
+import { SITE_DESCRIPTION, SITE_NAME, siteOrigin, sitePublic } from "@/lib/seo";
 import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
@@ -18,13 +19,20 @@ const display = Barlow_Condensed({
 });
 const sans = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" });
 
-export const metadata: Metadata = {
-  title: { default: "Two-Minute Warning", template: "%s · Two-Minute Warning" },
-  description:
-    "An open, point-in-time NFL early-warning app: the Waiver Radar and its public track record.",
-  // Not indexed until launch (E5): robots.txt disallows everything as well.
-  robots: { index: false, follow: false },
-};
+// Read per request (the environment, lib/seo.ts): the canonical origin and whether the site may
+// be indexed. Not indexed until the owner sets SITE_PUBLIC=true (robots.txt follows the same flag).
+export function generateMetadata(): Metadata {
+  const indexable = sitePublic();
+  return {
+    metadataBase: new URL(siteOrigin()),
+    title: { default: SITE_NAME, template: `%s · ${SITE_NAME}` },
+    description: SITE_DESCRIPTION,
+    applicationName: SITE_NAME,
+    openGraph: { type: "website", siteName: SITE_NAME, locale: "en_US", title: SITE_NAME, description: SITE_DESCRIPTION },
+    twitter: { card: "summary", title: SITE_NAME, description: SITE_DESCRIPTION },
+    robots: indexable ? { index: true, follow: true } : { index: false, follow: false },
+  };
+}
 
 export const viewport: Viewport = {
   colorScheme: "light dark",

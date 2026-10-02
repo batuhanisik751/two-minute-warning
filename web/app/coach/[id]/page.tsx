@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/ui";
 import { isCoachId } from "@/lib/decisions";
 import { getBestCalls, getClockCases, getCoach, getDecisionsMeta, getWorstCalls, type CoachSeasonRow } from "@/lib/queries/decisions";
 import { getCoachHotSeat, getHotSeatMeta } from "@/lib/queries/hot-seat";
+import { pageMetadata } from "@/lib/seo";
 
 // No loading.tsx above this route on purpose (as /player/[id]): an unknown id must answer with a
 // real 404 status, which needs notFound() before the response starts streaming.
@@ -23,7 +24,12 @@ export async function generateMetadata({ params }: PageProps<"/coach/[id]">): Pr
   const { id } = await params;
   if (!isCoachId(id)) return { title: "Coach not found" };
   const c = await getCoach(id);
-  return { title: c ? c.name : "Coach not found" };
+  if (!c) return { title: "Coach not found" };
+  return pageMetadata(
+    `/coach/${id}`,
+    c.name,
+    `${c.name}: graded fourth-down, two-point and clock decisions by season, the worst and best calls, and the Hot-Seat Meter's history.`,
+  );
 }
 
 function SeasonsTable({ rows, name, current }: { rows: CoachSeasonRow[]; name: string; current: { season: number | null; week: number | null } }) {

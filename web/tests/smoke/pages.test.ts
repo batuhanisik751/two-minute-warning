@@ -51,6 +51,16 @@ describe("every page", () => {
       assert.equal(p.doc.querySelectorAll("h1").length, 1, `${path}: expected exactly one <h1>`);
       assert.equal(p.doc.querySelectorAll("nav[aria-label=Main] a").length, 9, `${path}: main navigation (components/NavLinks.tsx NAV)`);
       assert.ok(!/postgres(ql)?:\/\//i.test(p.html), `${path}: a connection string in the page`);
+      // SEO basics (lib/seo.ts): a page title, a description, the canonical URL (the path
+      // without its query, on the configured origin) and Open Graph
+      assert.match(p.doc.title, /^.+ · Two-Minute Warning$/, `${path}: title "${p.doc.title}"`);
+      const desc = p.doc.querySelector("meta[name=description]")?.getAttribute("content") ?? "";
+      assert.ok(desc.length >= 60 && desc.length <= 200, `${path}: description of ${desc.length} characters`);
+      const canonical = p.doc.querySelector("link[rel=canonical]")?.getAttribute("href") ?? "";
+      assert.equal(canonical && new URL(canonical).pathname, path.split("?")[0], `${path}: canonical ${canonical}`);
+      for (const og of ["og:title", "og:description", "og:url", "og:site_name", "og:type"]) {
+        assert.ok(p.doc.querySelector(`meta[property="${og}"]`)?.getAttribute("content"), `${path}: no ${og}`);
+      }
     }
   });
 
@@ -85,6 +95,16 @@ describe("every page", () => {
     const body = await r.text();
     assert.match(body, /User-Agent: \*/i);
     assert.match(body, /Disallow: \/\s*$/m);
+  });
+
+  test("the sitemap lists the site's pages; robots.txt names no sitemap while the site is private", async (t) => {
+    if (!up) return t.skip(`no server at ${BASE}`);
+    const robots = await (await fetch(`${BASE}/robots.txt`)).text();
+    assert.ok(!/Sitemap:/i.test(robots), robots);
+    const r = await fetch(`${BASE}/sitemap.xml`);
+    assert.equal(r.status, 200);
+    const locs = Array.from((await r.text()).matchAll(/<loc>([^<]+)<\/loc>/g), (m) => new URL(m[1]).pathname);
+    assert.deepEqual(locs, ["/", "/waivers", "/regression", "/decisions", "/hot-seat", "/board", "/time-machine", "/track-record", "/methodology"]);
   });
 });
 
@@ -391,6 +411,9 @@ describe("/methodology", () => {
     for (const id of ["sources", "point-in-time", "leakage", "radar", "results", "glossary", "disclaimers"]) {
       assert.ok(m.querySelector(`#${id}`), `section #${id}`);
     }
+    // every credit and every other source is named in the sources section (I5)
+    const sources = text(m.querySelector("#sources")!.closest("section")!);
+    for (const c of [...CREDITS, "nfl4th", "Next Gen Stats", "Combine", "betting lines"]) assert.ok(sources.includes(c), `sources: ${c}`);
     assert.ok(m.querySelector("[data-testid=pooled-y_hit] tbody tr"), "results table");
     assert.ok(m.querySelector("[data-testid=tier-table] tbody tr"), "priority table");
     if (seedOnly) {

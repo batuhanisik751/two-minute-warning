@@ -11,8 +11,9 @@ import { leagueTotals, rankCoaches } from "@/lib/decisions";
 import { fmtInt } from "@/lib/format";
 import { parseInt4 } from "@/lib/params";
 import { getBestCalls, getClockCases, getDecisionSeasons, getDecisionsMeta, getSeasonCoaches, getWorstCalls, type DecisionsMeta } from "@/lib/queries/decisions";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = { title: "Decision Report Card" };
+export const metadata = pageMetadata("/decisions", "Decision Report Card", "The Decision Report Card: NFL head coaches' fourth-down, two-point and clock decisions graded by win probability, the season's best and worst calls, and the leaderboard.");
 
 /** How many worst and best calls a season shows (the lists fold after 10). */
 const WORST = 20;

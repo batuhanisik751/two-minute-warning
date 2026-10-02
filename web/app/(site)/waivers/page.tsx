@@ -26,8 +26,9 @@ import {
   type ListHeader,
   type Pick,
 } from "@/lib/queries/radar";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = { title: "Waivers" };
+export const metadata = pageMetadata("/waivers", "Waivers", "The Waiver Radar: each week's pickups by position and FLEX with the chance of a starter week, its range, the reasons and what happened, plus the K and D/ST streamers.");
 
 function listWord(n: number): string {
   return n === 1 ? "list" : "lists";

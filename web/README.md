@@ -21,7 +21,23 @@ computed from anything but that database.
 
 Every page carries the skip link, the "Data as of" line (the Tuesday as-of of the current
 week's lists, and when the data was published), the disclaimer of PROJECT_SPEC 16 and the data
-credits. `robots.txt` disallows everything and every page is `noindex` until launch (E5).
+credits. Every page has a title, a description, a canonical URL and Open Graph basics; until
+the owner makes the site public, `robots.txt` disallows everything and every page is `noindex`
+(see "Search engines" below).
+
+## Search engines
+
+One place, `lib/seo.ts`, read per request from the environment (no domain is written in the code):
+
+| variable | effect |
+|---|---|
+| `SITE_URL` | the canonical origin (e.g. `https://example.org`; only its origin is used) for the canonical links, Open Graph URLs and the sitemap. Unset: Vercel's own `VERCEL_PROJECT_PRODUCTION_URL`, else `http://localhost:3000` |
+| `SITE_PUBLIC` | `true`: `robots.txt` allows crawling (except `/league`) and names the sitemap, pages are indexable. Anything else, or unset (the default): `robots.txt` disallows everything and every page says `noindex, nofollow` |
+
+`/sitemap.xml` (`app/sitemap.ts`) lists the nine pages of the main navigation at that origin;
+player and coach pages are reached from them. A page's canonical URL is its path without the
+query (a picked week or filter is a view of the same page). The site stays private (Vercel
+Authentication, `SITE_PUBLIC` unset) until the owner decides; docs/deploy.md step 10.
 
 ## Running it locally
 
@@ -160,7 +176,7 @@ links into it) and navigation.
 |---|---|---|
 | types | `npm run typecheck` | nothing (`next typegen` + `tsc`) |
 | lint | `npm run lint` | nothing |
-| unit | `npm test` | nothing: formatting, rank buckets and badges, query-string parsing, track-record selection, database-URL guard rails, method constants vs the Python code, theme contrast (WCAG AA, both themes, incl. the strip, field and position colours), FLEX merge order and counts, the league shape, position tabs, team colours, the streamer's comparison sentence and cutoffs (`lib/streamer.ts`), Regression Watch's tag order, toggle, verdicts, dropped tags and shrinkage table (`lib/regression.ts`), the stability study's tables (`lib/stability.ts`), the fold rule (`lib/fold.ts`), the Decision Report Card's situation in words, options, leaderboard rule, totals and clock-case words (`lib/decisions.ts`) and its methodology picks (`lib/decisions-track.ts`), the Hot-Seat Meter's rounding, driver and outcome words, calibration grouping, timelines and track-record picks (`lib/hot-seat.ts`), the Cliff board's disagreement rule, driver and outcome words, calibration bands, record and track cells (`lib/board.ts`) |
+| unit | `npm test` | nothing: formatting, rank buckets and badges, query-string parsing, track-record selection, database-URL guard rails, method constants vs the Python code, theme contrast (WCAG AA, both themes, incl. the strip, field and position colours), FLEX merge order and counts, the league shape, position tabs, team colours, the streamer's comparison sentence and cutoffs (`lib/streamer.ts`), Regression Watch's tag order, toggle, verdicts, dropped tags and shrinkage table (`lib/regression.ts`), the stability study's tables (`lib/stability.ts`), the fold rule (`lib/fold.ts`), the Decision Report Card's situation in words, options, leaderboard rule, totals and clock-case words (`lib/decisions.ts`) and its methodology picks (`lib/decisions-track.ts`), the Hot-Seat Meter's rounding, driver and outcome words, calibration grouping, timelines and track-record picks (`lib/hot-seat.ts`), the Cliff board's disagreement rule, driver and outcome words, calibration bands, record and track cells (`lib/board.ts`), the site origin and the indexing flag (`lib/seo.ts`) |
 | migrations | `npm run db:check` | nothing (never connects) |
 | build | `npm run build` | nothing (no database at build time) |
 | smoke + accessibility + layout | `npm run test:smoke:run` | a build, the local Postgres server and Google Chrome (or `CHROME_PATH`) |
@@ -171,7 +187,20 @@ the local server (`twm_web_test`, `twm_web_test_empty`; `tests/setup-db.ts` appl
 `next start` on each, runs `tests/smoke/*.test.ts` with `SMOKE_REQUIRE=1` and stops the
 servers. The suites fetch every page, check the key text (data-as-of line, disclaimer, credits,
 list rows, charts and their tables, 404s, empty states) and run axe-core inside jsdom on each
-page (zero serious or critical violations; contrast is checked by the unit tier instead).
+page (zero serious or critical violations; jsdom cannot measure contrast).
+
+The **browser accessibility pass** (`tests/smoke/a11y-browser.test.ts`, headless Chrome) runs
+axe again with colour contrast on every page of the smoke set and the not-found page, in the
+light and the dark theme, every fold opened: zero serious or critical violations (moderate ones
+are printed). Its keyboard pass, on one page of each kind at 1280 and 375 px, presses Tab: the
+skip link must be the first stop, visible, and move focus to `<main>`; the nine nav links must
+come in order; each of the first 30 stops must show a focus ring on screen.
+
+**Performance** (`tests/perf.ts`, not a test): `npx tsx tests/perf.ts <base> / /methodology
+/waivers /time-machine` against a running `next start` prints, per page, the median of 3 cold
+loads of LCP, CLS, TBT, FCP, TTFB, the HTML and the JavaScript transferred, on a mobile profile
+like Lighthouse's (412 px, 4x CPU slowdown, 150 ms, 1.6 Mbps; Chrome's own throttling, so a
+guide, not a Lighthouse score) and on desktop. Lighthouse itself is not installed.
 
 - `-- --real`: the same suites against the real local publish (database `twm`, read only),
   with only the checks that hold for any data.
@@ -226,5 +255,12 @@ CI (`.github/workflows/ci.yml`, job `web`) runs every tier, the smoke tier again
   unknown player id also answers 404, but Next 16 renders a page-level `notFound()` from an
   error shell whose body the browser fills in once the scripts run; the smoke test checks the
   status and that the not-found page is in the payload.
+- **Errors** (checked in a browser with the database stopped, I5): a page whose read fails shows
+  "Something went wrong" (`app/error.tsx`: the database may be waking up, try again; a reference
+  that matches the server log's digest) inside the normal header and footer, and the header's
+  "Data as of" line says the database could not be read. No message, stack or connection string
+  reaches the page (the server log names the host and port at most). `app/global-error.tsx` is
+  the plain fallback if the layout itself fails. `app/(site)/loading.tsx` is shown while a
+  page's queries run (not for `/player/[id]` and `/coach/[id]`, which must answer 404 first).
 - **Teams** are today's franchises (dim_team holds current franchises only); past lists say so.
 - No logos, no league data, no ESPN data.

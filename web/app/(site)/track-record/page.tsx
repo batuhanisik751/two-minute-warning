@@ -9,8 +9,9 @@ import StreamTrack from "@/components/track/StreamTrack";
 import { PageHeader } from "@/components/ui";
 import { pct } from "@/lib/format";
 import { AS_OF_WEEKDAY, TRACK_INTERVAL_LEVEL } from "@/lib/method";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = { title: "Track record" };
+export const metadata = pageMetadata("/track-record", "Track record", "The public track record: how every module's published estimates did against what happened, with intervals and simple baselines.");
 
 const SECTIONS = [
   { id: "radar", title: "Waiver Radar" },

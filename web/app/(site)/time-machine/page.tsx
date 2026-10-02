@@ -28,8 +28,9 @@ import {
   type Covered,
   type ModuleId,
 } from "@/lib/time-machine";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = { title: "Time machine" };
+export const metadata = pageMetadata("/time-machine", "Time machine", "The time machine: pick a published week and see what every module said then, from the stored lists, with what happened afterwards.");
 
 const REPRO_URL = "https://github.com/batuhanisik751/two-minute-warning/blob/main/docs/timemachine.md";
 

@@ -22,7 +22,7 @@ export default function ErrorPage({ error, retry }: { error: Error & { digest?: 
         >
           Try again
         </button>
-        <Link href="/" className="inline-flex min-h-11 items-center rounded-md border border-line px-4 text-sm">
+        <Link href="/" className="inline-flex min-h-11 items-center rounded-md border border-line px-4 text-sm no-underline">
           Home
         </Link>
       </div>

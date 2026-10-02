@@ -11,8 +11,9 @@ import { BOARD_CLIFF_DROP, BOARD_MIN_GAMES, BOARD_MIN_PRIOR, BOARD_TOP_PPG } fro
 import { parseInt4, parseKind } from "@/lib/params";
 import { positionShort, sortPositions } from "@/lib/positions";
 import { getBoard, getBoardCalibration, getBoardDisagreement, getBoardIndex, type BoardEntry, type BoardHeader, type BoardKey } from "@/lib/queries/board";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = { title: "Cliff board" };
+export const metadata = pageMetadata("/board", "Cliff board", "The Cliff board: veterans' estimated chance of a fantasy cliff next season and, separately, of missed time, next to the experts' preseason ranks.");
 
 function Intro() {
   return (

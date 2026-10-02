@@ -222,9 +222,19 @@
     line-height: 1.5;
   }
 
+  /* Links are underlined (a light line, full on hover): the accent alone is too close to the
+     body text's colour to tell a link apart (WCAG 1.4.1; axe link-in-text-block, I5). Links
+     styled as controls (the nav, tabs, cards) opt out with `no-underline`. */
   a {
     color: var(--accent);
-    text-underline-offset: 2px;
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+    text-underline-offset: 3px;
+  }
+
+  a:hover {
+    text-decoration-color: currentColor;
   }
 
   /* Focus: one visible ring everywhere (two layers so a control that removes its outline

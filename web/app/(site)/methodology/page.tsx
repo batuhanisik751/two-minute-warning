@@ -23,8 +23,9 @@ import HotSeatSection from "@/components/methodology/HotSeatSection";
 import RegressionSection from "@/components/methodology/RegressionSection";
 import StreamerSection from "@/components/methodology/StreamerSection";
 import { headline, select, widestRange } from "@/lib/track";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = { title: "Methodology (draft)" };
+export const metadata = pageMetadata("/methodology", "Methodology (draft)", "How Two-Minute Warning works: the data sources, the point-in-time rule, every model and its backtest, the limits, the disclaimers and the full glossary.");
 
 const SCOPES = ["pooled", "diff", "position", "position_diff", "experts", "experts_diff", "calibration_fixed"];
 const MODEL_ORDER = ["logit", "lgbm", "baseline_ecr", "baseline_last_points", "baseline_snap_delta"];
@@ -440,9 +441,11 @@ export default async function MethodologyPage() {
           </h2>
           <ul className="mt-3 list-disc space-y-2 pl-6">
             <li>
-              <a href="https://nflverse.nflverse.com/">nflverse</a>, loaded with nflreadpy: play-by-play, player stats,
-              schedules and results, weekly rosters, injury reports, depth charts, snap counts and player details. Every
-              page depends on it.
+              <a href="https://nflverse.nflverse.com/">nflverse</a>, loaded with nflreadpy: play-by-play (built by
+              nflfastR, whose win probability the Decision Report Card is compared with), player stats, schedules and
+              results with their betting lines (the Hot-Seat Meter&apos;s market expectation), weekly rosters, injury
+              reports, depth charts, snap counts, player details, and the NFL Combine results and Next Gen Stats (the
+              Cliff board). Every page depends on it.
             </li>
             <li>
               ffverse&apos;s <a href="https://github.com/ffverse/ffopportunity">ffopportunity</a> (through nflreadpy):
@@ -458,6 +461,17 @@ export default async function MethodologyPage() {
             <li>
               <a href="https://www.pro-football-reference.com/">Pro Football Reference</a>: the original source of
               nflverse&apos;s snap counts (snap share).
+            </li>
+            <li>
+              Head-coach departures (the Hot-Seat Meter&apos;s labels): every change nflverse&apos;s schedules show,
+              each checked by hand against public pages, mostly{" "}
+              <a href="https://en.wikipedia.org/">Wikipedia</a>&apos;s &ldquo;NFL season&rdquo; pages and the coaches&apos;
+              own pages, with the source kept for every row.
+            </li>
+            <li>
+              A benchmark only (no published number is computed from it): the{" "}
+              <a href="https://github.com/nflverse/nfl4th">nfl4th</a> R package&apos;s fourth-down recommendations, which
+              the Decision Report Card&apos;s grades are compared with.
             </li>
           </ul>
           <p className="mt-3 text-sm text-muted">

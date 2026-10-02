@@ -6,6 +6,13 @@ import { before, describe, test } from "node:test";
 import { DATA, EMPTY_BASE, REQUIRE, fetchPage, prose, serverUp, text, type Page } from "./dom";
 
 let up = false;
+/** The later modules' pages and the empty state each shows before its first publish (I5). */
+const MODULE_PAGES: [string, RegExp][] = [
+  ["/decisions", /No decisions published yet/],
+  ["/hot-seat", /No Hot-Seat list published yet/],
+  ["/board", /No board published yet/],
+  ["/time-machine", /Nothing published yet/],
+];
 const pages = new Map<string, Page>();
 
 before(
@@ -16,7 +23,7 @@ before(
     }
     up = await serverUp(EMPTY_BASE);
     if (!up) return;
-    for (const r of ["/", "/waivers", "/methodology", "/player/00-9000013", "/regression", "/waivers?pos=K"]) pages.set(r, await fetchPage(r, EMPTY_BASE));
+    for (const r of ["/", "/waivers", "/methodology", "/player/00-9000013", "/regression", "/waivers?pos=K", ...MODULE_PAGES.map((m) => m[0]), "/track-record"]) pages.set(r, await fetchPage(r, EMPTY_BASE));
   },
   { timeout: 120_000 },
 );
@@ -57,5 +64,16 @@ describe("empty states (no list published yet)", () => {
     assert.match(text(k.doc.querySelector("main")!), /No lists published yet/);
     assert.equal(k.doc.querySelectorAll("nav[aria-label=Position] a").length, 0);
     assert.match(text(pages.get("/methodology")!.doc.querySelector("main")!), /No streamer track record published yet/);
+  });
+
+  test("the later modules and the track record say nothing is published, never an error page (I5)", (t) => {
+    if (!up) return t.skip("no empty-database server (SMOKE_EMPTY_BASE_URL)");
+    for (const [path, says] of [...MODULE_PAGES, ["/track-record", /yet/] as [string, RegExp]]) {
+      const p = pages.get(path)!;
+      assert.equal(p.status, 200, `${path} returned ${p.status}`);
+      const m = text(p.doc.querySelector("main")!);
+      assert.ok(!/Something went wrong/.test(m), `${path}: the error page`);
+      assert.match(m, says, path);
+    }
   });
 });

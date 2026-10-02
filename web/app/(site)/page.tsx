@@ -19,8 +19,9 @@ import { getSiteMeta } from "@/lib/queries/meta";
 import { getLatestLive, getListIndex, getRadarModel } from "@/lib/queries/radar";
 import { getTrackRows } from "@/lib/queries/track";
 import { headline } from "@/lib/track";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = { title: "This week" };
+export const metadata = pageMetadata("/", "This week", "This week's NFL early warnings: the Waiver Radar's top pickups by position, the K and D/ST streamers, Regression Watch flags, the coach of the week, the Hot-Seat Meter and the Cliff board.");
 
 const TOP = 5;
 

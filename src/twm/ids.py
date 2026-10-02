@@ -946,17 +946,11 @@ RAW_COVERAGE: tuple[RawCoverage, ...] = (
     RawCoverage("pfr_rush", "pfr_rush", "pfr_player_id", "pfr", "pfr_player_name", None,
                 "season"),
     RawCoverage("pfr_rec", "pfr_rec", "pfr_player_id", "pfr", "pfr_player_name", None, "season"),
-    RawCoverage("ngs_passing", "ngs_passing", "player_gsis_id", GSIS, "player_display_name",
-                "player_position", "season"),
-    RawCoverage("ngs_rushing", "ngs_rushing", "player_gsis_id", GSIS, "player_display_name",
-                "player_position", "season"),
-    RawCoverage("ngs_receiving", "ngs_receiving", "player_gsis_id", GSIS, "player_display_name",
-                "player_position", "season"),
     RawCoverage("draft_picks", "draft_picks[gsis]", "gsis_id", GSIS, "pfr_player_name",
                 "position", "season"),
     RawCoverage("draft_picks", "draft_picks[pfr]", "pfr_player_id", "pfr", "pfr_player_name",
                 "position", "season"),
-    RawCoverage("combine", "combine", "pfr_id", "pfr", "player_name", "pos", "season"),
+    # combine and NGS are warehouse tables since I1a: covered by warehouse_coverage()
 )  # fmt: skip
 
 POOL_LABEL = "ff_rankings_all[rp_preseason_pool]"
@@ -1060,8 +1054,9 @@ class CoverageRows:
 
 
 def warehouse_coverage() -> list[CoverageRows]:
-    """The warehouse's own id columns: snaps (pfr), daily depth charts without a source gsis
-    (espn), and gsis ids in stats, injuries and play-by-play (present in dim_player?)."""
+    """The warehouse's own id columns: snaps and the combine (pfr), daily depth charts without
+    a source gsis (espn), and gsis ids in stats, injuries, play-by-play and Next Gen Stats
+    (present in dim_player?)."""
     play = " UNION ALL ".join(
         f"SELECT season, {role}_player_id AS source_id, {role}_player_name AS name, "
         "NULL AS position FROM fact_play"
@@ -1080,6 +1075,11 @@ def warehouse_coverage() -> list[CoverageRows]:
         CoverageRows("fact_injury_report", GSIS,
                      "SELECT season, gsis_id, full_name, position FROM fact_injury_report", True),
         CoverageRows("fact_play", GSIS, play, False),
+        CoverageRows("fact_combine", "pfr",
+                     "SELECT season, pfr_id, player_name, pos FROM fact_combine", True),
+        *(CoverageRows(name, GSIS, f"SELECT season, player_gsis_id, player_display_name, "
+                       f"player_position FROM {name}", True)
+          for name in sc.NGS_WEEK_TABLES),
     ]  # fmt: skip
 
 

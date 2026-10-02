@@ -155,12 +155,21 @@ def build(tmp: Path) -> Path:
     (call inside :func:`golden_env`). Returns the warehouse path."""
     from twm.sources import nflverse as nv
     from twm.warehouse import build as wb
+    from twm.warehouse import schema as sc
 
     for name in INPUTS:
         for season in (None,) if name in ONE_FILE else SEASONS:
             path = nv.cache_path(name, season)
             path.parent.mkdir(parents=True, exist_ok=True)
             read_input(name, season).write_parquet(path)
+    # build inputs no golden module reads yet (combine, Next Gen Stats; I1a) are written empty
+    # with their snapshot columns, so the slice builds and the frozen inputs stay as they are
+    for name in (n for n in sc.SOURCE_DATASETS if n not in INPUTS):
+        cols = {c: _POLARS.get(t, pl.String()) for c, t in sc.snapshot_columns(name).items()}
+        for season in SEASONS:
+            path = nv.cache_path(name, season)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            pl.DataFrame(schema=cols).write_parquet(path)
     db = tmp / "golden.duckdb"
     wb.build_warehouse(list(SEASONS), db_path=db)
     return db

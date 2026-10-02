@@ -1270,7 +1270,143 @@ def fact_opportunity_rush_spec() -> Table:
     )
 
 
-# ---- dimensions --------------------------------------------------------------------------
+# ---- combine and Next Gen Stats (I1a) ----------------------------------------------------------
+
+COMBINE_DRAFT_COLUMNS = ("draft_year", "draft_team", "draft_round", "draft_ovr")
+_COMBINE_DOCS = {
+    "season": "the combine's year = the draft the player entered (2021: pro-day results, the "
+    "in-person combine was cancelled)",
+    "draft_year": "the linked Pro-Football-Reference player's draft year (NULL: undrafted, or "
+    "not filled upstream yet: every 2026 row in the 2026-09-29 cache). Differs from season on "
+    "8 rows, PFR namesake links that carry another player's draft. Hidden (NULL) in the as-of "
+    "view until draft_available_at",
+    "draft_team": "drafting team's full name at the time ('San Diego Chargers'); hidden in the "
+    "as-of view until draft_available_at",
+    "draft_round": "draft round; hidden in the as-of view until draft_available_at",
+    "draft_ovr": "overall pick number; hidden in the as-of view until draft_available_at",
+    "pfr_id": "Pro-Football-Reference player id as PFR links the row (NULL when PFR has no NFL "
+    "page for him; a few are namesakes, see gsis_id)",
+    "cfb_id": "Sports-Reference college football id",
+    "pos": "position at the combine (PFR's labels: OG, OLB, EDGE, ...)",
+    "ht": "height as feet-inches text ('6-3')",
+    "wt": "weight, pounds",
+    "forty": "40-yard dash, seconds",
+    "bench": "225-pound bench press, repetitions",
+    "vertical": "vertical jump, inches (halves occur)",
+    "broad_jump": "broad jump, inches",
+    "cone": "3-cone drill, seconds",
+    "shuttle": "20-yard shuttle, seconds",
+}
+COMBINE_GSIS = Column(
+    "gsis_id",
+    "VARCHAR",
+    computed=True,
+    doc=(
+        "the player's gsis_id through bridge_player_id (id_type 'pfr'); NULL when pfr_id is "
+        "NULL or maps to no player, or when the link does not fit the combine year (a drafted "
+        "player must be drafted that year; an undrafted one must debut 0-6 seasons later) or "
+        "the pfr_id is on several combine rows that fit (PFR namesakes). Counts in "
+        "build_manifest notes; the doubtful links are 'suspect' rows of report_id_unmatched"
+    ),
+)
+
+
+def _height_inches_sql() -> str:
+    ht = q("ht")
+    return (
+        f"CASE WHEN regexp_full_match({ht}, '[0-9]+-[0-9]+') THEN "
+        f"CAST(split_part({ht}, '-', 1) AS INTEGER) * 12 + CAST(split_part({ht}, '-', 2) AS "
+        "INTEGER) END"
+    )
+
+
+def fact_combine_spec() -> Table:
+    ints = dict.fromkeys(("draft_year", "draft_round", "draft_ovr"), "INTEGER")
+    cols = []
+    for c in columns_from_snapshot("combine", types=ints):
+        cols.append(Column(c.name, c.type, doc=_COMBINE_DOCS.get(c.name, "")))
+        if c.name == "pfr_id":
+            cols.append(COMBINE_GSIS)
+        if c.name == "ht":
+            cols.append(Column("height_in", "INTEGER", derived=_height_inches_sql,
+                               requires=("ht",), doc="height in inches, from ht"))  # fmt: skip
+    return Table(
+        name="fact_combine",
+        source="combine",
+        primary_key=("season", "player_name", "school", "pos"),
+        not_null_key=("season", "player_name"),
+        dedupe_order=("pfr_id NULLS LAST",),
+        columns=tuple(cols),
+        doc=(
+            "One row per player per NFL Scouting Combine (2000+; Pro-Football-Reference via "
+            "nflverse load_combine): measurements (height, weight, 40, bench, vertical, broad "
+            "jump, 3-cone, shuttle), position and school, plus PFR's draft record of the linked "
+            "player (hidden point-in-time until the draft is over). gsis_id comes through "
+            "bridge_player_id. A drill the player skipped is NULL."
+        ),
+    )
+
+
+# NGS stat family -> nflverse dataset (load_nextgen_stats(stat_type=...)).
+NGS_FAMILIES = {"passing": "ngs_passing", "rushing": "ngs_rushing", "receiving": "ngs_receiving"}
+NGS_WEEK_TABLES = {f"fact_ngs_{fam}_week": ds for fam, ds in NGS_FAMILIES.items()}
+_NGS_DOCS = {
+    "week": "the week as NGS numbers it; 0 = the regular season's totals (REG only). NGS puts "
+    "the Super Bowl one week after nflverse's schedule (22 vs 21 in 2016-2020, 23 vs 22 from "
+    "2021): use game_id to join games",
+    "team_abbr": "the player's team in that game (current codes: LAR -> LA); NULL on 30 "
+    "2021 week-0 rows upstream",
+    "player_gsis_id": "the player's gsis_id as NGS gives it (never NULL)",
+}
+NGS_GAME_ID = Column(
+    "game_id",
+    "VARCHAR",
+    computed=True,
+    doc=(
+        "the fact_game game of a weekly row, matched on season, season_type, team (home or "
+        "away) and week (the Super Bowl at NGS week - 1); NULL for week 0 (season totals)"
+    ),
+)
+NGS_GSIS = Column(
+    "gsis_id",
+    "VARCHAR",
+    computed=True,
+    doc=(
+        "player_gsis_id when it is a known player (dim_player, through the B3 id tables); "
+        "NULL otherwise (counted in build_manifest notes and the id report)"
+    ),
+)
+_NGS_WEEKLY_MIN = {"passing": "15 attempts", "rushing": "10 rushes", "receiving": "5 targets"}
+_NGS_MODEL_NOTE = (
+    "Expected values (expected_rush_yards, *_over_expected, expected_completion_percentage, "
+    "completion_percentage_above_expectation, avg_expected_yac, avg_yac_above_expectation) "
+    "come from the NFL's NGS models (spec 6.3)."
+)
+
+
+def fact_ngs_week_spec(family: str) -> Table:
+    dataset = NGS_FAMILIES[family]
+    cols = []
+    for c in columns_from_snapshot(dataset, transforms={"team_abbr": normalize_team_sql}):
+        cols.append(Column(c.name, c.type, transform=c.transform, doc=_NGS_DOCS.get(c.name, "")))
+        if c.name == "week":
+            cols.append(NGS_GAME_ID)
+        if c.name == "player_gsis_id":
+            cols.append(NGS_GSIS)
+    return Table(
+        name=f"fact_ngs_{family}_week",
+        source=dataset,
+        primary_key=("player_gsis_id", "season", "season_type", "week"),
+        columns=tuple(cols),
+        doc=(
+            f"One row per player per NGS week of the {family} family (2016+; nflverse "
+            "load_nextgen_stats, every column as published): weekly rows only for players "
+            f"with at least {_NGS_WEEKLY_MIN[family]} that week (the smallest value in "
+            "2016-2026), plus week 0 = the regular season's totals. "
+            "Three tables (passing, rushing, receiving) because the families share only the "
+            "identifying columns. " + _NGS_MODEL_NOTE
+        ),
+    )
 
 
 def dim_team_spec() -> Table:
@@ -1621,6 +1757,8 @@ def tables() -> dict[str, Table]:
         fact_roster_week_spec(),
         fact_ranking_spec(),
         fact_ranking_kdst_spec(),
+        *(fact_ngs_week_spec(f) for f in NGS_FAMILIES),
+        fact_combine_spec(),
         dim_player_spec(),
         BRIDGE_PLAYER_ID,
         REPORT_ID_COVERAGE,
@@ -1646,4 +1784,8 @@ SOURCE_DATASETS = (
     "ff_playerids",
     "rosters_weekly",
     "ff_rankings_all",
+    "ngs_passing",
+    "ngs_rushing",
+    "ngs_receiving",
+    "combine",
 )

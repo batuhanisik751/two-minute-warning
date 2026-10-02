@@ -368,7 +368,7 @@ def _assert_official_snapshots_complete(con: duckdb.DuckDBPyConnection) -> None:
     Monday-night games from the official snapshots silently.
     """
     problems = []
-    for name in [*av.GAME_DATA_TABLES, *av.DERIVED_GAME_DATA_TABLES, "fact_game"]:
+    for name in [*av.GAME_DATA_TABLES, *av.DERIVED_GAME_DATA_TABLES, *av.NGS_TABLES, "fact_game"]:
         weekly, finale = con.execute(f"""
             SELECT
               count(*) FILTER (WHERE NOT w.is_split_week AND x.available_at > w.asof_weekly_utc),
@@ -1150,6 +1150,151 @@ def _build_fact_snaps(
     return out
 
 
+def _build_fact_ngs_week(
+    con: duckdb.DuckDBPyConnection,
+    name: str,
+    src: SourceFiles,
+    stats: TableStats,
+    arules: av.AvailabilityRules,
+) -> TableStats:
+    """One Next Gen Stats family (I1a): every source column, plus the weekly row's ``game_id``
+    and ``gsis_id`` (the NGS gsis id when it is a known player, after ``_stage_player_ids``).
+
+    NGS numbers the Super Bowl one week after the schedule (22 vs 21 in 2016-2020, 23 vs 22
+    from 2021), so a row matches a game in its week or, for the Super Bowl, the week before.
+    A weekly row without a game gets no available_at and stops the build (AvailabilityError)."""
+    table = sc.tables()[name]
+    if not src.paths[table.source]:  # every requested season predates NGS (2016)
+        return _materialize(con, table, _empty_select(table), stats, arules)
+    _, inner = _source_select(con, _without_computed(table), src, stats)
+    pick = {"game_id": "g.game_id", "gsis_id": "p.gsis_id"}
+    cols = ", ".join(
+        f"{pick[c.name]} AS {sc.q(c.name)}" if c.computed else f"s.{sc.q(c.name)}"
+        for c in table.columns
+    )
+    sql = (
+        f"SELECT {cols} FROM ({inner}) s "
+        "LEFT JOIN fact_game g ON s.week > 0 AND g.season = s.season "
+        "AND g.season_type = s.season_type AND s.team_abbr IN (g.home_team, g.away_team) "
+        "AND (g.week = s.week OR (g.game_type = 'SB' AND g.week = s.week - 1)) "
+        "LEFT JOIN _players p ON p.gsis_id = s.player_gsis_id"
+    )
+    out = _materialize(con, table, sql, stats, arules)
+    out.notes.update(
+        dict(
+            zip(
+                ("n_week0_rows", "n_rows_without_gsis_id", "n_super_bowl_rows_week_shifted"),
+                con.execute(f"""
+                    SELECT count(*) FILTER (WHERE x.week = 0),
+                           count(*) FILTER (WHERE x.gsis_id IS NULL),
+                           count(*) FILTER (WHERE g.week = x.week - 1)
+                    FROM {sc.q(name)} x LEFT JOIN fact_game g USING (game_id)""").fetchone(),
+                strict=True,
+            )
+        )
+    )
+    return out
+
+
+# A combine row's PFR link must fit the combine year (I1a): a drafted player was drafted that
+# year; an undrafted one debuted 0 to COMBINE_DEBUT_MAX_GAP seasons later (the latest real
+# debut in 2000-2026 is a punter 6 seasons after his combine; the next gap, 8, is a namesake).
+COMBINE_DEBUT_MAX_GAP = 6
+
+
+def _combine_links_sql(inner: str) -> str:
+    """Every combine row with its PFR link, whether the link fits, and how many fitting rows
+    share the pfr id (``_combine_links``)."""
+    pfr = pid.canonical_id_sql("s.pfr_id", "VARCHAR")
+    fits = (
+        "(b.method = 'manual' OR (p.draft_year IS NOT NULL AND p.draft_year = s.season) OR "
+        "(p.draft_year IS NULL AND (p.rookie_season IS NULL OR p.rookie_season - s.season "
+        f"BETWEEN 0 AND {COMBINE_DEBUT_MAX_GAP})))"
+    )
+    return f"""
+        CREATE OR REPLACE TEMP TABLE _combine_links AS
+        SELECT *, count(*) FILTER (WHERE fits) OVER (PARTITION BY pfr) AS n_fit_rows FROM (
+            SELECT s.season, s.player_name, s.school, s.pos, {pfr} AS pfr, b.gsis_id,
+                   p.display_name, p.draft_year, p.rookie_season,
+                   b.gsis_id IS NOT NULL AND {fits} AS fits
+            FROM ({inner}) s
+            LEFT JOIN _bridge b ON b.id_type = 'pfr' AND b.source_id = {pfr}
+            LEFT JOIN _players p ON p.gsis_id = b.gsis_id)"""
+
+
+def _stage_combine_suspects(con: duckdb.DuckDBPyConnection) -> None:
+    """Links left NULL go to ``_usage_null`` and one 'suspect' row per pfr id to
+    ``_bridge_issues`` (report_id_unmatched), like the snap-count usage check."""
+    bad = "gsis_id IS NOT NULL AND NOT (fits AND n_fit_rows = 1)"
+    con.execute(f"""
+        INSERT INTO _usage_null
+        SELECT DISTINCT 'fact_combine', 'pfr', pfr, season FROM _combine_links WHERE {bad}""")
+    con.execute(f"""
+        INSERT INTO _bridge_issues
+        SELECT 'suspect', 'fact_combine', 'pfr', pfr, any_value(gsis_id),
+               any_value(display_name), string_agg(DISTINCT pos, ', ' ORDER BY pos),
+               min(season), max(season), count(*),
+               'combine: the link names ' || any_value(gsis_id) || ' ('
+               || COALESCE(any_value(display_name), '?') || ', '
+               || COALESCE('drafted ' || any_value(draft_year), 'undrafted, debut '
+                           || COALESCE(CAST(any_value(rookie_season) AS VARCHAR), '?'))
+               || ') but ' || CASE WHEN bool_or(fits) THEN count(*) FILTER (WHERE fits)
+                    || ' combine rows fit it (' || string_agg(season || ' ' || player_name
+                    || ', ' || school, '; ' ORDER BY season, school) || ')'
+                  ELSE 'the combine row (' || string_agg(season || ' ' || player_name || ', '
+                    || school, '; ' ORDER BY season, school) || ') does not fit his draft '
+                    || 'year or debut' END
+               || ': fact_combine.gsis_id is NULL (a PFR namesake?); add a manual override '
+               || 'once the player is known'
+        FROM _combine_links WHERE {bad} GROUP BY pfr""")
+
+
+def _build_fact_combine(
+    con: duckdb.DuckDBPyConnection,
+    src: SourceFiles,
+    stats: TableStats,
+    arules: av.AvailabilityRules,
+) -> TableStats:
+    """Combine measurements (I1a) with ``gsis_id`` through ``_bridge`` (id_type 'pfr'), kept
+    only when the link fits the combine year and no other combine row claims the same id."""
+    table = sc.tables()["fact_combine"]
+    if not src.paths["combine"]:  # every requested season predates the combine data (2000)
+        return _materialize(con, table, _empty_select(table), stats, arules)
+    _, inner = _source_select(con, _without_computed(table), src, stats)
+    con.execute(_combine_links_sql(inner))
+    _stage_combine_suspects(con)
+    cols = ", ".join(
+        "CASE WHEN l.fits AND l.n_fit_rows = 1 THEN l.gsis_id END AS gsis_id"
+        if c.computed
+        else f"s.{sc.q(c.name)}"
+        for c in table.columns
+    )
+    key = ("season", "player_name", "school", "pos")
+    on = " AND ".join(f"l.{k} IS NOT DISTINCT FROM s.{k}" for k in key)
+    sql = f"SELECT {cols} FROM ({inner}) s LEFT JOIN _combine_links l ON {on}"
+    out = _materialize(con, table, sql, stats, arules)
+    n = con.execute("""
+        SELECT count(*) FILTER (WHERE pfr IS NULL),
+               count(*) FILTER (WHERE pfr IS NOT NULL AND gsis_id IS NULL),
+               count(*) FILTER (WHERE gsis_id IS NOT NULL AND NOT fits),
+               count(*) FILTER (WHERE fits AND n_fit_rows > 1)
+        FROM _combine_links""").fetchone()
+    out.notes["gsis_id_null_reasons"] = dict(
+        zip(("no_pfr_id", "pfr_id_not_in_bridge", "link_does_not_fit_combine_year",
+             "pfr_id_on_several_fitting_rows"), n, strict=True)
+    )  # fmt: skip
+    for by in ("season", "pos"):
+        rows = con.execute(
+            f"SELECT {by}, count(*), count(gsis_id) FROM fact_combine GROUP BY 1 ORDER BY 1"
+        ).fetchall()
+        out.notes[f"gsis_match_by_{by}"] = {str(k): [t, m] for k, t, m in rows}
+    out.notes["n_rows_without_gsis_id"] = con.execute(
+        "SELECT count(*) FROM fact_combine WHERE gsis_id IS NULL"
+    ).fetchone()[0]
+    con.execute("DROP TABLE _combine_links")
+    return out
+
+
 def _build_dim_player(
     con: duckdb.DuckDBPyConnection,
     src: SourceFiles,
@@ -1371,6 +1516,10 @@ def build_warehouse(
                 _build_fact_ranking(
                     con, src, seasons, stats["fact_ranking_kdst"], arules, kdst=True
                 )
+                # I1a: Next Gen Stats (game-matched) and the combine (PFR ids via the bridge)
+                for name in av.NGS_TABLES:
+                    _build_fact_ngs_week(con, name, src, stats[name], arules)
+                _build_fact_combine(con, src, stats["fact_combine"], arules)
                 # after every event table: an undrafted player exists from his first row
                 _build_dim_player(con, src, stats["dim_player"], arules)
                 _build_id_reports(con, seasons, stats, arules)

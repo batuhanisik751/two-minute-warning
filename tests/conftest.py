@@ -300,6 +300,35 @@ RANKINGS_ALL_DTYPES: dict[str, pl.DataType] = {
 }
 
 
+# Combine (2000+) and Next Gen Stats (2016+), I1a: the columns the tests use (others are NULL).
+COMBINE_DTYPES: dict[str, pl.DataType] = {
+    "season": pl.Int32(), "draft_year": pl.Float64(), "draft_team": pl.String(),
+    "draft_round": pl.Float64(), "draft_ovr": pl.Float64(), "pfr_id": pl.String(),
+    "cfb_id": pl.String(), "player_name": pl.String(), "pos": pl.String(), "school": pl.String(),
+    "ht": pl.String(), "wt": pl.Float64(), "forty": pl.Float64(), "vertical": pl.Float64(),
+}  # fmt: skip
+NGS_ID_DTYPES: dict[str, pl.DataType] = {
+    "season": pl.Int32(), "season_type": pl.String(), "week": pl.Int32(),
+    "player_display_name": pl.String(), "player_position": pl.String(),
+    "team_abbr": pl.String(), "player_gsis_id": pl.String(),
+}  # fmt: skip
+NGS_DTYPES: dict[str, dict[str, pl.DataType]] = {
+    "ngs_passing": {**NGS_ID_DTYPES, "attempts": pl.Int32(), "avg_time_to_throw": pl.Float64()},
+    "ngs_rushing": {**NGS_ID_DTYPES, "rush_attempts": pl.Int32(),
+                    "rush_yards_over_expected": pl.Float64()},
+    "ngs_receiving": {**NGS_ID_DTYPES, "targets": pl.Int32(), "avg_separation": pl.Float64()},
+}  # fmt: skip
+NGS_FIRST_SEASON = 2016
+COMBINE_FIRST_SEASON = 2000
+
+
+def ngs_row(g: Mapping[str, Any], gsis_id: str, team: str, **kw: Any) -> dict[str, Any]:
+    """One NGS row for game ``g`` (its week and season type; ``week=0`` for season totals)."""
+    return {"season": g["season"], "season_type": "REG" if g["game_type"] == "REG" else "POST",
+            "week": g["week"], "player_display_name": f"P {gsis_id}", "player_position": "WR",
+            "team_abbr": team, "player_gsis_id": gsis_id, **kw}  # fmt: skip
+
+
 def frame(rows: list[Mapping[str, Any]], dtypes: Mapping[str, pl.DataType]) -> pl.DataFrame:
     """Build a typed frame from partial row dicts (missing keys -> NULL)."""
     cols = list(dtypes)
@@ -516,6 +545,8 @@ class RawCache:
         opportunity: list[dict[str, Any]] | None = None,
         opportunity_pass: list[dict[str, Any]] | None = None,
         opportunity_rush: list[dict[str, Any]] | None = None,
+        combine: list[dict[str, Any]] | None = None,
+        ngs: Mapping[str, list[dict[str, Any]]] | None = None,
     ) -> None:
         """Write every per-season dataset a build needs, with sensible tiny defaults."""
         self.write("schedules", season, frame(games, SCHEDULE_DTYPES))
@@ -608,6 +639,19 @@ class RawCache:
             if not isinstance(rosters, pl.DataFrame):
                 rosters = frame(rosters, ROSTERS_WEEKLY_DTYPES)
             self.write("rosters_weekly", season, rosters)
+        if season >= COMBINE_FIRST_SEASON:  # one prospect without a PFR page by default
+            if combine is None:
+                combine = [{"season": season, "player_name": "Gamma Three", "pos": "WR",
+                            "school": "State", "ht": "6-1", "wt": 200.0, "forty": 4.5}]  # fmt: skip
+            self.write("combine", season, frame(combine, COMBINE_DTYPES))
+        if season >= NGS_FIRST_SEASON:  # one row per family in the first game by default
+            ngs = dict(ngs or {})
+            first = min(games, key=lambda g: (g["week"], g["game_id"]))
+            for ds, dtypes in NGS_DTYPES.items():
+                rows = ngs.get(ds)
+                if rows is None:
+                    rows = [ngs_row(first, "00-0000002", first["home_team"])]
+                self.write(ds, season, frame(rows, dtypes))
 
     def write_globals(self) -> None:
         self.write("teams", None, default_teams())

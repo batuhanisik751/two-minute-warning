@@ -201,7 +201,7 @@ def test_config_dir_override_and_reload(tmp_path, monkeypatch):
 def test_availability_block_loads_and_is_validated():
     a = settings().availability
     assert a.game_data_lag_hours == {"pbp": 6, "player_stats": 6, "team_stats": 6,
-                                     "snap_counts": 6}  # fmt: skip
+                                     "snap_counts": 6, "ngs": 6}  # fmt: skip
     assert a.game_result_lag_hours == 3
     assert a.schedule_release_month_day == "05-20"
     assert a.schedule_slot_lead_days == 12

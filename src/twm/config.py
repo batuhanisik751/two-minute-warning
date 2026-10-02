@@ -30,8 +30,9 @@ class Paths(BaseModel):
     models: str = "models"  # trained production models (twm.modules.waiver_radar.production)
 
 
-# Datasets whose rows are stamped "game end + lag" (twm.warehouse.available).
-GAME_DATA_DATASETS = ("pbp", "player_stats", "team_stats", "snap_counts")
+# Datasets whose rows are stamped "game end + lag" (twm.warehouse.available); "ngs" = the three
+# Next Gen Stats families (I1a), which also wait for the nightly NGS run.
+GAME_DATA_DATASETS = ("pbp", "player_stats", "team_stats", "snap_counts", "ngs")
 MAX_GAME_DATA_LAG_HOURS = 48
 WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 

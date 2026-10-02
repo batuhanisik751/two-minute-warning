@@ -504,7 +504,9 @@ moment the whole row was public, and every estimate errs late.
 | `fact_ranking` (C1) | the day after `scrape_date`, 00:00 UTC | The scrape's time of day is unknown (A3 proposed 12:00 UTC the same day; the end of the day errs later). The Tuesday as-of therefore sees the previous Friday's weekly ranking |
 | `fact_opportunity_week` (C3, ffopportunity weekly) | the row's game end + `game_data_lag_hours.pbp` (6 h), joined on `game_id`, like play-by-play (the A3 proposal was a per-week constant; per game is what the other game-data tables do, so a split-week game waits for its own end) | The 2026 asset is rebuilt 16 minutes after `play_by_play_2026` (GitHub releases API, 2026-09-28, section 9). Every row's `game_id` is in the schedule; 113 rows (split-week games) are public only after their own week's as-of. |
 | `fact_opportunity_pass`, `fact_opportunity_rush` (D1, ffopportunity per play) | the row's game end + `game_data_lag_hours.pbp` (6 h), joined on `game_id`: the same moment as its `fact_play` play | They come from the same ffopportunity run as the weekly file (which is their per-player sum, section 9), rebuilt right after play-by-play. Checked on a build: every row's `available_at` equals its play's. 395 pass and 332 rush rows (split-week games) are public only after their week's as-of. |
-| draft, combine, participation (not in the warehouse yet) | A3 proposals, to implement when those tables are added: draft/combine the draft day / March; participation Feb 15 of the next year (never in-season) | |
+| `fact_ngs_*_week` (I1a, Next Gen Stats) | weekly rows: the latest of game end + `game_data_lag_hours.ngs` (6 h) and the first 10:00 UTC after the game end; week 0 (regular-season totals): the same on the season's last game | §11: NGS is refreshed "nightly 03:00-05:00 ET" (= 09:00 UTC in EDT, 10:00 UTC in EST). Every weekly row 2016-2026 matches one game (§16). The 2026 file written Tuesday 2026-09-29 14:18 UTC already holds week 3's Monday-night game (PHI at CHI), consistent with the rule (10:15 UTC). |
+| `fact_combine` (I1a) | 00:00 UTC on the first day of that year's draft (2000-2026, §16); an unlisted season May 15. The draft columns are masked until May 15 (`draft_public_month_day`) | The A3 proposal ("the draft day / March"): the draft day, the later of the two, since 2021's rows are pro-day results whose dates no fixed March or April day is known to bound (§16) |
+| draft picks, participation (not in the warehouse yet) | A3 proposals, to implement when those tables are added: draft picks the draft day; participation Feb 15 of the next year (never in-season) | |
 
 Verified on a full 1999-2026 build (2026-09-27, rebuilt after the B2 review): no event row has
 a NULL `available_at`; for
@@ -641,3 +643,47 @@ Verified on the full 1999-2026 cache (2026-09-27) while building `fact_roster_we
   30-42 rostered QB/RB/WR/TE per as-of whose season-final status is RES although they play later
   that season (507, 507 and 712 player-as-of rows; 2016: 149, legitimately returning players).
   An open question for the owner (docs/waiver_radar.md "Known limits of the features").
+
+## 16. Combine and Next Gen Stats (I1a, checked 2026-10-02)
+
+Verified on the cache (`data/raw/combine` 2000-2026, `data/raw/ngs_*` 2016-2026; the 2026
+files written 2026-09-29 14:18 UTC) and on a full 1999-2026 build:
+
+- **NGS week 0 = regular-season totals.** Every week-0 row is `season_type` REG; its
+  receptions equal the REG sum of player_stats receptions on 1,243 of 1,251 rows (2016-2025;
+  REG + POST would match only when the player had no playoff catches). The 2026 week-0 rows are
+  season to date (weeks 1-3), so the value is overwritten all season. 30 week-0 rows of 2021
+  have a NULL `team_abbr`.
+- **NGS week numbers.** REG weeks 1-17/18 as the schedule; POST 18, 19, 20, 22 (2016-2020) and
+  19, 20, 21, 23 (2021-2025): the Super Bowl is one week later than in nflverse's schedule
+  (21 / 22). Every weekly row (24,971) matches exactly one schedule game on season, season
+  type, team and week (Super Bowl at week - 1); team codes are current except `LAR` (= LA).
+- **NGS volume floors** (smallest weekly values 2016-2026): 15 pass attempts, 10 rushes, 5
+  targets. `player_position` changes over time (Patterson WR 2016-2018, RB 2021-2023), so it is
+  the position of the time. Every `player_gsis_id` is in `players`.
+- **NGS timing.** §11: "nightly 03:00-05:00 ET". The 2026 file written Tuesday 14:18 UTC
+  already holds week 3's Monday-night game (PHI at CHI, 2026-09-28 20:15 ET), consistent with
+  the rule (public 10:15 UTC Tuesday).
+- **Combine content.** 2000-2026, 319-337 rows a year except 2021 (464): the 2021 combine had no
+  on-field workouts ("all on-field workouts will be conducted at on-campus pro days", ESPN,
+  2021-01-18, https://africa.espn.com/nfl/story/_/id/30738093), so 2021 is pro-day data.
+  `(season, player_name, school, pos)` is unique. `pfr_id` is NULL on 1,531 rows; `draft_*` are
+  NULL on every 2026 row (the 2026 draft was in April; the cache is from September). PFR links
+  namesakes: 8 rows carry another player's draft (`draft_year` <> `season`) and 17 PFR ids sit
+  on two combine rows (34 rows). Only `vertical` has fractions (halves).
+- **Draft dates** (first day, from each "<year> NFL draft" Wikipedia infobox, read 2026-10-02;
+  `available.DRAFT_FIRST_DAY`): 2000 Apr 15, 2001 Apr 21, 2002 Apr 20, 2003 Apr 26, 2004 Apr 24,
+  2005 Apr 23, 2006 Apr 29, 2007 Apr 28, 2008 Apr 26, 2009 Apr 25, 2010 Apr 22, 2011 Apr 28,
+  2012 Apr 26, 2013 Apr 25, 2014 May 8 (to May 10, the latest), 2015 Apr 30, 2016 Apr 28,
+  2017 Apr 27, 2018 Apr 26, 2019 Apr 25, 2020 Apr 23, 2021 Apr 29 (to May 1), 2022 Apr 28,
+  2023 Apr 27, 2024 Apr 25, 2025 Apr 24, 2026 Apr 23. The earliest first day is 2000-04-15,
+  and every draft ended before May 15 (`draft_public_month_day`).
+- **Why the draft day and not one fixed date.** A fixed date would have to be on or before
+  April 15 (the 2000 draft) and after every measurement; 2021's measurements come from pro days
+  whose dates are not in the data, so no fixed day can be shown to follow all of them. The
+  draft's first day (00:00 UTC, 20:00 ET the evening before) is after every combine and pro
+  day and before every pick.
+- **Combine id links** (full build): 7,028 of 8,968 rows get a gsis_id; drafted rows
+  2000-2025 5,363 of 5,546 (96.7%). The fit check drops 24 links (drafted another year, or a
+  debut before the combine or more than 6 seasons after it) and 12 rows sharing one id. Details
+  and per-season/position rates: docs/warehouse.md "Combine and Next Gen Stats".

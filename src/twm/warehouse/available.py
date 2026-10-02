@@ -100,6 +100,33 @@ DERIVED_GAME_DATA_TABLES: dict[str, tuple[str, ...]] = {
     "fact_kicker_week": ("player_stats",),
     "fact_defense_week": ("team_stats", "pbp"),
 }
+# I1a: Next Gen Stats. A weekly row is public after its game like the other game data (game end
+# + game_data_lag_hours.ngs) and never before the NGS nightly run that follows the game: the
+# nflverse schedule article gives "nightly 03:00-05:00 ET" (docs/assumptions.md section 11),
+# and 05:00 ET is 09:00 UTC (EDT) or 10:00 UTC (EST), so the first 10:00 UTC after the game's
+# end errs late in both. Week 0 (the regular season's totals) waits for the season's last game.
+NGS_LAG_KEY = "ngs"
+NGS_TABLES: dict[str, str] = dict(sc.NGS_WEEK_TABLES)
+NGS_NIGHTLY_RUN_DONE_UTC = timedelta(hours=10)  # time of day, UTC
+
+# I1a: the first day of each NFL draft, from the infobox of Wikipedia's "<year> NFL draft"
+# page (https://en.wikipedia.org/wiki/<year>_NFL_draft, read 2026-10-02; docs/assumptions.md
+# section 16). A combine row is public from 00:00 UTC that day: 20:00 ET the evening before, so
+# before the first pick whatever the start time, and after every combine (February-March) and
+# 2021 pro day (the draft needs them). A season missing here falls back to
+# draft_public_month_day (May 15, after every draft's last day), which errs later still.
+DRAFT_FIRST_DAY: dict[int, date] = {
+    2000: date(2000, 4, 15), 2001: date(2001, 4, 21), 2002: date(2002, 4, 20),
+    2003: date(2003, 4, 26), 2004: date(2004, 4, 24), 2005: date(2005, 4, 23),
+    2006: date(2006, 4, 29), 2007: date(2007, 4, 28), 2008: date(2008, 4, 26),
+    2009: date(2009, 4, 25), 2010: date(2010, 4, 22), 2011: date(2011, 4, 28),
+    2012: date(2012, 4, 26), 2013: date(2013, 4, 25), 2014: date(2014, 5, 8),
+    2015: date(2015, 4, 30), 2016: date(2016, 4, 28), 2017: date(2017, 4, 27),
+    2018: date(2018, 4, 26), 2019: date(2019, 4, 25), 2020: date(2020, 4, 23),
+    2021: date(2021, 4, 29), 2022: date(2022, 4, 28), 2023: date(2023, 4, 27),
+    2024: date(2024, 4, 25), 2025: date(2025, 4, 24), 2026: date(2026, 4, 23),
+}  # fmt: skip
+DRAFT_AVAILABLE_AT = "draft_available_at"
 
 # fact_schedule columns that can still change after the spring release (flexed or moved games,
 # Week 17/18 slots chosen late, venue moves): hidden in the as-of view until slot_available_at.
@@ -162,7 +189,9 @@ class AvailabilityRules:
     """``config/settings.yaml`` -> ``availability`` as plain values."""
 
     game_data_lag: Mapping[str, timedelta] = field(
-        default_factory=lambda: {ds: timedelta(hours=6) for ds in GAME_DATA_TABLES.values()}
+        default_factory=lambda: {
+            ds: timedelta(hours=6) for ds in (*GAME_DATA_TABLES.values(), NGS_LAG_KEY)
+        }
     )
     game_result_lag: timedelta = timedelta(hours=3)
     schedule_release_month: int = 5
@@ -467,6 +496,40 @@ TABLE_AVAILABILITY: dict[str, Availability] = {
             "game_id.",
             week_key=_SW,
         ),
+        *(
+            Availability(
+                name,
+                "event",
+                "A weekly Next Gen Stats row is public after its game like the other game data "
+                "(game end + game_data_lag_hours.ngs, 6 h, joined on game_id) and never before "
+                "the nightly NGS run after the game (03:00-05:00 ET, so the first 10:00 UTC after "
+                "the game end). Week 0 (the regular season's totals, cumulative and refreshed "
+                "in season) only after the season's last scheduled game, the same way (the "
+                "Super Bowl once the playoffs are scheduled). Expected-value columns are NGS "
+                "model outputs (spec 6.3).",
+                week_key=_SW,
+            )
+            for name in NGS_TABLES
+        ),
+        Availability(
+            "fact_combine",
+            "event",
+            "A combine row (measurements, position, school) is public before the draft: from "
+            "00:00 UTC on the first day of that year's draft (DRAFT_FIRST_DAY, Wikipedia, "
+            "2000-2026; a later season without a listed date: draft_public_month_day, May 15). "
+            "The draft columns (draft_year, draft_team, draft_round, draft_ovr) are only known "
+            "after the draft: NULL in the as-of view until draft_available_at (May 15, like "
+            "dim_player). pfr_id and gsis_id exist mostly for players who later reached the NFL "
+            "(identifiers, never features).",
+            masked_columns=sc.COMBINE_DRAFT_COLUMNS,
+            masked_until=DRAFT_AVAILABLE_AT,
+            extra_columns={
+                DRAFT_AVAILABLE_AT: "UTC time from which the draft columns (draft_year, "
+                "draft_team, draft_round, draft_ovr) count as public: "
+                "availability.draft_public_month_day (May 15) of the season, after every "
+                "draft's last day; the as-of view shows them as NULL before that",
+            },
+        ),
         Availability(
             "fact_injury_report",
             "event",
@@ -743,6 +806,15 @@ def _kickoff(alias: str) -> str:
     return f"({alias}.availability_game_end_utc - {_interval(wk.GAME_DURATION_EST)})"
 
 
+def ngs_nightly_run_sql(t: str) -> str:
+    """The first NGS_NIGHTLY_RUN_DONE_UTC (10:00 UTC) strictly after the timestamp ``t``."""
+    done = _interval(NGS_NIGHTLY_RUN_DONE_UTC)
+    return (
+        f"(CAST(date_trunc('day', {t} - {done}) AS TIMESTAMP) + {done} + "
+        f"{_interval(timedelta(days=1))})"
+    )
+
+
 # When a game's result is public: its (availability) end + game_result_lag.
 def _result_public(alias: str, rules: AvailabilityRules) -> str:
     return f"({alias}.availability_game_end_utc + {_interval(rules.game_result_lag)})"
@@ -794,6 +866,52 @@ def available_at_sql(table: str, rules: AvailabilityRules) -> AvailabilitySQL:
         if table == "fact_defense_week":  # points allowed come from the final score
             expr = f"GREATEST({expr}, {_result_public('_g', rules)})"
         return AvailabilitySQL(expr=expr, joins="LEFT JOIN fact_game _g ON _g.game_id = s.game_id")
+
+    if table in NGS_TABLES:
+        # the game's end; week 0 (season totals): the season's last game end
+        end = "(CASE WHEN s.week = 0 THEN _l.last_end ELSE _g.availability_game_end_utc END)"
+        after_lag = f"({end} + {_interval(rules.game_data_lag[NGS_LAG_KEY])})"
+        nightly = ngs_nightly_run_sql(end)
+        return AvailabilitySQL(
+            expr=f"GREATEST({after_lag}, {nightly})",
+            joins="""
+            LEFT JOIN fact_game _g ON _g.game_id = s.game_id
+            LEFT JOIN (
+                SELECT season, max(availability_game_end_utc) AS last_end
+                FROM fact_game GROUP BY season
+            ) _l ON s.week = 0 AND _l.season = s.season""",
+            branch=(
+                f"CASE WHEN {end} IS NULL THEN 'unplaced' "
+                "WHEN s.week = 0 THEN 'week0_after_season_last_game' "
+                f"WHEN {after_lag} >= {nightly} THEN 'game_end_plus_lag' "
+                "ELSE 'next_nightly_run' END"
+            ),
+            branches=(
+                "game_end_plus_lag",
+                "next_nightly_run",
+                "week0_after_season_last_game",
+                "unplaced",
+            ),
+        )
+
+    if table == "fact_combine":
+        listed = " ".join(
+            f"WHEN {y} THEN TIMESTAMP '{d.isoformat()} 00:00:00'"
+            for y, d in sorted(DRAFT_FIRST_DAY.items())
+        )
+        fallback = (
+            f"make_timestamp(s.season, {rules.draft_public_month}, {rules.draft_public_day}, "
+            "0, 0, 0)"
+        )
+        return AvailabilitySQL(
+            expr=f"(CASE s.season {listed} ELSE {fallback} END)",
+            extra=((DRAFT_AVAILABLE_AT, fallback),),
+            branch=(
+                f"CASE WHEN s.season IN ({', '.join(str(y) for y in DRAFT_FIRST_DAY)}) "
+                "THEN 'draft_first_day' ELSE 'unlisted_season_draft_public_day' END"
+            ),
+            branches=("draft_first_day", "unlisted_season_draft_public_day"),
+        )
 
     if table == "fact_schedule":
         release = (

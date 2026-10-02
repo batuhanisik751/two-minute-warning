@@ -34,7 +34,9 @@ availability:
   # 2021-2025, only 0.5 h for the 1999-2005 guessed night kickoffs and exactly 0 h for the
   # 1999-2002 Monday-night finales). The build stops if a lag drops any row of a non-split week
   # from its Tuesday as-of, or a finale row from the end-of-season snapshot.
-  game_data_lag_hours: {pbp: 6, player_stats: 6, team_stats: 6, snap_counts: 6}
+  # ngs (Next Gen Stats, I1a): also never before 10:00 UTC after the game (nightly NGS run,
+  # 03:00-05:00 ET); week 0 season totals wait for the season's last game.
+  game_data_lag_hours: {pbp: 6, player_stats: 6, team_stats: 6, snap_counts: 6, ngs: 6}
   # A fact_game row (final score) is public this long after the estimated game end
   # (kickoff + 4 h): weather delays and overtime can push real games past kickoff + 4 h, so the
   # final score waits 3 h more. Checked on the data: for every 2020+ game with a reliable play

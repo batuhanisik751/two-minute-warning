@@ -1,4 +1,4 @@
-# The warehouse (Steps B1-B3, C1, C3, D1, S1)
+# The warehouse (Steps B1-B3, C1, C3, D1, S1, I1a)
 
 `twm build 2025 2026` (or `--start 1999`) turns the Parquet cache in `data/raw/` into one
 DuckDB file, `data/warehouse.duckdb` (gitignored). The build is written to
@@ -32,8 +32,8 @@ real cache (`uv run pytest -m realdata`, never download; they build into a tempo
 "PK" is the primary key: the columns that identify one row. Uniqueness is checked after every build
 and a violation stops the build with `PrimaryKeyError` naming the table, the key and example rows.
 Every *event* table (all `fact_*` and `coach_*` tables and `dim_coach`) also has an
-`available_at` column, always the last one (`fact_schedule` stores `slot_available_at` just
-before it, `dim_player` stores `public_from_utc` last): see "When is a row available?" below.
+`available_at` column, always the last one (`fact_schedule` stores `slot_available_at` and
+`fact_combine` `draft_available_at` just before it, `dim_player` stores `public_from_utc` last): see "When is a row available?" below.
 
 | Table | One row is... | PK | Source |
 |---|---|---|---|
@@ -53,6 +53,8 @@ before it, `dim_player` stores `public_from_utc` last): see "When is a row avail
 | `fact_roster_week` | one player on one weekly roster (2002+, C1): team, **point-in-time position**, status (ACT, INA, DEV practice squad, RES, CUT ...), `entry_year`, draft pick. The source of positions and of "who is on a roster"; its `available_at` depends on the season's snapshot kind (below). `rookie_year` is hidden point-in-time | `season, week, gsis_id` | rosters_weekly |
 | `fact_ranking` | one player on one FantasyPros QB/RB/WR/TE ranking page on one scrape day (C1): `page_kind` = `preseason` (redraft cheat sheet), `ros` (rest of season) or `weekly`; `page_pos` the page's position; ECR, `pos_rank` (rank among the page position's players), rostership `player_owned_avg` / `player_owned_espn` / `player_owned_yahoo`; `gsis_id` through `bridge_player_id` (NULL when unmatched). Built seasons only (`season`: the scrape's year from March, the year before in January-February) | `scrape_date, ecr_type, page_kind, page_pos, fantasypros_id` | ff_rankings_all |
 | `fact_ranking_kdst` | the same as `fact_ranking` for the FantasyPros K and DST pages (S1b): one kicker or team defense on one K/DST ranking page on one scrape day (preseason cheat sheets every season from 2020; `ros` and `weekly` pages too), with `pos_rank`, rostership, `gsis_id` for kickers (NULL for DST) and `nfl_team`, the team as the rest of the warehouse spells it (JAC -> JAX, LAR -> LA, OAK -> LV, `FA` -> NULL): a DST row's entity. The 2019-12 to 2020-10 short-form K pages' `PK` is written `K` | `scrape_date, ecr_type, page_kind, page_pos, fantasypros_id` | ff_rankings_all |
+| `fact_ngs_passing_week`, `fact_ngs_rushing_week`, `fact_ngs_receiving_week` | one player in one Next Gen Stats week of one stat family (I1a, 2016+), every published column (separation, cushion, intended air yards, rush yards over expected, time to throw, completion % above expectation ...): weekly rows only for players with at least 15 attempts / 10 rushes / 5 targets that week, plus `week` 0 = the regular season's totals. `game_id` (the matched game; NULL for week 0) and `gsis_id` (the NGS id when it is a known player) are added; `team_abbr` uses current codes. See "Combine and Next Gen Stats" below | `player_gsis_id, season, season_type, week` | ngs_passing / ngs_rushing / ngs_receiving |
+| `fact_combine` | one player at one NFL Scouting Combine (I1a, 2000+; 2021 = pro-day results): height (`ht` and `height_in`), weight, 40, bench, vertical, broad jump, 3-cone, shuttle, `pos`, `school`, PFR's draft record of the linked player (`draft_year/team/round/ovr`, hidden point-in-time until May 15) and `gsis_id` through `bridge_player_id` (PFR id), NULL when the link does not fit the combine year. See "Combine and Next Gen Stats" below | `season, player_name, school, pos` | combine |
 | `dim_team` | one of the 36 nflverse team rows; `current_abbr` maps OAK→LV, SD→LAC, STL→LA, LAR→LA; `is_current` is false for those four | `team_abbr` | teams |
 | `dim_player` | one player from nflverse's player table, with one id per other system (`pfr_id`, `espn_id`, `sleeper_id`, `fantasypros_id`, `yahoo_id`, `sportradar_id`, `mfl_id`, all from `bridge_player_id`, see "Player IDs") and `public_from_utc`, the moment he exists point-in-time (his draft, or his first public data row). `dim_team` and `dim_player` are snapshots of the one-file datasets (`all.parquet`) (manifest `seasons` = `[]`) and change whenever `twm ingest` refreshes them; since B3 the ids and `public_from_utc` also use the built seasons' weekly rosters and facts | `gsis_id` | players (+ bridge) |
 | `bridge_player_id` | one id of another system (`id_type`, `source_id`) and the `gsis_id` it belongs to, with the `method` that linked it, `n_candidates` and `is_conflict`; see "Player IDs" | `id_type, source_id` | players, rosters_weekly, ff_playerids, data/manual |
@@ -210,6 +212,76 @@ team-game), and D/ST points against four games scored by hand from the play desc
 2023_01_DAL_NYG DAL 32, 2023_02_CLE_PIT CLE 7 (14 allowed after two giveaway TDs),
 2023_14_LA_BAL BAL 7 (overtime punt return TD), 2023_09_IND_CAR CAR 4 (15 allowed after two
 pick-sixes).
+
+### Combine and Next Gen Stats (`fact_combine`, `fact_ngs_*_week`, I1a)
+
+Inputs of the Cliff & Breakout Board (spec 8.6): athletic testing for prospects and NGS
+efficiency (separation, rush yards over expected) from 2016. Code: `schema.fact_combine_spec`,
+`schema.fact_ngs_week_spec`, `build._build_fact_combine` / `_build_fact_ngs_week`, rules in
+`available.py`; tests `tests/test_combine_ngs_warehouse.py` (synthetic, plus `realdata`).
+
+**NGS: three tables, not one.** Passing, rushing and receiving share only the identifying
+columns (season, week, player, team); one table would be about 60 columns, mostly NULL, and
+would need a `stat_family` key. Each table keeps every published column under its own name.
+Facts checked on the cache (2016-2026, 2026-10-02):
+
+- key `(player_gsis_id, season, season_type, week)` is unique; `player_gsis_id` is never NULL
+  and always a known player (`gsis_id` = it; NULL would mean unknown, 0 rows);
+- weekly rows exist only above a volume floor (15 attempts / 10 rushes / 5 targets, the
+  smallest values seen), so a missing week is not a zero;
+- `week` 0 is the **regular season's totals** (`season_type` REG): its receptions equal the
+  REG sum of `fact_player_week` on 1,243 of 1,251 rows 2016-2025. It is cumulative and refreshed
+  in season (the 2026 rows hold weeks 1-3), so only the value after the season is safe; 30
+  rows of 2021 have no team upstream;
+- POST weeks are numbered 18-20 + 22 (2016-2020) and 19-21 + 23 (2021+): NGS puts the Super
+  Bowl one week after the schedule. `game_id` is matched on season, season type, team (home or
+  away) and week, the Super Bowl at NGS week - 1: every one of the 24,971 weekly rows matches
+  exactly one game (a row without a game stops the build);
+- `player_position` is point-in-time (Cordarrelle Patterson WR 2016-2018, RB 2021-2023;
+  Taysom Hill QB 2020-2021, TE 2024), so it stays visible;
+- expected-value columns (`expected_rush_yards`, `rush_yards_over_expected*`,
+  `rush_pct_over_expected`, `expected_completion_percentage`,
+  `completion_percentage_above_expectation`, `avg_expected_yac`, `avg_yac_above_expectation`)
+  are NGS model outputs (spec 6.3).
+
+**Combine.** One row per player per combine (2000-2026), key `(season, player_name, school,
+pos)` (unique; duplicates would be dropped and counted). `season` is the draft the player
+entered; 2021 had no in-person workouts, so its 464 rows are pro-day results. PFR's draft
+record of the linked player (`draft_year`, `draft_team` as a full name, `draft_round`,
+`draft_ovr` = overall pick) is NULL for every 2026 row in the 2026-09-29 cache. `height_in` is
+parsed from `ht` ('6-3' -> 75). `vertical` has half inches; `wt`, `bench` and `broad_jump` are
+whole numbers.
+
+`gsis_id` comes from the PFR id through `bridge_player_id` and is kept only when the link fits:
+a drafted player must have been drafted in the combine's year, an undrafted one must debut
+0-6 seasons later (the longest real gap, a punter, is 6; the next, 8, is a namesake), and no
+other combine row may claim the same id. PFR links namesakes (Mike Edwards, a 2013 Hawaii CB,
+carries the 2019 Kentucky safety's id and draft record; Stanford Samuels (2004) and Stanford
+Samuels III (2020) share one id). Rows the check rejects are `suspect` rows of `report_id_unmatched`
+(dataset `fact_combine`) and count as unmatched in `report_id_coverage`; a manual override
+fixes a link. Match rates on the full build (`build_manifest.notes`):
+
+| Rows | With a gsis_id |
+|---|---|
+| all 8,968 | 7,028 (78.4%); NULL: 1,531 without a PFR id, 373 PFR ids no id table knows, 24 links that do not fit the year, 12 ids on several fitting rows |
+| drafted in the combine's year, 2000-2025 | 5,363 of 5,546 (96.7%); QB/RB/WR/TE 1,712 of 1,773 (96.6%). The misses are mostly 2000-2010 picks without a PFR id who never played (a lookup by draft slot finds only 14 of the 183 in nflverse's player table) |
+| undrafted, 2000-2025 | 1,436 of 3,095 (46.4%): most never reached an NFL roster, so no gsis_id exists |
+| by season | 2000 66.7% (214/321), 2005 70.4%, 2010 82.2%, 2015 83.2%, 2020 92.9% (313/337), 2021 54.5% (253/464, pro days list more fringe prospects), 2025 81.2% (267/329), 2026 71.8% (229/319) |
+| by position | QB 72.3%, RB 80.1%, WR 77.0%, TE 82.4%; lowest K 50.4%, P 49.7%, LS 43.8% |
+
+**Availability.** NGS weekly rows: game end + `game_data_lag_hours.ngs` (6 h), never before
+the first 10:00 UTC after the game end (the nightly NGS run is 03:00-05:00 ET); week 0: the
+same on the season's last scheduled game (the Super Bowl once the playoffs are in the
+schedule). A Sunday 13:00 game's row is public Monday 10:00 UTC, a Monday-night game's at
+10:15 UTC Tuesday, before the 14:00 UTC as-of; the official-snapshot check covers the three
+tables. Combine rows: 00:00 UTC on the draft's first day (`available.DRAFT_FIRST_DAY`, cited
+in docs/assumptions.md section 16), and the four draft columns are NULL in the as-of view until
+`draft_available_at` (May 15, `draft_public_month_day`, as for `dim_player`). Accepted
+hindsight: a PFR id or gsis_id exists mostly for prospects who later reached the NFL, so their
+presence says something about the future; they are identifiers (never features, spec 6.2
+rule 5), and features should join the combine from the player side (`dim_player`, which only
+exists point-in-time from the draft). `dim_player.public_from_utc` does not use combine rows
+(an undrafted prospect still appears from his first game data).
 
 ### `fact_depth_chart`
 
@@ -387,6 +459,8 @@ guess. "Kickoff" is game end minus 4 h (the real kickoff, or the late night-slot
 | `fact_schedule.slot_available_at` (gates `gameday`, `weekday`, `gametime`, `kickoff_utc`, `kickoff_is_estimated`, `location`, `stadium`, `away_rest`, `home_rest`) | the latest of: the row's `available_at`; kickoff − `schedule_slot_lead_days` (12); for the last two regular-season weeks the previous week's as-of; for a listed change, its kickoff | Date, time and venue can still change after the release: games are flexed with 12 days' notice, and Week 17/18 slots are picked after the previous week. The as-of view shows these columns as NULL until then; who plays whom and the week number stay visible. |
 | `fact_play`, `fact_player_week`, `fact_team_week`, `fact_snaps`, `fact_opportunity_week`, `fact_opportunity_pass`, `fact_opportunity_rush` | the row's game (joined on `game_id`) end + `game_data_lag_hours` (6 h each; the three ffopportunity tables use the play-by-play lag, `pbp`, so a play and its expected values always become public together) | nflverse publishes game data in a nightly run after the game. Each row uses its own game, never a per-week constant, so a game moved to Tuesday or Wednesday (the split weeks) is not visible at its week's Tuesday as-of and is at the next. ffopportunity's weekly file is rebuilt right after play-by-play (the 2026 asset was updated 16 minutes after `play_by_play_2026`: docs/assumptions.md section 9). |
 | `fact_kicker_week`, `fact_defense_week` (S1) | the row's game end + the largest `game_data_lag_hours` of the datasets it is built from (`player_stats` for kickers; `team_stats` and `pbp` for D/ST: 6 h each), and for D/ST never before the final score is public (game end + `game_result_lag_hours`) | They are slices and combinations of game data, so they become public exactly when their inputs do. Registered in `available.DERIVED_GAME_DATA_TABLES`; the official-snapshot check covers them. |
+| `fact_ngs_*_week` (I1a) | weekly rows: the latest of game end + `game_data_lag_hours.ngs` (6 h) and the first 10:00 UTC after the game end; week 0 (season totals): the same rule applied to the season's last game (the Super Bowl) | The nflverse schedule article gives NGS "nightly 03:00-05:00 ET": 05:00 ET is 09:00 UTC (EDT) or 10:00 UTC (EST), so 10:00 UTC errs late in both; a Sunday 13:00 game's row waits for Monday 10:00 UTC instead of Sunday 23:00 ET. Monday night still makes the Tuesday as-of (10:15 UTC); the official-snapshot check covers these tables. Week 0 is cumulative and refreshed in season, so only the final value after the season is safe |
+| `fact_combine` (I1a) | 00:00 UTC on the first day of that year's draft (`available.DRAFT_FIRST_DAY`, 2000-2026 from Wikipedia); an unlisted season: May 15 (`draft_public_month_day`). Draft columns: `draft_available_at` = May 15 of the season | The combine (February-March) and 2021's pro days are over before the draft; 00:00 UTC is 20:00 ET the evening before the first pick. PFR's draft record of the player is known only after the draft, like `dim_player` |
 | `fact_injury_report` | 2021-2024 rows with `date_modified`: that stamp. 2010-2020 rows with a stamp: the stamp + `injury_legacy_stamp_offset_hours` (9 h). Otherwise (2009, the 62 null rows of 2010, 2025+): the team's kickoff that week. A team without a game that week: the week's `asof_weekly_utc`. Then never earlier than 1 s after the **previous** week's as-of | `date_modified` is the row's last change, observed. From 2021 the stamps are real UTC; the 2010-2020 ones are not (their time of day does not move with daylight saving time, see `docs/assumptions.md` section 4), so they count 9 h later. The final report is always out by kickoff. The floor enforces spec 6.1: week N+1 reports are not available at the Tuesday as-of after week N. |
 | `fact_depth_chart` | daily rows (2025+): `dt`. Legacy weekly rows (2001-2024): that week's `asof_weekly_utc` minus 6 days, the Wednesday 14:00 UTC before the week's games. REG rows whose week has no REG week (the post-finale chart) use the week with the same number (Wild Card); SBBYE rows use the Super Bowl week | Week N's chart is visible at the as-of after week N and week N+1's is not (as-ofs are at least 7 days apart). The orphan mappings are later than the charts' real dates. |
 | `fact_roster_week` | per season, from the data: **game-day** snapshots (2016 on): week N's roster at week N's `asof_weekly_utc`; **post-game** snapshots (2002-2015): at week N+1's as-of, the season's last week at its own as-of + 7 days. The build measures, among players who played in week N (a snap or stat row), the share whose week-N status is not ACT; above `availability.roster_postgame_share_threshold` (1%) the season is post-game (`notes.regime_by_season`) | A post-game roster shows moves made after the games (a player who played Sunday shows RES): 6.6%-9.8% of players who played are not ACT in 2002-2015, 0%-0.18% in 2016-2026. Such a roster can contain moves made after the Tuesday as-of, so it waits a week. Consequence: in 2002-2015 no roster is public at the week-1 as-of |
@@ -727,16 +801,18 @@ share of rows that map, `id_match_rate` = share of distinct ids) and `report_id_
 (every unmatched id with a name, position, first/last season and row count, plus the
 `suspect`, `ambiguous`, `conflict`, `name_link` and `multiple_ids` rows; an unmatched id the
 bridge knows something about says so in `detail`). Snap rows the usage check left without a
-gsis_id count as unmatched. Datasets: the warehouse's `fact_snaps` (PFR),
+gsis_id count as unmatched, and so do combine rows whose PFR link the I1a check left NULL.
+Datasets: the warehouse's `fact_snaps` and `fact_combine` (PFR),
 `fact_depth_chart[daily_no_gsis]` (daily rows without an upstream gsis_id: how many the ESPN id
-rescues), `fact_player_week`, `fact_injury_report`, `fact_play` (passer/rusher/receiver; `gsis`
-ids: is the id in `dim_player`?), and straight from the raw cache (read from the Parquet files,
+rescues), `fact_player_week`, `fact_injury_report`, `fact_play` (passer/rusher/receiver) and
+`fact_ngs_{passing,rushing,receiving}_week` (`gsis` ids: is the id in `dim_player`?), and
+straight from the raw cache (read from the Parquet files,
 never fetched; a dataset or season that is not cached is skipped and listed in
 `notes.coverage_datasets_skipped`): FantasyPros rankings (`ff_rankings_all[rp]` and `[wp]` per
 scrape year, `ff_rankings_week`, `ff_rankings_draft`; team defenses left out, and for
 `ff_rankings_all` the IDP pages (`db`, `dl`, `lb`, `idp`), which sometimes list an offensive
 player), `ff_opportunity`,
-`pfr_pass/rush/rec`, `ngs_*`, `draft_picks` (gsis and PFR ids) and `combine` (PFR ids). Scope
+`pfr_pass/rush/rec` and `draft_picks` (gsis and PFR ids). Scope
 `fantasy` = QB/RB/WR/TE rows of datasets that have a position.
 
 `ff_rankings_all[rp_preseason_pool]` is the Waiver Radar candidate pool: per season 2020-2026,

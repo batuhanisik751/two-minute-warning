@@ -707,3 +707,30 @@ Checked on the full 1999-2026 build (details and definitions: `docs/board.md`):
   10+ carries). RYOE is NULL upstream for 2016-2017.
 - **Market baseline**: preseason FantasyPros ECR exists from 2020 (the 2019 preseason pages were
   scraped only from January 2020); it is expert consensus, not ADP.
+
+## 18. Board later snapshots: depth charts and the draft (I2a/I2b, checked 2026-10-02)
+
+Checked on the full 1999-2026 build (definitions: `docs/board.md`, "Preseason snapshot" and
+"Post-draft snapshot"):
+
+- **2017's week-1 chart has 30 teams.** The only 2002-2024 season whose legacy week-1 REG chart
+  lacks a team: 2017 week 1 has 15 regular-season games in `fact_game`, and MIA-TB was played in
+  week 11 (kickoff 2017-11-19 18:00 UTC). MIA and TB have week-2 charts. The I2a code reads week
+  1 only, so at the preseason snapshot of S = 2016 every MIA and TB player is `dc_absent` (and
+  their chart features NULL); a fallback to a team's first chart of the season is not built.
+- **Daily pulls number ranks across slots.** In the daily pull the 2025 week-1 chart uses
+  (`dt` 2025-09-04 07:21:47 UTC, the last before the as-of 2025-09-04 23:20 UTC), the offense
+  WRs sit in three slots (`pos_slot` 1, 2, 8; all 32 teams) whose `depth_rank` runs 1-7, 2-8 and
+  3-9: the starter of slot 2 is rank 2, of slot 8 rank 3, and only slot 1 has a rank 1. Legacy
+  charts rank within the slot (two or three WRs share rank 1), so I2a renumbers a daily pull's
+  rank within (team, unit, position, `pos_slot`) in the pull's order. 2025 has 221 pulls
+  (2025-08-03 to 2026-03-14); the latest one visible at the as-of is used.
+- **Draft visibility.** A drafted player's `dim_player.public_from_utc` is exactly 00:00 UTC on
+  May 15 of his draft year (`draft_public_month_day`; checked 2014, 2021, 2025, 2026), later than
+  every recorded draft's first day + 3 days (the latest first day: 2014-05-08), so the post-draft
+  as-of is May 15 every season. `draft_pick` is the overall pick (1 to 256-259).
+- **Draft positions.** `dim_player.position` is hidden (today's); the pick's `fact_combine`
+  position of the draft year is used: 4,809 of 5,716 drafted rows 2003-2025 have one (74-91% a
+  year). No warehouse table was added for the raw `draft_picks` file.
+- **Team codes.** `draft_team` and every fact table use today's franchise code (2014, 2016,
+  2019 picks and stat lines read LA, LAC, LV), so a pick matches his S team's stat-line code.

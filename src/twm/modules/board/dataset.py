@@ -8,6 +8,7 @@ S+1 labels (:func:`twm.modules.board.populations.add_labels`). Written (git-igno
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import polars as pl
@@ -75,23 +76,53 @@ def build_preseason_dataset(
     """Step I2a: the same rows and labels read at the PRESEASON snapshot of each S (one hour
     before the first week-1 kickoff of S+1; :mod:`twm.modules.board.preseason`). A season whose
     as-of has not passed yet is skipped."""
-    from datetime import UTC, datetime
-
     from twm.modules.board import preseason as pre
 
+    return _later(db, "preseason", lambda s: pre.preseason_as_of(db, s), pre.preseason_features,
+                  xfp_games, departures, seasons, progress)  # fmt: skip
+
+
+def build_post_draft_dataset(
+    db: Path | str,
+    *,
+    xfp_games: pl.DataFrame | None,
+    departures: bf.Departures,
+    seasons: list[int] | None = None,
+    progress: Progress | None = None,
+) -> pl.DataFrame:
+    """Step I2b: the same rows and labels read at the POST-DRAFT snapshot of each S (after the
+    S+1 draft; :mod:`twm.modules.board.post_draft`). A season whose as-of has not passed yet is
+    skipped."""
+    from twm.modules.board import post_draft as pd_
+
+    return _later(db, "post-draft", pd_.post_draft_as_of, pd_.post_draft_features, xfp_games,
+                  departures, seasons, progress)  # fmt: skip
+
+
+def _later(
+    db: Path | str,
+    name: str,
+    as_of: Callable[[int], datetime],
+    build: Callable[..., pl.DataFrame],
+    xfp_games: pl.DataFrame | None,
+    departures: bf.Departures,
+    seasons: list[int] | None,
+    progress: Progress | None,
+) -> pl.DataFrame:
+    """The rows of every snapshot season read at ``as_of(S)`` by ``build`` (I2a / I2b)."""
     say = progress or (lambda _m: None)
     done = complete_seasons(db)
     parts = []
     for s in sorted(seasons or done):
         try:
-            at = pre.preseason_as_of(db, s)
+            at = as_of(s)
         except bs.SeasonNotOverError:
             continue
         if at > datetime.now(UTC):
             continue
         with AsOfView(db, at) as v:
-            parts.append(pre.preseason_features(v, s, xfp_games=xfp_games, departures=departures))
-        say(f"preseason {s} ({at:%Y-%m-%d %H:%M} UTC): {parts[-1].height} players")
+            parts.append(build(v, s, xfp_games=xfp_games, departures=departures))
+        say(f"{name} {s} ({at:%Y-%m-%d %H:%M} UTC): {parts[-1].height} players")
     return _labelled(db, pl.concat(parts, how="vertical"), max(done))
 
 

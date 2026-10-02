@@ -1649,6 +1649,27 @@ def _board_entries() -> list[Entry]:
     out += [Entry(name=n, title=t, kind="feature", modules=("board",), unit=u, formula=f,
                   explanation=e, source="twm.modules.board.preseason", step="I2a")
             for n, t, u, f, e in pre]  # fmt: skip
+    pdr = [
+        ("draft_pos_count_pd", "Draft picks at his position", "count",
+         "picks of his S team in the S+1 draft (dim_player draft fields, public May 15) whose "
+         "combine position of that year is his (RB: RB/HB); NULL when no pick is visible",
+         "His team drafted competition."),
+        ("draft_pos_best_round_pd", "Best round drafted at his position", "round (1 = first)",
+         "the lowest draft_round among those picks; NULL when there is none",
+         "How much capital the competition cost."),
+        ("draft_pos_best_pick_pd", "Best pick drafted at his position", "overall pick",
+         "the lowest overall draft_pick among those picks; NULL when there is none",
+         "How much capital the competition cost."),
+        ("draft_qb_r1_pd", "Rookie first-round QB", "boolean",
+         "his S team drafted a combine-listed QB in round 1 of the S+1 draft",
+         "A new quarterback may start."),
+        ("draft_unplaced_pd", "Unplaced early pick", "boolean",
+         "his S team made a round 1-3 pick of that draft with no combine row (position unknown "
+         "point-in-time)", "The draft counts may miss a pick at his position."),
+    ]  # fmt: skip
+    out += [Entry(name=n, title=t, kind="feature", modules=("board",), unit=u, formula=f,
+                  explanation=e, source="twm.modules.board.post_draft", step="I2b")
+            for n, t, u, f, e in pdr]  # fmt: skip
     labels = [
         ("y_cliff", "Cliff", "PPG in S+1 <= 70% of PPG in S with 6+ games in S+1 (Cliff "
          "population: 3+ prior seasons, top-36 PPG at his position with 8+ games in S); NULL "

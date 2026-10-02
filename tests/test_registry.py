@@ -54,6 +54,7 @@ def test_available_features_are_real_columns():
     twm.modules.streamer.features) or the Hot-Seat's (H3a), or one of the per-game values
     it computes from warehouse columns (snap share = offense_pct, carry share, xFP, FPOE)."""
     from twm.modules.board.features import FEATURES as BOARD_FEATURES
+    from twm.modules.board.post_draft import NEW_FEATURES as BOARD_POST_DRAFT
     from twm.modules.board.preseason import NEW_FEATURES as BOARD_PRESEASON
     from twm.modules.decisions.conversion import FEATURES as GO_FEATURES
     from twm.modules.decisions.fieldgoal import FEATURES as FG_FEATURES
@@ -65,8 +66,8 @@ def test_available_features_are_real_columns():
 
     cols = set().union(*warehouse_columns().values())
     computed = {"offense_snap_share", "carry_share", "xfp", "fpoe", *STREAMER_FEATURES,
-                *WP_FEATURES, *WP_SMOOTH, *GO_FEATURES, *FG_FEATURES,
-                *HOT_SEAT_FEATURES, *BOARD_FEATURES, *BOARD_PRESEASON}  # fmt: skip
+                *WP_FEATURES, *WP_SMOOTH, *GO_FEATURES, *FG_FEATURES, *HOT_SEAT_FEATURES,
+                *BOARD_FEATURES, *BOARD_PRESEASON, *BOARD_POST_DRAFT}  # fmt: skip
     for e in rg.entries(kind="feature", status="available"):
         assert e.name in cols or e.name in computed or e.name in FEATURE_COLUMNS, e.name
     # every streamer feature is registered for the streamer, and nothing else is
@@ -82,9 +83,9 @@ def test_available_features_are_real_columns():
     hot_seat = {e.name for e in rg.REGISTRY.values() if e.kind == "feature"
                 and "hot_seat" in e.modules}  # fmt: skip
     assert hot_seat == set(HOT_SEAT_FEATURES)
-    # I1b/I2a: every board feature (+ the preseason ones) is registered for the board module
+    # I1b/I2a/I2b: every board feature (+ the preseason and post-draft ones) is registered
     board = {e.name for e in rg.REGISTRY.values() if e.kind == "feature" and "board" in e.modules}
-    assert board == {*BOARD_FEATURES, *BOARD_PRESEASON}
+    assert board == {*BOARD_FEATURES, *BOARD_PRESEASON, *BOARD_POST_DRAFT}
 
 
 def test_every_waiver_radar_feature_is_registered():

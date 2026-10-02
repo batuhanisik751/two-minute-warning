@@ -26,6 +26,7 @@ import polars as pl
 
 from twm.backtest.walkforward import WalkForwardResult, walk_forward
 from twm.modules.board import models as bm
+from twm.modules.board import post_draft as pdr
 from twm.modules.board import preseason as pre
 from twm.modules.hot_seat.models import InnerCvLogit, Spec, neg_log_loss
 
@@ -45,22 +46,27 @@ class Variant:
     ecr_kind: str  # how the ECR baseline scores the rows: "fall" or "rise"
     title: str
     positions: tuple[str, ...] = ()  # breakout: the positions of the rows (empty: all)
-    snapshot: str = "end_of_season"  # or "preseason" (I2a: + preseason.NEW_FEATURES)
+    snapshot: str = "end_of_season"  # or "preseason" (I2a) / "post_draft" (I2b): + NEW_FEATURES
 
     @property
     def models(self) -> list[str]:
         return list(self.specs)
 
 
-SNAPSHOTS = ("end_of_season", "preseason")
+SNAPSHOTS = ("end_of_season", "preseason", "post_draft")
+# the features each later snapshot adds to every model (the PPG-rank baseline excepted)
+EXTRA_FEATURES: dict[str, tuple[str, ...]] = {
+    "end_of_season": (), "preseason": pre.NEW_FEATURES, "post_draft": pdr.NEW_FEATURES,
+}  # fmt: skip
 
 
 def variants(snapshot: str = "end_of_season") -> dict[str, Variant]:
-    """The five variants; at the ``preseason`` snapshot every model (the PPG-rank baseline
-    excepted) also gets :data:`twm.modules.board.preseason.NEW_FEATURES` (step I2a)."""
+    """The five variants; at the ``preseason`` (step I2a) and ``post_draft`` (step I2b)
+    snapshots every model (the PPG-rank baseline excepted) also gets that snapshot's
+    :data:`EXTRA_FEATURES`."""
     if snapshot not in SNAPSHOTS:
         raise ValueError(f"unknown snapshot {snapshot!r}")
-    x = pre.NEW_FEATURES if snapshot == "preseason" else ()
+    x = EXTRA_FEATURES[snapshot]
     cliff = bm.specs((*bm.CLIFF_FEATURES, *x), "y_cliff")
     sens = bm.specs((*bm.CLIFF_FEATURES, *x), "y_cliff_or_missed")
     return {

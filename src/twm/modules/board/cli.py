@@ -28,9 +28,11 @@ def _dataset(db: Path, progress, snapshot: str = "end_of_season") -> object:
     deps = bf.read_departures(settings().path("manual") / DEPARTURES_CSV)
     progress(f"departures: {deps.rows.height} rows, {deps.n_blank_date} blank dates "
              f"({deps.n_blank_unknown} never counted as known)")  # fmt: skip
-    if snapshot == "preseason":  # step I2a
-        df = bd.build_preseason_dataset(db, xfp_games=xfp, departures=deps, progress=progress)
-        path = bd.write_dataset(df, ROOT / bd.OUT_DIR, "dataset_preseason.parquet")
+    if snapshot in ("preseason", "post_draft"):  # steps I2a / I2b
+        pre = snapshot == "preseason"
+        build = bd.build_preseason_dataset if pre else bd.build_post_draft_dataset
+        df = build(db, xfp_games=xfp, departures=deps, progress=progress)
+        path = bd.write_dataset(df, ROOT / bd.OUT_DIR, f"dataset_{snapshot}.parquet")
     else:
         df = bd.build_dataset(db, xfp_games=xfp, departures=deps, progress=progress)
         path = bd.write_dataset(df, ROOT / bd.OUT_DIR)
@@ -70,8 +72,9 @@ def backtest_cmd(
     snapshot: str = typer.Option(
         "end_of_season",
         "--snapshot",
-        help="end_of_season (I1b) or preseason (I2a: 1 h before week 1 of S+1; also runs the "
-        "end-of-season variants for the comparison; writes reports/board/preseason_*).",
+        help="end_of_season (I1b), preseason (I2a: 1 h before week 1 of S+1) or post_draft (I2b: "
+        "May 15 of S+1, after the draft); a later snapshot also runs the end-of-season variants "
+        "for the comparison and writes reports/board/<snapshot>_*.",
     ),
 ) -> None:
     """Rebuild the dataset, run the walk-forward of every variant (snapshots 2007-2024, labels
@@ -100,14 +103,14 @@ def backtest_cmd(
     cache = ROOT / "data/board/runs" if resume else None
     reps = br.run_all(df, path, tuple(variant) or None, progress=say, cache=cache)
     prefix = ""
-    if snapshot == "preseason":
+    if snapshot != "end_of_season":
         eos = {n: r.run.scored.select("season", "gsis_id", pl.col(f"p_{r.primary}").alias("p_eos"))
                for n, r in reps.items()}  # fmt: skip
-        pre = _dataset(path, say, "preseason")
+        pre = _dataset(path, say, snapshot)
         assert isinstance(pre, pl.DataFrame)
         reps = br.run_all(pre, path, tuple(variant) or None, progress=say, cache=cache,
-                          snapshot="preseason", eos=eos)  # fmt: skip
-        prefix = "preseason_"
+                          snapshot=snapshot, eos=eos)  # fmt: skip
+        prefix = f"{snapshot}_"
     con = duckdb.connect(str(path), read_only=True)
     try:  # names for the report's tables only (never a feature)
         names = con.sql("SELECT gsis_id, display_name FROM dim_player").pl()

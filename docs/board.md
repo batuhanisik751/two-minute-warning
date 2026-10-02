@@ -6,8 +6,8 @@ The board answers two offseason questions for fantasy drafts:
 - **Breakout**: which young WR/TE (and, reported apart, RB) will become a fantasy starter?
 
 I1b builds the populations, labels, features, models and an honest walk-forward backtest
-(`reports/board/cliff.md`, `reports/board/breakout.md`). The post-draft and preseason snapshots and
-the `/board` page are step I2. Code: `src/twm/modules/board/`; run `uv run twm board backtest`.
+(`reports/board/cliff.md`, `reports/board/breakout.md`). The preseason (I2a) and post-draft (I2b)
+snapshots are below; the `/board` page is step I2c. Code: `src/twm/modules/board/`; run `uv run twm board backtest`.
 
 ## Season-level numbers
 
@@ -135,6 +135,55 @@ I1b's; every model except the PPG-rank baseline gets the eight features. `eos` i
 same rows, compared with paired season-block intervals; the ECR is the same preseason scrape,
 now taken about when this snapshot is.
 
+## Post-draft snapshot (step I2b)
+
+Same rows and labels as the end-of-season snapshot of S, read after the S+1 draft (module
+`twm.modules.board.post_draft`, code `twm board backtest --snapshot post_draft`). **As-of**:
+00:00 UTC on the day after the draft's last day, taken as its first day + 3 days because only
+first days are recorded (`available.DRAFT_FIRST_DAY`, docs/assumptions.md section 16), or later:
+`dim_player` shows a drafted player only from `availability.draft_public_month_day` (May 15) of
+his draft year, so its draft fields would be hidden before then. Every draft 2003-2026 began by
+May 8, so the as-of is **May 15 00:00 UTC of S+1** for every snapshot (the rule's date; it errs
+late, and is before the spec's June 1). Every I1b feature is recomputed at that moment; only
+`hc_departure` changes (37 rows: NO 2011 and TB 2021, announced after the end-of-season
+snapshot). It is this snapshot's **head-coach change announced by the as-of** (his S team; no new
+column, never NULL). The new features (NULL when the S+1 draft has no pick visible at the as-of,
+which never happens 2003-2026; NULL inputs get the models' missing indicators):
+
+- **The picks**: `dim_player` rows with `draft_year` = S+1 (`draft_team`, `draft_round`, overall
+  `draft_pick`). A pick's position is his `fact_combine` `pos` of that year (public from the
+  draft's first day): `dim_player.position` is today's and hidden point-in-time, and the raw
+  `draft_picks` file is not a warehouse table (not added: the combine covers the early skill
+  picks, below). Team codes are today's franchise codes in both, so they match.
+- `draft_pos_count_pd`: picks of his S team (his last regular-season game's) at his position
+  (RB: RB or HB). `draft_pos_best_round_pd` / `draft_pos_best_pick_pd`: the best (lowest) round
+  and overall pick among them; NULL when there is none.
+- `draft_qb_r1_pd`: his S team drafted a combine-listed QB in round 1.
+- `draft_unplaced_pd` (the missing flag of the counts): his S team made a round 1-3 pick with no
+  combine row of that year, so the pick may be at his position and uncounted. Of the drafted
+  `dim_player` rows 2003-2025, 4,809 of 5,716 (84%; 74-91% a year) have a combine position; of the
+  round 1-3 picks whose position is QB, RB, WR or TE today, all have one in 18 of those 23 drafts,
+  all but 1-3 in four (2003, 2007, 2017, 2018) and 25 of 32 in 2021 (the pro-day year).
+- **Not features**: team changes by free agency or trade. The warehouse has no dated
+  transactions (weekly rosters exist only in season), so a move between the Super Bowl and the
+  as-of is not observable point-in-time; it is not approximated.
+
+Results (2026-10-02 run; `reports/board/post_draft_{cliff,breakout}.md`, primary models, PR-AUC
+with 95% season-block intervals; `eos` = the end-of-season primary on the same rows, paired):
+
+| variant | post-draft PR-AUC | vs `eos` | ECR era (labels 2020-2025): vs ECR |
+|---|---|---|---|
+| Cliff main | logit 0.359 [0.312, 0.411] | -0.003 [-0.016, +0.009] | 0.414 vs 0.503: -0.088 [-0.145, -0.018] |
+| Missed | logit_simple 0.388 [0.330, 0.448] | +0.004 [-0.015, +0.029] | 0.362 vs 0.570: -0.207 [-0.353, -0.094] |
+| Cliff or missed | logit 0.534 [0.490, 0.580] | -0.000 [-0.009, +0.009] | 0.554 vs 0.689: -0.135 [-0.189, -0.069] |
+| Breakout WR/TE | logit 0.231 [0.174, 0.334] | -0.004 [-0.050, +0.022] | 0.319 vs 0.315: +0.003 [-0.062, +0.116] |
+| Breakout RB | logit 0.198 [0.128, 0.312] | -0.036 [-0.100, -0.000] | 0.218 vs 0.378: -0.160 [-0.455, +0.027] |
+
+In words: the draft adds nothing measurable to the end-of-season models (every Cliff difference
+is within +/-0.01; the Breakout RB model is slightly worse), and the experts' preseason ECR,
+taken three to four months later, still wins on the Cliff variants. The week-1 depth chart
+(preseason snapshot) is where offseason information helps.
+
 ## Models and evaluation
 
 - `logit`: L2 logistic regression = the Hot-Seat `InnerCvLogit` (the Radar's `LogitEstimator`;
@@ -184,6 +233,12 @@ gives some back), running back, fewer games, age and the aging curve, workload.
   positives and top-k hits per season) and `_features.csv` (mean importance per fold). About 30 s
   on an idle Mac; `--resume` keeps each finished variant in `data/board/runs/` so a long run can be
   split.
-- `notebooks/05_cliff_breakout.ipynb`: the populations, labels and backtest, read from those files.
+- `notebooks/05_cliff_breakout.ipynb`: the populations, labels and backtest, read from those files,
+  and the later snapshots' paired differences and top inputs (`reports/board/{post_draft,preseason}_*`).
+- `uv run twm board backtest --snapshot preseason|post_draft [--resume]`: also builds
+  `data/board/dataset_{preseason,post_draft}.parquet` and writes `reports/board/{preseason,post_draft}_*`
+  (the end-of-season variants run first, for the paired `eos` comparison).
 - Tests: `tests/test_board.py` (synthetic world in `tests/board_world.py`; the realdata test runs the
-  leakage harness on the real warehouse at the 2016 snapshot).
+  leakage harness on the real warehouse at the 2016 snapshot), `tests/test_board_preseason.py`,
+  `tests/test_board_post_draft.py` (its realdata test runs the harness at the 2016 preseason and
+  post-draft as-ofs).

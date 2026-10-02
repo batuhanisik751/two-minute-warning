@@ -340,6 +340,20 @@ PRESEASON_INTRO = {
     "cliff": ["# Cliff backtest at the preseason snapshot (step I2a)", "", _PRE, ""],
     "breakout": ["# Breakout backtest at the preseason snapshot (step I2a)", "", _PRE, ""],
 }
+_PD = (
+    "Step I2b: the same rows and labels as the end-of-season report, read at the POST-DRAFT "
+    "snapshot (00:00 UTC May 15 of S+1, the day the project's rule makes the draft public; "
+    "point in time): every I1b feature (head-coach departures now known through the as-of) plus "
+    "the draft capital his S team added at his position, a first-round rookie QB and a flag for "
+    'picks with no known position (docs/board.md, "Post-draft snapshot"). Free-agency and trade '
+    "moves are not observable point-in-time and are not features. `eos` = the end-of-season "
+    "report's primary model on the same rows; the ECR (2020+) is still taken months later (the "
+    "last August/September scrape before week 1), so it knows more than the model."
+)
+POST_DRAFT_INTRO = {
+    "cliff": ["# Cliff backtest at the post-draft snapshot (step I2b)", "", _PD, ""],
+    "breakout": ["# Breakout backtest at the post-draft snapshot (step I2b)", "", _PD, ""],
+}
 CAVEATS = [
     "## Read before trusting", "",
     "- Intervals resample whole seasons (18 in `all`, 6 in `ecr_era`): the ECR-era intervals are "
@@ -359,8 +373,9 @@ def write_reports(
     reps: dict[str, VariantReport], out_dir: Path, names: pl.DataFrame, prefix: str = ""
 ) -> list[Path]:
     """reports/board/{prefix}{cliff,breakout}.md, .csv (metrics), _seasons.csv and _features.csv
-    for the populations with a variant in ``reps`` (prefix "preseason_": step I2a)."""
-    intro = PRESEASON_INTRO if prefix else INTRO
+    for the populations with a variant in ``reps`` (prefix "preseason_": step I2a;
+    "post_draft_": step I2b)."""
+    intro = {"preseason_": PRESEASON_INTRO, "post_draft_": POST_DRAFT_INTRO}.get(prefix, INTRO)
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
     for pop, names_ in POPULATIONS.items():

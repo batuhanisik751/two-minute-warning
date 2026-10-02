@@ -768,6 +768,22 @@ How much of the team's downfield passing is aimed at him.
 - **Source:** twm.modules.waiver_radar.features; fact_player_week.air_yards_share
 - **Waiver Radar reason:** "Got {value:.0%} of his team's air yards (throws down the field) over the last {weeks} games"
 
+### Best pick drafted at his position
+
+How much capital the competition cost.
+
+- **Name:** `draft_pos_best_pick_pd`; **unit:** overall pick; **used by:** board
+- **Formula:** the lowest overall draft_pick among those picks; NULL when there is none
+- **Source:** twm.modules.board.post_draft
+
+### Best round drafted at his position
+
+How much capital the competition cost.
+
+- **Name:** `draft_pos_best_round_pd`; **unit:** round (1 = first); **used by:** board
+- **Formula:** the lowest draft_round among those picks; NULL when there is none
+- **Source:** twm.modules.board.post_draft
+
 ### Broad jump
 
 Explosiveness.
@@ -943,6 +959,14 @@ Draft capital, finer than the round.
 - **Name:** `drafted_pick`; **unit:** overall pick; **used by:** board
 - **Formula:** dim_player.draft_pick; NULL undrafted
 - **Source:** twm.modules.board.features
+
+### Draft picks at his position
+
+His team drafted competition.
+
+- **Name:** `draft_pos_count_pd`; **unit:** count; **used by:** board
+- **Formula:** picks of his S team in the S+1 draft (dim_player draft fields, public May 15) whose combine position of that year is his (RB: RB/HB); NULL when no pick is visible
+- **Source:** twm.modules.board.post_draft
 
 ### Draft round
 
@@ -1697,6 +1721,14 @@ The team drafted its quarterback of the future: owners tend to be patient.
 - **Formula:** a QB (fact_roster_week.position) on the team's latest visible weekly roster of the season (status not CUT/RET/UFA/TRD) was a first-round pick of this year's draft (dim_player draft_round = 1, draft_year = season); NULL without a visible roster
 - **Source:** twm.modules.hot_seat.features
 
+### Rookie first-round QB
+
+A new quarterback may start.
+
+- **Name:** `draft_qb_r1_pd`; **unit:** boolean; **used by:** board
+- **Formula:** his S team drafted a combine-listed QB in round 1 of the S+1 draft
+- **Source:** twm.modules.board.post_draft
+
 ### Rookie target share
 
 An early role is the strongest sign of a coming breakout.
@@ -2068,6 +2100,14 @@ Not drafted.
 - **Name:** `undrafted`; **unit:** boolean; **used by:** board
 - **Formula:** no draft round in dim_player
 - **Source:** twm.modules.board.features
+
+### Unplaced early pick
+
+The draft counts may miss a pick at his position.
+
+- **Name:** `draft_unplaced_pd`; **unit:** boolean; **used by:** board
+- **Formula:** his S team made a round 1-3 pick of that draft with no combine row (position unknown point-in-time)
+- **Source:** twm.modules.board.post_draft
 
 ### Vacated carries
 

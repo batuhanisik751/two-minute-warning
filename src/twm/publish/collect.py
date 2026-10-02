@@ -805,9 +805,9 @@ def model_versions(store: Path, versions: Sequence[str]) -> pl.DataFrame:
 
 
 # Modules with registry entries but no page on the site yet: their terms stay out of the published
-# glossary until the module ships (Hot-Seat until step H4b; the board until its web step, I2c:
-# its tables publish from step I2c-a on, its terms only with the page).
-UNPUBLISHED_MODULES: frozenset[str] = frozenset({"board"})
+# glossary until the module ships (Hot-Seat until step H4b; the board until its web step, I2c-b).
+# Empty: every module's terms publish.
+UNPUBLISHED_MODULES: frozenset[str] = frozenset()
 
 
 def glossary() -> pl.DataFrame:

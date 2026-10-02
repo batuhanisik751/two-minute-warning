@@ -12,6 +12,7 @@
 //   record), for the empty states.
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as s from "../db/schema";
+import { seedBoard } from "./seed-board";
 import { seedDecisions } from "./seed-decisions";
 import { seedHotSeat } from "./seed-hot-seat";
 import { MODULES_SEED, seedModules } from "./seed-modules";
@@ -298,6 +299,8 @@ export async function seed(db: Db, variant: SeedVariant): Promise<void> {
   await seedDecisions(db);
   // the Hot-Seat Meter (tests/seed-hot-seat.ts; needs the decisions seed's coaches)
   await seedHotSeat(db);
+  // the Cliff board (tests/seed-board.ts; uses this seed's players and teams)
+  await seedBoard(db);
 }
 
 function rotateFeatured<T extends { gsisId: string }>(pool: T[], at: number): T[] {

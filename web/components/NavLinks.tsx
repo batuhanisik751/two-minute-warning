@@ -9,6 +9,7 @@ export const NAV = [
   { href: "/regression", label: "Regression" },
   { href: "/decisions", label: "Decisions" },
   { href: "/hot-seat", label: "Hot seat" },
+  { href: "/board", label: "Board" },
   { href: "/track-record", label: "Track record" },
   { href: "/methodology", label: "Methodology" },
 ] as const;

@@ -2,6 +2,7 @@
 // fixed; against a real publish they are discovered from the pages themselves.
 import { POSITIONS } from "../../lib/method";
 import { SEED } from "../seed";
+import { BOARD_SEED } from "../seed-board";
 import { DECISIONS_SEED } from "../seed-decisions";
 import { HOT_SEAT_SEED } from "../seed-hot-seat";
 import { MODULES_SEED } from "../seed-modules";
@@ -9,7 +10,7 @@ import { DATA, fetchPage } from "./dom";
 
 export type Route = {
   path: string;
-  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record" | "hot-seat" | "coach-hot-seat";
+  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record" | "hot-seat" | "coach-hot-seat" | "board";
 };
 
 export type RouteSet = {
@@ -73,6 +74,14 @@ function seedRoutes(): RouteSet {
       { path: `/hot-seat?season=${HOT_SEAT_SEED.past}&week=4`, kind: "hot-seat" },
       { path: `/hot-seat?season=${HOT_SEAT_SEED.older}`, kind: "hot-seat" },
       ...[HOT_SEAT_SEED.firedAfter, HOT_SEAT_SEED.interim].map((id) => ({ path: `/coach/${id}`, kind: "coach-hot-seat" as const })),
+      // the Cliff board: the default (this season's live board), its reconstructed board, a past
+      // board with final outcomes and the experts' ranks, one position of the board with an
+      // unranked player, the board before the experts' ranks
+      { path: "/board", kind: "board" },
+      { path: `/board?season=${BOARD_SEED.season}&kind=backtest`, kind: "board" },
+      { path: `/board?season=${BOARD_SEED.past[1]}`, kind: "board" },
+      { path: `/board?season=${BOARD_SEED.past[0]}&pos=TE`, kind: "board" },
+      { path: `/board?season=${BOARD_SEED.noEcr}`, kind: "board" },
     ],
     missing: MISSING,
     notes: [],
@@ -151,6 +160,17 @@ async function realRoutes(): Promise<RouteSet> {
     if (hc && !routes.some((r) => r.path === hc)) routes.push({ path: hc, kind: "coach-hot-seat" });
   } else {
     notes.push("no Hot-Seat list: /hot-seat was not checked");
+  }
+  // the Cliff board: the default, the oldest season, one position of the default board
+  const bd = (await fetchPage("/board")).doc;
+  const bs = Array.from(bd.querySelectorAll<HTMLOptionElement>("form[action='/board'] select[name=season] option")).map((o) => o.value);
+  if (bs.length) {
+    routes.push({ path: "/board", kind: "board" });
+    if (bs.length > 1) routes.push({ path: `/board?season=${bs[bs.length - 1]}`, kind: "board" });
+    const tab = bd.querySelector<HTMLAnchorElement>("nav[aria-label=Position] a[data-pos=TE]")?.getAttribute("href");
+    if (tab) routes.push({ path: tab, kind: "board" });
+  } else {
+    notes.push("no board: /board was not checked");
   }
   return { routes, missing: MISSING, notes };
 }

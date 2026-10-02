@@ -4,7 +4,7 @@ import { MiniLabel } from "@/components/ui";
 import { outcomeWords, wholePct, type OutcomeRow } from "@/lib/hot-seat";
 
 /** The estimate as a whole percent with a bar under it (hidden from screen readers). */
-export function EstimateCell({ probability, size = "big" }: { probability: number; size?: "big" | "small" }) {
+export function EstimateCell({ probability, size = "big", label = "Estimated chance" }: { probability: number; size?: "big" | "small"; label?: string }) {
   const w = `${Math.max(0, Math.min(1, probability)) * 100}%`;
   return (
     <span className="block tnum">
@@ -12,7 +12,7 @@ export function EstimateCell({ probability, size = "big" }: { probability: numbe
       <span className="meter mt-1 block" aria-hidden="true">
         <span className="meter-fill meter-estimate" style={{ width: w }} />
       </span>
-      <MiniLabel className="mt-1">Estimated chance</MiniLabel>
+      <MiniLabel className="mt-1">{label}</MiniLabel>
     </span>
   );
 }

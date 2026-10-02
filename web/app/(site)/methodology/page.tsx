@@ -18,6 +18,7 @@ import { getRadarModel } from "@/lib/queries/radar";
 import { getTierStats, getTrackRows, type TrackRow } from "@/lib/queries/track";
 import { SITE_TERMS } from "@/lib/site-terms";
 import DecisionsSection from "@/components/methodology/DecisionsSection";
+import BoardSection from "@/components/methodology/BoardSection";
 import HotSeatSection from "@/components/methodology/HotSeatSection";
 import RegressionSection from "@/components/methodology/RegressionSection";
 import StreamerSection from "@/components/methodology/StreamerSection";
@@ -421,6 +422,9 @@ export default async function MethodologyPage() {
             <a href="#hot-seat">The Hot-Seat Meter</a>
           </li>
           <li>
+            <a href="#board">The Cliff board</a>
+          </li>
+          <li>
             <a href="#glossary">Glossary</a>
           </li>
           <li>
@@ -659,6 +663,8 @@ export default async function MethodologyPage() {
         <DecisionsSection />
 
         <HotSeatSection />
+
+        <BoardSection />
 
         <section aria-labelledby="glossary">
           <h2 id="glossary" className="section-title scroll-mt-24">

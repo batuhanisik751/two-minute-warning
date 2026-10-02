@@ -9,7 +9,7 @@ I1b builds the populations, labels, features, models and an honest walk-forward 
 (`reports/board/cliff.md`, `reports/board/breakout.md`). The preseason (I2a) and post-draft (I2b)
 snapshots are below; the board in production (step I2c-a: the approved models, their frozen
 backtest, `twm board score`, the published tables) is "Production" at the end; the `/board`
-page is step I2c. Code: `src/twm/modules/board/`; run `uv run twm board backtest`.
+page is step I2c-b ("On the site", at the end). Code: `src/twm/modules/board/`; run `uv run twm board backtest`.
 
 ## Season-level numbers
 
@@ -354,8 +354,8 @@ production_cli}.py`, `src/twm/publish/board_lists.py`.
   drivers), `board_outcome` (games and PPG in S1, `y_cliff`, `y_missed`; 'final' / 'pending'),
   `board_track_record` (`preseason_cliff.csv` then `preseason_breakout.csv` row for row) and
   `board_disagreement` (per ECR-era board and model: the model's and the ECR's top-10 picks,
-  both, and how many had the label). The glossary's board terms stay unpublished until the
-  web step (`publish.collect.UNPUBLISHED_MODULES`).
+  both, and how many had the label). The glossary's board terms publish since the web step
+  (I2c-b: `publish.collect.UNPUBLISHED_MODULES` is empty).
 
 **The 2026 board** (scored 2026-10-02, after its as-of, Wed 2026-09-09 23:20 UTC, and frozen
 in the pin: published as reconstructed, kind 'backtest'; outcomes pending until the 2026 season
@@ -366,3 +366,33 @@ rank, scrape of 2026-09-04): Darren Waller TE 79.0% (67.3%, #2; TE33), Kenny Gai
 Knox TE 55.6% (11.3%; TE47), Tyler Higbee TE 51.4% (30.1%; TE48), Zach Ertz TE 50.8% (83.4%, #1;
 TE64), Christian McCaffrey RB 47.2% (2.7%; RB3), George Kittle TE 41.3% (7.1%; TE10), Rico
 Dowdle RB 40.7% (8.3%; RB29).
+
+## On the site (step I2c-b)
+
+`/board` (web/README.md): every published board (2008 on) with a season picker and position
+filters; the newest season's live board by default, else its reconstructed one, labelled. Per
+player, by the chance of a Cliff: both chances side by side as whole percents (never added),
+last season's team, PPG, position rank and games, age, the preseason ECR (2020 on), the three
+drivers of each chance in words, and the outcome once final. "How to read this": what each
+chance means, the timing (the kickoff eve; a live board published earlier from the latest daily
+depth chart must say so in `board_list.note`, step I6), calibration by band (aggregated in SQL
+from the reconstructed rows and final outcomes) and the disagreement record from
+`board_disagreement`. Breakout is not a list: /methodology states its result from the
+`research` rows (words computed from the intervals). Home: a "Cliff watch" card (top 5).
+
+**Where we disagree** (`web/lib/board.ts` `disagreements`, the record's rule on the whole
+board): our top 10 by the Cliff chance (`cliff_rank` <= 10) against the experts' top 10, the
+players whose ECR position rank falls furthest below last season's PPG rank (`ecr_rank -
+pos_rank_s`, largest first; a player the experts did not rank counts as dropped furthest, the
+better last season first; ties by id). In ours only: "we see more risk than the experts"; in
+theirs only: "the experts see more risk than we do"; both or neither: no marker; no marker
+without ECR. The record ranked the Cliff among the players with 6+ games in S1 (the report's
+evaluation rows, known only afterwards), so its groups can differ slightly from the markers; the
+page says so. Record 2020-2025 (Cliff): our picks only 16 of 39 had a Cliff, the experts' picks
+only 14 of 39, both 18 of 21; missed time: 8 of 26, 3 of 26, 28 of 34.
+
+Finding (I2c-b): the published Breakout research rows (the preseason snapshot) show Breakout RB
+ahead of last season's PPG rank on PR-AUC (+0.088 [+0.009, +0.183]) while WR/TE is not
+(+0.006 [-0.061, +0.099]); the owner's decision cited the end-of-season run (RB +0.048
+[-0.054, +0.148]). Neither differs clearly from the ECR in 2020-2025. The page states this
+from the rows; the decision is unchanged.

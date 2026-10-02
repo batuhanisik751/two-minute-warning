@@ -109,3 +109,27 @@ export const HOT_SEAT_RESEARCH = {
   seasons: 20,
   winsVsExpectedOddsRatio: 0.307077,
 } as const;
+
+/** The Cliff board (docs/board.md). Who is on it: at least BOARD_MIN_PRIOR seasons in the league
+ *  before last season and top-BOARD_TOP_PPG at his position in points per game, ranked among
+ *  players with at least BOARD_RANK_MIN_GAMES games (src/twm/modules/board/populations.py
+ *  CLIFF_MIN_PRIOR, CLIFF_TOP; seasons.py MIN_GAMES_RANKED). The Cliff: BOARD_MIN_GAMES+ games next
+ *  season and a drop of at least BOARD_CLIFF_DROP in points per game; missed time: fewer than
+ *  BOARD_MIN_GAMES games (populations.py CLIFF_DROP, MIN_GAMES_NEXT). */
+export const BOARD_MIN_PRIOR = 3;
+export const BOARD_TOP_PPG = 36;
+export const BOARD_RANK_MIN_GAMES = 8;
+export const BOARD_CLIFF_DROP = 0.3;
+export const BOARD_MIN_GAMES = 6;
+/** Drivers per chance (board/production.py N_DRIVERS). */
+export const BOARD_DRIVERS = 3;
+/** The board's as-of: this many hours before the first week-1 kickoff (board/preseason.py
+ *  KICKOFF_EVE_LEAD). */
+export const BOARD_KICKOFF_LEAD_HOURS = 1;
+/** The disagreement record compares each side's top this-many per board (board/evaluation.py
+ *  disagreements `top`); the page's marker uses the same size. */
+export const BOARD_DISAGREE_TOP = 10;
+/** The first board with FantasyPros' preseason expert ranks (evaluation.py ECR_FIRST_SNAPSHOT + 1). */
+export const BOARD_ECR_FIRST_SEASON = 2020;
+/** The calibration bands on /board (lower edges, 0-1). A presentation choice of the site. */
+export const BOARD_BANDS = [0, 0.1, 0.25, 0.5] as const;

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Term from "@/components/Term";
+import BoardTrack from "@/components/track/BoardTrack";
 import DecisionsTrack from "@/components/track/DecisionsTrack";
 import HotSeatTrack from "@/components/track/HotSeatTrack";
 import RadarTrack from "@/components/track/RadarTrack";
@@ -17,6 +18,7 @@ const SECTIONS = [
   { id: "regression", title: "Regression Watch" },
   { id: "decisions", title: "Decision Report Card" },
   { id: "hot-seat", title: "Hot-Seat Meter" },
+  { id: "board", title: "Cliff board" },
 ] as const;
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
@@ -84,6 +86,9 @@ export default function TrackRecordPage() {
         </Section>
         <Section id="hot-seat" title={SECTIONS[4].title}>
           <HotSeatTrack />
+        </Section>
+        <Section id="board" title={SECTIONS[5].title}>
+          <BoardTrack />
         </Section>
       </div>
     </>

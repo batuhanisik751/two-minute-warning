@@ -208,6 +208,47 @@ export const SITE_TERMS: Record<string, TermEntry> = {
       "The three inputs that move this coach's estimate the most, up or down, compared with an average " +
       "coach: the logistic regression's own terms (its weight times how far the value is from average).",
   },
+  // The Cliff board (docs/board.md). Its thresholds are stated on the pages (lib/method.ts BOARD_*,
+  // checked against src/twm/modules/board/populations.py).
+  board_cliff_chance: {
+    name: "board_cliff_chance",
+    title: "Chance of a Cliff",
+    explanation:
+      "The model's estimated chance that the player plays enough games next season to judge and " +
+      "loses a large share of his points per game. It is only meaningful for a player who plays: " +
+      "the chance of missing time is a separate number, and the two are never added together.",
+  },
+  board_missed_chance: {
+    name: "board_missed_chance",
+    title: "Chance of missed time",
+    explanation:
+      "The model's estimated chance that the player plays only a few games next season or none " +
+      "(injury, a benching, a release or retirement), from a separate, simpler model.",
+  },
+  board_ecr: {
+    name: "board_ecr",
+    title: "Experts' preseason rank (ECR)",
+    explanation:
+      "FantasyPros' expert consensus ranking: many fantasy experts' preseason ranks at the " +
+      "position, combined into one, from the last scrape before week 1. It is the experts' " +
+      "consensus, not draft position (ADP), and it exists for recent seasons only.",
+  },
+  board_kind: {
+    name: "board_kind",
+    title: "Live or reconstructed board",
+    explanation:
+      "A live board is made before the season's first kickoff from the data public then, and never " +
+      "changed afterwards. A reconstructed board (backtest) was scored later, from the data as it " +
+      "stood on the eve of week 1: what the model would have said then, not a board anyone saw at the time.",
+  },
+  board_disagree: {
+    name: "board_disagree",
+    title: "Where we disagree",
+    explanation:
+      "A player near the top of our list for a Cliff who is not among the same number of players " +
+      "the experts' ranking drops furthest below last season's finish, or the reverse. The record " +
+      "of past disagreements shows how both kinds turned out.",
+  },
   wp_points: {
     name: "wp_points",
     title: "WP points",

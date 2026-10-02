@@ -8,6 +8,15 @@ import { fileURLToPath } from "node:url";
 import {
   AS_OF_TIME_UTC,
   AS_OF_WEEKDAY,
+  BOARD_CLIFF_DROP,
+  BOARD_DISAGREE_TOP,
+  BOARD_DRIVERS,
+  BOARD_ECR_FIRST_SEASON,
+  BOARD_KICKOFF_LEAD_HOURS,
+  BOARD_MIN_GAMES,
+  BOARD_MIN_PRIOR,
+  BOARD_RANK_MIN_GAMES,
+  BOARD_TOP_PPG,
   CHANCE_RANGE_LEVEL,
   CLOCK,
   END_OF_HALF_SECONDS,
@@ -142,4 +151,26 @@ test("the Hot-Seat research numbers are reports/hot_seat/research.csv's primary 
   assert.equal(r("positive_coach_seasons"), R.positiveCoachSeasons);
   assert.equal(r("n_seasons"), R.seasons);
   assert.equal(row("wins_vs_expected")("odds_ratio"), R.winsVsExpectedOddsRatio);
+});
+
+test("the board's population, labels, drivers, anchor and disagreement size are the Python code's", () => {
+  const num = (f: string, name: string) => {
+    const m = read(`src/twm/modules/board/${f}`).match(new RegExp(`^${name}\\s*=\\s*([0-9.]+)`, "m"));
+    assert.ok(m, `${name} not found in ${f}`);
+    return Number(m[1]);
+  };
+  assert.equal(num("populations.py", "CLIFF_MIN_PRIOR"), BOARD_MIN_PRIOR);
+  assert.equal(num("populations.py", "CLIFF_TOP"), BOARD_TOP_PPG);
+  assert.equal(num("populations.py", "CLIFF_DROP"), BOARD_CLIFF_DROP);
+  assert.equal(num("populations.py", "MIN_GAMES_NEXT"), BOARD_MIN_GAMES);
+  assert.equal(num("seasons.py", "MIN_GAMES_RANKED"), BOARD_RANK_MIN_GAMES);
+  assert.equal(num("production.py", "N_DRIVERS"), BOARD_DRIVERS);
+  assert.equal(num("evaluation.py", "ECR_FIRST_SNAPSHOT") + 1, BOARD_ECR_FIRST_SEASON);
+  const lead = read("src/twm/modules/board/preseason.py").match(/^KICKOFF_EVE_LEAD = timedelta\(hours=(\d+)\)/m);
+  assert.ok(lead, "KICKOFF_EVE_LEAD not found");
+  assert.equal(Number(lead[1]), BOARD_KICKOFF_LEAD_HOURS);
+  const top = read("src/twm/modules/board/evaluation.py").match(/def disagreements\([^)]*top: int = (\d+)/);
+  assert.ok(top, "disagreements top not found");
+  assert.equal(Number(top[1]), BOARD_DISAGREE_TOP);
+  assert.match(read("config/settings.yaml"), /^ {4}preseason: "week1_kickoff_eve"/m);
 });

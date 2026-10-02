@@ -224,8 +224,8 @@ def test_the_publish_family(tmp_path: Path, pinned) -> None:
     """The pin's frozen boards (2008-2025 and the 2026 board frozen at approval) give one list
     per (season, week 0, 'preseason', kind) with every Cliff player and both chances, whatever
     the store holds: a store's reconstructed 2026 board is replaced by the pin's, a live one is
-    kept beside it. The board's tables publish with every module, its glossary terms only with
-    its page (the web step)."""
+    kept beside it. The board's tables and (since its page, step I2c-b) its glossary terms
+    publish with every module."""
     import duckdb
 
     from twm.publish import board_lists as pb
@@ -234,8 +234,8 @@ def test_the_publish_family(tmp_path: Path, pinned) -> None:
 
     fam = FAMILIES["board"]
     assert fam.key == ("season", "week", "snapshot") and fam.row_id == "gsis_id"
-    assert "board" in col.MODULES and "board" in col.UNPUBLISHED_MODULES
-    assert not {"dc_absent", "age_curve_ratio"} & set(col.glossary()["name"].to_list())
+    assert "board" in col.MODULES and "board" not in col.UNPUBLISHED_MODULES
+    assert {"dc_absent", "age_curve_ratio"} <= set(col.glossary()["name"].to_list())  # I2c-b
     models_, _, _ = pinned
     con = duckdb.connect()
     con.execute("CREATE TABLE dim_player AS SELECT * FROM (VALUES ('00-0000001')) t(gsis_id)")

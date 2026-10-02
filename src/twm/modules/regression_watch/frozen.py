@@ -116,11 +116,12 @@ def rest_of_season_at(frame: pl.DataFrame, keys: pl.DataFrame) -> pl.DataFrame:
 
 def build_snapshot(
     db: Path | str, season: int, league: League, *, xfp_source: str,
-    progress: Progress | None = None,
+    progress: Progress | None = None, xfp_dir: Path | None = None,
 ) -> dict[str, pl.DataFrame]:  # fmt: skip
     """The snapshot of the approved ``season`` (module docstring) from the warehouse, which must
     reach back to 2006 (the owner's Mac; never the scheduled job), with the xFP of
-    ``xfp_source`` (own: each season's walk-forward fold). Deterministic."""
+    ``xfp_source`` (own: each season's walk-forward fold, its folds in ``xfp_dir`` when given:
+    the Time Machine check's scratch copy). Deterministic."""
     from twm.modules.regression_watch import backtest as bt
     from twm.modules.regression_watch import production as rprod
     from twm.modules.regression_watch import projection as pj
@@ -130,7 +131,7 @@ def build_snapshot(
     from twm.modules.waiver_radar.weekly import last_reg_week
 
     last = int(season) - 1
-    xfp = xs.history(db, last, xfp_source, progress=progress)
+    xfp = xs.history(db, last, xfp_source, progress=progress, out_dir=xfp_dir)
     frame = player_games_history(db, list(range(pj.FIRST_DATA_SEASON, last + 1)), xfp=xfp)
     if pj.FIRST_DATA_SEASON not in set(frame.get_column("season").unique().to_list()):
         raise rprod.RegressionProductionError(

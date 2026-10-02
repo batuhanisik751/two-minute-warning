@@ -49,13 +49,16 @@ def pinned_source(path: Path | None = None) -> str:
 
 def history(
     db: Path | str, last_season: int, source: str,
-    *, progress: Callable[[str], None] | None = None,
+    *, progress: Callable[[str], None] | None = None, out_dir: Path | None = None,
 ) -> pl.DataFrame | None:  # fmt: skip
     """The per player-game expected points of the seasons up to ``last_season`` for the frame
     loaders' ``xfp=`` (:func:`.player_week.with_xfp`): None = ffopportunity's (the frame as
-    built), else the own walk-forward xFP (each season from its own fold)."""
+    built), else the own walk-forward xFP (each season from its own fold; ``out_dir``: the
+    folds' directory, default data/regression_watch/own_xfp/, I3a passes a scratch copy)."""
     if check(source) == FFOPPORTUNITY:
         return None
     from twm.modules.regression_watch import own_xfp as ox
 
-    return ox.history_player_games(db, last_season, progress=progress)
+    if out_dir is None:  # the default folds' directory (the call as before I3a)
+        return ox.history_player_games(db, last_season, progress=progress)
+    return ox.history_player_games(db, last_season, out_dir=out_dir, progress=progress)

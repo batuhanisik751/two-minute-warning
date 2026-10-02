@@ -240,6 +240,11 @@ def test_history_follows_the_source_and_never_defaults(monkeypatch):
     monkeypatch.setattr(ox, "history_player_games", fake)
     assert xs.history("w.duckdb", 2025, "ffopportunity") is None  # the frame as built
     assert xs.history("w.duckdb", 2025, "own") == "own frame" and seen == [2025]
+    dirs = []
+    other = lambda db, last, out_dir=None, progress=None: dirs.append(out_dir) or "copy"  # noqa: E731
+    monkeypatch.setattr(ox, "history_player_games", other)
+    assert xs.history("w.duckdb", 2025, "own", out_dir=Path("x")) == "copy"  # I3a's copy
+    assert dirs == [Path("x")]
     with pytest.raises(ValueError, match="must be one of"):
         xs.history("w.duckdb", 2025, "nflverse")
     with pytest.raises(ValueError, match="must be one of"):

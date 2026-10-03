@@ -2952,6 +2952,27 @@ def league_report(
     raise typer.Exit(code=run_report(week))
 
 
+@league_app.command("weekly")
+def league_weekly(
+    week: int | None = typer.Option(
+        None,
+        help="The lists' week N to score and report (made after week N's games; default: the "
+        "latest week whose Tuesday as-of has passed).",
+    ),
+    limit: int = typer.Option(3, "--limit", help="Free agents per position in the summary."),
+) -> None:
+    """The weekly routine in one command (run it on Tuesday after 14:00 UTC, or any day for a
+    refresh): refresh the current season's nflverse data, rebuild the FULL warehouse, score the
+    week's Radar, K / D/ST streamer and Regression Watch lists into your local predictions store
+    with the approved models (a list already stored is never scored again), sync the league,
+    write the report and print the radar summary. One line per step; a failure stops with one
+    clear line. Exit 2 when My League is off or no week is due, 3 when the week's data has not
+    arrived, 1 when a step failed. Never publishes."""
+    from twm.league.commands import run_weekly
+
+    raise typer.Exit(code=run_weekly(week, limit))
+
+
 @league_app.command("trade")
 def league_trade(
     give: list[str] = typer.Option(..., "--give", help="A player you give (repeat for more)."),

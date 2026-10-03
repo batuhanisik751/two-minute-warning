@@ -3,8 +3,54 @@
 My League reads the owner's ESPN league into `data/league.duckdb` (never published) and runs
 only when `ENABLE_MY_LEAGUE=true` and the ESPN keys are in `.env` (PROJECT_SPEC 4.3, 8.3).
 Every `twm league` command prints one line and exits with code 2 otherwise. The commands:
-`sync`, `settings-diff`, `radar`, `regret`, `report` (steps F2-F4, docs/progress.md) and
-`trade` (below).
+`sync`, `settings-diff`, `radar`, `regret`, `report` (steps F2-F4, docs/progress.md),
+`trade` and `weekly` (below).
+
+## Weekly routine
+
+```
+uv run twm league weekly [--week N] [--limit 3]
+```
+
+Run it on **Tuesday after 14:00 UTC** (the week's as-of: the lists of week N are made after
+week N's games), or any day for a refresh. Why: `radar`, `report` and `trade` read the lists
+from your LOCAL predictions store (`data/predictions.duckdb`); the scheduled job makes its
+lists on GitHub and publishes them to the database only, so without this routine the Mac's
+store goes stale. Code: `src/twm/league/weekly.py`, `commands.run_weekly`; tests:
+`tests/test_league_weekly.py` (mocked steps). The steps, in order, one line each; any failure
+stops the routine with one clear line naming the step's log:
+
+1. **ingest**: `twm ingest --start <season> --force` (the current season's nflverse files and
+   the one-file datasets, as the nightly job). A cold cache stops first: `twm ingest --end
+   <season - 1>`.
+2. **build**: `twm build --start 1999 --end <season>` (settings `seasons.pbp_start`): always
+   the FULL warehouse. `twm build` replaces the warehouse with the seasons it is given, so a
+   shorter range (the job's `build_start` 2012) would leave the Mac's warehouse partial.
+3. **score**: week N (`--week`, default the latest week whose Tuesday as-of has passed) with
+   the approved models, the runner's commands: `twm radar score --pinned`, `twm streamer
+   score`, `twm regression score`. A module whose approved version already has rows for
+   week N is skipped ("already stored"): a stored list is never scored again (the store would
+   replace it); a partly stored streamer list stops. Scored in the live window (Tuesday's
+   as-of to the next first kickoff) a list is stored as `live`; later it is a reconstructed
+   `backtest` list (the scorers' own rule). Exit 3 when the week's data has not arrived (run
+   again later). The scorers' reports and every log go to `reports/league/weekly/<run>/`
+   (git-ignored), never over the committed weekly reports.
+4. **sync**: `twm league sync` (ESPN's current week).
+5. **report**: `twm league report --week N`, then the radar summary (`twm league radar --week
+   N --limit 3`: the top 3 free agents per position and the drop candidate).
+
+Nothing is published and the remote database is never touched. Measured on the owner's Mac
+(Saturday 2026-10-03, a busy machine): 94 s in all: ingest 8 s, the full 1999-2026 build
+58 s, score 4 s (the Radar and streamer week 3 lists were already stored; Regression Watch's
+week 3 list of the approved version was scored, as a reconstructed list), sync 22 s, report
+2 s.
+
+**Model versions.** Every list is read in ONE model version (versions are never mixed within
+a list): the approved one of `config/production_models.yaml` when it is stored for the week;
+otherwise the newest stored version for that week, and the output says so, e.g. "Regression
+Watch's projections from the previous model version mean_flat_all-77146b2e5d2169fc: the
+approved zero_flat_all-9d98d6f251ee054c has no list stored for week 3 (`uv run twm league
+weekly --week 3` scores it)". Same rule in `radar`, `report` and `trade`.
 
 ## Trade checker
 

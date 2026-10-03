@@ -239,3 +239,13 @@ def run_trade(
     for line in text(res.check, res.data, res.sched, note):
         echo(line)
     return 0
+
+
+def run_weekly(week: int | None, limit: int, echo: Callable[[str], None] = typer.echo) -> int:
+    """`twm league weekly`: ingest, full build, the due week's lists scored into the local
+    predictions store, sync, report and the radar summary (twm.league.weekly)."""
+    from twm.league.weekly import default_parts, run
+
+    if _env(echo) is None:
+        return EXIT_UNAVAILABLE
+    return run(week, limit, echo, default_parts())

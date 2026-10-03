@@ -241,7 +241,7 @@ def test_report_exit_codes(isolated, f3_sync):  # noqa: F811
     )
     assert _run("sync")[0] == 0
     code, out = _run("report", "--week", "7")
-    assert code == 2 and "no Radar list of the approved model is stored for 2026 week 7" in out
+    assert code == 2 and "no Radar list is stored for 2026 week 7" in out
     assert len(out.strip().splitlines()) == 1
 
 

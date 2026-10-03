@@ -7,7 +7,9 @@ step F3). Reads only: data/league.duckdb (the newest synced week), the predictio
   ``waiver_radar`` for QB/RB/WR/TE, ``streamer_k`` / ``streamer_dst`` for K and D/ST), the
   Radar's week N being the list made after week N's games. Nothing is re-scored: the chances
   are the lists' own, calibrated on config/scoring.yaml (a line says so when the league scores
-  differently, :func:`scoring_note`).
+  differently, :func:`scoring_note`). Each list is ONE model version (:func:`one_version`):
+  the approved one when it is stored for the week, else the newest stored version, and a note
+  says so (a re-pinned model whose week is not scored yet; `twm league weekly` scores it).
 - **Free agents**: the newest week's ``league_free_agents`` (ESPN's top 50 per position, free
   agents and players on waivers), joined by gsis_id / ``DST-<team>``. A listed player who is a
   free agent keeps his list rank and chance; an ESPN free agent the list's pool does not hold
@@ -54,31 +56,56 @@ def pinned_versions(pins_path: Path | None = None) -> dict[str, tuple[int, str]]
     return {k: (p.season, p.model_version) for k, p in read_pins(pins_path).items()}
 
 
+PIN_MODULES = {"waiver_radar": "waiver_radar", "streamer_k": "streamer",
+               "streamer_dst": "streamer", "regression_watch": "regression_watch"}  # fmt: skip
 LIST_SQL = """
     SELECT entity_id, rank_group AS position, score, rank, band, reasons_json, tier, kind,
-           model_version, week, horizon, as_of
-    FROM predictions WHERE season = ? AND model_version IN ({marks}) {week}
+           model_version, week, horizon, as_of, module, created_at
+    FROM predictions WHERE season = ? AND module IN ({marks}) {week}
 """
 
 
-def stored_rows(
-    predictions: Path, season: int, versions: list[str], week: int | None = None
+def stored_lists(
+    predictions: Path, season: int, modules: list[str], week: int | None = None
 ) -> pl.DataFrame:
-    """The predictions store's rows of ``versions`` in ``season`` (one week, or every week),
-    opened read-only."""
+    """The predictions store's rows of ``modules`` in ``season`` (one week, or every week),
+    EVERY stored model version (:func:`one_version` picks one per list), opened read-only."""
     if not predictions.exists():
         raise PersonalUnavailableError(
             f"My League: the predictions store is missing ({predictions.name}): run the weekly "
-            "lists first (`uv run twm pipeline run`)"
+            "lists first (`uv run twm league weekly`)"
         )
     con = duckdb.connect(str(predictions), read_only=True)
     try:
-        sql = LIST_SQL.format(marks=", ".join("?" * len(versions)),
+        sql = LIST_SQL.format(marks=", ".join("?" * len(modules)),
                               week="AND week = ?" if week is not None else "")  # fmt: skip
-        args = [season, *versions] + ([week] if week is not None else [])
+        args = [season, *modules] + ([week] if week is not None else [])
         return con.execute(sql, args).pl()
     finally:
         con.close()
+
+
+def one_version(rows: pl.DataFrame, pinned: str | None) -> tuple[pl.DataFrame, str | None]:
+    """ONE list's rows of ONE model version (versions are never mixed within a list): the
+    approved ``pinned`` one when it is stored; else the newest stored version (latest
+    ``created_at``, then the version name), returned second so the caller says so. ``pinned``
+    None (no approved model for the season): no rows."""
+    if pinned is None:
+        return rows.clear(), None
+    mine = rows.filter(pl.col("model_version") == pinned)
+    if mine.height or rows.height == 0:
+        return mine, None
+    newest = (rows.group_by("model_version").agg(pl.col("created_at").max())
+              .sort(["created_at", "model_version"], descending=True)
+              .item(0, "model_version"))  # fmt: skip
+    return rows.filter(pl.col("model_version") == newest), str(newest)
+
+
+def fallback_note(what: str, version: str, pinned: str, week: int) -> str:
+    """The line printed when :func:`one_version` fell back to an older version."""
+    return (f"{what} from the previous model version {version}: the approved {pinned} has no "
+            f"list stored for week {week} (`uv run twm league weekly --week {week}` scores "
+            "it)")  # fmt: skip
 
 
 @dataclass
@@ -227,6 +254,16 @@ def _pins(pins_path: Path | None, season: int) -> tuple[dict[str, str], list[str
     return out, notes
 
 
+WHAT = {"streamer_k": "the K streamer list", "streamer_dst": "the D/ST streamer list",
+        "regression_watch": "Regression Watch's projections"}  # fmt: skip
+
+
+def _what(key: str, positions: list[str]) -> str:
+    if key == "waiver_radar":
+        return f"the Radar's {', '.join(positions)} list" + ("s" if len(positions) > 1 else "")
+    return WHAT[key]
+
+
 def build(
     con: duckdb.DuckDBPyConnection,
     predictions: Path,
@@ -240,45 +277,52 @@ def build(
     week, default the latest one stored at or before the sync's ESPN week)."""
     view = load_league(con)
     versions, notes = _pins(pins_path, view.season)
-    rows = stored_rows(predictions, view.season, sorted(set(versions.values())))
-    radar_v = versions["waiver_radar"]
-    weeks = sorted(set(rows.filter(pl.col("model_version") == radar_v).get_column("week")))
+    rows = stored_lists(predictions, view.season, sorted(set(PIN_MODULES.values())))
+    radar = pl.col("module") == "waiver_radar"
+    weeks = sorted(set(rows.filter(radar).get_column("week")))
     if week is None:
         before = [w for w in weeks if w <= view.week]
         if not before:
             raise PersonalUnavailableError(
-                f"My League: no Radar list of the approved model is stored for {view.season} "
-                f"up to week {view.week}: run the weekly lists first")  # fmt: skip
+                f"My League: no Radar list is stored for {view.season} up to week {view.week}: "
+                "run the weekly lists first (`uv run twm league weekly`)")  # fmt: skip
         week = before[-1]
     elif week not in weeks:
         stored = f" (stored: {', '.join(map(str, weeks))})" if weeks else ""
         raise PersonalUnavailableError(
-            f"My League: no Radar list of the approved model is stored for {view.season} "
-            f"week {week}{stored}")  # fmt: skip
+            f"My League: no Radar list is stored for {view.season} week {week}{stored}"
+        )
     if view.week - week > 1:
         notes.append(f"the week {week} lists are older than the free agents (ESPN week "
                      f"{view.week}): a newer list is not stored yet")  # fmt: skip
     rows = rows.filter(pl.col("week") == week)
-    lists = []
+    lists, chosen, older = [], {}, {}  # older: (pin key, version) -> positions
     for pos in POSITIONS:
-        v = versions.get(PIN_KEYS[pos])
-        pos_rows = rows.filter((pl.col("position") == pos) & (pl.col("model_version") == v))
-        if v is not None and pos_rows.height == 0:
+        key = PIN_KEYS[pos]
+        pos_rows, old = one_version(rows.filter(
+            (pl.col("module") == PIN_MODULES[key]) & (pl.col("position") == pos)),
+            versions.get(key))  # fmt: skip
+        if old is not None:
+            older.setdefault((key, old), []).append(pos)
+        if key in versions and pos_rows.height == 0:
             notes.append(f"no stored {pos} list for week {week}")
+        chosen[pos] = pos_rows
         lists.append(position_list(view, pos_rows, pos, limit))
-    stream = rows.filter(
-        pl.col("position").is_in(STREAM_POSITIONS)
-        & pl.col("model_version").is_in([versions.get(PIN_KEYS[p]) for p in STREAM_POSITIONS])
-    )
-    proj = rows.filter(pl.col("model_version") == versions.get(PROJECTION_PIN, ""))
+    stream = pl.concat([chosen[p] for p in STREAM_POSITIONS])
+    proj, old = one_version(rows.filter(pl.col("module") == PIN_MODULES[PROJECTION_PIN]),
+                            versions.get(PROJECTION_PIN))  # fmt: skip
+    if old is not None:
+        older[(PROJECTION_PIN, old)] = []
     if PROJECTION_PIN in versions and proj.height == 0:
         notes.append(f"no stored Regression Watch projections for week {week}")
+    for (key, old), positions in older.items():
+        notes.append(fallback_note(_what(key, positions), old, versions[key], week))
     mine, drops = view.rosters.clear(), None
     if view.my_team is not None:
         mine = view.rosters.filter(pl.col("league_team_id") == view.my_team)
         drops = drop_view(mine, view.slots, stream, proj, season=view.season, week=week,
                           warehouse=warehouse)  # fmt: skip
-    as_of = rows.filter(pl.col("model_version") == radar_v).get_column("as_of").max()
+    as_of = pl.concat([chosen[p] for p in RADAR_POSITIONS]).get_column("as_of").max()
     return PersonalRadar(view.season, view.week, week, lists, drops, view.my_team is not None,
                          notes, proj, mine, as_of)  # fmt: skip
 

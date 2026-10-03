@@ -214,21 +214,29 @@ class Projections:
     horizon: int | None  # Regression Watch's weeks left after N (the stored rows')
     version: str
     rows: dict[str, dict]  # entity_id -> stored row
+    note: str | None = None  # the list is an older model version's
 
 
 def projections(
     predictions: Path, season: int, sync_week: int, week: int | None, pins_path: Path | None
 ) -> Projections:
-    """Regression Watch's stored list of the approved model: ``week``, default the latest
-    stored at or before the synced ESPN week (as `twm league radar` picks its lists)."""
-    from twm.league.personal import PersonalUnavailableError, pinned_versions, stored_rows
+    """Regression Watch's stored list of ``week`` (default the latest stored at or before the
+    synced ESPN week, as `twm league radar` picks its lists): the approved model's, else the
+    newest stored version's (:func:`twm.league.personal.one_version`; ``note`` says so)."""
+    from twm.league.personal import (
+        PersonalUnavailableError,
+        fallback_note,
+        one_version,
+        pinned_versions,
+        stored_lists,
+    )
 
     pin = pinned_versions(pins_path).get("regression_watch")
     if pin is None or pin[0] != season:
         raise TradeError(f"My League: no approved Regression Watch model for {season} "
                          "(config/production_models.yaml): no projection to compare")  # fmt: skip
     try:
-        rows = stored_rows(predictions, season, [pin[1]])
+        rows = stored_lists(predictions, season, ["regression_watch"])
     except PersonalUnavailableError as e:
         raise TradeError(str(e)) from e
     weeks = sorted(set(rows.get_column("week").to_list()))
@@ -236,16 +244,19 @@ def projections(
         before = [w for w in weeks if w <= sync_week]
         if not before:
             raise TradeError(f"My League: no Regression Watch list is stored for {season} up "
-                             f"to week {sync_week}: run the weekly lists first")  # fmt: skip
+                             f"to week {sync_week}: run the weekly lists first (`uv run twm "
+                             "league weekly`)")  # fmt: skip
         week = before[-1]
     elif week not in weeks:
         stored = f" (stored: {', '.join(map(str, weeks))})" if weeks else ""
         raise TradeError(f"My League: no Regression Watch list is stored for {season} week "
                          f"{week}{stored}")  # fmt: skip
-    rows = rows.filter(pl.col("week") == week)
+    rows, old = one_version(rows.filter(pl.col("week") == week), pin[1])
+    note = None if old is None else fallback_note(
+        "Regression Watch's projections", old, pin[1], week)  # fmt: skip
     hs = [h for h in rows.get_column("horizon").to_list() if h is not None]
-    return Projections(week, max(hs) if hs else None, pin[1],
-                       {r["entity_id"]: r for r in rows.iter_rows(named=True)})  # fmt: skip
+    return Projections(week, max(hs) if hs else None, old or pin[1],
+                       {r["entity_id"]: r for r in rows.iter_rows(named=True)}, note)  # fmt: skip
 
 
 def value_of(p: Player, proj: Projections, averages: dict[str, tuple[float, int]]) -> Value:
@@ -794,7 +805,7 @@ def playoff_line(check: TradeCheck, data: LeagueData, sched: Schedule) -> str:
 
 def notes(check: TradeCheck, data: LeagueData, sched: Schedule) -> list[str]:
     """The stated assumptions under every check."""
-    out = [playoff_line(check, data, sched),
+    out = [*check.notes, playoff_line(check, data, sched),
            "K and D/ST are not projected by Regression Watch: they are kept the same in both "
            "lineups, so they do not move the numbers",
            "IR-slot players are left out of every lineup and of the roster count"]  # fmt: skip
@@ -933,4 +944,6 @@ def run(
                       and p.entity_id not in proj.rows})  # fmt: skip
     averages = season_average(warehouse, data.season, proj.week, missing)
     pool = residual_pool(proj.horizon or len(sched.weeks), pins_path)
-    return TradeRun(evaluate(data, give, get, proj, sched, averages, pool), data, sched)
+    check = evaluate(data, give, get, proj, sched, averages, pool)
+    check.notes += [proj.note] if proj.note else []
+    return TradeRun(check, data, sched)

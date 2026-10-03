@@ -18,7 +18,7 @@ Built on the open-source [nflverse](https://nflverse.nflverse.com/) data ecosyst
 | **Decision Report Card** | Did each coach's fourth-down and two-point calls gain or lose win probability, by the app's own win-probability model? Plus three simple clock-management checks. | weekly |
 | **Hot-Seat Meter** | Each head coach's estimated chance of being fired this season, with the three things driving it. | weekly, and once after the season |
 | **Cliff board** | Which veterans are likely to fall off a cliff next season, and, as a separate number, to miss most of it. | once a year, before week 1 |
-| **My League** (optional) | The owner's own ESPN league: free agents worth adding, points left on the bench, a trade checker. Runs on the owner's Mac only and is never published. | on demand |
+| **My League** (optional) | The owner's own ESPN league: free agents worth adding, points left on the bench, a trade checker. Runs on the owner's Mac only and is never published; `uv run twm league weekly` (Tuesday after 14:00 UTC) refreshes the data, scores the week's lists locally, syncs the league and writes the report (`docs/my_league.md`). | weekly, on demand |
 | **Time machine** and **Track record** | What every module said in any published week, with what happened; how often each was right over every backtest season and the live season. | always |
 
 Words like *walk-forward*, *precision@10* or *xFP* are explained in `docs/glossary.md` (or `uv run twm glossary <term>`) and on the site's Methodology page.

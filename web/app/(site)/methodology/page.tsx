@@ -453,8 +453,9 @@ export default async function MethodologyPage() {
             </li>
             <li>
               ffverse&apos;s <a href="https://github.com/ffverse/ffopportunity">ffopportunity</a> (through nflreadpy):
-              the expected fantasy points (xFP) behind the player pages&apos; charts and several Radar features, and the
-              per-play rows Regression Watch values with its own walk-forward models.
+              the expected fantasy points (xFP) behind several Radar features, and the per-play rows that Regression
+              Watch and the player pages&apos; charts value with our own walk-forward models (the player pages showed
+              ffopportunity&apos;s xFP until October 2, 2026).
             </li>
             <li>
               <a href="https://github.com/dynastyprocess/data">DynastyProcess</a>: the cross-platform player id map and

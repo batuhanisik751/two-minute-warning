@@ -232,7 +232,9 @@ def test_collect_other_tables(synthetic: ps.Synthetic) -> None:
                      & (pl.col("week") == 1)).row(0, named=True)  # fmt: skip
     # 3 catches, 41 yards, 10 rushing yards, full PPR: 3 + 4.1 + 1.0
     assert row["fantasy_points"] == pytest.approx(8.1)
-    assert row["xfp"] == pytest.approx(4 + 3.5) and row["fpoe"] == pytest.approx(0.6)
+    # step PXFP: xFP/FPOE are Regression Watch's own walk-forward xFP
+    # (tests/test_player_pages_xfp.py); a publish without that module carries none
+    assert all(row[c] is None for c in col.XFP_COLUMNS)
     assert row["carry_share"] == pytest.approx(6 / 25) and row["snap_share"] == 0.6
     snaps_only = pws.filter(pl.col("gsis_id") == ps.gid(1, 3)).row(0, named=True)
     assert snaps_only["fantasy_points"] == 0 and snaps_only["target_share"] == 0

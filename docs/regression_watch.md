@@ -18,8 +18,9 @@ is a prediction yet.
   list, the stability study and the backtest use our own walk-forward models**: a play of
   season S is valued by models trained only on seasons before S (section "Our own expected
   points" below). D1 built the frame with nflverse's **ffopportunity** models, which saw later
-  seasons too; the frame (`twm regression player`, the player pages' xFP and FPOE) and the
-  Waiver Radar still use those.
+  seasons too; the frame as built (`twm regression player`) and the Waiver Radar still use
+  those. **Since 2026-10-02 (step PXFP, the owner's decision) the player pages' xFP and FPOE
+  use the own walk-forward xFP too** (section "The player pages" below).
 - **FPOE (fantasy points over expected)** = points - xFP. Positive: he did more with his
   chances than an average player would have. Opportunity (xFP) tends to repeat from week to
   week; FPOE is partly skill but largely luck, so it tends to shrink back toward zero
@@ -125,7 +126,7 @@ line or an ffopportunity row, at QB, RB, WR or TE (109,610 rows on the 2026-09-2
 |---|---|
 | `season`, `week`, `game_id`, `gsis_id`, `team` | who and which game |
 | `position`, `position_source` | his position at the time (below) and where it came from |
-| `fantasy_points`, `xfp`, `fpoe` | the weekly numbers (the same as the site's `player_week_summary` and the Waiver Radar's). `fantasy_points` is 0 when he has expected points but no stat line; `xfp`/`fpoe` are empty without an ffopportunity row (no target, carry or pass) |
+| `fantasy_points`, `xfp`, `fpoe` | the weekly numbers (ffopportunity's as built, the Waiver Radar's; the site's `player_week_summary` shows the own walk-forward xFP since step PXFP). `fantasy_points` is 0 when he has expected points but no stat line; `xfp`/`fpoe` are empty without an ffopportunity row (no target, carry or pass) |
 | `points_ng`, `xfp_ng`, `fpoe_ng` | the same without garbage time |
 | `points_garbage`, `xfp_garbage` | the garbage-time parts |
 | `play_points`, `play_xfp` | the play-by-play sums over all his plays (the checks above) |
@@ -443,10 +444,41 @@ parameters re-approved and their backtest lists re-frozen, and the 2026 fold's m
 (section "The weekly list" above). The live list of 2026 week 3, published before the switch,
 stays as it was (frozen, ffopportunity's xFP); the lists from week 4 on use the own xFP.
 ffopportunity stays in the project: its per-play rows are still the play list the own models
-value (each with its garbage-time flag), D1's frame and `twm regression player`, the player
-pages' xFP and FPOE (`player_week_summary`) and the Waiver Radar's features still use its
-expectations, and `twm regression own-xfp` / `--xfp ffopportunity` keep the comparison
-runnable for research.
+value (each with its garbage-time flag), D1's frame as built and `twm regression player` and
+the Waiver Radar's features still use its expectations, and `twm regression own-xfp` / `--xfp
+ffopportunity` keep the comparison runnable for research. The player pages followed on
+2026-10-02 (next section).
+
+## The player pages (step PXFP, owner's decision of 2026-10-02)
+
+The player pages' weekly xFP and FPOE, with and without garbage time (`player_week_summary`:
+`xfp`, `fpoe`, `points_ng`, `xfp_ng`, `fpoe_ng`), are the own walk-forward xFP's, the numbers
+of Regression Watch's own frame (`player_week.with_xfp`); `fpoe` = points - xFP as before.
+
+- **History** (2013, the first snap-count season, .. the season before the pin's): frozen on
+  the owner's Mac into the Regression Watch pin's snapshot as `player_xfp` (one row per
+  player-game: `season`, `week`, `game_id`, `gsis_id`, `xfp`, `xfp_ng`, `points_ng`, `fpoe_ng`;
+  each season from the fold trained on the seasons before it), sha256 and rows in
+  `config/production_models.yaml`. `uv run twm regression freeze` writes it with the backtest
+  lists; `--player-xfp` writes only it (the parameters and the lists keep their bytes). The
+  scheduled job and `twm publish` only read it (required: no file, no publish; never
+  recomputed, no ffopportunity fallback). `twm model check regression_watch` checks it (sha256,
+  rows, one row per player-game, every season) and, where the folds and the warehouse are on
+  disk, re-builds it from the saved folds (nothing is fit) to 1e-9; `twm timemachine verify
+  --module regression_watch` re-builds every season of it.
+- **The season in progress**: scored with the pinned live models by the weekly list's own
+  function (`own_xfp.live_frame`: the season's plays valued by the pinned models, summed with
+  D1's SQL, put into the frame), over every built row; nothing is fit.
+- **Empty** (NULL) where a player-week has no own-xFP row: no ffopportunity row for the game
+  (as before), and, new, the 144 player-weeks of 2013-2025 whose weekly stat line lists him
+  at RB/WR/TE but whose position at the time (D1's frame) was FB (121), DB (16), CB (4), OL
+  (2) or LB (1): D1's frame keeps QB/RB/WR/TE only, so those weeks already had no
+  garbage-time split. No player-week gained or lost a value otherwise; `points_ng` is
+  unchanged.
+- **Old vs new** (82,998 player-weeks of 2013-2026, 66,573 with both): own minus
+  ffopportunity per player-week QB -1.07, RB -0.25, TE -0.39, WR -0.28 (all -0.39);
+  correlation .981 / .994 / .991 / .990 (all .990), in line with H6-b's per player-game
+  comparison above.
 
 ## Commands
 

@@ -62,7 +62,9 @@ BACKTEST_TABLES = ("predictions", "outcomes", "model_versions")
 # input rows they were scored from; twm.modules.board.production.CURRENT_TABLES).
 DECISION_TABLES = ("fourth_downs", "two_point", "clock_cases", "team_games", "season_inputs")
 BOARD_TABLES = ("current_board", "current_inputs")
-SNAPSHOT_TABLES = (*BACKTEST_TABLES, "hit_rates", *DECISION_TABLES, *BOARD_TABLES)
+PLAYER_XFP_TABLES = ("player_xfp",)  # PXFP: Regression Watch's own-xFP player weeks
+SNAPSHOT_TABLES = (*BACKTEST_TABLES, "hit_rates", *DECISION_TABLES, *BOARD_TABLES,
+                   *PLAYER_XFP_TABLES)  # fmt: skip
 PARQUET_LEVEL = 19  # zstd level of the snapshot files (measured: 0.89 MB for 91,638 rows)
 FLOAT_TOLERANCE = 1.01e-6  # the evaluation CSV prints 6 decimals
 HEADER = """\

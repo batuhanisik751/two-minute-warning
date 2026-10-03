@@ -166,6 +166,13 @@ Source: `reports/regression_watch/backtest.md`, "Rank correlation (Spearman), he
 - **Ordering:** pooled, the projection does not rank players better than season-to-date PPG
   (0.011 (-0.008 to 0.030)); its value is in the size of the error and in the tags.
 
+Source: `docs/regression_watch.md`, "The player pages (step PXFP, owner's decision of 2026-10-02)"
+- **The player pages use the same own xFP** (since 2026-10-02): the seasons from 2013 on are
+  frozen in this pin (`player_xfp`), the season in progress is scored with the pinned live
+  models. A player-week without an own-xFP row is empty, which now also covers the 144
+  player-weeks whose position at the time was FB (121), DB (16), CB (4), OL (2) or LB (1); the
+  per player-week correlation with ffopportunity's xFP is .990 (all -0.39 points).
+
 Source: `docs/timemachine.md`, "What is not checked (and why)"
 - **Live week 3 of 2026** used the previous xFP source (ffopportunity), so a recomputation with
   today's pin would differ by design; it is kept append-only. **Linux not recomputed:** the

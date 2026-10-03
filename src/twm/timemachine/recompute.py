@@ -203,7 +203,8 @@ def regression_watch(ctx: Context) -> ModuleResult:
     from twm.modules.regression_watch import frozen as fz
     from twm.modules.regression_watch import production as rprod
 
-    res = ModuleResult("regression_watch", "pin snapshot predictions + model_versions (sha256)",
+    res = ModuleResult("regression_watch", "pin snapshot predictions + model_versions + "
+                       "player_xfp (sha256)",
                        "frozen.build_snapshot from the warehouse (xFP folds: a copy)")  # fmt: skip
     params, pin = rprod.load_pinned_params(ctx.season)
     stored = fz.load_snapshot(pin)
@@ -224,6 +225,15 @@ def regression_watch(ctx: Context) -> ModuleResult:
         exact=["params", "notes", "training_seasons"]))  # fmt: skip
     res.notes.append("own xFP per play from the stored walk-forward folds when current by "
                      "content hash (else refit into the scratch copy)")  # fmt: skip
+    # step PXFP: the player pages' own-xFP history frozen in the same pin, every season of it
+    stored_px = fz.load_player_xfp(pin)
+    new_px = fz.build_player_xfp(ctx.db, ctx.season, xfp_dir=xdir, progress=ctx.progress)
+    res.comparison.add(compare_lists(stored_px, new_px, lists=["season"],
+                                     entity=["week", "game_id", "gsis_id"],
+                                     numbers=list(fz.PLAYER_XFP_COLUMNS[4:])))  # fmt: skip
+    px, n = stored_px.get_column("season"), stored_px.height
+    res.notes.append(f"player pages' own xFP (pin {fz.PLAYER_XFP}): every season "
+                     f"{px.min()}-{px.max()}, {n:,} player-games, from the same folds")  # fmt: skip
     return res
 
 

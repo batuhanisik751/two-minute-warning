@@ -372,8 +372,12 @@ def default_hooks() -> Hooks:
         from twm.modules.streamer.production import load_pinned_k, load_pinned_rule
 
         k, rule = load_pinned_k(season)[0], load_pinned_rule(season)[0]
-        live, params, _ = load_pinned_xfp(season)
+        live, params, rw_pin = load_pinned_xfp(season)
         xfp = f"own xFP {live.version}" if live is not None else "ffopportunity xFP"
+        # step PXFP: the player pages' own-xFP history frozen in that pin (sha256 first)
+        from twm.modules.regression_watch.frozen import load_player_xfp
+
+        xfp += f", player pages' history {load_player_xfp(rw_pin).height:,} player-games"
         # step P3: the decisions' grading spec and its five fold models (sha256 first)
         from twm.modules.decisions.production import load_pinned as load_pinned_grading
 

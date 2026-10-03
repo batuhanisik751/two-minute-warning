@@ -550,9 +550,10 @@ def player_week_summary(con, first_season: int) -> pl.DataFrame:
     position: the stats row's, else the snap-count row's), from ``first_season``. Fantasy
     points with the config scoring (0 when he played without a stat line); snap share from
     snap counts (NULL without a snap-count row); target and carry share (0 when he played
-    without a stat line); xFP from ffopportunity re-scored with the config scoring (NULL
-    without an ffopportunity row) and FPOE = points - xFP."""
-    from twm.scoring import score_sql, xfp_sql
+    without a stat line); ``points_raw``, the unrounded points FPOE is taken from. xFP and
+    FPOE are not here: :func:`with_xfp` adds Regression Watch's own walk-forward xFP (step
+    PXFP; ffopportunity's before)."""
+    from twm.scoring import score_sql
 
     pos = ", ".join(f"'{p}'" for p in FANTASY_POSITIONS)
     s = int(first_season)
@@ -571,10 +572,6 @@ def player_week_summary(con, first_season: int) -> pl.DataFrame:
         ), tc AS (
             SELECT game_id, team, carries AS team_carries FROM fact_team_week
             WHERE season >= {s} AND season_type = 'REG'
-        ), xp AS (
-            SELECT game_id, posteam AS team, player_id AS gsis_id, {xfp_sql()} AS xfp
-            FROM fact_opportunity_week
-            WHERE season >= {s} AND season_type = 'REG' AND player_id IS NOT NULL
         ), k AS (
             SELECT game_id, team, gsis_id FROM st WHERE position IN ({pos})
             UNION
@@ -589,30 +586,45 @@ def player_week_summary(con, first_season: int) -> pl.DataFrame:
                round(COALESCE(st.target_share, 0), 4) AS target_share,
                CASE WHEN tc.team_carries > 0
                     THEN round(COALESCE(st.carries, 0) / tc.team_carries, 4) END AS carry_share,
-               round(xp.xfp, 2) AS xfp,
-               round(COALESCE(st.fantasy_points, 0) - xp.xfp, 2) AS fpoe,
-               st.player_display_name
+               COALESCE(st.fantasy_points, 0) AS points_raw, st.player_display_name
         FROM k
         LEFT JOIN st USING (game_id, team, gsis_id)
         LEFT JOIN sn USING (game_id, team, gsis_id)
         LEFT JOIN tc USING (game_id, team)
-        LEFT JOIN xp USING (game_id, team, gsis_id)
         ORDER BY 1, 2, 3
         """
     ).pl()
 
 
 NG_COLUMNS = ("points_ng", "xfp_ng", "fpoe_ng")
+XFP_COLUMNS = ("xfp", "fpoe", *NG_COLUMNS)
 
 
-def with_ng(pws: pl.DataFrame, ng: pl.DataFrame | None) -> pl.DataFrame:
-    """The weekly player summary with its no-garbage-time points, xFP and FPOE (step P2:
-    Regression Watch's D1 frame, :func:`twm.publish.regression_lists.ng_columns`; NULL where
-    the frame has no row, or without it)."""
-    if ng is None:
-        return pws.with_columns(pl.lit(None, dtype=pl.Float64).alias(c) for c in NG_COLUMNS)
+def with_xfp(pws: pl.DataFrame, own: pl.DataFrame | None) -> pl.DataFrame:
+    """The weekly player summary with its xFP and FPOE, with and without garbage time, from
+    Regression Watch's own walk-forward xFP (step PXFP, owner's decision of 2026-10-02:
+    :func:`twm.publish.regression_lists.own_player_weeks`; before it, ffopportunity's): ``xfp``
+    rounded to 2 decimals, ``fpoe`` = points - xFP, and the no-garbage-time three as
+    :func:`twm.publish.regression_lists.ng_columns` rounds them (step P2). NULL where a
+    player-week has no own-xFP row (or without ``own``: a publish without Regression Watch)."""
+    from twm.publish.regression_lists import ng_columns
+
     keys = ["gsis_id", "season", "week"]
-    return pws.join(ng.select(*keys, *NG_COLUMNS), on=keys, how="left", maintain_order="left")
+    if own is None:
+        nulls = [pl.lit(None, dtype=pl.Float64).alias(c) for c in ("xfp_raw", *NG_COLUMNS)]
+        out = pws.with_columns(nulls)
+    else:
+        raw = own.select(*keys, pl.col("xfp").alias("xfp_raw")).unique(
+            keys, keep="first", maintain_order=True
+        )
+        ng = ng_columns(own).join(raw, on=keys, how="left")
+        out = pws.join(ng.select(*keys, "xfp_raw", *NG_COLUMNS), on=keys, how="left",
+                       maintain_order="left")  # fmt: skip
+    base = [c for c in pws.columns if c not in ("points_raw", "player_display_name")]
+    return out.with_columns(
+        pl.col("xfp_raw").round(2).alias("xfp"),
+        (pl.col("points_raw") - pl.col("xfp_raw")).round(2).alias("fpoe"),
+    ).select(*base, *XFP_COLUMNS, "player_display_name")
 
 
 def dim_player(con, ids: Sequence[str], fallback_names: pl.DataFrame) -> pl.DataFrame:
@@ -912,16 +924,17 @@ def collect(inputs: Inputs) -> PublishData:
         data_as_of, meta = data_freshness(con, season, inputs.now)
     finally:
         con.close()
-    frame = None
+    own = None  # step PXFP: the player pages' xFP is Regression Watch's own walk-forward xFP
     if "regression_watch" in inputs.modules:
-        frame = rl.history(inputs.warehouse, min(first, rl.FIRST_LIVE_SEASON), season)
+        own = rl.own_player_weeks(inputs.warehouse, season)
+        frame = rl.history(inputs.warehouse, rl.FIRST_LIVE_SEASON, season)  # live seasons only
         got = rl.collect_regression(inputs.store, inputs.warehouse, inputs.path("regression_csv"),
                                     season, inputs.now, frame,
                                     inputs.path("regression_stability_csv"))  # fmt: skip
         families["regression_watch"], tables["regression_track_record"] = got.data, got.track_record
         tables.update(got.tables)
         extra.append(got)
-    pws = with_ng(pws, None if frame is None else rl.ng_columns(frame))
+    pws = with_xfp(pws, own)
     dec = None
     if "decisions" in inputs.modules:  # step P3: the frozen history + the season in progress
         from twm.publish import decisions as dc

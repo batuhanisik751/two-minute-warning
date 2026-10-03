@@ -208,9 +208,9 @@ def run_week(
     ``live``: the approved own xFP models (:func:`.production.load_pinned_xfp`), required when
     the parameters were made with the own xFP (step H6-b2): the season's plays public at the
     as-of are scored with them (nothing is fit) and replace ffopportunity's expected points in
-    the frame (:func:`.player_week.with_xfp`)."""
+    the frame (:func:`.own_xfp.live_frame`; the player pages' season in progress too)."""
     from twm.asof import AsOfView, weekly_as_of
-    from twm.modules.regression_watch.player_week import player_games_for, with_xfp
+    from twm.modules.regression_watch.player_week import player_games_for
 
     if int(season) != int(params.season):
         raise ValueError(f"the approved parameters score {params.season}, not {season}")
@@ -231,11 +231,12 @@ def run_week(
     kickoff = rw.next_kickoff(db, season, week)
     kind = rw.run_kind(as_of, kickoff, now) if real_clock else "backtest"
     with AsOfView(db, as_of) as view:
-        std = player_games_for(view, season)
-        if live is not None:
-            from twm.modules.regression_watch.own_xfp import live_player_games
+        if live is not None:  # the player pages' season in progress uses the same function
+            from twm.modules.regression_watch.own_xfp import live_frame
 
-            std = with_xfp(std, live_player_games(view, season, live))
+            std = live_frame(view, season, live)
+        else:
+            std = player_games_for(view, season)
         names = view.sql("SELECT gsis_id, display_name AS name FROM dim_player")
     table = score_week(std, names, params, league, week)
     horizon = (last - week) if last is not None else 0

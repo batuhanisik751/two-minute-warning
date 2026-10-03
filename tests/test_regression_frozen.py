@@ -31,7 +31,8 @@ def committed():
 
 def test_the_committed_snapshot_is_pinned_small_and_matches_the_report(committed) -> None:
     params, pin, frames = committed
-    assert pin.backtest_seasons == "2011-2025" and set(pin.backtest) == set(fz.TABLES)
+    assert pin.backtest_seasons == "2011-2025"
+    assert set(pin.backtest) == {*fz.TABLES, fz.PLAYER_XFP}  # PXFP: the player pages' own xFP
     sizes = {t: pin.backtest[t].path().stat().st_size for t in fz.TABLES}
     assert sum(sizes.values()) < 1_000_000, sizes  # the Radar's snapshot is 0.89 MB
     # 10,826 rows since the own walk-forward xFP (H6-b2; 10,787 with ffopportunity's)

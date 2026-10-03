@@ -1772,19 +1772,25 @@ def regression_pin(
     _freeze_regression(path, chosen, backtest_csv)  # P2: its frozen backtest lists too
 
 
-def _freeze_regression(path: Path, season: int, backtest_csv: Path) -> None:
+def _freeze_regression(path: Path, season: int, backtest_csv: Path,
+                       player_xfp_only: bool = False) -> None:  # fmt: skip
     from twm import pins
     from twm.config import ROOT, league
     from twm.modules.regression_watch import frozen as fz
     from twm.modules.regression_watch import production as rprod
 
+    say = lambda m: typer.echo(m, err=True)  # noqa: E731
     try:
-        pin = fz.freeze(path, season, league(), csv_path=_project_path(backtest_csv),
-                        progress=lambda m: typer.echo(m, err=True))  # fmt: skip
+        if player_xfp_only:  # PXFP: only the player pages' own-xFP history
+            pin = fz.freeze_player_xfp(path, season, progress=say)
+        else:
+            pin = fz.freeze(path, season, league(), csv_path=_project_path(backtest_csv),
+                            progress=say)  # fmt: skip
     except (rprod.RegressionProductionError, pins.PinError, LookupError, ValueError) as e:
         typer.echo(f"cannot freeze the backtest lists: {e}", err=True)
         raise typer.Exit(code=1) from e
-    for table in fz.TABLES:
+    tables = [] if player_xfp_only else list(fz.TABLES)
+    for table in tables + [t for t in (fz.PLAYER_XFP,) if t in pin.backtest]:
         f = pin.backtest[table]
         size = fz.snapshot_dir(pin.model_version, ROOT).joinpath(f"{table}.parquet").stat()
         typer.echo(f"wrote {f.file} ({f.rows:,} rows, {size.st_size / 1e3:,.0f} KB, sha256 "
@@ -1802,17 +1808,23 @@ def regression_freeze(
         "--backtest-csv",
         help="The committed backtest the frozen lists must reproduce.",
     ),  # fmt: skip
+    player_xfp: bool = typer.Option(
+        False, "--player-xfp", help="Freeze only the player pages' own-xFP history (PXFP)."
+    ),
 ) -> None:
     """Freeze the time machine's backtest lists of the approved parameters (P2): the headline
     as-of weeks of every D3 test season, made from the warehouse (it must reach back to 2006:
     run this on the owner's Mac, never in the scheduled job), refused unless every season's
     choice, the headline MAE and the tag hit rates equal the committed backtest CSV and the
     parameters' record; written under artifacts/production_models/regression_watch/ and pinned
-    with their sha256 (`twm regression pin` does this too). Review, then commit."""
+    with their sha256 (`twm regression pin` does this too). With own-xFP parameters also the
+    player pages' own-xFP history (step PXFP: every player-game from the first snap-count
+    season to the season before, each season from its walk-forward fold); ``--player-xfp``
+    freezes only that. Review, then commit."""
     from twm.config import settings
 
     chosen = season if season is not None else settings().current_season
-    _freeze_regression(_warehouse_or_exit(db), chosen, backtest_csv)
+    _freeze_regression(_warehouse_or_exit(db), chosen, backtest_csv, player_xfp)
 
 
 @regression_app.command("outcomes")
@@ -1895,6 +1907,38 @@ def check_regression_pin(
     typer.echo(f"  frozen backtest lists {pin.backtest_seasons}: {rows} (sha256 and rows "
                f"checked); every season's choice, the headline MAE and the tag hit rates match "
                f"{backtest_csv}")  # fmt: skip
+    _check_player_xfp(pin)
+
+
+def _check_player_xfp(pin) -> None:
+    """PXFP: the player pages' own-xFP history frozen in the pin (required; sha256 before it
+    is read, rows, one row per player-game, every season before the pin's); where the folds
+    and the warehouse are on disk (the owner's Mac), re-built from the saved folds (nothing is
+    fit) and compared within 1e-9."""
+    from twm import pins
+    from twm.config import settings
+    from twm.modules.regression_watch import frozen as fz
+
+    try:
+        frozen = fz.load_player_xfp(pin)
+    except pins.PinError as e:
+        typer.echo(f"not usable: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    seasons = frozen.get_column("season")
+    head = (f"  player pages' own xFP {seasons.min()}-{seasons.max()}: {frozen.height:,} "
+            "player-games (sha256 and rows checked)")  # fmt: skip
+    rebuilt = fz.rebuild_player_xfp(settings().path("warehouse"), pin.season)
+    if rebuilt is None:
+        typer.echo(f"{head}; not re-built here (no own xFP folds or warehouse on disk)")
+        return
+    problems = fz.player_xfp_mismatches(frozen, rebuilt)
+    if problems:
+        typer.echo(f"not usable: the frozen own-xFP player weeks disagree with the folds on "
+                   f"disk in {len(problems)} places, e.g. " + "; ".join(problems[:3]),
+                   err=True)  # fmt: skip
+        raise typer.Exit(code=1)
+    typer.echo(f"{head}; re-built from the folds on disk: equal within "
+               f"{fz.PLAYER_XFP_TOLERANCE:g}")  # fmt: skip
 
 
 # --------------------------------------------------------------------------------------

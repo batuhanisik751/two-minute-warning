@@ -134,6 +134,10 @@ regression_watch:
       file: artifacts/production_models/regression_watch/backtest-zero_flat_all-9d98d6f251ee054c/model_versions.parquet
       sha256: 4678dc545886149778c943fff840e563193ecadcb50dffcb5ee471d30d68b2b9
       rows: 15
+    player_xfp:
+      file: artifacts/production_models/regression_watch/backtest-zero_flat_all-9d98d6f251ee054c/player_xfp.parquet
+      sha256: 72d1378b846fd09f29382786806f0ebd3c229a6fef5faa195ec9eb3550b07334
+      rows: 73677
 streamer_dst:
   season: 2026
   model_version: baseline_opponent_dst-e76f31d80f3a905e

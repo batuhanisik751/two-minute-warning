@@ -302,7 +302,7 @@ def load_snapshot(pin: Any, root: Path | None = None) -> dict[str, pl.DataFrame]
     must hang together: one outcome per row, every row's parameters listed."""
     from twm import pins
 
-    if set(pin.backtest) != set(TABLES):
+    if set(TABLES) - set(pin.backtest) or set(pin.backtest) - {*TABLES, PLAYER_XFP}:
         raise pins.PinError(
             f"the pin of {pin.module} has no frozen backtest lists: freeze them with `uv run twm "
             "regression freeze` on the owner's Mac (warehouse from 2006), review and commit"
@@ -323,7 +323,8 @@ def freeze(
 ) -> Any:  # fmt: skip
     """Build the snapshot for the approved parameters of ``season``, refuse unless it matches
     ``csv_path`` and the parameters, write it and add it to their pin (the parameters file and
-    every other pin keep their bytes). Returns the new pin."""
+    every other pin keep their bytes); with own parameters the player pages' own-xFP history
+    too (:func:`freeze_player_xfp`, step PXFP). Returns the new pin."""
     from dataclasses import replace
 
     from twm import pins
@@ -331,6 +332,8 @@ def freeze(
 
     params, pin = rprod.load_pinned_params(season, path=path, root=root)
     frames = build_snapshot(db, season, league, xfp_source=params.xfp_source, progress=progress)
+    if params.xfp_source == "own":  # the folds are current now: nothing is fit twice
+        pxfp = build_player_xfp(db, season, progress=progress)
     problems = snapshot_mismatches(frames, csv_path, league, params)
     if problems:
         raise rprod.RegressionProductionError(
@@ -339,9 +342,162 @@ def freeze(
             "backtest` on the same warehouse"
         )
     files = write_snapshot(frames, params.model_version, root)
+    if params.xfp_source == "own":
+        files[PLAYER_XFP] = write_player_xfp(pxfp, params.model_version, root)
     seen = sorted(int(s) for s in frames["model_versions"].get_column("test_season").to_list())
     new = replace(pin, backtest=files, backtest_seasons=f"{seen[0]}-{seen[-1]}")
     current = pins.read_pins(path)
     current[rprod.PIN_KEY] = new
     pins.write_pins(current, path)
     return new
+
+
+# --------------------------------------------------------------------------------------
+# The player pages' own xFP history (step PXFP, owner's decision of 2026-10-02)
+# --------------------------------------------------------------------------------------
+
+PLAYER_XFP = "player_xfp"  # twm.pins.SNAPSHOT_TABLES
+PLAYER_XFP_COLUMNS = ("season", "week", "game_id", "gsis_id", "xfp", "xfp_ng", "points_ng",
+                      "fpoe_ng")  # fmt: skip
+PLAYER_XFP_KEYS = ("season", "week", "game_id", "gsis_id")
+PLAYER_XFP_TOLERANCE = 1e-9  # re-building from the same folds must give the frozen values
+
+
+def player_xfp_rows(frame: pl.DataFrame, first: int) -> pl.DataFrame:
+    """The own-xFP player weeks of a D1 frame with the own xFP (:func:`.player_week.with_xfp`)
+    from season ``first``: every frame row (``xfp`` NULL where ffopportunity has no row for
+    the game, as the frame keeps it), all plays and without garbage time."""
+    typed = [pl.col("season").cast(pl.Int32), pl.col("week").cast(pl.Int32)]
+    rows = frame.filter(pl.col("season") >= int(first)).select(*typed, *PLAYER_XFP_COLUMNS[2:])
+    return no_negative_zero(rows.sort(PLAYER_XFP_KEYS))
+
+
+def player_xfp_first_season() -> int:
+    """The player pages' first season (``seasons.snaps_start`` in config/settings.yaml)."""
+    from twm.config import settings
+
+    return int(settings().seasons["snaps_start"])
+
+
+def build_player_xfp(
+    db: Path | str, season: int, *, xfp: pl.DataFrame | None = None,
+    progress: Progress | None = None, xfp_dir: Path | None = None,
+) -> pl.DataFrame:  # fmt: skip
+    """The player pages' own-xFP history before the approved ``season``: every season from
+    :func:`player_xfp_first_season` to ``season`` - 1, each from the walk-forward fold trained
+    on the seasons before it (``xfp``: those per player-game values, default
+    :func:`.xfp_source.history` with its folds in ``xfp_dir``: may FIT folds not current, so the
+    owner's Mac only). Deterministic."""
+    from twm.modules.regression_watch import xfp_source as xs
+    from twm.modules.regression_watch.player_week import player_games_history
+
+    first, last = player_xfp_first_season(), int(season) - 1
+    if xfp is None:
+        xfp = xs.history(db, last, xs.OWN, progress=progress, out_dir=xfp_dir)
+    frame = player_games_history(db, list(range(first, last + 1)), xfp=xfp)
+    return player_xfp_rows(frame, first)
+
+
+def load_player_xfp(pin: Any, root: Path | None = None) -> pl.DataFrame:
+    """The pin's frozen own-xFP player weeks (sha256 before reading, rows after): REQUIRED (no
+    fallback to ffopportunity), one row per player-game, every season before the pin's from
+    the player pages' first season."""
+    from twm import pins
+
+    if PLAYER_XFP not in pin.backtest:
+        raise pins.PinError(
+            f"the pin of {pin.module} has no frozen own-xFP player weeks ({PLAYER_XFP}): freeze "
+            "them with `uv run twm regression freeze --player-xfp` on the owner's Mac (the own "
+            "xFP folds and the warehouse from 2006), review and commit"
+        )
+    df = pins.read_snapshot(pin, (PLAYER_XFP,), root)[PLAYER_XFP]
+    if tuple(df.columns) != PLAYER_XFP_COLUMNS or df.select("game_id", "gsis_id").is_duplicated(
+    ).any():  # fmt: skip
+        raise pins.PinError(f"the {pin.module} pin's {PLAYER_XFP} is not one row per player-game")
+    want = list(range(player_xfp_first_season(), int(pin.season)))
+    if sorted(df.get_column("season").unique().to_list()) != want:
+        raise pins.PinError(f"the {pin.module} pin's {PLAYER_XFP} does not cover {want[0]}-"
+                            f"{want[-1]} (the seasons before {pin.season})")  # fmt: skip
+    return df
+
+
+def player_xfp_mismatches(frozen: pl.DataFrame, rebuilt: pl.DataFrame) -> list[str]:
+    """Where a re-build disagrees with the frozen player weeks ([] = the same player-games and
+    NULL pattern, every number within :data:`PLAYER_XFP_TOLERANCE`)."""
+    keys = list(PLAYER_XFP_KEYS)
+    a, b = frozen.sort(keys), rebuilt.select(PLAYER_XFP_COLUMNS).sort(keys)
+    if a.height != b.height or not a.select(keys).equals(b.select(keys)):
+        return [f"the re-build has other player-games ({b.height:,} rows, frozen {a.height:,})"]
+    problems = []
+    for c in PLAYER_XFP_COLUMNS[4:]:
+        if not a[c].is_null().equals(b[c].is_null()):
+            problems.append(f"{c}: the re-build is NULL in other rows")
+            continue
+        diff = float((a[c] - b[c]).abs().max() or 0.0)  # type: ignore[arg-type]
+        if diff > PLAYER_XFP_TOLERANCE:
+            problems.append(f"{c}: the re-build differs by up to {diff:.3g}")
+    return problems
+
+
+def write_player_xfp(rows: pl.DataFrame, version: str, root: Path | None = None) -> Any:
+    """Write ``backtest-<version>/player_xfp.parquet`` (zstd, the snapshot's level; atomic) and
+    describe it for the pin (a SnapshotFile)."""
+    from twm import pins
+    from twm.config import ROOT
+
+    base = root if root is not None else ROOT
+    path = snapshot_dir(version, base) / f"{PLAYER_XFP}.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    rows.select(PLAYER_XFP_COLUMNS).write_parquet(
+        tmp, compression="zstd", compression_level=pins.PARQUET_LEVEL, statistics=False
+    )
+    tmp.replace(path)
+    try:
+        rel = path.relative_to(base).as_posix()
+    except ValueError:
+        rel = str(path)
+    return pins.SnapshotFile(rel, pins.sha256_of(path), rows.height)
+
+
+def freeze_player_xfp(
+    db: Path | str, season: int, *, root: Path | None = None, path: Path | None = None,
+    progress: Progress | None = None, xfp_dir: Path | None = None,
+) -> Any:  # fmt: skip
+    """Freeze the player pages' own-xFP history (:func:`build_player_xfp`) into the approved
+    ``season``'s pin snapshot (the parameters, the backtest lists and every other pin keep
+    their bytes). The owner's Mac only; the scheduled job reads it. Returns the new pin."""
+    from dataclasses import replace
+
+    from twm import pins
+    from twm.modules.regression_watch import production as rprod
+
+    params, pin = rprod.load_pinned_params(season, path=path, root=root)
+    if params.xfp_source != "own":
+        raise rprod.RegressionProductionError(
+            f"the approved parameters use the {params.xfp_source} xFP: the player pages' own "
+            "xFP history is frozen only with own parameters"
+        )
+    rows = build_player_xfp(db, season, progress=progress, xfp_dir=xfp_dir)
+    file = write_player_xfp(rows, params.model_version, root)
+    new = replace(pin, backtest={**pin.backtest, PLAYER_XFP: file})
+    current = pins.read_pins(path)
+    current[rprod.PIN_KEY] = new
+    pins.write_pins(current, path)
+    return new
+
+
+def rebuild_player_xfp(
+    db: Path | str | None, season: int, *, out_dir: Path | None = None
+) -> pl.DataFrame | None:
+    """The player pages' own-xFP history re-built from the folds ALREADY on disk (their saved
+    inputs and predictions; nothing is fit) and the warehouse, or None when either is missing
+    (the scheduled job and CI have neither: they check the sha256 and rows only)."""
+    from twm.config import ROOT
+    from twm.modules.regression_watch import own_xfp as ox
+
+    if db is None or not Path(db).exists():
+        return None
+    xfp = ox.saved_player_games(out_dir if out_dir is not None else ROOT / ox.OUT_DIR,
+                                int(season) - 1)  # fmt: skip
+    return None if xfp is None else build_player_xfp(db, season, xfp=xfp)

@@ -152,6 +152,9 @@ predictions store (read-only), as the Radar's do. The backtest lists (the time m
   since 2026, so frozen live lists keep their outcomes on a fresh runner. A list before week 4
   carries the note "Week N is earlier than the backtested weeks 4-14: ..." (also in the weekly
   report). `player_week_summary` gains `points_ng`, `xfp_ng`, `fpoe_ng` (without garbage time).
+  Since step PXFP its `xfp`/`fpoe` and those three are the own walk-forward xFP's: the seasons
+  before the pin's from the pin's frozen `player_xfp` (sha256 checked, required), the pinned
+  season scored with the pinned live models (docs/regression_watch.md "The player pages").
 - *Track records*: `reports/streamer/backtest.csv` and `reports/regression_watch/backtest.csv`,
   row for row (`line` = the CSV's data row; the latter's `table` and `group` columns are
   `section` and `row_group`).

@@ -22,10 +22,12 @@ Sources (opened read-only), with the Radar's rules (:mod:`twm.publish.collect`):
 - **tags**: the product's Sell-high and Buy-low only; the frozen backtest lists still carry D3's
   third tag, Legit, which is stripped here (:func:`shown_tags`; owner, 2026-09-30). Live lists
   published before that keep their rows (frozen): the site hides 'legit';
-- **player_week_summary**'s points, xFP and FPOE without garbage time (the D1 frame).
+- **player_week_summary**'s xFP and FPOE, with and without garbage time: the own walk-forward
+  xFP (step PXFP, :func:`own_player_weeks`: the pin's frozen history + the pinned season
+  scored live with the pinned models).
 
-The warehouse needs only the seasons the job builds (2012 on): the D1 frame is read from the
-first snap-count season (2013) for the player summaries and the live seasons.
+The warehouse needs only the seasons the job builds (2012 on): the D1 frame is read for the
+live seasons only (since step PXFP the player summaries' history comes from the pin).
 """
 
 from __future__ import annotations
@@ -216,6 +218,38 @@ def stability_rows(path: Path) -> pl.DataFrame:
     publishes it: ``line`` = the data row's number, every CSV column (``table`` -> ``section``,
     ``window`` -> ``seasons``)."""
     return csv_table(path, STABILITY_TABLE, STABILITY_RENAME)
+
+
+def own_player_weeks(
+    db: Path, season: int, *, path: Path | None = None, root: Path | None = None
+) -> pl.DataFrame:
+    """The player pages' xFP (step PXFP, owner's decision of 2026-10-02): Regression Watch's
+    own walk-forward xFP per player-game (:data:`twm.modules.regression_watch.frozen.
+    PLAYER_XFP_COLUMNS`). The seasons before the pinned one come from the pin's frozen
+    history (sha256 checked; REQUIRED, never recomputed here, no ffopportunity fallback); the
+    pinned season from the pinned live models through the weekly list's own function
+    (:func:`~twm.modules.regression_watch.own_xfp.live_frame`, every built row; nothing is fit).
+    """
+    from twm import pins
+    from twm.asof import AsOfView
+    from twm.modules.regression_watch import frozen as fz
+    from twm.modules.regression_watch import own_xfp as ox
+    from twm.modules.regression_watch import production as rprod
+    from twm.modules.regression_watch.player_week import END_OF_TIME
+
+    try:
+        live, _, pin = rprod.load_pinned_xfp(season, path=path, root=root)
+        history = fz.load_player_xfp(pin, root)
+    except pins.PinError as e:
+        raise PublishInputError(f"the player pages' own xFP cannot be read: {e}") from e
+    if live is None:
+        raise PublishInputError(
+            "the player pages show the own walk-forward xFP (step PXFP), but the approved "
+            "Regression Watch parameters use ffopportunity's: approve own parameters"
+        )
+    with AsOfView(db, END_OF_TIME) as view:
+        current = fz.player_xfp_rows(ox.live_frame(view, season, live), season)
+    return pl.concat([history, current.select(history.columns)], how="vertical")
 
 
 def ng_columns(frame: pl.DataFrame) -> pl.DataFrame:

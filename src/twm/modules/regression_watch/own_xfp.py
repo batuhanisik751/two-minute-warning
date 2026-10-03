@@ -754,6 +754,28 @@ def live_player_games(view: Any, season: int, live: LiveModels, rules: Any = Non
                            rules)  # fmt: skip
 
 
+def live_frame(view: Any, season: int, live: LiveModels, rules: Any = None) -> pl.DataFrame:
+    """D1's frame of ``season`` at the view's as-of with the live models' xFP
+    (:func:`live_player_games` through :func:`.player_week.with_xfp`): the ONE function behind
+    the weekly list and the player pages' season in progress (step PXFP). Nothing is fit."""
+    from twm.modules.regression_watch.player_week import player_games_for, with_xfp
+
+    frame = player_games_for(view, int(season), rules=rules)
+    return with_xfp(frame, live_player_games(view, season, live, rules))
+
+
+def saved_player_games(out_dir: Path, last_season: int) -> pl.DataFrame | None:
+    """Per player-game own xFP of 2007 .. ``last_season`` from the folds already on disk
+    (their saved inputs and predictions; nothing is fit), or None when a file is missing."""
+    seasons = range(FIRST_TEST_SEASON, int(last_season) + 1)
+    paths = [_inputs_path(out_dir, k) for k in ("pass", "rush")]
+    paths += [p for s in seasons for p in _fold_paths(out_dir, s).values()]
+    if not all(p.exists() for p in paths):
+        return None
+    plays = {k: pl.read_parquet(_inputs_path(out_dir, k)) for k in ("pass", "rush")}
+    return player_game_xfp(own_tables(plays, load_predictions(out_dir, seasons)))
+
+
 def history_player_games(
     db: Path | str, last_season: int, *, out_dir: Path | None = None, workers: int = 4,
     progress: Progress | None = None,
@@ -766,6 +788,7 @@ def history_player_games(
 
     out = out_dir if out_dir is not None else ROOT / OUT_DIR
     run_folds(db, int(last_season), out, workers=workers, progress=progress)
-    plays = {k: pl.read_parquet(_inputs_path(out, k)) for k in ("pass", "rush")}
-    preds = load_predictions(out, range(FIRST_TEST_SEASON, int(last_season) + 1))
-    return player_game_xfp(own_tables(plays, preds))
+    got = saved_player_games(out, int(last_season))
+    if got is None:  # run_folds wrote every file: only a concurrent delete gets here
+        raise FileNotFoundError(f"the own xFP folds in {out} are incomplete")
+    return got

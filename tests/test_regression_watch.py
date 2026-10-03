@@ -606,8 +606,9 @@ def test_frame_agrees_with_the_published_player_week_summary(world):
     df = pw.player_games_history(world, [2025])
     j = df.join(pub, on=["gsis_id", "season", "week"], suffix="_pub")
     assert j.height == df.height > 0
-    for c in ("fantasy_points", "xfp", "fpoe"):
-        assert ((j[c] - j[f"{c}_pub"]).abs() < 0.006).all(), c
+    # the points (the xFP since step PXFP: the own xFP frame's, tests/test_player_pages_xfp.py)
+    assert ((j["fantasy_points"] - j["fantasy_points_pub"]).abs() < 0.006).all()
+    assert ((j["fantasy_points"] - j["points_raw"]).abs() < 1e-6).all()
 
 
 def test_frame_before_2006_is_empty_and_typed(world):

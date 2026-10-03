@@ -1,8 +1,10 @@
 // The footer of every page: the disclaimer of PROJECT_SPEC 16 (verbatim) and the data
 // credits. Each credit was checked against the code that uses the data:
 // - nflverse: every dataset (src/twm/sources/nflverse.py), loaded with nflreadpy.
-// - ffverse's ffopportunity: expected fantasy points (xFP, FPOE; fact_opportunity_week),
-//   downloaded from github.com/ffverse/ffopportunity by nflreadpy's load_ff_opportunity.
+// - ffverse's ffopportunity: per-play and weekly expected-points data (fact_opportunity_*),
+//   downloaded from github.com/ffverse/ffopportunity by nflreadpy's load_ff_opportunity: the
+//   Waiver Radar's xFP features; the plays the own walk-forward xFP values (Regression Watch
+//   and, since 2026-10-02, the player pages, which showed ffopportunity's xFP before).
 // - DynastyProcess: the player id map (load_ff_playerids) and the FantasyPros rankings
 //   archive (load_ff_rankings), both from github.com/dynastyprocess/data.
 // - FantasyPros: the expert rankings in that archive (the candidate pool's preseason list
@@ -27,7 +29,7 @@ export default function SiteFooter() {
         </p>
         <p data-testid="attribution">
           Data from <a href="https://nflverse.nflverse.com/">nflverse</a> (play-by-play, player
-          stats, snap counts, rosters, schedules). Expected fantasy points from ffverse&apos;s{" "}
+          stats, snap counts, rosters, schedules). Expected-points play data from ffverse&apos;s{" "}
           <a href="https://github.com/ffverse/ffopportunity">ffopportunity</a>. Player id map
           and the <a href="https://www.fantasypros.com/">FantasyPros</a> expert rankings archive
           from <a href="https://github.com/dynastyprocess/data">DynastyProcess</a>. Snap counts

@@ -140,7 +140,9 @@ export default async function RegressionSection() {
         A player&apos;s points split into <strong>opportunity</strong> (<Term name="xfp">xFP</Term>: what an average player
         would have scored from his targets and carries) and <strong>efficiency</strong> (<Term name="fpoe">FPOE</Term> = points
         minus xFP). The question is which of the two repeats. Since October 1, 2026 its xFP comes from our own
-        walk-forward models: each season&apos;s plays are valued by models trained only on the seasons before it.
+        walk-forward models: each season&apos;s plays are valued by models trained only on the seasons before it. Since
+        October 2, 2026 the player pages&apos; xFP and FPOE come from the same models: earlier seasons frozen with the
+        approved models, the season in progress scored by them each week.
       </p>
       <section aria-labelledby="stability" data-testid="stability-section">
         <h3 id="stability" className="display mt-6 scroll-mt-24 text-xl uppercase">

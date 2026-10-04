@@ -20,6 +20,29 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pytest -m "not network and not realdata and not postgres"
 
+  # The safety hooks of .pre-commit-config.yaml (end-of-file-fixer, trailing-whitespace,
+  # check-yaml, check-added-large-files, detect-private-key) on every file, with the locked
+  # pre-commit (dev dependency), so they run even in a clone where `pre-commit install` never
+  # ran. ruff and ruff-format are skipped here: the python job runs the locked ruff. A hook
+  # that would change a file fails the job and prints the diff; generated and pinned files
+  # are excluded in .pre-commit-config.yaml (a rewrite would break their sha256 pins).
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --locked
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      - run: uv run pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: ruff,ruff-format
+
   # `twm publish` and the Drizzle migrations against a real Postgres (tests marked postgres).
   # The service matches docker-compose.yml (user/password twm: CI-only, not secrets), so the
   # tests' default TWM_LOCAL_DATABASE_URL reaches it; TWM_REQUIRE_POSTGRES turns "server not

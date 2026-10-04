@@ -11,8 +11,10 @@
 //   from 2020, the experts' baseline in the track record, the "ranked before the season"
 //   reasons).
 // - Pro Football Reference: the source of nflverse's snap counts (snap share).
-// - Wikipedia: the public pages the Hot-Seat Meter's head-coach departure labels were checked
-//   against by hand (docs/labeling_coaches.md; mostly each season's "NFL season" page).
+// - Wikipedia: the public pages the Hot-Seat Meter's head-coach departure labels were researched
+//   from (one cited URL per row, docs/labeling_coaches.md; mostly each season's "NFL season"
+//   page). The owner accepted that research in bulk (docs/progress.md, 2026-10-01): never
+//   describe the labels as individually checked.
 // No FTN credit: ftn_charting and participation are downloaded but no published number
 // uses them.
 import Link from "next/link";
@@ -34,7 +36,8 @@ export default function SiteFooter() {
           and the <a href="https://www.fantasypros.com/">FantasyPros</a> expert rankings archive
           from <a href="https://github.com/dynastyprocess/data">DynastyProcess</a>. Snap counts
           originate from <a href="https://www.pro-football-reference.com/">Pro Football Reference</a>. Head-coach
-          departures checked by hand against public pages, mostly <a href="https://en.wikipedia.org/">Wikipedia</a>.
+          departures researched from cited public pages, mostly <a href="https://en.wikipedia.org/">Wikipedia</a>,
+          and accepted by the project&apos;s owner in bulk, not re-checked row by row.
         </p>
         <p>
           No NFL or team logos are used. Code under the MIT license on{" "}

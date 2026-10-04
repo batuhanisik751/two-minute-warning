@@ -469,9 +469,10 @@ export default async function MethodologyPage() {
             </li>
             <li>
               Head-coach departures (the Hot-Seat Meter&apos;s labels): every change nflverse&apos;s schedules show,
-              each checked by hand against public pages, mostly{" "}
+              researched from cited public pages, mostly{" "}
               <a href="https://en.wikipedia.org/">Wikipedia</a>&apos;s &ldquo;NFL season&rdquo; pages and the coaches&apos;
-              own pages, with the source kept for every row.
+              own pages, with the source kept for every row. The project&apos;s owner accepted that research in bulk
+              rather than re-checking every row, so a mistake in it is possible.
             </li>
             <li>
               A benchmark only (no published number is computed from it): the{" "}
@@ -720,7 +721,7 @@ export default async function MethodologyPage() {
           <p className="mt-3">{DISCLAIMER}</p>
           <p className="mt-2">
             A chance is a track record of similar players, not a promise: most players on any list do not become
-            starters. This page is a draft and will grow with each module.
+            starters.
           </p>
         </section>
       </div>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { pageMetadata, siteOrigin, sitePublic } from "../../lib/seo";
+import { SITEMAP_PATHS, pageMetadata, siteOrigin, sitePublic, sitemapEntries } from "../../lib/seo";
 
 test("the origin: SITE_URL, else Vercel's production domain, else localhost; only the origin", () => {
   assert.equal(siteOrigin({ SITE_URL: "https://example.org/some/path?x=1" }), "https://example.org");
@@ -23,4 +23,14 @@ test("a page's metadata: canonical path and a complete openGraph", () => {
   assert.deepEqual(m.alternates, { canonical: "/waivers" });
   assert.equal((m.openGraph as { url: string }).url, "/waivers");
   assert.equal((m.openGraph as { title: string }).title, "Waivers · Two-Minute Warning");
+});
+
+test("the sitemap only once the site is public (else /sitemap.xml answers 404), at the configured origin", () => {
+  assert.equal(sitemapEntries({}), null);
+  assert.equal(sitemapEntries({ SITE_PUBLIC: "false", SITE_URL: "https://example.org" }), null);
+  const e = sitemapEntries({ SITE_PUBLIC: "true", SITE_URL: "https://example.org/x" })!;
+  assert.deepEqual(e.map((x) => new URL(x.url).pathname), [...SITEMAP_PATHS]);
+  assert.equal(e[0].url, "https://example.org");
+  assert.deepEqual(e.find((x) => x.url.endsWith("/methodology"))?.changeFrequency, "monthly");
+  assert.ok(e.filter((x) => !x.url.endsWith("/methodology")).every((x) => x.changeFrequency === "weekly"));
 });

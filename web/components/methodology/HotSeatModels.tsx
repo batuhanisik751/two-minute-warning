@@ -1,13 +1,19 @@
 import { fmtInt, pct } from "@/lib/format";
-import { MODEL_WORDS, trackCell, type TrackCell, type TrackCellRow } from "@/lib/hot-seat";
+import { MODEL_WORDS, top5Slices, trackCell, type TrackCell, type TrackCellRow } from "@/lib/hot-seat";
 import { TRACK_INTERVAL_LEVEL } from "@/lib/method";
 
 const COLUMNS = [
   { slice: "all", metric: "roc_auc", label: "ROC-AUC, every row", digits: 3 },
   { slice: "all", metric: "pr_auc", label: "PR-AUC, every row", digits: 3 },
   { slice: "all", metric: "brier", label: "Brier, every row (lower is better)", digits: 4 },
-  { slice: "end_of_season", metric: "top5_hit_rate", label: "Top-5 hit rate, end of season", digits: 3 },
 ] as const;
+
+/** The table's columns: the every-row metrics, then the top-5 hit rate at each published point
+ *  (week 12 beside the season's end, lib/hot-seat.ts top5Slices). */
+const columns = (rows: TrackCellRow[]) => [
+  ...COLUMNS,
+  ...top5Slices(rows).map((t) => ({ slice: t.slice, metric: "top5_hit_rate", label: `Top-5 hit rate, ${t.when}`, digits: 3 })),
+];
 
 function Cell({ c, digits }: { c: TrackCell | null; digits: number }) {
   if (!c) return <td className="num text-muted">–</td>;
@@ -29,6 +35,7 @@ export default function HotSeatModels({ rows }: { rows: TrackCellRow[] }) {
   const models = Object.keys(MODEL_WORDS).filter((m) => rows.some((r) => r.variant === "main" && r.model === m && r.prob === "prob"));
   if (!models.length) return null;
   const n = trackCell(rows, { model: "logit", slice: "all", metric: "roc_auc" });
+  const cols = columns(rows);
   return (
     <div className="space-y-2">
       <div className="table-scroll">
@@ -37,7 +44,7 @@ export default function HotSeatModels({ rows }: { rows: TrackCellRow[] }) {
           <thead>
             <tr>
               <th scope="col">Model</th>
-              {COLUMNS.map((c) => (
+              {cols.map((c) => (
                 <th key={`${c.slice}-${c.metric}`} scope="col" className="num">
                   {c.label}
                 </th>
@@ -48,7 +55,7 @@ export default function HotSeatModels({ rows }: { rows: TrackCellRow[] }) {
             {models.map((m) => (
               <tr key={m} data-model={m}>
                 <th scope="row">{MODEL_WORDS[m]}</th>
-                {COLUMNS.map((c) => (
+                {cols.map((c) => (
                   <Cell key={`${c.slice}-${c.metric}`} c={trackCell(rows, { model: m, slice: c.slice, metric: c.metric })} digits={c.digits} />
                 ))}
               </tr>

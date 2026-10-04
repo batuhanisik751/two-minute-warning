@@ -7,6 +7,7 @@ import DecisionList from "@/components/decisions/DecisionList";
 import { CountCells, CountHeaders } from "@/components/decisions/Leaderboard";
 import { FoldTable } from "@/components/Fold";
 import CoachHotSeat from "@/components/hot-seat/CoachHotSeat";
+import CoachRecord from "@/components/hot-seat/CoachRecord";
 import Term from "@/components/Term";
 import { PageHeader } from "@/components/ui";
 import { isCoachId } from "@/lib/decisions";
@@ -28,7 +29,7 @@ export async function generateMetadata({ params }: PageProps<"/coach/[id]">): Pr
   return pageMetadata(
     `/coach/${id}`,
     c.name,
-    `${c.name}: graded fourth-down, two-point and clock decisions by season, the worst and best calls, and the Hot-Seat Meter's history.`,
+    `${c.name}: graded fourth-down, two-point and clock decisions by season, the worst and best calls, record vs expectation and the Hot-Seat Meter's history.`,
   );
 }
 
@@ -113,6 +114,7 @@ export default async function CoachPage({ params }: PageProps<"/coach/[id]">) {
           <p className="text-muted">No season row published for this coach.</p>
         )}
       </section>
+      <CoachRecord rows={hotSeat} name={coach.name} />
       <CoachHotSeat rows={hotSeat} name={coach.name} season={hotSeatMeta.latest?.season ?? null} />
       <section aria-labelledby="coach-worst-heading" className="mt-10">
         <h2 id="coach-worst-heading" className="section-title mb-2 scroll-mt-24">

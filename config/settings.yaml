@@ -148,7 +148,7 @@ paths:
 
 # The scheduled pipeline (step E4): `twm pipeline run`, run by .github/workflows/pipeline.yml
 # (docs/deploy.md "The scheduled pipeline"). Times are UTC. The workflow's cron lines must
-# equal `nightly` and `retry_attempts` (tests/test_workflows.py checks it).
+# equal `nightly`, `retry_attempts` and `end_of_season_attempts` (tests/test_workflows.py).
 pipeline:
   # In season the job runs every night; the window comes from the current season's schedule
   # (its first and last regular-season game days), never from typed-in dates. Outside it the
@@ -164,6 +164,13 @@ pipeline:
   # and 18:00 UTC). A week whose data has not arrived is a warning before the LAST attempt and
   # a failure from the last attempt on (GitHub then emails the owner).
   retry_attempts: ["tuesday 15:17", "tuesday 18:47", "tuesday 21:17", "wednesday 03:17"]
+  # The Hot-Seat end-of-season snapshot (published before Black Monday's announcements): it is
+  # due once every team's last regular-season game is public (the last kickoff + 4 h + the 6 h
+  # play-by-play lag: about 04:00 UTC Monday after an afternoon finale, 11:20 UTC after a
+  # Sunday-night one). These Monday runs go ahead only the day after the season's last game
+  # day (the gate); the plan scores the snapshot only once it is due. GitHub can start a
+  # scheduled run hours late, so they come early. docs/hot_seat.md has the manual fallback.
+  end_of_season_attempts: ["monday 03:17", "monday 05:47", "monday 11:37"]
   # First season the job's warehouse needs: the dataset starts with snap counts (2013) and the
   # 2013 candidate pool uses the prior season's points per game. Building 2012-2026 gives the
   # same dataset and the same published rows as 1999-2026 (measured 2026-09-28), in half the time.

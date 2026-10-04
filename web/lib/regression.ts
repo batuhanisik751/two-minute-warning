@@ -124,6 +124,26 @@ export type RegressionTrackRow = {
   notGraded: number | null;
 };
 
+/** The seasons the backtest tested (its `choice` rows: one per test season). */
+export function testSeasons(rows: readonly RegressionTrackRow[]): { from: number; to: number } | null {
+  const s = rows.filter((r) => r.section === "choice" && r.season !== null).map((r) => r.season as number);
+  return s.length ? { from: Math.min(...s), to: Math.max(...s) } : null;
+}
+
+/** The as-of weeks of the frozen walk-forward backtest: the weeks of its reconstructed lists in
+ *  the published test seasons. A reconstructed list of the season in progress (2026 week 3, made
+ *  to compare with the live list) is not part of it. Without published test seasons: the
+ *  reconstructed lists of the seasons before the newest list's. */
+export function backtestWeeks(
+  lists: readonly { season: number; week: number; kind: string }[],
+  seasons: { from: number; to: number } | null,
+): number[] {
+  const newest = lists.length ? Math.max(...lists.map((l) => l.season)) : null;
+  const inBacktest = (s: number) => (seasons ? s >= seasons.from && s <= seasons.to : newest !== null && s < newest);
+  const weeks = lists.filter((l) => l.kind === "backtest" && inBacktest(l.season)).map((l) => l.week);
+  return [...new Set(weeks)].sort((a, b) => a - b);
+}
+
 export const RW_METHODS: Record<string, string> = {
   model: "Projection (Regression Watch)",
   baseline_ppg: "Season-to-date PPG",

@@ -128,7 +128,11 @@ async function getHotSeatTimelineRaw(season: number): Promise<TimelineRow[]> {
 }
 export const getHotSeatTimeline = cached("hotSeat.getHotSeatTimeline", getHotSeatTimelineRaw);
 
-export type CoachHotSeatRow = HotSeatKey & { team: string; rank: number; nCoaches: number; probability: number; isInterim: boolean; outcome: OutcomeRow | null };
+export type CoachHotSeatRow = HotSeatKey & {
+  team: string; rank: number; nCoaches: number; probability: number; isInterim: boolean; outcome: OutcomeRow | null;
+  /** his record vs the market's expectation at this list (the coach page's "record vs expectation") */
+  regWins: number; regGamesPlayed: number; expectedWins: number | null; winsVsExpected: number | null;
+};
 
 /** One coach's rows in every list, oldest first, with the list's size and his outcome. */
 async function getCoachHotSeatRaw(coachId: string): Promise<CoachHotSeatRow[]> {
@@ -136,6 +140,7 @@ async function getCoachHotSeatRaw(coachId: string): Promise<CoachHotSeatRow[]> {
     .select({
       season: hotSeatRow.season, week: hotSeatRow.week, snapshot: hotSeatRow.snapshot, kind: hotSeatRow.kind, team: hotSeatRow.team,
       rank: hotSeatRow.rank, nCoaches: hotSeatList.nCoaches, probability: hotSeatRow.probability, isInterim: hotSeatRow.isInterim, ...outcomeColumns,
+      regWins: hotSeatRow.regWins, regGamesPlayed: hotSeatRow.regGamesPlayed, expectedWins: hotSeatRow.expectedWins, winsVsExpected: hotSeatRow.winsVsExpected,
     })
     .from(hotSeatRow)
     .innerJoin(hotSeatList, and(eq(hotSeatList.season, hotSeatRow.season), eq(hotSeatList.week, hotSeatRow.week), eq(hotSeatList.snapshot, hotSeatRow.snapshot), eq(hotSeatList.kind, hotSeatRow.kind)))

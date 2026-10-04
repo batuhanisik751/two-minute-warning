@@ -11,13 +11,15 @@ import {
   outcomeWords,
   parseDrivers,
   phaseName,
+  recordPerSeason,
   recordWords,
+  seasonNotStarted,
   signedNum,
   timelineWords,
   wholePct,
   type CalCell,
 } from "../../lib/hot-seat";
-import { HOT_SEAT_BANDS, HOT_SEAT_PHASES, HOT_SEAT_WINDOW_DAYS } from "../../lib/method";
+import { HOT_SEAT_BANDS, HOT_SEAT_FIRST_WEEK, HOT_SEAT_PHASES, HOT_SEAT_WINDOW_DAYS } from "../../lib/method";
 
 test("a probability is shown as a whole percent, never 0% or 100% when it is not", () => {
   assert.equal(wholePct(0.7061), "71%");
@@ -146,4 +148,59 @@ test("the headline tiles carry their interval and rows, and skip what is not pub
   const t = headlineStats(rows, 0.95);
   assert.deepEqual(t.map((x) => [x.value, x.interval]), [["0.788", "95% interval 0.745 to 0.825"], ["0.1202", null]]);
   assert.equal(t[0].note, "10,059 rows, 20 test seasons");
+  // the top-5 hit rate at week 12 beside (before) the season-end one, both from the rows
+  const top5 = [
+    { ...base, slice: "end_of_season", metric: "top5_hit_rate", value: 0.523256, lo: 0.436778, hi: 0.621067 },
+    { ...base, slice: "week_12", metric: "top5_hit_rate", value: 0.490385, lo: 0.424501, hi: 0.558573 },
+  ];
+  const t5 = headlineStats([...rows, ...top5], 0.95).slice(2);
+  assert.deepEqual(t5.map((x) => [x.label, x.value]), [
+    ["Coaches let go who were in their season's top 5 at week 12", "0.490"],
+    ["Coaches let go who were in their season's top 5 at season end", "0.523"],
+  ]);
+});
+
+test("record vs expectation (coach page): the season's end, else his newest weekly row; NULL-safe", () => {
+  const row = (season: number, week: number, snapshot: string, kind: string, regWins: number, games: number, exp: number | null) => ({
+    season, week, snapshot, kind, team: "KC", regWins, regGamesPlayed: games, expectedWins: exp, winsVsExpected: exp === null ? 0.4 : regWins - exp,
+  });
+  const out = recordPerSeason([
+    row(2024, 17, "weekly", "backtest", 14, 16, 12.2),
+    row(2024, 18, "end_of_season", "backtest", 15, 17, 12.9),
+    // the season in progress: backtest and live rows of week 3, then a newer live week 4
+    row(2026, 3, "weekly", "backtest", 1, 3, 1.5),
+    row(2026, 4, "weekly", "live", 2, 4, 2.4),
+    // a season whose market expectation is not known: the record stays, the difference is not invented
+    row(2005, 18, "end_of_season", "backtest", 10, 16, null),
+  ]);
+  assert.deepEqual(out.map((r) => [r.season, r.throughWeek, r.record]), [[2026, 4, "2–2"], [2024, null, "15–2"], [2005, null, "10–6"]]);
+  assert.equal(out[1].expectedWins, 12.9);
+  assert.equal(signedNum(out[1].winsVsExpected!), "+2.1");
+  assert.equal(out[2].expectedWins, null);
+  assert.equal(out[2].winsVsExpected, null);
+  assert.deepEqual(recordPerSeason([]), []);
+});
+
+test("this season's weekly lists not started: when the first is due, from the weekly as-of rule", () => {
+  const meta = (week: number, at: string, generatedAt = "2026-10-04T21:34:09Z") => ({ currentSeason: 2026, asOf: { at, week: { season: 2026, week } }, generatedAt });
+  // the newest list is this season's: nothing to say
+  assert.equal(seasonNotStarted(2026, meta(3, "2026-09-29T14:00:00Z")), null);
+  assert.equal(seasonNotStarted(2025, { currentSeason: null, asOf: null, generatedAt: null }), null);
+  // week 3's as-of known (past the first weekly week): the next list is due one week later
+  const late = seasonNotStarted(2025, meta(3, "2026-09-29T14:00:00Z"))!;
+  assert.equal(late.firstWeek, HOT_SEAT_FIRST_WEEK);
+  assert.equal(late.dueAt, new Date(Date.parse("2026-09-29T14:00:00Z") + 7 * 864e5).toISOString());
+  assert.equal(late.overdue, false);
+  // published after that next as-of without a list: it is overdue
+  const missed = seasonNotStarted(2025, meta(3, "2026-09-29T14:00:00Z", "2026-10-07T03:00:00Z"))!;
+  assert.equal(missed.overdue, true);
+  // week 1's as-of known, published that day: the first list is still to come
+  const early = seasonNotStarted(2025, meta(1, "2026-09-15T14:00:00Z", "2026-09-15T15:00:00Z"))!;
+  assert.equal(early.dueAt, new Date(Date.parse("2026-09-15T14:00:00Z") + (HOT_SEAT_FIRST_WEEK - 1) * 7 * 864e5).toISOString());
+  assert.equal(early.overdue, false);
+  // no weekly as-of of this season yet (preseason): no date is made up
+  const pre = seasonNotStarted(2025, { currentSeason: 2026, asOf: { at: "2026-01-06T14:00:00Z", week: { season: 2025, week: 18 } }, generatedAt: null })!;
+  assert.deepEqual(pre, { season: 2026, firstWeek: HOT_SEAT_FIRST_WEEK, dueAt: null, overdue: false });
+  // nothing published at all
+  assert.equal(seasonNotStarted(null, meta(3, "2026-09-29T14:00:00Z"))?.season, 2026);
 });

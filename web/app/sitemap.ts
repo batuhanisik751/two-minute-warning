@@ -1,11 +1,15 @@
 import type { MetadataRoute } from "next";
-import { SITEMAP_PATHS, siteOrigin } from "@/lib/seo";
+import { notFound } from "next/navigation";
+import { sitemapEntries } from "@/lib/seo";
 
-// The site's pages at the configured origin (lib/seo.ts). Player and coach pages are reached
-// from these; listing them would mean a database read per sitemap request.
+// The site's pages at the configured origin (lib/seo.ts), only once the site is public
+// (SITE_PUBLIC=true, like robots.txt's Sitemap line): before that /sitemap.xml answers 404.
+// Read per request so it follows the flag. Player and coach pages are reached from these;
+// listing them would mean a database read per sitemap request.
 export const dynamic = "force-dynamic";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const origin = siteOrigin();
-  return SITEMAP_PATHS.map((p) => ({ url: `${origin}${p === "/" ? "" : p}`, changeFrequency: p === "/methodology" ? "monthly" : "weekly" }));
+  const entries = sitemapEntries();
+  if (!entries) notFound();
+  return entries;
 }

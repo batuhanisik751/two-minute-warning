@@ -7,11 +7,14 @@ before the season's first regular-season game day to ``days_after_last_game`` da
 last one, the dates read from the cached schedule) every scheduled run goes ahead; in the
 offseason only the nightly run on ``offseason_weekday`` does. A manual run always goes ahead,
 and so does a run that cannot tell (no cached schedule yet: a cold cache).
+The Hot-Seat end-of-season attempts (``end_of_season_attempts``, Monday crons) go ahead only
+in the :data:`EOS_GATE_DAYS` days after the season's last regular-season game day.
 
 **The plan** (after the warehouse is built): a week's list is due when the clock is inside its
 live window, from its Tuesday as-of to the first kickoff of the next week (the same window
 that makes a list 'live', :func:`twm.modules.waiver_radar.weekly.run_kind`). The last
-regular-season week has no list (nothing follows it). An operator may name a week instead.
+regular-season week has no list (nothing follows it); the Hot-Seat end-of-season snapshot
+starts at :func:`end_of_season_due` (the runner's plan). An operator may name a week instead.
 
 **Not ready** (``twm radar score`` exit code 3: some of the week's data has not arrived): a
 warning while a later retry attempt is still to come, a failure from the week's LAST attempt on
@@ -32,6 +35,8 @@ import polars as pl
 from twm.config import WEEKDAY_KEYS, PipelineConfig
 
 TRIGGERS = ("schedule", "manual")
+# the end-of-season attempts go ahead only this many days after the last regular-season game day
+EOS_GATE_DAYS = 2
 
 
 def _utc(t: datetime) -> datetime:
@@ -58,17 +63,26 @@ def nightly_cron(cfg: PipelineConfig) -> str:
     return f"{m} {h} * * *"
 
 
-def retry_crons(cfg: PipelineConfig) -> list[str]:
+def _crons(attempts: Sequence[tuple[str, str]]) -> list[str]:
     out = []
-    for day, hhmm in cfg.attempts():
+    for day, hhmm in attempts:
         h, m = _hhmm(hhmm)
         out.append(f"{m} {h} * * {cron_weekday(day)}")
     return out
 
 
+def retry_crons(cfg: PipelineConfig) -> list[str]:
+    return _crons(cfg.attempts())
+
+
+def eos_crons(cfg: PipelineConfig) -> list[str]:
+    """The Hot-Seat end-of-season snapshot's own cron lines (``end_of_season_attempts``)."""
+    return _crons(cfg.eos_attempts())
+
+
 def cron_role(cron: str | None, cfg: PipelineConfig) -> str | None:
-    """'nightly' or 'retry' for a cron line of the workflow (``github.event.schedule``), None
-    when unknown or not given."""
+    """'nightly', 'retry' or 'end_of_season' for a cron line of the workflow
+    (``github.event.schedule``), None when unknown or not given."""
     if not cron:
         return None
     norm = " ".join(cron.split())
@@ -76,6 +90,8 @@ def cron_role(cron: str | None, cfg: PipelineConfig) -> str | None:
         return "nightly"
     if norm in retry_crons(cfg):
         return "retry"
+    if norm in eos_crons(cfg):
+        return "end_of_season"
     return None
 
 
@@ -150,11 +166,22 @@ def gate(
         return Gate(True, "manual run", inside)
     if dates is None:
         return Gate(True, "no cached schedule yet (cold cache): running", None)
+    role = cron_role(cron, cfg)
+    if role == "end_of_season":
+        days = (t.date() - dates.last_game).days
+        if 0 < days <= EOS_GATE_DAYS:
+            return Gate(True, f"the Hot-Seat end-of-season attempt (the last regular-season "
+                              f"game day was {dates.last_game})", inside)  # fmt: skip
+        return Gate(
+            False,
+            f"the end-of-season attempts go ahead only in the {EOS_GATE_DAYS} days after the "
+            f"last regular-season game day ({dates.last_game}); the nightly run does the rest",
+            inside,
+        )
     if inside:
         return Gate(
             True, f"in season ({season_text}: {dates.first_game} to {dates.last_game})", True
         )
-    role = cron_role(cron, cfg)
     day = WEEKDAY_KEYS[t.weekday()]
     if day == cfg.offseason_weekday and role in ("nightly", None):
         return Gate(True, f"offseason: the weekly run ({cfg.offseason_weekday})", False)
@@ -300,3 +327,32 @@ def week_windows(db: Path | str, season: int) -> list[WeekWindow]:
     finally:
         con.close()
     return [WeekWindow(int(w), _utc(a), None if k is None else _utc(k)) for w, a, k in rows]
+
+
+def end_of_season_due(db: Path | str, season: int, rules=None) -> datetime | None:
+    """When the Hot-Seat end-of-season snapshot of ``season`` is due (aware UTC): every team's
+    last regular-season game public, i.e. the latest regular-season game's estimated end
+    (``fact_game.availability_game_end_utc``) plus the later of the result and play-by-play
+    lags, the same rule that dates each team's snapshot row (anchor ``last_game_end``,
+    :func:`twm.modules.hot_seat.features.as_of_points`). None without regular-season games.
+    ``rules``: :class:`~twm.warehouse.available.AvailabilityRules` (default: the config's)."""
+    from twm.warehouse import available as av
+    from twm.warehouse.build import connect
+
+    if rules is None:
+        from twm.config import settings
+
+        rules = av.AvailabilityRules.from_config(settings().availability)
+    con = connect(db, read_only=True)
+    try:
+        row = con.execute(
+            "SELECT max(availability_game_end_utc) FROM fact_game "
+            "WHERE season = ? AND season_type = 'REG'",
+            [season],
+        ).fetchone()
+    finally:
+        con.close()
+    if row is None or row[0] is None:
+        return None
+    lag = max(rules.game_result_lag, rules.game_data_lag[av.GAME_DATA_TABLES["fact_play"]])
+    return _utc(row[0]) + lag

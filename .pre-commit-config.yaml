@@ -1,3 +1,8 @@
+# Runs on every commit once `uv run pre-commit install` ran in the clone, and in CI on every push
+# (.github/workflows/ci.yml, job `hygiene`: every file, ruff skipped there because the python
+# job runs the locked ruff). The fixers never touch generated or pinned files: a rewrite would
+# break their sha256 pins or golden comparisons (artifacts/, data/, reports/*.csv,
+# tests/golden/expected/) or drizzle-kit's generated migrations (web/drizzle/).
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.9  # keep in sync with the ruff version in uv.lock (`uv run ruff --version`)
@@ -9,8 +14,13 @@ repos:
     rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
+        exclude: &generated ^(artifacts/|data/|reports/.*\.csv$|tests/golden/expected/|web/drizzle/)
       - id: trailing-whitespace
+        exclude: *generated
       - id: check-yaml
+      # --enforce-all: also in CI's every-file run (without it only files being added are
+      # checked). The one committed file above the limit: the 2.5 MB nfl4th benchmark table.
       - id: check-added-large-files
-        args: [--maxkb=2000]
+        args: [--maxkb=2000, --enforce-all]
+        exclude: ^reports/decisions/nfl4th_benchmark\.csv$
       - id: detect-private-key

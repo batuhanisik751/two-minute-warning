@@ -39,6 +39,14 @@ export function sitePublic(env: Env = process.env): boolean {
 /** The routes a sitemap lists (the pages of the main navigation and the track record). */
 export const SITEMAP_PATHS = ["/", "/waivers", "/regression", "/decisions", "/hot-seat", "/board", "/time-machine", "/track-record", "/methodology"] as const;
 
+/** The sitemap's entries at the configured origin, or null while the site is private
+ *  (SITE_PUBLIC not true): app/sitemap.ts then answers 404, as robots.txt names no sitemap. */
+export function sitemapEntries(env: Env = process.env): { url: string; changeFrequency: "weekly" | "monthly" }[] | null {
+  if (!sitePublic(env)) return null;
+  const o = siteOrigin(env);
+  return SITEMAP_PATHS.map((p) => ({ url: `${o}${p === "/" ? "" : p}`, changeFrequency: p === "/methodology" ? "monthly" : "weekly" }));
+}
+
 /** A page's title, description, canonical URL (the path without its query: a picked week or
  *  filter is a view of the same page) and Open Graph basics. Metadata merges shallowly, so the
  *  page sets its whole openGraph object. */

@@ -5,7 +5,7 @@ import { dimPlayer, dimTeam, modelVersions, regressionList, regressionOutcome, r
 import { cached } from "@/lib/cache";
 import type { ListKey } from "@/lib/params";
 import type { StabilityRow } from "@/lib/stability";
-import { dropTags, type RegressionRow, type RegressionTrackRow } from "@/lib/regression";
+import { backtestWeeks, dropTags, testSeasons, type RegressionRow, type RegressionTrackRow } from "@/lib/regression";
 
 // Regression Watch's published lists (regression_list / regression_row / regression_outcome),
 // its frozen parameters (model_versions.params) and its track record (regression_track_record).
@@ -175,13 +175,14 @@ async function getRegressionParamsRaw(): Promise<{ version: string; model: strin
   const rows = await headersQuery()
     .orderBy(desc(regressionList.season), desc(regressionList.week), desc(sql`${regressionList.kind} = 'live'`))
     .limit(1);
-  const weeks = await db()
-    .selectDistinct({ week: regressionList.week })
-    .from(regressionList)
-    .where(eq(regressionList.kind, "backtest"))
-    .orderBy(asc(regressionList.week));
+  // the backtest's as-of weeks: its lists in the published test seasons only (a reconstructed
+  // list of the season in progress, e.g. 2026 week 3, is not part of the frozen backtest)
+  const [lists, track] = await Promise.all([
+    db().selectDistinct({ season: regressionList.season, week: regressionList.week, kind: regressionList.kind }).from(regressionList),
+    getRegressionTrackRaw(),
+  ]);
   const h = rows[0];
-  return h ? { version: h.paramsVersion, model: h.model, params: h.params, weeks: weeks.map((w) => w.week) } : null;
+  return h ? { version: h.paramsVersion, model: h.model, params: h.params, weeks: backtestWeeks(lists, testSeasons(track)) } : null;
 }
 export const getRegressionParams = cached("regression.getRegressionParams", getRegressionParamsRaw);
 

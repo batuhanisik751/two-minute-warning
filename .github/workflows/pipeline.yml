@@ -20,6 +20,13 @@ on:
     - cron: "47 18 * * 2"
     - cron: "17 21 * * 2"
     - cron: "17 3 * * 3"
+    # The Hot-Seat end-of-season snapshot, the morning after the last regular-season game day
+    # (before Black Monday's announcements; GitHub can start a run hours late, so early).
+    # Every other Monday the gate stops them at once; the plan scores the snapshot only once
+    # every team's last game is public. Manual fallback: docs/hot_seat.md.
+    - cron: "17 3 * * 1"
+    - cron: "47 5 * * 1"
+    - cron: "37 11 * * 1"
   workflow_dispatch:
     inputs:
       week:

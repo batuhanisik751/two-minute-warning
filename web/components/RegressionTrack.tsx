@@ -1,16 +1,10 @@
 import Term from "@/components/Term";
 import { fmtInt, pct, pctRange } from "@/lib/format";
 import { TRACK_INTERVAL_LEVEL } from "@/lib/method";
-import { TAGS, droppedRates, rwMethodName, signed, tagTitle, tagVerdict, trackRow, type RegressionTrackRow } from "@/lib/regression";
+import { TAGS, droppedRates, rwMethodName, signed, tagTitle, tagVerdict, testSeasons, trackRow, type RegressionTrackRow } from "@/lib/regression";
 
 const pts = (x: number) => x.toFixed(2);
 const range = (lo: number | null, hi: number | null, f: (x: number) => string) => (lo !== null && hi !== null ? `${f(lo)} to ${f(hi)}` : null);
-
-/** The seasons the backtest tested (its `choice` rows: one per test season). */
-export function testSeasons(rows: readonly RegressionTrackRow[]): { from: number; to: number } | null {
-  const s = rows.filter((r) => r.section === "choice" && r.season !== null).map((r) => r.season as number);
-  return s.length ? { from: Math.min(...s), to: Math.max(...s) } : null;
-}
 
 const HIT_WORDS: Record<(typeof TAGS)[number], string> = {
   sell_high: "his rest-of-season PPG was below his PPG at the list",

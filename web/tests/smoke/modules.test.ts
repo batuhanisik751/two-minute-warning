@@ -183,7 +183,7 @@ describe("/regression (seed)", () => {
     assert.equal(rows(fold, "rw-row").length, M.rwLong.buyLow - 10);
     assert.equal(bl.querySelector("ol[data-testid=rw-list]:not([data-fold-rest])")!.children.length, 10);
     assert.equal(m.querySelector("[data-testid=tag-sell_high] details"), null, "Sell-high (3) does not fold");
-    assert.match(prose(m.querySelector("[data-testid=rw-track]")!), /Graded on 900 player-weeks of the 2024–2025 test seasons, as-of weeks 4, 6/);
+    assert.match(prose(m.querySelector("[data-testid=rw-track]")!), /Graded on 900 player-weeks of the 2024–2025 test seasons, as-of weeks 4, 6 \(/);
     const weeks = Array.from(m.querySelectorAll<HTMLOptionElement>("select[name=week] option")).map((o) => normalise(o.textContent ?? ""));
     assert.deepEqual(weeks, ["Week 4 (reconstructed)", "Week 6 (reconstructed)"]);
   });

@@ -32,9 +32,9 @@ One place, `lib/seo.ts`, read per request from the environment (no domain is wri
 | variable | effect |
 |---|---|
 | `SITE_URL` | the canonical origin (e.g. `https://example.org`; only its origin is used) for the canonical links, Open Graph URLs and the sitemap. Unset: Vercel's own `VERCEL_PROJECT_PRODUCTION_URL`, else `http://localhost:3000` |
-| `SITE_PUBLIC` | `true`: `robots.txt` allows crawling (except `/league`) and names the sitemap, pages are indexable. Anything else, or unset (the default): `robots.txt` disallows everything and every page says `noindex, nofollow` |
+| `SITE_PUBLIC` | `true`: `robots.txt` allows crawling (except `/league`) and names the sitemap, `/sitemap.xml` is served, pages are indexable. Anything else, or unset (the default): `robots.txt` disallows everything, `/sitemap.xml` answers 404 and every page says `noindex, nofollow` |
 
-`/sitemap.xml` (`app/sitemap.ts`) lists the nine pages of the main navigation at that origin;
+`/sitemap.xml` (`app/sitemap.ts`, only with `SITE_PUBLIC=true`) lists the nine pages of the main navigation at that origin;
 player and coach pages are reached from them. A page's canonical URL is its path without the
 query (a picked week or filter is a view of the same page). The site stays private (Vercel
 Authentication, `SITE_PUBLIC` unset) until the owner decides; docs/deploy.md step 10.

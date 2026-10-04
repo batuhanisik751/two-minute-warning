@@ -78,8 +78,8 @@ matches no game, changes nothing, names a `coach_out` the schedule does not list
 another row stops the build; `build_manifest.notes.coach_corrections` on `fact_game` lists each
 applied row with its team-game count (`n_coach_team_games_corrected`: 192 at H1b).
 `available_at` is unchanged. `fact_play.home_coach` / `away_coach` keep the raw pbp names
-(nothing reads them). Hot-Seat labels still come from the owner-verified
-`data/manual/coach_departures.csv`; `n_team_seasons_multi_coach` counts the corrected
+(nothing reads them). Hot-Seat labels still come from
+`data/manual/coach_departures.csv` (cited research the owner accepted in bulk); `n_team_seasons_multi_coach` counts the corrected
 splits. Evidence per season is in `docs/assumptions.md` section 10.
 
 A schedule row mixes three availabilities: the fixture itself is known months ahead; the

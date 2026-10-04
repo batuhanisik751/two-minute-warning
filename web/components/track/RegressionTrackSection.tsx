@@ -1,9 +1,9 @@
 import Link from "next/link";
-import RegressionTrack, { testSeasons } from "@/components/RegressionTrack";
+import RegressionTrack from "@/components/RegressionTrack";
 import { fmtInt, seasonWeek } from "@/lib/format";
 import { getRegressionParams, getRegressionTrack } from "@/lib/queries/regression";
 import { getRegressionLive } from "@/lib/queries/track-record";
-import { TAGS, tagTitle } from "@/lib/regression";
+import { TAGS, tagTitle, testSeasons } from "@/lib/regression";
 import { liveTagSummary } from "@/lib/track-record";
 import LiveResults from "./LiveResults";
 import { H4, NotPublished, Panel } from "./parts";

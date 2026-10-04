@@ -1,11 +1,11 @@
 import Link from "next/link";
 import StabilityStudy from "@/components/methodology/StabilityStudy";
-import RegressionTrack, { testSeasons } from "@/components/RegressionTrack";
+import RegressionTrack from "@/components/RegressionTrack";
 import Term from "@/components/Term";
 import { EmptyState } from "@/components/ui";
 import { fmtInt, pct, pctRange } from "@/lib/format";
 import { getRegressionParams, getRegressionStability, getRegressionTrack } from "@/lib/queries/regression";
-import { TAGS, paramNumber, shrinkRows, signed, tagTitle, trackRow, type RegressionTrackRow } from "@/lib/regression";
+import { TAGS, paramNumber, shrinkRows, signed, tagTitle, testSeasons, trackRow, type RegressionTrackRow } from "@/lib/regression";
 
 const POS = ["QB", "RB", "WR", "TE", "all"];
 

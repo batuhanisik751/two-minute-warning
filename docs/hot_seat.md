@@ -2,7 +2,7 @@
 
 PROJECT_SPEC 8.5. The features (H3a) come first; the labels and the models (H3b) are in the last
 two sections.
-Labels come from the owner-verified `data/manual/coach_departures.csv` (docs/labeling_coaches.md).
+Labels come from `data/manual/coach_departures.csv`: cited public-source research that the owner accepted in bulk on 2026-10-01, not re-checked row by row (see "Where the labels come from" below; docs/labeling_coaches.md).
 
 - Code: `src/twm/modules/hot_seat/features.py`; config: `hot_seat:` in `config/settings.yaml`.
 - Command: `uv run twm hotseat features` (2002 to the current season), `--season S` or
@@ -285,9 +285,14 @@ approved model".
   backtest). The snapshot is due once every team's last game is public (exit code 3 before),
   so a frozen list never misses a team. Freshness: Regression Watch's checks (exit code 3).
 - **Live or reconstructed**: the Radar's rule: `live` only on the real clock between the
-  as-of and the next week's first kickoff (the end-of-season snapshot: until the first playoff
-  kickoff). The snapshot can be scored after Black Monday (the job runs on Tuesday); its
-  features stay point in time at each team's own as-of.
+  as-of and the next week's first kickoff. The end-of-season snapshot is stored `live` when it
+  is scored on the real clock inside its window: from its as-of (the latest team's
+  `last_game_end` as-of, i.e. the moment it is due) until the first playoff kickoff, when the
+  window closes; scored later it is `backtest` (reconstructed). The job scores it the morning
+  after the last game day, before Black Monday's announcements (see "When the end-of-season
+  snapshot runs"); one scored after some announcements (a late manual run, or Tuesday's
+  attempts when Monday's data was late) is still `live`, since its features stay point in
+  time at each team's own as-of, and the stored `created_at` tells when it was made.
 - **Store**: `predictions` rows (`module` hot_seat, `entity_type` coach, `entity_id` the
   warehouse coach id, `rank_group` the snapshot, `score` the probability, `reasons_json`:
   team, coach name, interim flag, drivers, key features). A live list is append-only: a
@@ -295,9 +300,23 @@ approved model".
   reconstructed, keeps the stored one. Report: `reports/hot_seat/weekly/<season>-W<nn>.md`.
 - **The job**: stage `hotseat_score` after `decisions` (the decision-quality feature reads
   the season grades it makes), preflight loads the pin and the snapshot (sha256), one publish.
-  It scores the week the other lists score; once the last regular-season week's Tuesday as-of
-  has passed (no other list follows it) it scores the end-of-season snapshot on each night of
-  the season window, with the same retry deadline; a stored live snapshot is kept.
+  It scores the week the other lists score; once no other list is due and the end-of-season
+  snapshot is due, it scores that snapshot on every run of the season window; a stored live
+  snapshot is kept (append-only, never overwritten).
+- **When the end-of-season snapshot runs** (spec P2: published before Black Monday): it is due
+  once every team's last regular-season game is public, the latest regular-season game's
+  estimated end (kickoff + 4 h) plus the later of the result and play-by-play lags (6 h), the
+  same rule that dates the snapshot's rows (`twm.pipeline.schedule.end_of_season_due`, read
+  from the warehouse's schedule, never typed in): about 04:00 UTC Monday after an afternoon
+  finale, 11:20 UTC (06:20 ET) after a Sunday-night one (every finale 2022-2025). Besides the
+  nightly 10:47 run, `pipeline.end_of_season_attempts` adds Monday runs at 03:17, 05:47 and
+  11:37 UTC (GitHub can start them hours late); the gate drops them on every other Monday,
+  and the plan scores the snapshot only once it is due (before that the stage says when).
+  Data that has not arrived yet is a warning; the deadline (a failure, GitHub emails) is the
+  last week's last Tuesday retry, Wednesday 03:17 UTC. **Manual fallback**: once the due time
+  has passed (Sunday night ET after an afternoon finale, from 06:20 ET Monday after a
+  Sunday-night one), `gh workflow run pipeline.yml` with no week (the plan finds the snapshot
+  itself; the run's summary says "Hot-Seat Meter: week 18: scored", or when it is due).
 - **Published** (migration `web/drizzle/0004_hot_seat.sql`): `hot_seat_list` (season, week,
   snapshot, kind), `hot_seat_row` (every coach: probability, rank, interim flag, drivers as
   JSON, the key features; `coach_id` = the decisions' slug of the coach's name, so

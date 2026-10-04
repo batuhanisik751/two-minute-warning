@@ -11,7 +11,9 @@ same exit codes and the same files as when the owner types it):
 2. **gate** (here, :func:`twm.pipeline.schedule.gate`): offseason days without a run stop here.
 3. **ingest**: ``twm ingest --start <season> --force`` (the nightly refresh: the current season
    and the one-file datasets); on a cold cache (historical seasons missing) first
-   ``twm ingest --end <season - 1>``. One retry after a pause (downloads can be flaky).
+   ``twm ingest --end <season - 1>``. One retry after a pause (downloads can be flaky). Then
+   what arrived (:mod:`twm.pipeline.arrivals`: per dataset, the newest season/week and the
+   fetch time) goes to the result, the summary and the ``pipeline_runs`` notes.
 4. **build**: ``twm build --start <build_start> --end <season>``.
 5. **plan** (here, :func:`twm.pipeline.schedule.plan_week`): which week's list is due.
 6. **dataset**: ``twm radar dataset``.
@@ -46,7 +48,9 @@ same exit codes and the same files as when the owner types it):
 16. **hotseat_score** / **hotseat_export** (step H4a; only when a list is due): ``twm hotseat
     score`` with the approved Hot-Seat model (sha256 checked in preflight; loaded, never fitted),
     after **decisions** because its decision-quality feature reads the season grades just made;
-    the same not-ready rules (the end-of-season snapshot not due yet = exit code 3).
+    the same not-ready rules. Once no other list is due, the end-of-season snapshot is
+    planned from its due time (every team's last game public, :func:`twm.pipeline.schedule.
+    end_of_season_due`: the night of the last game day, before Black Monday).
 17. **board_score** (step I6b; once a season): ``twm board score --live-publish``, the season's
     LIVE Cliff board with the pinned models, only while its window is open (config
     ``as_of.board.live_publish``: from that as-of to the first week-1 kickoff) and no live board
@@ -78,6 +82,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from twm.pipeline import arrivals as ar
 from twm.pipeline import schedule as sc
 
 EXIT_OK = 0
@@ -165,6 +170,8 @@ class RunResult:
     files: list[str] = field(default_factory=list)
     publish_result: dict[str, Any] = field(default_factory=dict)
     decisions: str = ""  # step P3: what the season-in-progress grading found
+    # what the refresh found: dataset -> newest season, week, fetch time (arrivals.py)
+    arrivals: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def seconds(self) -> float:
@@ -277,6 +284,12 @@ class Hooks:
     # as_of.board.live_publish) is open and no live board of the season is stored
     board_window: Callable[[int, datetime], tuple[bool, str]] = (
         lambda s, now: (False, "the board's window was not checked"))  # fmt: skip
+    # season -> when the Hot-Seat end-of-season snapshot is due (every team's last game
+    # public, :func:`twm.pipeline.schedule.end_of_season_due`); None = unknown, then the last
+    # week's Tuesday as-of
+    end_of_season_due: Callable[[int], datetime | None] = lambda s: None  # noqa: E731
+    # season -> per dataset, the newest season/week in the cache and its fetch time
+    arrivals: Callable[[int], dict[str, dict[str, Any]]] = lambda s: {}  # noqa: E731
 
 
 def decisions_summary(season: int, folder: Path | None = None) -> str:
@@ -417,6 +430,8 @@ def default_hooks() -> Hooks:
         resolve_target=tg.resolve,
         record_failure=wr.record_failure_at,
         board_window=board_window,
+        end_of_season_due=lambda s: sc.end_of_season_due(settings().path("warehouse"), s),
+        arrivals=lambda s: ar.dataset_arrivals(s),
     )
 
 
@@ -513,6 +528,7 @@ class _Run:
             "run_url": self.opts.run_url or None,
             "pretend_now": None if r.pretend_now is None else r.pretend_now.isoformat(),
             "stages": {st.name: {"status": st.status, "seconds": st.seconds} for st in r.stages},
+            "arrivals": r.arrivals,
         }  # fmt: skip
 
     # -- the stages ---------------------------------------------------------------------
@@ -591,6 +607,12 @@ class _Run:
             self.fail("ingest", f"downloads failed twice (exit codes {codes})", t0,
                       code=max(codes), logs=logs)  # fmt: skip
             return False
+        try:  # what arrived (docs/assumptions.md section 12); best effort
+            self.res.arrivals = dict(self.hooks.arrivals(self.season))
+        except Exception as ex:
+            self.warn(f"the datasets' newest weeks could not be read from the cache: {ex}")
+        newest = ar.arrivals_text(self.res.arrivals)
+        what += f"; newest: {newest}" if newest else ""
         self.add("ingest", "ok", t0, what, code=0, logs=[self.rel(p) for p in logs])
         return True
 
@@ -619,18 +641,30 @@ class _Run:
         return p
 
     def hot_seat_plan(self, p: sc.Plan) -> sc.Plan:
-        """The Hot-Seat list's plan (step H4a): the Radar's; once the last regular-season
-        week's as-of has passed (no other list follows it), that week = the end-of-season
-        snapshot, with the same retry deadline (`twm hotseat score` keeps a stored live
-        snapshot on later nights)."""
+        """The Hot-Seat list's plan (step H4a): the Radar's while one of its lists is due; else,
+        once the end-of-season snapshot is due (every team's last regular-season game public:
+        ``hooks.end_of_season_due``, the night of the last game day, before Black Monday;
+        unknown = the last week's Tuesday as-of), the last week = that snapshot. Its deadline
+        is the last week's last Tuesday retry: a not-ready snapshot is a warning before it.
+        `twm hotseat score` keeps a stored live snapshot on later nights (append-only)."""
         if p.week is not None or not getattr(self, "windows", None):
             return p
         last = max(self.windows, key=lambda w: w.week)
-        if last.as_of > self.now:
-            return p
+        try:
+            due = self.hooks.end_of_season_due(self.season)
+        except Exception as e:  # informative; the Tuesday as-of still starts the snapshot
+            self.warn(f"the end-of-season snapshot's due time could not be read: {e}")
+            due = None
+        start = due if due is not None else last.as_of
+        if start > self.now:
+            if len(self.windows) < 2 or self.now < sorted(w.as_of for w in self.windows)[-2]:
+                return p
+            return sc.Plan(p.season, None, f"{p.reason}; the Hot-Seat end-of-season snapshot "
+                           f"is due at {start:%a %Y-%m-%d %H:%M} UTC")  # fmt: skip
         end = sc.deadline(last.as_of, self.s.pipeline)
-        return sc.Plan(p.season, last.week, f"week {last.week}: the end-of-season snapshot",
-                       as_of=last.as_of, deadline=end)  # fmt: skip
+        return sc.Plan(p.season, last.week,
+                       f"week {last.week}: the end-of-season snapshot (due since "
+                       f"{start:%a %Y-%m-%d %H:%M} UTC)", as_of=start, deadline=end)  # fmt: skip
 
     def _state(self, module: str, key: str, value: str | None = None) -> str:
         """The Radar's ``score`` / ``list_kind`` or another module's (``res.modules``)."""
@@ -671,17 +705,17 @@ class _Run:
             self.add(stage, "ok", t0, f"{who}week {p.week} scored", code=code, logs=logs)
             return True
         if code == SCORE_NOT_READY:
-            missing = _tail(log, 8)
+            missing, attempt = _tail(log, 8), p.attempt_text(self.now)
             if p.not_ready_fails(self.now):
                 self._state(module, "score", "late")
                 text = (f"{who}week {p.week}'s data has not arrived by the last attempt "
-                        f"({self.res.attempt}); the score log says what is missing")  # fmt: skip
+                        f"({attempt}); the score log says what is missing")  # fmt: skip
                 self.res.errors.append(f"{stage}: {text}")
                 self.add(stage, "late", t0, text + (f"\n{missing}" if missing else ""),
                          code=code, logs=logs)  # fmt: skip
             else:
                 self._state(module, "score", "not_ready")
-                text = f"{who}week {p.week}'s data has not fully arrived yet ({self.res.attempt})"
+                text = f"{who}week {p.week}'s data has not fully arrived yet ({attempt})"
                 self.warn(text)
                 self.add(stage, "not_ready", t0, text + (f"\n{missing}" if missing else ""),
                          code=code, logs=logs)  # fmt: skip

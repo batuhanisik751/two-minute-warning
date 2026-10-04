@@ -45,6 +45,10 @@ describe("every page", () => {
       assert.equal(normalise(p.doc.querySelector("[data-testid=disclaimer]")?.textContent ?? ""), DISCLAIMER, path);
       const credits = normalise(p.doc.querySelector("[data-testid=attribution]")?.textContent ?? "");
       for (const c of CREDITS) assert.ok(credits.includes(c), `${path}: credit ${c} missing`);
+      // the coach labels are cited research accepted by the owner in bulk (docs/progress.md,
+      // 2026-10-01), never "checked by hand"; no draft or placeholder wording on a page
+      assert.match(credits, /accepted by the project's owner in bulk, not re-checked row by row/, path);
+      assert.doesNotMatch(prose(p.doc), /checked by hand|verified by hand|page is a draft|coming soon|lorem ipsum/i, path);
       assert.equal(p.doc.querySelector("meta[name=robots]")?.getAttribute("content"), "noindex, nofollow", path);
       const firstFocusable = p.doc.querySelector("a[href], button, input, select, textarea");
       assert.equal(firstFocusable?.getAttribute("href"), "#main", `${path}: the skip link is not the first focusable element`);
@@ -97,14 +101,15 @@ describe("every page", () => {
     assert.match(body, /Disallow: \/\s*$/m);
   });
 
-  test("the sitemap lists the site's pages; robots.txt names no sitemap while the site is private", async (t) => {
+  test("while the site is private: robots.txt names no sitemap and /sitemap.xml answers 404", async (t) => {
     if (!up) return t.skip(`no server at ${BASE}`);
     const robots = await (await fetch(`${BASE}/robots.txt`)).text();
     assert.ok(!/Sitemap:/i.test(robots), robots);
+    // the smoke servers run without SITE_PUBLIC (every page says noindex); the public sitemap's
+    // entries are unit-tested (tests/unit/seo.test.ts)
     const r = await fetch(`${BASE}/sitemap.xml`);
-    assert.equal(r.status, 200);
-    const locs = Array.from((await r.text()).matchAll(/<loc>([^<]+)<\/loc>/g), (m) => new URL(m[1]).pathname);
-    assert.deepEqual(locs, ["/", "/waivers", "/regression", "/decisions", "/hot-seat", "/board", "/time-machine", "/track-record", "/methodology"]);
+    assert.equal(r.status, 404);
+    assert.ok(!/<urlset/.test(await r.text()), "no sitemap body");
   });
 });
 

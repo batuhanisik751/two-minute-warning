@@ -15,7 +15,7 @@ let set: RouteSet;
 const pages = new Map<string, Page>();
 const empty = new Map<string, Page>();
 const seedOnly = DATA === "seed";
-const EXTRA = ["/", "/methodology", "/track-record"];
+const EXTRA = ["/", "/hot-seat", "/methodology", "/track-record"];
 
 before(
   async () => {
@@ -79,6 +79,18 @@ describe("/hot-seat", () => {
     }
   });
 
+  test("this season's weekly lists not started yet: said plainly, with when the first is due", (t) => {
+    if (!up) return t.skip(`no server at ${BASE}`);
+    const note = main("/hot-seat").querySelector("[data-testid=hot-seat-not-started]");
+    if (seedOnly) assert.equal(note, null, "the seed's newest list is this season's");
+    if (!note) return;
+    const due = String.raw`(?:is|was) due at \w{3} \d{1,2} \w{3} \d{4}, \d{2}:\d{2} UTC \(the weekly as-of\)(?: and has not been published yet)?`;
+    assert.match(
+      prose(note),
+      new RegExp(String.raw`^No \d{4} weekly list has been published yet: the next one (?:${due}|is due on the \w+ after week \d+'s games)\.(?: Shown below: the newest published list, from \d{4}\.)?$`),
+    );
+  });
+
   test("how to read it: the meaning, the early-season check from the data, the labels' source, the research", (t) => {
     if (!up) return t.skip(`no server at ${BASE}`);
     const r = set.routes.find((x) => x.kind === "hot-seat");
@@ -100,6 +112,15 @@ describe("/hot-seat", () => {
       for (const td of all(sec, "[data-testid=coach-hot-seat-table] tbody td.num:nth-child(2) .font-semibold")) assert.match(text(td), /^(?:<1%|>99%|\d{1,3}%)$/);
       for (const o of all(sec, "[data-outcome]")) assert.match(text(o), /^(Let go|Not let go|Left another way|Pending)$/);
       assert.doesNotMatch(prose(sec), HARSH);
+      // record vs expectation (spec 9.1): beside the Hot-Seat history, NULL-safe
+      const rec = m.querySelector("[data-testid=coach-record-table]");
+      assert.ok(rec, "the record vs expectation table");
+      for (const tr of all(rec, "tbody tr")) {
+        const [record, expected, vs] = all(tr, "td").map(text);
+        assert.match(record, /^(\d+–\d+|\d+\.5 wins in \d+ games \(a tie counts half\))$/);
+        assert.match(expected, /^(\d+\.\d|not known)$/);
+        assert.match(vs, /^([+−]?\d+\.\d|–)$/);
+      }
     }
   });
 });
@@ -175,6 +196,12 @@ describe("seed: the Hot-Seat Meter elsewhere", () => {
     assert.equal(all(sec, "[data-testid=hot-seat-chart] details table tbody tr").length, 2);
     const past = all(sec, "[data-testid=coach-hot-seat-table] tbody tr").map((r) => text(r.querySelector("th a")!));
     assert.deepEqual(past, [String(H.past), String(H.older)]);
+    // record vs expectation: this season through the newest week, past seasons at their end
+    const rec = all(main(`/coach/${H.featured}`), "[data-testid=coach-record-table] tbody tr").map((r) => prose(r.querySelector("th")!));
+    assert.equal(rec.length, 3, rec.join(" | "));
+    assert.match(rec[0], new RegExp(`^${H.season} [A-Z]{2,3}, through week ${H.liveWeek}$`));
+    assert.match(rec[1], new RegExp(`^${H.past} [A-Z]{2,3}$`));
+    assert.match(rec[2], new RegExp(`^${H.older} [A-Z]{2,3}$`));
     const gone = main(`/coach/${H.firedAfter}`).querySelector("[data-testid=coach-hot-seat]")!;
     assert.match(prose(gone), /Let go fired after the season, announced 2026-01-05/);
     assert.equal(gone.querySelector("[data-testid=coach-hot-seat-season]"), null, "no row this season");
@@ -193,7 +220,11 @@ describe("seed: the Hot-Seat Meter elsewhere", () => {
     assert.match(prose(m.querySelector("[data-testid=hot-seat-research]")!), new RegExp(`odds ratio per standard deviation of fourth-down WP lost per game is ${HOT_SEAT_RESEARCH.oddsRatio.toFixed(2)}`));
     assert.match(prose(m), /penalty strength C = 0\.1/);
     const tr = main("/track-record").querySelector("[data-testid=track-hot-seat]")!;
-    assert.equal(all(tr, "[data-testid=hot-seat-headline] > li").length, 3);
+    // the top-5 hit rate at week 12 beside the season-end one (tiles and the models table)
+    assert.equal(all(tr, "[data-testid=hot-seat-headline] > li").length, 4);
+    assert.match(prose(tr.querySelector("[data-testid=hot-seat-headline]")!), /top 5 at week 12 .*top 5 at season end/);
+    const heads = all(m, "[data-testid=hot-seat-models] thead th").map(text);
+    assert.deepEqual(heads.slice(-2), ["Top-5 hit rate, week 12", "Top-5 hit rate, season end"]);
     assert.equal(tr.querySelector("[data-testid=hot-seat-live]")!.getAttribute("data-live"), "pending");
     assert.match(prose(tr.querySelector("[data-testid=hot-seat-live]")!), /^No live results yet\. 1 live list \(12 coach-seasons\): outcomes pending until the season's departures are labelled/);
   });

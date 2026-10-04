@@ -356,7 +356,8 @@ class SeasonWindow(BaseModel):
 class PipelineConfig(BaseModel):
     """``pipeline:`` in settings.yaml: the scheduled job (step E4, `twm pipeline run`,
     .github/workflows/pipeline.yml; docs/deploy.md 'The scheduled pipeline'). The workflow's
-    cron lines must match ``nightly`` and ``retry_attempts`` (tests/test_workflows.py)."""
+    cron lines must match ``nightly``, ``retry_attempts`` and ``end_of_season_attempts``
+    (tests/test_workflows.py)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -365,6 +366,10 @@ class PipelineConfig(BaseModel):
     nightly: str = "10:47"
     retry_attempts: list[str] = ["tuesday 15:17", "tuesday 18:47", "tuesday 21:17",
                                  "wednesday 03:17"]  # fmt: skip
+    # The Hot-Seat end-of-season snapshot's own attempts (the morning after the last
+    # regular-season game day; the gate drops them on every other day, the plan acts on them
+    # only once the snapshot is due). docs/hot_seat.md "When the end-of-season snapshot runs".
+    end_of_season_attempts: list[str] = ["monday 03:17", "monday 05:47", "monday 11:37"]
     build_start: int = 2012
 
     @field_validator("offseason_weekday")
@@ -386,9 +391,19 @@ class PipelineConfig(BaseModel):
             raise ValueError("pipeline.retry_attempts needs at least one attempt")
         return [" ".join(_weekday_time("pipeline.retry_attempts", a)) for a in v]
 
+    @field_validator("end_of_season_attempts")
+    @classmethod
+    def _eos_attempts(cls, v: list[str]) -> list[str]:
+        return [" ".join(_weekday_time("pipeline.end_of_season_attempts", a)) for a in v]
+
     def attempts(self) -> list[tuple[str, str]]:
         """The retry attempts as (weekday, 'HH:MM')."""
         return [_weekday_time("pipeline.retry_attempts", a) for a in self.retry_attempts]
+
+    def eos_attempts(self) -> list[tuple[str, str]]:
+        """The end-of-season attempts as (weekday, 'HH:MM')."""
+        key = "pipeline.end_of_season_attempts"
+        return [_weekday_time(key, a) for a in self.end_of_season_attempts]
 
 
 class PublishConfig(BaseModel):

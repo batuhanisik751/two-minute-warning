@@ -59,6 +59,10 @@ def summary_markdown(result: Any) -> str:
         facts.append((titles.get(module, module), f"week {week}: {m.get('score')}{kind}"))
     if getattr(r, "decisions", ""):  # step P3: the season in progress's grades
         facts.append(("Decisions", r.decisions))
+    if getattr(r, "arrivals", None):  # what the refresh found (the full list: result.json)
+        from twm.pipeline.arrivals import arrivals_text
+
+        facts.append(("Data", arrivals_text(r.arrivals)))
     facts.append(("Publish", r.publish + (f" to {r.target}" if r.target else "")))
     lines += [f"- **{k}:** {_cell(v)}" for k, v in facts if v]
     lines += ["", "| stage | result | time | notes |", "|---|---|---:|---|"]

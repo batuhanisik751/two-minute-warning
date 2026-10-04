@@ -81,6 +81,25 @@ def test_gate_offseason_runs_once_a_week() -> None:
         sc.gate(wednesday, trigger="push", cron=None, dates=DATES, cfg=CFG)
 
 
+def test_gate_end_of_season_attempts_only_after_the_last_game_day() -> None:
+    """The Monday crons (Hot-Seat end-of-season snapshot) go ahead only in the days right
+    after the season's last regular-season game day (read from the schedule), never on the
+    other Mondays of the season or in the offseason; a manual run always does."""
+    crons = sc.eos_crons(CFG)
+    assert crons and {sc.cron_role(c, CFG) for c in crons} == {"end_of_season"}
+    after = datetime.combine(DATES.last_game + timedelta(days=1), datetime.min.time(), UTC)
+    for cron in crons:
+        g = sc.gate(after + timedelta(hours=5), trigger="schedule", cron=cron, dates=DATES,
+                    cfg=CFG)  # fmt: skip
+        assert g.run and g.in_season and "end-of-season attempt" in g.reason
+        for day in ("2026-10-05T05:47", "2026-12-28T05:47", "2027-03-01T05:47"):
+            g = sc.gate(t(day), trigger="schedule", cron=cron, dates=DATES, cfg=CFG)
+            assert not g.run and "after the last regular-season game day" in g.reason
+    assert sc.gate(t("2026-10-05T05:47"), trigger="manual", cron=None, dates=DATES, cfg=CFG).run
+    # a cold cache cannot tell: it runs (the plan decides)
+    assert sc.gate(after, trigger="schedule", cron=crons[0], dates=None, cfg=CFG).run
+
+
 def test_cron_lines_follow_the_config() -> None:
     assert sc.nightly_cron(CFG) == "47 10 * * *"
     assert sc.retry_crons(CFG) == ["17 15 * * 2", "47 18 * * 2", "17 21 * * 2", "17 3 * * 3"]

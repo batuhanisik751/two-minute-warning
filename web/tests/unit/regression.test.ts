@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   DROPPED_TAGS,
   TAGS,
+  backtestWeeks,
   droppedRates,
   dropTags,
   paramNumber,
@@ -15,6 +16,7 @@ import {
   statsOf,
   tagRows,
   tagVerdict,
+  testSeasons,
   trackRow,
   type RegressionRow,
   type RegressionTrackRow,
@@ -109,4 +111,25 @@ test("the shrinkage table comes from the frozen parameters", () => {
   assert.equal(paramNumber(params, "x_sell"), 4.5);
   assert.equal(paramNumber(params, "nope"), null);
   assert.deepEqual(shrinkRows(null), []);
+});
+
+test("the backtest's as-of weeks: its lists in the published test seasons, not the season in progress", () => {
+  // the 2026-10-04 audit: a reconstructed 2026 week-3 list (kind backtest) made the site say "weeks 3, 4, 6, 8, 10"
+  const lists = [
+    ...[2011, 2025].flatMap((season) => [4, 6, 8, 10].map((week) => ({ season, week, kind: "backtest" }))),
+    { season: 2026, week: 3, kind: "backtest" },
+    { season: 2026, week: 3, kind: "live" },
+  ];
+  const t = (season: number): RegressionTrackRow => ({
+    section: "choice", weeks: null, position: null, method: null, metric: null, rowGroup: null, season,
+    value: 1, lo: null, hi: null, n: 1, nSeasons: null, perAsof: null, notGraded: null,
+  });
+  const seasons = testSeasons([t(2011), t(2018), t(2025), { ...t(2030), section: "threshold" }]);
+  assert.deepEqual(seasons, { from: 2011, to: 2025 });
+  assert.deepEqual(backtestWeeks(lists, seasons), [4, 6, 8, 10]);
+  // no published test seasons: the seasons before the newest list's
+  assert.deepEqual(backtestWeeks(lists, null), [4, 6, 8, 10]);
+  assert.deepEqual(backtestWeeks([], null), []);
+  // a test season's live list never counts
+  assert.deepEqual(backtestWeeks([{ season: 2024, week: 5, kind: "live" }], { from: 2024, to: 2024 }), []);
 });

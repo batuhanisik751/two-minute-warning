@@ -46,6 +46,7 @@ class Fake:
     missing: list[str] = field(default_factory=list)
     dates: sc.SeasonDates | None = DATES
     model_error: str | None = None
+    eos_due: datetime | None = None  # the Hot-Seat end-of-season snapshot due time
     calls: list[tuple[str, list[str]]] = field(default_factory=list)
     failures: list[dict] = field(default_factory=list)
     slept: list[float] = field(default_factory=list)
@@ -84,6 +85,7 @@ class Fake:
             resolve_target=lambda mode: FakeTarget(), record_failure=record,
             sleep=self.slept.append,
             decisions_summary=lambda s: f"{s}: 9 fourth downs graded (4 clear)",
+            end_of_season_due=lambda s: self.eos_due,
         )  # fmt: skip
 
     def stages(self) -> list[str]:
@@ -399,14 +401,24 @@ def test_a_bug_in_the_runner_still_ends_with_a_result(tmp_path: Path) -> None:
     assert (tmp_path / "b" / "summary.md").exists()
 
 
-def test_the_hot_seat_end_of_season_snapshot_is_scored_after_the_last_week(
+# the synthetic season's end-of-season snapshot is due the night before its last week's
+# Tuesday as-of: a Sunday-night finale (kickoff 01:20 UTC Monday) + 4 h + the 6 h pbp lag
+EOS_DUE = windows()[-1].as_of - timedelta(hours=26, minutes=40)
+MONDAY_CRON = "37 11 * * 1"
+
+
+def test_the_hot_seat_end_of_season_snapshot_is_scored_once_due_before_black_monday(
     tmp_path: Path,
 ) -> None:
-    """Step H4a: no list follows the last regular-season week, but its as-of starts the
-    Hot-Seat end-of-season snapshot (the other modules skip); not due yet = not ready."""
-    fake = Fake()
-    res = run(fake, tmp_path / "a", now="2027-01-12T15:20", trigger="manual")
+    """Step H4a: no list follows the last regular-season week, but once every team's last
+    game is public (the due time) the Hot-Seat end-of-season snapshot is scored, the morning
+    after the last game day, a day before the last week's Tuesday as-of."""
+    assert EOS_DUE.weekday() == 0 and windows()[-1].as_of > EOS_DUE  # Monday, before Tuesday
+    now = (EOS_DUE + timedelta(minutes=20)).isoformat()[:16]
+    fake = Fake(eos_due=EOS_DUE)
+    res = run(fake, tmp_path / "a", now=now, cron=MONDAY_CRON)
     assert res.exit_code == rn.EXIT_OK, res.errors
+    assert res.gate.startswith("the Hot-Seat end-of-season attempt")
     assert res.week is None and res.stage("score").status == "skipped"
     args = fake.args("hotseat_score")[0]
     assert args[:6] == ["hotseat", "score", "--season", "2026", "--week", "18"]
@@ -414,12 +426,135 @@ def test_the_hot_seat_end_of_season_snapshot_is_scored_after_the_last_week(
     summary = (tmp_path / "a" / "run" / "summary.md").read_text()
     assert "**Hot-Seat Meter:** week 18: scored" in summary
     assert fake.stages()[-2:] == ["hotseat_score", "publish"]
-    # before every team's last game is public: a warning, the publish still runs
-    fake = Fake(codes={"hotseat_score": rn.SCORE_NOT_READY})
-    res = run(fake, tmp_path / "b", now="2027-01-12T15:20", trigger="manual")
+    # data not arrived yet: a warning (the deadline is the last week's last Tuesday retry)
+    fake = Fake(eos_due=EOS_DUE, codes={"hotseat_score": rn.SCORE_NOT_READY})
+    res = run(fake, tmp_path / "b", now=now, cron=MONDAY_CRON)
     assert res.exit_code == rn.EXIT_OK and res.modules["hot_seat"]["score"] == "not_ready"
+    assert "early attempt: the last one is Wed 2027-01-13 03:17 UTC" in " ".join(res.warnings)
     assert fake.stages()[-1] == "publish"
-    # before the last week's as-of: no Hot-Seat list either
+    # ... and still missing at that deadline: late, GitHub emails the owner
+    fake = Fake(eos_due=EOS_DUE, codes={"hotseat_score": rn.SCORE_NOT_READY})
+    res = run(fake, tmp_path / "c", now="2027-01-13T03:20", cron="17 3 * * 3")
+    assert res.modules["hot_seat"]["score"] == "late" and res.exit_code == rn.EXIT_NOT_READY
+
+
+def test_the_end_of_season_snapshot_waits_for_its_due_time(tmp_path: Path) -> None:
+    """An early Monday attempt before every team's last game is public scores nothing and
+    says when the snapshot is due; the rest of the run (and the publish) goes ahead."""
+    fake = Fake(eos_due=EOS_DUE)
+    res = run(fake, tmp_path / "a", now="2027-01-11T05:50", cron="47 5 * * 1")
+    assert res.exit_code == rn.EXIT_OK, res.errors
+    assert "hotseat_score" not in fake.stages() and fake.stages()[-1] == "publish"
+    assert res.stage("hotseat_score").status == "skipped"
+    assert "end-of-season snapshot is due at Mon 2027-01-11 11:20 UTC" in (
+        res.stage("hotseat_score").detail
+    )
+    # before the last weeks: nothing about it
+    fake = Fake(eos_due=EOS_DUE)
+    res = run(fake, tmp_path / "b", now="2026-10-03T12:00", cron="47 10 * * *")
+    assert "end-of-season" not in res.stage("hotseat_score").detail
+
+
+def test_the_monday_attempts_stop_at_the_gate_on_every_other_monday(tmp_path: Path) -> None:
+    fake = Fake(eos_due=EOS_DUE)
+    res = run(fake, tmp_path, now="2026-10-05T05:50", cron="47 5 * * 1")
+    assert res.exit_code == rn.EXIT_OK and res.status == "skipped"
+    assert fake.stages() == [] and "go ahead only in the 2 days after" in res.gate
+
+
+def test_an_unknown_due_time_falls_back_to_the_last_weeks_tuesday_as_of(tmp_path: Path) -> None:
+    """Without the warehouse's due time the snapshot waits for the last week's Tuesday as-of
+    (later than due, never earlier)."""
     fake = Fake()
-    run(fake, tmp_path / "c", now="2027-01-09T15:20", trigger="manual")
+    run(fake, tmp_path / "a", now="2027-01-11T11:40", trigger="manual")
     assert "hotseat_score" not in fake.stages()
+    fake = Fake()
+    res = run(fake, tmp_path / "b", now="2027-01-12T15:20", trigger="manual")
+    assert fake.args("hotseat_score")[0][4:6] == ["--week", "18"]
+    assert res.modules["hot_seat"]["score"] == "scored"
+
+
+def test_the_due_time_comes_from_the_warehouse_and_matches_the_snapshot_rows(
+    tmp_path: Path,
+) -> None:
+    """On the synthetic Hot-Seat world (a built warehouse, nothing typed): the plan's due time
+    equals the latest team's end-of-season row as-of (anchor last_game_end, the rule `twm
+    hotseat score` checks), comes before the last week's Tuesday as-of, and the run scores the
+    snapshot from that moment on, not a minute before."""
+    from tests.test_hot_seat_features import build_hot_seat_world
+    from twm.modules.hot_seat import features as hf
+    from twm.warehouse.build import connect
+
+    db = build_hot_seat_world(tmp_path / "world")
+    due = sc.end_of_season_due(db, 2025)
+    wins = sc.week_windows(db, 2025)
+    con = connect(db, read_only=True)
+    try:
+        con.execute("SET TimeZone='UTC'")
+        rules = hf.HotSeatRules(end_of_season_anchor="last_game_end")
+        points = hf.as_of_points(hf._Warehouse(con), 2025, rules, t("2030-01-01T00:00"))
+    finally:
+        con.close()
+    assert due == max(p.as_of for p in points if p.snapshot == "end_of_season")
+    assert due is not None and due < max(wins, key=lambda w: w.week).as_of
+    for minutes, scored in ((-5, False), (5, True)):
+        fake = Fake()
+        hooks = fake.hooks()
+        hooks.windows = lambda s: wins
+        hooks.end_of_season_due = lambda s: sc.end_of_season_due(db, 2025)
+        opts = rn.Options(out=tmp_path / f"run{minutes}", now=due + timedelta(minutes=minutes),
+                          run_id="r")  # fmt: skip
+        res = rn.run(opts, execute=fake.execute, hooks=hooks, env={})
+        assert res.exit_code == rn.EXIT_OK, res.errors
+        assert ("hotseat_score" in fake.stages()) is scored
+        if scored:
+            assert fake.args("hotseat_score")[0][4:6] == ["--week", str(wins[-1].week)]
+
+
+def test_the_refresh_records_each_datasets_newest_week_and_fetch_time(tmp_path: Path) -> None:
+    """docs/assumptions.md section 12: per dataset, the newest season/week in the cache after
+    the ingest and when it was fetched, in result.json, the summary and pipeline_runs' notes."""
+    import polars as pl
+
+    from twm.pipeline import arrivals as ar
+
+    raw = tmp_path / "raw"
+    for name, df in {
+        "pbp": pl.DataFrame({"season": [2026, 2026], "week": [3, 4]}),
+        "schedules": pl.DataFrame(
+            {"season": [2026] * 3, "week": [4, 5, 18], "result": [3, None, None]}
+        ),
+        "depth_charts": pl.DataFrame({"team": ["KC"]}),  # no season or week column
+    }.items():
+        (raw / name).mkdir(parents=True)
+        df.write_parquet(raw / name / "2026.parquet")
+    (raw / "teams").mkdir()
+    pl.DataFrame({"team_abbr": ["KC"]}).write_parquet(raw / "teams" / "all.parquet")
+    (raw / "snap_counts").mkdir()
+    (raw / "snap_counts" / "2026.parquet").write_text("not parquet")
+    got = ar.dataset_arrivals(2026, raw)
+    assert set(got) == {"pbp", "schedules", "depth_charts", "teams", "snap_counts"}
+    assert (got["pbp"]["season"], got["pbp"]["week"]) == (2026, 4)
+    assert got["schedules"]["week"] == 4  # the newest week with a final result
+    assert set(got["depth_charts"]) == {"season", "fetched_utc"}  # no week column
+    assert got["teams"]["season"] is None and "error" in got["snap_counts"]
+    assert datetime.fromisoformat(got["pbp"]["fetched_utc"]).tzinfo is not None
+    # the run: ingest's detail, result.json, the summary and the publish notes carry it
+    fake = Fake()
+    hooks = fake.hooks()
+    hooks.arrivals = lambda s: ar.dataset_arrivals(s, raw)
+    opts = rn.Options(out=tmp_path / "run", now=t("2026-09-29T15:20"), run_id="r")
+    res = rn.run(opts, execute=fake.execute, hooks=hooks, env={"DATABASE_URL": SECRET})
+    assert res.exit_code == rn.EXIT_OK and res.arrivals["pbp"]["week"] == 4
+    assert "newest: pbp 2026 week 4 (fetched " in res.stage("ingest").detail
+    out = tmp_path / "run"
+    assert json.loads((out / "result.json").read_text())["arrivals"]["pbp"]["week"] == 4
+    assert "- **Data:** pbp 2026 week 4" in (out / "summary.md").read_text()
+    notes = json.loads((out / "publish_notes.json").read_text())["pipeline"]
+    assert notes["arrivals"]["schedules"]["week"] == 4
+    # unreadable: a warning, the run goes on
+    hooks.arrivals = lambda s: 1 / 0
+    res = rn.run(rn.Options(out=tmp_path / "run2", now=t("2026-09-29T15:20"), run_id="r"),
+                 execute=fake.execute, hooks=hooks, env={})  # fmt: skip
+    assert res.exit_code == rn.EXIT_OK and res.arrivals == {}
+    assert any("newest weeks could not be read" in w for w in res.warnings)

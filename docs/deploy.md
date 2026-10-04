@@ -312,6 +312,7 @@ lines equal it):
 | every day 10:47 | the nightly refresh in season; in the offseason it goes ahead only on Tuesdays |
 | Tuesday 15:17, 18:47, 21:17 | retries after the Tuesday 14:00 as-of (snap counts can lag) |
 | Wednesday 03:17 | the **last** attempt: a week whose data is still missing now fails the run, so GitHub emails you |
+| Monday 03:17, 05:47, 11:37 | the Hot-Seat end-of-season snapshot, the morning after the last regular-season game day (`end_of_season_attempts`): the gate stops them on every other Monday, and the plan scores the snapshot only once every team's last game is public (docs/hot_seat.md "When the end-of-season snapshot runs", with the manual fallback) |
 
 "In season" runs from 7 days before the current season's first regular-season game day to 10
 days after its last one; the dates are read from the cached schedule, never typed in. Why
@@ -342,7 +343,7 @@ it; the run's log shows every one):
 |---|---|
 | preflight | the approved models load (the Radar's model and backtest, the streamer's K model and D/ST rule, Regression Watch's parameters, the decisions' grading spec and its five fold models: pin, file, sha256, version); where the publish goes; which CA bundle would check Neon's certificate |
 | gate | offseason days without a run stop here (exit 0) |
-| ingest | `twm ingest --start <season> --force` (current season and one-file datasets); on a cold cache first `twm ingest --end <season - 1>`; one retry after 60 s |
+| ingest | `twm ingest --start <season> --force` (current season and one-file datasets); on a cold cache first `twm ingest --end <season - 1>`; one retry after 60 s. Then it records, per dataset, the newest season and week in the cache and when the file was fetched (`arrivals` in `result.json`, the summary's "Data" line and the `pipeline_runs` notes; docs/assumptions.md section 12) |
 | build | `twm build --start 2012 --end <season>` (`pipeline.build_start`) |
 | plan | which week's list is due: the clock is between its Tuesday as-of and the next week's first kickoff |
 | dataset | `twm radar dataset` |
@@ -356,7 +357,7 @@ it; the run's log shows every one):
 | regression_score, regression_export | only when a list is due: `twm regression score` with the approved frozen parameters and the pinned own xFP live models (step H6-b2: the season's plays are valued with them; nothing is fitted); the same rules. Weeks 1-2 store nothing (nobody has 3 games) |
 | decisions_backtest | `twm model check decisions` (step P3): the approved grading (spec and fold models, sha256 before anything is opened) and its frozen 2006-2025 history (sha256, rows, `reports/decisions/fourth_downs.csv` and `clock.csv` reproduced). History is never regraded on the runner |
 | decisions | `twm decisions grade-pinned`: every fourth down, try and clock case of the season so far graded with the pinned models and inputs (nothing trained; nothing measured on earlier seasons: the runner's warehouse starts in 2012). Every run, whether or not a list is due (games of the weekend get graded the next night); the job summary's "Decisions" line counts them |
-| hotseat_score, hotseat_export | only when a list is due (step H4a): `twm hotseat score` with the approved Hot-Seat model (its pin and frozen backtest are loaded, sha256 first, in preflight; nothing is fitted). After `decisions` because the decision-quality feature reads the season grades it just made. The same not-ready rules (exit 3; also when the end-of-season snapshot is not due yet). Week 1 stores nothing (the first list is week 2). After the last regular-season week's as-of, when no other list is due, it scores the end-of-season snapshot (week = the last week; a stored live snapshot is kept on later nights) |
+| hotseat_score, hotseat_export | only when a list is due (step H4a): `twm hotseat score` with the approved Hot-Seat model (its pin and frozen backtest are loaded, sha256 first, in preflight; nothing is fitted). After `decisions` because the decision-quality feature reads the season grades it just made. The same not-ready rules (exit 3; also when the end-of-season snapshot is not due yet). Week 1 stores nothing (the first list is week 2). Once no other list is due and the end-of-season snapshot is due (every team's last regular-season game public: the night of the last game day, before Black Monday), it scores that snapshot (week = the last week; a stored live snapshot is kept on later runs) |
 | board_score | once a season (step I6b; docs/offseason.md step 5): `twm board score --live-publish` with the approved board models while the live board's window is open (config `as_of.board.live_publish`, from its as-of to the first week-1 kickoff) and no live board is stored; skipped otherwise (the summary says why; exit 3 from the command = the window closed meanwhile, also skipped). Stored 'live', append-only; its note names the depth chart |
 | publish | ONE `twm publish --target remote` for every module when the `DATABASE_URL` secret exists, otherwise skipped with a warning (so the pipeline can be rehearsed before Neon exists); it also runs after a not-ready score, so outcomes and player pages stay fresh |
 

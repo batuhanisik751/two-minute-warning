@@ -66,11 +66,17 @@ def test_the_pipeline_schedule_matches_the_config() -> None:
     wf = load("pipeline.yml")
     cfg = settings().pipeline
     crons = [c["cron"] for c in wf["on"]["schedule"]]
-    assert crons == [sc.nightly_cron(cfg), *sc.retry_crons(cfg)]
+    assert crons == [sc.nightly_cron(cfg), *sc.retry_crons(cfg), *sc.eos_crons(cfg)]
     # every retry comes after the weekly as-of (Tuesday 14:00 UTC)
     asof = settings().as_of.weekly
     assert asof.weekday == "tuesday" and asof.time == "14:00"
     assert all(day != "tuesday" or hhmm > "14:00" for day, hhmm in cfg.attempts())
+    # the Hot-Seat end-of-season attempts: Monday morning, before Black Monday's afternoon
+    # (ET) announcements, and each one a distinct role for the gate
+    assert cfg.eos_attempts() and all(day == "monday" and hhmm < "12:00"
+                                      for day, hhmm in cfg.eos_attempts())  # fmt: skip
+    assert {sc.cron_role(c, cfg) for c in sc.eos_crons(cfg)} == {"end_of_season"}
+    assert len(set(crons)) == len(crons)
     # never on the hour: GitHub delays scheduled runs most at the start of every hour
     assert all(not c.startswith("0 ") for c in crons)
 
@@ -203,3 +209,29 @@ def test_the_live_board_is_scored_with_its_pin_once_before_the_publish() -> None
     live = (ROOT / "src" / "twm" / "modules" / "board" / "live.py").read_text()
     for needle in ("fit_fold", "train_live", ".fit(", "walk_forward", "approve("):
         assert needle not in live, needle
+
+
+def test_ci_runs_the_safety_hooks_and_they_never_rewrite_pinned_files() -> None:
+    """The hooks of .pre-commit-config.yaml run in CI on every file (not only where `pre-commit
+    install` ran); the fixers skip generated and pinned files (sha256-checked)."""
+    ci = load("ci.yml")
+    job = ci["jobs"]["hygiene"]
+    run = [s["run"] for s in job["steps"] if "run" in s]
+    assert "uv sync --locked" in run
+    hook = next(s for s in job["steps"] if "pre-commit run" in s.get("run", ""))
+    assert "--all-files" in hook["run"] and hook["env"]["SKIP"] == "ruff,ruff-format"
+    cfg = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text())
+    hooks = {h["id"]: h for r in cfg["repos"] for h in r["hooks"]}
+    assert {"end-of-file-fixer", "trailing-whitespace", "check-yaml", "detect-private-key",
+            "check-added-large-files"} <= set(hooks)  # fmt: skip
+    assert "--enforce-all" in hooks["check-added-large-files"]["args"]
+    assert "exclude" not in hooks["detect-private-key"]  # every file, pinned ones too
+    for fixer in ("end-of-file-fixer", "trailing-whitespace"):
+        pattern = re.compile(hooks[fixer]["exclude"])
+        for path in ("artifacts/production_models/x/model.json", "data/manual/x.csv",
+                     "reports/hot_seat/backtest_metrics.csv", "tests/golden/expected/a.md",
+                     "web/drizzle/0000_init.sql"):  # fmt: skip
+            assert pattern.search(path), (fixer, path)
+        assert not pattern.search("src/twm/cli.py") and not pattern.search("docs/deploy.md")
+    lock = (ROOT / "uv.lock").read_text()
+    assert 'name = "pre-commit"' in lock  # locked dev dependency

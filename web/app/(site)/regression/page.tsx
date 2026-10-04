@@ -10,7 +10,7 @@ import { fmtInt, fmtUtc, kindLabel, seasonWeek } from "@/lib/format";
 import { chooseList, parseInt4, parseKind } from "@/lib/params";
 import { getSiteMeta } from "@/lib/queries/meta";
 import { getRegressionIndex, getRegressionList, getRegressionTrack, type RegressionListData } from "@/lib/queries/regression";
-import { TAGS, parseGarbage, regressionHref, signed, statsOf, tagRows, tagTitle, type RegressionRow, type Tag } from "@/lib/regression";
+import { TAGS, backtestWeeks, parseGarbage, regressionHref, signed, statsOf, tagRows, tagTitle, testSeasons, type RegressionRow, type Tag } from "@/lib/regression";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata("/regression", "Regression Watch", "Regression Watch: the week's sell-high and buy-low players, from expected fantasy points against points per game, with or without garbage time, and its track record.");
@@ -85,7 +85,7 @@ export default async function RegressionPage({ searchParams }: PageProps<"/regre
   const data = await getRegressionList(chosen.season, chosen.week, chosen.kind);
   const k = kindLabel(chosen.kind, "Regression Watch");
   const other = index.find((r) => r.season === chosen.season && r.week === chosen.week && r.kind !== chosen.kind);
-  const weeks = [...new Set(index.filter((r) => r.kind === "backtest").map((r) => r.week))].sort((a, b) => a - b);
+  const weeks = backtestWeeks(index, testSeasons(track));
   const asked = askedSeason !== null || askedWeek !== null || askedKind !== null;
   return (
     <>

@@ -6,10 +6,11 @@ import WeekPicker from "@/components/WeekPicker";
 import { EmptyState, KindBadge, Note, PageHeader } from "@/components/ui";
 import { fmtInt, fmtUtc, kindLabel } from "@/lib/format";
 import { HotSeatWhatHappened } from "@/components/hot-seat/parts";
-import { hotSeatHref, hotSeatTally, listName, mergeTimeline, type TimelinePoint } from "@/lib/hot-seat";
-import { HOT_SEAT_WINDOW_DAYS } from "@/lib/method";
+import { hotSeatHref, hotSeatTally, listName, mergeTimeline, seasonNotStarted, type TimelinePoint } from "@/lib/hot-seat";
+import { AS_OF_WEEKDAY, HOT_SEAT_WINDOW_DAYS } from "@/lib/method";
 import { chooseList, parseInt4, parseKind, type ListKey, type WeekRef } from "@/lib/params";
 import { getHotSeatCalibration, getHotSeatIndex, getHotSeatList, getHotSeatTimeline, type HotSeatEntry, type HotSeatHeader, type HotSeatKey } from "@/lib/queries/hot-seat";
+import { getSiteMeta } from "@/lib/queries/meta";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata("/hot-seat", "Hot-Seat Meter", "The Hot-Seat Meter: each NFL head coach's estimated chance of being let go, week by week, the drivers in words, and how past seasons' estimates turned out.");
@@ -27,6 +28,27 @@ function Intro() {
   );
 }
 
+/** The newest published list is from an earlier season: say so, and when this season's next
+ *  weekly list is due (lib/hot-seat.ts seasonNotStarted: the weekly as-of rule, no typed date). */
+function NotStarted({ s, newest }: { s: NonNullable<ReturnType<typeof seasonNotStarted>>; newest: number | null }) {
+  return (
+    <div className="mt-4" data-testid="hot-seat-not-started">
+      <Note>
+        No {s.season} weekly list has been published yet: the next one{" "}
+        {s.dueAt ? (
+          <>
+            {s.overdue ? "was due at" : "is due at"} <time dateTime={s.dueAt}>{fmtUtc(s.dueAt)}</time> (the weekly as-of)
+            {s.overdue ? " and has not been published yet" : ""}
+          </>
+        ) : (
+          <>is due on the {AS_OF_WEEKDAY} after week {s.firstWeek}&apos;s games</>
+        )}
+        .{newest !== null ? ` Shown below: the newest published list, from ${newest}.` : ""}
+      </Note>
+    </div>
+  );
+}
+
 /** No week asked for: the newest live list of the newest season, else the newest list. */
 function defaultList(index: HotSeatKey[]): ListKey | null {
   const top = index[0];
@@ -36,7 +58,9 @@ function defaultList(index: HotSeatKey[]): ListKey | null {
 
 export default async function HotSeatPage({ searchParams }: PageProps<"/hot-seat">) {
   const sp = await searchParams;
-  const [index, cal] = await Promise.all([getHotSeatIndex(), getHotSeatCalibration()]);
+  const [index, cal, meta] = await Promise.all([getHotSeatIndex(), getHotSeatCalibration(), getSiteMeta()]);
+  const newest = index[0]?.season ?? null;
+  const notStarted = seasonNotStarted(newest, meta);
   const askedSeason = parseInt4(sp.season);
   const askedWeek = parseInt4(sp.week);
   const askedKind = parseKind(sp.kind);
@@ -50,6 +74,7 @@ export default async function HotSeatPage({ searchParams }: PageProps<"/hot-seat
         <EmptyState title="No Hot-Seat list published yet">
           <p>The weekly lists appear here after the first publish that includes the Hot-Seat Meter.</p>
         </EmptyState>
+        {notStarted ? <NotStarted s={notStarted} newest={null} /> : null}
         <HowToRead cal={cal} />
       </>
     );
@@ -74,6 +99,7 @@ export default async function HotSeatPage({ searchParams }: PageProps<"/hot-seat
         hrefFor={(w) => hotSeatHref({ season: w.season, week: w.week })}
         weekName={weekName}
       />
+      {notStarted ? <NotStarted s={notStarted} newest={newest} /> : null}
       {asked && !picked.exact ? (
         <div className="mt-4">
           <Note tone="warn">There is no list for that week; showing the nearest published one instead.</Note>

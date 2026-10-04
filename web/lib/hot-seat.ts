@@ -1,7 +1,7 @@
 // The Hot-Seat Meter's pure helpers (no database, no React): rounding, drivers in plain English,
 // outcomes in words, the early-season calibration grid and the weekly timelines. Unit-tested in
 // tests/unit/hot-seat.test.ts. The wording is careful on purpose: these are real people's jobs.
-import { HOT_SEAT_BANDS, HOT_SEAT_PHASES, HOT_SEAT_WINDOW_DAYS, TRACK_INTERVAL_LEVEL } from "./method";
+import { HOT_SEAT_BANDS, HOT_SEAT_FIRST_WEEK, HOT_SEAT_PHASES, HOT_SEAT_WINDOW_DAYS, TRACK_INTERVAL_LEVEL } from "./method";
 import { docUrl } from "./site";
 
 const MINUS = "−";
@@ -254,6 +254,56 @@ export function lastPerSeason<T extends { season: number; week: number; snapshot
   return [...by.values()].sort((a, b) => b.season - a.season);
 }
 
+export type RecordSeason = {
+  season: number;
+  team: string;
+  /** null: the full regular season (the end-of-season snapshot); else the list's week */
+  throughWeek: number | null;
+  record: string;
+  expectedWins: number | null;
+  winsVsExpected: number | null;
+};
+
+/** The coach page's record vs expectation, newest season first: per season his regular-season
+ *  record and the market's expected wins from his published Hot-Seat rows (the end-of-season
+ *  snapshot; the season in progress, or a coach let go during it: his newest weekly row). A
+ *  season without a row has no entry; a NULL expectation stays NULL (shown as not known). */
+export function recordPerSeason(
+  rows: { season: number; week: number; snapshot: string; kind: string; team: string; regWins: number; regGamesPlayed: number; expectedWins: number | null; winsVsExpected: number | null }[],
+): RecordSeason[] {
+  return lastPerSeason(rows).map((r) => ({
+    season: r.season,
+    team: r.team,
+    throughWeek: r.snapshot === "end_of_season" ? null : r.week,
+    record: recordWords(r.regWins, r.regGamesPlayed),
+    expectedWins: r.expectedWins,
+    winsVsExpected: r.expectedWins === null ? null : r.winsVsExpected,
+  }));
+}
+
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+
+/** The current season has no published weekly Hot-Seat list yet (the newest published list is
+ *  from an earlier season): the season and when the NEXT weekly list is due -- the next weekly
+ *  as-of (Tuesday 14:00 UTC) after the site's current one, and never before the week of the first
+ *  weekly list (HOT_SEAT_FIRST_WEEK), counted in whole weeks from the site's current weekly as-of
+ *  (site_meta's current week and its lists' as-of); `overdue` when that time had already passed at
+ *  the publish. null when the newest list is from the current season (or nothing says which season
+ *  is current). dueAt null: no weekly as-of of the season is known yet (before week 1's lists). */
+export function seasonNotStarted(
+  newestListSeason: number | null,
+  meta: { currentSeason: number | null; asOf: { at: string; week: { season: number; week: number } } | null; generatedAt: string | null },
+): { season: number; firstWeek: number; dueAt: string | null; overdue: boolean } | null {
+  const season = meta.currentSeason;
+  if (season === null || (newestListSeason !== null && newestListSeason >= season)) return null;
+  const a = meta.asOf;
+  const base = a && a.week.season === season && a.week.week >= 1 ? Date.parse(a.at) : NaN;
+  const ahead = a ? Math.max(HOT_SEAT_FIRST_WEEK - a.week.week, 1) : 0;
+  const dueAt = Number.isNaN(base) ? null : new Date(base + ahead * WEEK_MS).toISOString();
+  const published = meta.generatedAt ? Date.parse(meta.generatedAt) : NaN;
+  return { season, firstWeek: HOT_SEAT_FIRST_WEEK, dueAt, overdue: dueAt !== null && !Number.isNaN(published) && Date.parse(dueAt) <= published };
+}
+
 /** A /hot-seat link. */
 export function hotSeatHref(q: { season?: number; week?: number; kind?: string }): string {
   const p = new URLSearchParams();
@@ -294,13 +344,20 @@ export const MODEL_WORDS: Record<string, string> = {
   base_wins_vs_expected: "Baseline: wins vs market expectation",
 };
 
+/** The slices whose top-5 hit rate the backtest publishes, in season order: the weekly ones the
+ *  rows carry (`week_<n>`, e.g. week 12) and then the season's end. */
+export function top5Slices(rows: TrackCellRow[]): { slice: string; when: string }[] {
+  const weeks = [...new Set(rows.filter((r) => r.metric === "top5_hit_rate" && /^week_\d+$/.test(r.slice)).map((r) => Number(r.slice.slice(5))))];
+  return [...weeks.sort((a, b) => a - b).map((w) => ({ slice: `week_${w}`, when: `week ${w}` })), { slice: "end_of_season", when: "season end" }];
+}
+
 /** The backtest's headline numbers as tiles (main run, the model's own probability), each with
  *  its interval and the rows behind it. */
 export function headlineStats(rows: TrackCellRow[], level: number = TRACK_INTERVAL_LEVEL): { label: string; value: string; interval: string | null; note: string }[] {
   const tiles = [
     { label: "ROC-AUC, every list", slice: "all", metric: "roc_auc", digits: 3 },
     { label: "Brier score, every list (lower is better)", slice: "all", metric: "brier", digits: 4 },
-    { label: "Coaches let go who were in their season's top 5 at season end", slice: "end_of_season", metric: "top5_hit_rate", digits: 3 },
+    ...top5Slices(rows).map((t) => ({ label: `Coaches let go who were in their season's top 5 at ${t.when}`, slice: t.slice, metric: "top5_hit_rate", digits: 3 })),
   ];
   const out = [];
   for (const t of tiles) {

@@ -147,9 +147,10 @@ function track(): (typeof s.hotSeatTrackRecord.$inferInsert)[] {
   const out: (typeof s.hotSeatTrackRecord.$inferInsert)[] = [];
   const models: [string, number][] = [["logit", 0], ["hazard", -0.006], ["lgbm", -0.03], ["base_win_pct", -0.05], ["base_wins_vs_expected", -0.07]];
   for (const [model, d] of models) {
-    for (const [slice, n, pos] of [["all", 50, 9], ["end_of_season", 24, 3]] as const) {
+    // week_12: the backtest publishes only its top-5 hit rate (reports/hot_seat/backtest_metrics.csv)
+    for (const [slice, n, pos] of [["all", 50, 9], ["week_12", 22, 4], ["end_of_season", 24, 3]] as const) {
       for (const [metric, v, w] of [["roc_auc", 0.79, 0.04], ["pr_auc", 0.44, 0.09], ["brier", 0.12, 0.012], ["top5_hit_rate", 0.52, 0.09]] as const) {
-        if (metric === "top5_hit_rate" && slice === "all") continue;
+        if (metric === "top5_hit_rate" ? slice === "all" : slice === "week_12") continue;
         const value = r4(metric === "brier" ? v - d / 5 : v + d);
         out.push({ line: out.length + 1, variant: "main", model, prob: "prob", slice, metric, value, lo: r4(value - w), hi: r4(value + w), nRows: n, nPos: pos, nSeasons: 2 });
       }

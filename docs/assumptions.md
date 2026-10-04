@@ -146,7 +146,8 @@ kickoff that week (the final report is always out by then; A3's
 "Friday 23:59 of the report week" was dropped because it lands after Thursday games and is
 ill-defined for weeks that start on a Saturday or Wednesday). In
 every case a week-N+1 row is never available at the Tuesday as-of after week N. Live: nflverse
-refreshes injuries daily at 07:00 UTC, and the pipeline records the real arrival time.
+refreshes injuries daily at 07:00 UTC; each pipeline run records the newest week it found
+(`arrivals`, section 12).
 
 ## 5. Player ids: sources, dtypes and match rates (verified 2026-09-27, B3)
 
@@ -532,8 +533,13 @@ Known, accepted imperfections (values baked into rows that are already visible; 
   as-of-visible depth-chart slot (`fact_depth_chart.position`) or `rosters_weekly` once it is
   ingested. `dim_team.team_division` is today's alignment and team codes are today's.
 
-These are conservative estimates for history; live runs record the real arrival time of each
-dataset in the run log (`pipeline_runs`, step E4) so the estimates can be checked this season.
+These are conservative estimates for history. To check them this season, every pipeline run
+records what its refresh found (`src/twm/pipeline/arrivals.py`): per dataset, the newest season
+and week in the cache after `twm ingest` (schedules: the newest week with a final score) and
+when that file was fetched, in the run's `result.json`, the job summary ("Data") and the
+`arrivals` key of its `pipeline_runs` notes (step E4). This is the arrival as the job saw it,
+not nflverse's own upload time: the first run whose entry shows week N bounds when week N
+arrived (to within the time between runs).
 
 ## 13. What changes in the spec because of this verification
 

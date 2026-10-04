@@ -5,6 +5,7 @@ import { boardDisagreement, boardList, boardOutcome, boardRow, boardTrackRecord,
 import { cached } from "@/lib/cache";
 import { parseDrivers, type BoardCalCell, type BoardOutcome, type BoardTrackRow, type DisagreementRow, type Driver } from "@/lib/board";
 import { BOARD_BANDS } from "@/lib/method";
+import { showThirdPartyRanks } from "@/lib/third-party";
 
 // The Cliff board's published tables (step I2c-a): board_list, board_row, board_outcome,
 // board_track_record, board_disagreement and the board model_versions rows. Every number on
@@ -89,7 +90,14 @@ async function getBoardRaw(season: number, kind: "live" | "backtest"): Promise<{
     })),
   };
 }
-export const getBoard = cached("board.getBoard", getBoardRaw);
+const getBoardCached = cached("board.getBoard", getBoardRaw);
+/** One board. While the site is public FantasyPros' per-player ranks are removed (ecrRank NULL,
+ *  lib/third-party.ts): after the data cache, so one cache serves both modes and no rank reaches
+ *  a page, its markers or its payload. */
+export async function getBoard(season: number, kind: "live" | "backtest"): Promise<{ header: BoardHeader; rows: BoardEntry[] } | null> {
+  const b = await getBoardCached(season, kind);
+  return b && !showThirdPartyRanks() ? { ...b, rows: b.rows.map((r) => ({ ...r, ecrRank: null })) } : b;
+}
 
 /** The calibration check: every reconstructed board's rows with a final outcome, per chance and
  *  band (lib/method.ts BOARD_BANDS): rows, how many had the outcome, the average chance and the

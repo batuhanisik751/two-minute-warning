@@ -33,11 +33,24 @@ One place, `lib/seo.ts`, read per request from the environment (no domain is wri
 |---|---|
 | `SITE_URL` | the canonical origin (e.g. `https://example.org`; only its origin is used) for the canonical links, Open Graph URLs and the sitemap. Unset: Vercel's own `VERCEL_PROJECT_PRODUCTION_URL`, else `http://localhost:3000` |
 | `SITE_PUBLIC` | `true`: `robots.txt` allows crawling (except `/league`) and names the sitemap, `/sitemap.xml` is served, pages are indexable. Anything else, or unset (the default): `robots.txt` disallows everything, `/sitemap.xml` answers 404 and every page says `noindex, nofollow` |
+| `SHOW_THIRD_PARTY_RANKS` | testing only, never in production: `true` / `false` overrides the license switch below |
 
 `/sitemap.xml` (`app/sitemap.ts`, only with `SITE_PUBLIC=true`) lists the nine pages of the main navigation at that origin;
 player and coach pages are reached from them. A page's canonical URL is its path without the
 query (a picked week or filter is a view of the same page). The site stays private (Vercel
 Authentication, `SITE_PUBLIC` unset) until the owner decides; docs/deploy.md step 10.
+
+**FantasyPros' per-player values (license).** Their Terms of Use forbid republishing, so while
+`SITE_PUBLIC=true` the site hides them (owner's decision 2026-10-04): one switch,
+`showThirdPartyRanks()` in `lib/third-party.ts` (true unless the site is public). It is applied
+in the query layer after the data cache (`getBoard` clears `ecrRank`; `getList`, `getLatestLive`,
+`getStreamList`, `getLatestStreamLive` drop the reasons quoting their ranks), so no value reaches
+a page, a "where we disagree" marker or the RSC payload, and one cache serves both modes. The
+published reasons are text only, so those reasons are identified by their registry template
+(`lib/third-party-reasons.json`, id = the feature key; `tests/test_third_party_reasons.py` keeps
+it in step with `twm.registry`). Each page that hides something says once that "the experts'
+consensus ranks are not shown on the public site (license)" (`components/ThirdPartyNote.tsx`).
+Our own estimates and the aggregate model-vs-experts comparisons stay in both modes.
 
 ## Running it locally
 
@@ -184,7 +197,10 @@ links into it) and navigation.
 `npm run test:smoke:run` (`tests/run-smoke.ts`) creates and seeds two throwaway databases on
 the local server (`twm_web_test`, `twm_web_test_empty`; `tests/setup-db.ts` applies
 `web/drizzle` with Drizzle's migrator and loads the fictional seed of `tests/seed.ts`, `tests/seed-modules.ts`, `tests/seed-decisions.ts`, `tests/seed-hot-seat.ts` and `tests/seed-board.ts`), starts
-`next start` on each, runs `tests/smoke/*.test.ts` with `SMOKE_REQUIRE=1` and stops the
+`next start` on each, runs `tests/smoke/*.test.ts` with `SMOKE_REQUIRE=1`, then the public
+pass (a third server on the full seed with `SITE_PUBLIC=true`, `tests/smoke/public.test.ts`: no
+experts' rank, marker or FantasyPros reason in any page's HTML or RSC payload, the license note
+once, the same pages on the private server showing them) and stops the
 servers. The suites fetch every page, check the key text (data-as-of line, disclaimer, credits,
 list rows, charts and their tables, 404s, empty states) and run axe-core inside jsdom on each
 page (zero serious or critical violations; jsdom cannot measure contrast).

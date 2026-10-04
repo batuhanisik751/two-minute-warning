@@ -5,7 +5,8 @@ import { SeasonSummary } from "@/components/decisions/SeasonSummary";
 import HotSeatList from "@/components/hot-seat/HotSeatList";
 import { HotSeatWhatHappened } from "@/components/hot-seat/parts";
 import Term from "@/components/Term";
-import { boardHref, boardKindWords, boardTally, disagreements, hasEcr } from "@/lib/board";
+import ThirdPartyNote from "@/components/ThirdPartyNote";
+import { boardHref, boardKindWords, boardLinkText, boardTally, disagreements, hasEcr } from "@/lib/board";
 import { kindLabel } from "@/lib/format";
 import { hotSeatHref, hotSeatTally, listName } from "@/lib/hot-seat";
 import type { WeekRef } from "@/lib/params";
@@ -127,10 +128,11 @@ export async function BoardSection({ at, kind }: { at: WeekRef; kind: Kind }) {
         </>
       }
       href={boardHref({ season: at.season, kind })}
-      linkText="Every player, the experts' ranks, the drivers and how to read it"
+      linkText={boardLinkText()}
     >
       <div className="mt-4">
         <BoardWhatHappened tally={tally} />
+        <ThirdPartyNote inline />
       </div>
       <div className="mt-4">
         <BoardList rows={rows} marks={disagreements(all)} ecr={hasEcr(all)} label={`Cliff board top ${TOP}, ${at.season}, ${kindWord(kind)}`} showOutcome={tally.final > 0} compact />

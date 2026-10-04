@@ -4,6 +4,7 @@ import FlexNote from "@/components/FlexNote";
 import PickList from "@/components/PickList";
 import PositionTabs from "@/components/PositionTabs";
 import StreamBody from "@/components/StreamBody";
+import ThirdPartyNote from "@/components/ThirdPartyNote";
 import Term from "@/components/Term";
 import WeekPicker from "@/components/WeekPicker";
 import { EmptyState, KindBadge, Note, PageHeader, PosBadge } from "@/components/ui";
@@ -93,6 +94,7 @@ function ListNotes({ headers, picks, season, currentSeason, flex }: { headers: L
           that reconstructed this list did not generate them.
         </Note>
       ) : null}
+      {picks.some((p) => p.reasons.length > 0) ? <ThirdPartyNote /> : null}
       {season < (currentSeason ?? season) ? (
         <p className="text-sm text-muted">
           <Term name="current_franchise">Teams</Term> are shown by today&apos;s franchise code and name.

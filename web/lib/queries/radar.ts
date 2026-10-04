@@ -5,6 +5,7 @@ import { dimPlayer, dimTeam, modelVersions, radarList, radarOutcome, radarPick }
 import { cached } from "@/lib/cache";
 import { FLEX_POSITIONS } from "@/lib/positions";
 import { flexRankCounts, type FlexHistoryRow } from "@/lib/flex";
+import { showThirdPartyRanks, shownReasons } from "@/lib/third-party";
 import type { ListKey } from "@/lib/params";
 import type { RankCount } from "@/lib/buckets";
 
@@ -248,7 +249,18 @@ async function getListRaw(
     .orderBy(asc(radarPick.rank));
   return { header: toHeader(headers[0]), picks: rows.map(toPick) };
 }
-export const getList = cached("radar.getList", getListRaw);
+const getListCached = cached("radar.getList", getListRaw);
+/** One weekly list; while the site is public without the reasons that quote FantasyPros' ranks
+ *  (lib/third-party.ts), filtered after the data cache so one cache serves both modes. */
+export async function getList(...args: Parameters<typeof getListRaw>): Promise<{ header: ListHeader; picks: Pick[] } | null> {
+  const l = await getListCached(...args);
+  return l && gatePicks(l);
+}
+
+function gatePicks<L extends { picks: Pick[] }>(l: L): L {
+  const show = showThirdPartyRanks();
+  return show ? l : { ...l, picks: l.picks.map((p) => ({ ...p, reasons: shownReasons(p.reasons, show) })) };
+}
 
 export type TopList = { header: ListHeader; picks: Pick[] };
 
@@ -277,7 +289,12 @@ async function getLatestLiveRaw(): Promise<{ week: { season: number; week: numbe
   }));
   return { week: wk, lists };
 }
-export const getLatestLive = cached("radar.getLatestLive", getLatestLiveRaw);
+const getLatestLiveCached = cached("radar.getLatestLive", getLatestLiveRaw);
+/** The newest live week's lists (gated like getList). */
+export async function getLatestLive(): Promise<{ week: { season: number; week: number }; lists: TopList[] } | null> {
+  const l = await getLatestLiveCached();
+  return l && { ...l, lists: l.lists.map(gatePicks) };
+}
 
 /** The positions that have at least one published list (the tabs and cards come from these). */
 async function getPositionsRaw(): Promise<string[]> {

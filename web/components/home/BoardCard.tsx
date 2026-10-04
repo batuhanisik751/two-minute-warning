@@ -1,8 +1,9 @@
 import Link from "next/link";
 import Term from "@/components/Term";
+import ThirdPartyNote from "@/components/ThirdPartyNote";
 import { EstimateCell } from "@/components/hot-seat/parts";
 import { KindBadge, PosBadge } from "@/components/ui";
-import { boardHref, posRank } from "@/lib/board";
+import { boardHref, boardLinkText, posRank } from "@/lib/board";
 import { BOARD_CLIFF_DROP } from "@/lib/method";
 import { getBoard, getBoardIndex } from "@/lib/queries/board";
 import { getSiteMeta } from "@/lib/queries/meta";
@@ -63,8 +64,9 @@ export default async function BoardCard() {
         </ol>
       </div>
       <p className="mt-3 text-sm">
-        <Link href={boardHref({ season: chosen.season, kind: chosen.kind })}>Every player, the experts&apos; ranks, the drivers and how to read it</Link>
+        <Link href={boardHref({ season: chosen.season, kind: chosen.kind })}>{boardLinkText()}</Link>
       </p>
+      <ThirdPartyNote inline />
     </section>
   );
 }

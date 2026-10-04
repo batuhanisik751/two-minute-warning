@@ -25,6 +25,7 @@ import RegressionSection from "@/components/methodology/RegressionSection";
 import StreamerSection from "@/components/methodology/StreamerSection";
 import { headline, select, widestRange } from "@/lib/track";
 import { pageMetadata } from "@/lib/seo";
+import { THIRD_PARTY_NOTE, showThirdPartyRanks } from "@/lib/third-party";
 
 export const metadata = pageMetadata("/methodology", "Methodology", "How Two-Minute Warning works: the data sources, the point-in-time rule, every model and its backtest, the limits, the disclaimers and the full glossary.");
 
@@ -462,6 +463,7 @@ export default async function MethodologyPage() {
               the archive of <a href="https://www.fantasypros.com/">FantasyPros</a> expert rankings. The preseason
               expert ranks decide part of the candidate pool (from the 2020 season on), the in-season ranks are the
               experts&apos; baseline in the results, and a &ldquo;ranked before the season&rdquo; reason quotes them.
+              {showThirdPartyRanks() ? null : <>{" "}<span data-testid="third-party-note">{THIRD_PARTY_NOTE}</span></>}
             </li>
             <li>
               <a href="https://www.pro-football-reference.com/">Pro Football Reference</a>: the original source of

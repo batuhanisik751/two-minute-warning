@@ -1,8 +1,10 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import BoardList from "@/components/board/BoardList";
 import HowToRead from "@/components/board/HowToRead";
 import SeasonPicker from "@/components/decisions/SeasonPicker";
 import Term from "@/components/Term";
+import ThirdPartyNote from "@/components/ThirdPartyNote";
 import { EmptyState, KindBadge, Note, PageHeader } from "@/components/ui";
 import { BoardWhatHappened } from "@/components/board/parts";
 import { boardHref, boardKindWords, boardTally, disagreements, ecrSeason, hasEcr } from "@/lib/board";
@@ -12,15 +14,21 @@ import { parseInt4, parseKind } from "@/lib/params";
 import { positionShort, sortPositions } from "@/lib/positions";
 import { getBoard, getBoardCalibration, getBoardDisagreement, getBoardIndex, type BoardEntry, type BoardHeader, type BoardKey } from "@/lib/queries/board";
 import { pageMetadata } from "@/lib/seo";
+import { showThirdPartyRanks } from "@/lib/third-party";
 
-export const metadata = pageMetadata("/board", "Cliff board", "The Cliff board: veterans' estimated chance of a fantasy cliff next season and, separately, of missed time, next to the experts' preseason ranks.");
+const DESCRIPTION = "The Cliff board: veterans' estimated chance of a fantasy cliff next season and, separately, of missed time";
+
+/** Per request: the experts' ranks are named only where they are shown (lib/third-party.ts). */
+export function generateMetadata(): Metadata {
+  return pageMetadata("/board", "Cliff board", `${DESCRIPTION}${showThirdPartyRanks() ? ", next to the experts' preseason ranks" : ""}.`);
+}
 
 function Intro() {
   return (
     <PageHeader title="Cliff board" kicker="Veterans, next season, estimated">
       For established veterans ({BOARD_MIN_PRIOR}+ seasons in the league, top {BOARD_TOP_PPG} at their position in points per game), two
       estimated chances for the coming season: a drop of {Math.round(BOARD_CLIFF_DROP * 100)}% or more in points per game (a Cliff), and
-      playing fewer than {BOARD_MIN_GAMES} games (missed time), beside the experts&apos; preseason ranks. Estimates from past seasons&apos;
+      playing fewer than {BOARD_MIN_GAMES} games (missed time){showThirdPartyRanks() ? ", beside the experts' preseason ranks" : ""}. Estimates from past seasons&apos;
       patterns, not verdicts; how to read them is below the board.
     </PageHeader>
   );
@@ -144,7 +152,9 @@ function Body({ header, rows, pos }: { header: BoardHeader; rows: BoardEntry[]; 
       <div className="mt-4 space-y-3">
         {header.incomplete ? <Note tone="warn">This board was made before all of its data had arrived (published as incomplete).</Note> : null}
         {header.note ? <Note>{header.note[0].toUpperCase() + header.note.slice(1)}.</Note> : null}
-        {!ecr ? (
+        {!showThirdPartyRanks() ? (
+          <ThirdPartyNote />
+        ) : !ecr ? (
           <Note>
             <span data-testid="no-ecr">
               {ecrSeason(header.season) ? "No experts' preseason ranks were published for this board." : "The experts' preseason ranks start later: this board has none."}

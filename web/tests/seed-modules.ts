@@ -27,6 +27,8 @@ export const MODULES_SEED = {
     { id: "00-9100004", name: "Sam Holder" },
     { id: "00-9100005", name: "Pat Hashmark" },
   ],
+  /** a reason quoting FantasyPros' weekly rank, on each live list's first pick (see SEED.thirdPartyReason) */
+  thirdPartyReason: (name: string, pos: string) => `Experts ranked ${name} #3 at ${pos} last week`,
   kNote: "Seed note for K: the kicker model is ahead of last game's points, but not clearly.",
   rwNote: "Seed note: week 3 is earlier than the backtested weeks.",
   /** the reconstructed week whose Buy-low table is long (its extra players 7-12 of each
@@ -103,7 +105,7 @@ async function seedStream(db: Db): Promise<void> {
         chanceHigh: chance === null ? null : Math.round((chance + 0.04) * 10000) / 10000,
         modelProb: position === "K" ? Math.round((0.5 - rank * 0.05) * 10000) / 10000 : null,
         tier: chance === null ? null : chance >= 0.25 ? "speculative" : "watch",
-        reasons: live ? [`Seed streamer reason for ${e.name}`] : [],
+        reasons: live ? [`Seed streamer reason for ${e.name}`, ...(rank === 1 ? [S.thirdPartyReason(e.name, position)] : [])] : [],
       });
       const final = season < 2026;
       outcomes.set(`${season}-${week}-${e.id}`, {

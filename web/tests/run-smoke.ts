@@ -3,7 +3,10 @@
 //   npm run test:smoke:run            seed the test databases (tests/setup-db.ts), start
 //                                     `next start` twice (full seed and empty seed), run
 //                                     tests/smoke with SMOKE_REQUIRE=1 (incl. the overlap
-//                                     check in headless Chrome), stop both servers
+//                                     check in headless Chrome); then the public pass: a
+//                                     third server with SITE_PUBLIC=true on the same data,
+//                                     tests/smoke/public.test.ts (no per-player FantasyPros
+//                                     value on the public site); stop the servers
 //   npm run test:smoke:run -- --real  the same suite against the real local publish
 //                                     (database `twm` of docker-compose.yml, read only:
 //                                     nothing is created, seeded or written), assertions
@@ -62,7 +65,7 @@ async function waitUp(base: string, child: ChildProcess, ms = 60_000): Promise<v
   throw new Error(`the server at ${base} did not answer within ${ms / 1000} s`);
 }
 
-async function startServer(dbUrl: string): Promise<{ base: string; child: ChildProcess }> {
+async function startServer(dbUrl: string, extra: Record<string, string> = {}): Promise<{ base: string; child: ChildProcess }> {
   const port = await freePort();
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -72,6 +75,11 @@ async function startServer(dbUrl: string): Promise<{ base: string; child: ChildP
     LEAGUE_REPORTS_DIR: LEAGUE_DIR,
   };
   delete env.DATABASE_URL;
+  // the private servers are private and the public one public, whatever this shell says; the
+  // testing override of lib/third-party.ts never reaches a smoke server
+  delete env.SITE_PUBLIC;
+  delete env.SHOW_THIRD_PARTY_RANKS;
+  Object.assign(env, extra);
   // --keep: the server outlives this script, so its output goes to a file under .next/
   const logFile = KEEP ? openSync(join(web, ".next", `smoke-server-${port}.log`), "a") : null;
   const child = spawn(join(web, "node_modules", ".bin", "next"), ["start", "-p", String(port), "-H", "127.0.0.1"], {
@@ -117,10 +125,13 @@ async function stopServer(child: ChildProcess): Promise<void> {
   signal("SIGKILL"); // any grandchild that ignored SIGTERM
 }
 
-function runTests(env: Record<string, string>): Promise<number> {
+// The private pass; the public pass (tests/smoke/public.test.ts) runs on its own server.
+// layout: the overlap check in headless Chrome (tests/smoke/layout.test.ts)
+const PRIVATE_FILES = ["pages", "modules", "decisions", "hot-seat", "board", "time-machine", "track", "a11y", "a11y-browser", "empty", "layout", "league"];
+
+function runTests(env: Record<string, string>, names: string[] = PRIVATE_FILES): Promise<number> {
   return new Promise((resolve) => {
-    // layout: the overlap check in headless Chrome (tests/smoke/layout.test.ts)
-    const files = ["pages", "modules", "decisions", "hot-seat", "board", "time-machine", "track", "a11y", "a11y-browser", "empty", "layout", "league"].map((f) => join("tests", "smoke", `${f}.test.ts`));
+    const files = names.map((f) => join("tests", "smoke", `${f}.test.ts`));
     const child = spawn(
       join(web, "node_modules", ".bin", "tsx"),
       ["--test", "--test-concurrency=1", "--test-reporter=spec", ...files],
@@ -172,7 +183,22 @@ async function main(): Promise<number> {
       SMOKE_DATA: REAL ? "real" : "seed",
       SMOKE_LEAGUE_DIR: LEAGUE_DIR,
     });
-    return code;
+    // The public pass (FIX-W, license): the same data behind SITE_PUBLIC=true; it compares each
+    // page with the private server's, so that one stays up until it is done.
+    const pub = await startServer(fullUrl, { SITE_PUBLIC: "true" });
+    servers.push(pub.child);
+    console.log("public pass: SITE_PUBLIC=true");
+    const pubCode = await runTests(
+      {
+        SMOKE_BASE_URL: pub.base,
+        SMOKE_PRIVATE_BASE_URL: full.base,
+        SMOKE_PUBLIC: "1",
+        SMOKE_REQUIRE: "1",
+        SMOKE_DATA: REAL ? "real" : "seed",
+      },
+      ["public"],
+    );
+    return code || pubCode;
   } catch (err) {
     console.error(`smoke run failed: ${err instanceof Error ? err.message : String(err)}`);
     return 1;

@@ -1,0 +1,35 @@
+{
+  "about": "Reason sentences built from FantasyPros' per-player values (preseason or weekly expert ranks, list membership). The published rows store each reason's text only, so a reason is identified by its template: id = the registry feature key (twm.registry), template = its reason_template there. lib/third-party.ts hides them while the site is public (license); tests/test_third_party_reasons.py fails when the registry and this list drift apart.",
+  "reasons": [
+    {
+      "id": "preseason_pos_rank",
+      "module": "waiver_radar",
+      "template": "Was ranked No. {value:.0f} among {pos}s before the season",
+      "example": "Was ranked No. 27 among QBs before the season"
+    },
+    {
+      "id": "preseason_ranked",
+      "module": "waiver_radar",
+      "template": "Was on a preseason ranking list",
+      "example": "Was on a preseason ranking list"
+    },
+    {
+      "id": "kdst_preseason_rank",
+      "module": "streamer",
+      "template": "Was ranked #{value:.0f} at {pos} before the season",
+      "example": "Was ranked #9 at K before the season"
+    },
+    {
+      "id": "weekly_ecr_rank",
+      "module": "streamer",
+      "template": "Experts ranked {player} #{value:.0f} at {pos} last week",
+      "example": "Experts ranked Jordan Smith #3 at K last week"
+    },
+    {
+      "id": "weekly_ecr_listed",
+      "module": "streamer",
+      "template": "Was on the experts' weekly {pos} list",
+      "example": "Was on the experts' weekly DST list"
+    }
+  ]
+}

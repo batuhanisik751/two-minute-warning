@@ -1,5 +1,6 @@
 import Term from "@/components/Term";
 import { boardCalibration, type BoardCalCell, type DisagreementRow } from "@/lib/board";
+import { showThirdPartyRanks } from "@/lib/third-party";
 import { BOARD_CLIFF_DROP, BOARD_DISAGREE_TOP, BOARD_DRIVERS, BOARD_ECR_FIRST_SEASON, BOARD_KICKOFF_LEAD_HOURS, BOARD_MIN_GAMES } from "@/lib/method";
 import BoardCalibration from "./BoardCalibration";
 import DisagreementRecord from "./DisagreementRecord";
@@ -11,6 +12,8 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
  *  disagreements turned out. */
 export default function HowToRead({ cal, record }: { cal: BoardCalCell[]; record: DisagreementRow[] }) {
   const groups = boardCalibration(cal);
+  // public site: the ranks and the per-player markers are hidden (lib/third-party.ts); the record stays
+  const show = showThirdPartyRanks();
   return (
     <section aria-labelledby="how-to-read" className="mt-10 max-w-4xl" data-testid="how-to-read">
       <h2 id="how-to-read" className="section-title mb-3 scroll-mt-24">
@@ -31,9 +34,9 @@ export default function HowToRead({ cal, record }: { cal: BoardCalCell[]; record
           earlier, from the latest daily depth chart; if so, the note at the top of the board says so and its as-of time shows when.
         </p>
         <p>
-          <strong>The experts.</strong> Beside the chances is FantasyPros&apos; <Term name="board_ecr">preseason expert consensus rank (ECR)</Term>{" "}
-          at his position: the experts&apos; combined ranking, from {BOARD_ECR_FIRST_SEASON} on. It is not our model. <Term name="board_disagree">Where we disagree</Term>{" "}
-          marks a player in our top {BOARD_DISAGREE_TOP} by the chance of a Cliff who is not among the {BOARD_DISAGREE_TOP} players the experts
+          <strong>The experts.</strong> {show ? "Beside the chances is" : "The record below compares the board with"} FantasyPros&apos;{" "}
+          <Term name="board_ecr">preseason expert consensus rank (ECR)</Term> at {show ? "his" : "each"} position: the experts&apos; combined ranking, from{" "}
+          {BOARD_ECR_FIRST_SEASON} on. It is not our model. <Term name="board_disagree">Where we disagree</Term> {show ? "marks" : "is"} a player in our top {BOARD_DISAGREE_TOP} by the chance of a Cliff who is not among the {BOARD_DISAGREE_TOP} players the experts
           drop furthest below last season&apos;s finish (their rank minus last season&apos;s rank; a player they did not rank counts as dropped
           furthest), or the reverse. The {BOARD_DRIVERS} lines under each chance are what moves it most compared with an average player.
         </p>

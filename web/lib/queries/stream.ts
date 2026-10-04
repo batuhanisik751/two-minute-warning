@@ -7,6 +7,7 @@ import { cached } from "@/lib/cache";
 import type { ListKey } from "@/lib/params";
 import type { StreamTrackRow } from "@/lib/streamer";
 import { reasonTexts } from "./radar";
+import { showThirdPartyRanks, shownReasons } from "@/lib/third-party";
 
 // The K and D/ST streamer's published lists (stream_list / stream_pick / stream_outcome) and
 // its track record (stream_track_record). Same live/backtest rules as the Radar's lists.
@@ -164,7 +165,18 @@ async function getStreamListRaw(season: number, week: number, position: string, 
     .orderBy(asc(streamPick.rank));
   return { header: toHeader(headers[0]), picks: rows.map(toPick) };
 }
-export const getStreamList = cached("stream.getStreamList", getStreamListRaw);
+const getStreamListCached = cached("stream.getStreamList", getStreamListRaw);
+/** One streamer list; while the site is public without the reasons that quote FantasyPros' ranks
+ *  (lib/third-party.ts), filtered after the data cache so one cache serves both modes. */
+export async function getStreamList(...args: Parameters<typeof getStreamListRaw>): Promise<StreamListData | null> {
+  const l = await getStreamListCached(...args);
+  return l && gatePicks(l);
+}
+
+function gatePicks(l: StreamListData): StreamListData {
+  const show = showThirdPartyRanks();
+  return show ? l : { ...l, picks: l.picks.map((p) => ({ ...p, reasons: shownReasons(p.reasons, show) })) };
+}
 
 /** The newest live week's K and DST lists (the home page's Streamers card), or null. */
 async function getLatestStreamLiveRaw(): Promise<{ week: { season: number; week: number }; lists: StreamListData[] } | null> {
@@ -187,7 +199,12 @@ async function getLatestStreamLiveRaw(): Promise<{ week: { season: number; week:
   const lists = headers.map((h) => ({ header: toHeader(h), picks: rows.filter((r) => r.position === h.position).map(toPick) }));
   return { week: wk, lists };
 }
-export const getLatestStreamLive = cached("stream.getLatestStreamLive", getLatestStreamLiveRaw);
+const getLatestStreamLiveCached = cached("stream.getLatestStreamLive", getLatestStreamLiveRaw);
+/** The newest live week's K and DST lists (gated like getStreamList). */
+export async function getLatestStreamLive(): Promise<{ week: { season: number; week: number }; lists: StreamListData[] } | null> {
+  const l = await getLatestStreamLiveCached();
+  return l && { ...l, lists: l.lists.map(gatePicks) };
+}
 
 /** Every row of stream_track_record except the per-season ones, in the CSV's order. */
 async function getStreamTrackRaw(): Promise<StreamTrackRow[]> {

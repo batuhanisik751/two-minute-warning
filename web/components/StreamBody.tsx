@@ -2,6 +2,7 @@ import Link from "next/link";
 import StreamList from "@/components/StreamList";
 import Term from "@/components/Term";
 import { EmptyState, Note } from "@/components/ui";
+import ThirdPartyNote from "@/components/ThirdPartyNote";
 import { fmtInt, fmtUtc, kindLabel, pct, pointsRange, points as pointsDiff, seasonWeek } from "@/lib/format";
 import { AS_OF_WEEKDAY, CHANCE_RANGE_LEVEL, TRACK_INTERVAL_LEVEL } from "@/lib/method";
 import type { ListKey } from "@/lib/params";
@@ -51,6 +52,7 @@ export default async function StreamBody({ chosen, position, currentSeason }: { 
             reconstructed this list did not generate them.
           </Note>
         ) : null}
+        {picks.some((p) => p.reasons.length > 0) ? <ThirdPartyNote /> : null}
         {chosen.season < (currentSeason ?? chosen.season) ? (
           <p className="text-sm text-muted">
             <Term name="current_franchise">Teams</Term> are shown by today&apos;s franchise code and name.

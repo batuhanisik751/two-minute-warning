@@ -292,6 +292,18 @@ password out of chats, commit messages and command lines.
     - `SITE_PUBLIC=true`: `robots.txt` allows crawling (except `/league`) and names the sitemap,
       and pages become indexable. Set it only together with turning Vercel Authentication off:
       crawlers cannot read a protected site anyway.
+    - The same `SITE_PUBLIC=true` also hides FantasyPros' per-player values (license: their Terms
+      of Use forbid republishing; owner's decision 2026-10-04): the experts' preseason ranks and
+      the "where we disagree" markers on `/board`, the home page's Cliff watch and the time
+      machine, and the Waiver Radar / streamer reasons that quote their ranks (identified by
+      template, `web/lib/third-party-reasons.json`). Each such page says once that "the experts'
+      consensus ranks are not shown on the public site (license)". Our own estimates and the
+      aggregate model-vs-experts comparisons stay. One switch, `showThirdPartyRanks()` in
+      `web/lib/third-party.ts`; nothing else to set.
+    - Checklist before going public: `SHOW_THIRD_PARTY_RANKS` must NOT be set in production (it is
+      a testing override that can show the ranks on a public site: `vercel env ls` must not list
+      it), and after the redeploy `/board` must show the license note and no "Experts' preseason
+      rank" (the smoke runner's public pass, `npm run test:smoke:run`, checks the same on the seed).
 
     Environment variables take effect on the next deployment (redeploy after changing them).
     To go private again, remove `SITE_PUBLIC` (or set it to anything but `true`) and redeploy.

@@ -2,6 +2,7 @@ import Link from "next/link";
 import Term from "@/components/Term";
 import { EmptyState } from "@/components/ui";
 import { fmtInt, pct } from "@/lib/format";
+import { showThirdPartyRanks } from "@/lib/third-party";
 import { BOARD_CLIFF_DROP, BOARD_ECR_FIRST_SEASON, BOARD_KICKOFF_LEAD_HOURS, BOARD_MIN_GAMES, BOARD_MIN_PRIOR, BOARD_RANK_MIN_GAMES, BOARD_TOP_PPG, TRACK_INTERVAL_LEVEL } from "@/lib/method";
 import { getBoardGraded, getBoardIndex, getBoardModels, getBoardTrack, type BoardModel } from "@/lib/queries/board";
 import BoardBacktest from "./BoardBacktest";
@@ -47,7 +48,7 @@ export default async function BoardSection() {
         <div className="mt-3 space-y-3">
           <p>
             Before each season, two <Term name="board_cliff_chance">estimated chances</Term> for every established veteran (
-            <Link href="/board">the Cliff board</Link>), next to the experts&apos; preseason ranks: a Cliff, and missed time. Estimates from
+            <Link href="/board">the Cliff board</Link>){showThirdPartyRanks() ? ", next to the experts' preseason ranks" : ""}: a Cliff, and missed time. Estimates from
             past seasons&apos; patterns, worded as such.
           </p>
           <H3 id="board-labels">Who is on it, and the two outcomes</H3>

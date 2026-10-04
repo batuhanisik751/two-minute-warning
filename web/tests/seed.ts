@@ -36,6 +36,9 @@ export const SEED = {
   /** the fictional league shape the glossary's starter_threshold states (read by the FLEX note) */
   league: { teams: 10, starters: { QB: 10, RB: 20, WR: 30, TE: 8 } },
   positions: ["QB", "RB", "WR", "TE"] as const,
+  /** a reason quoting FantasyPros' preseason rank (lib/third-party-reasons.json), on every rank-1 pick
+   *  with reasons: shown on the private site, hidden on the public one (tests/smoke/public.test.ts) */
+  thirdPartyReason: (pos: string) => `Was ranked No. 27 among ${pos}s before the season`,
   /** picks per list */
   sizes: { live: 8, recon: 6, backtest: 12 },
   teams: [
@@ -216,7 +219,7 @@ export async function seed(db: Db, variant: SeedVariant): Promise<void> {
           chanceHigh: chance === null ? null : Math.round((chance + 0.03) * 10000) / 10000,
           modelProb: Math.round((0.65 - r * 0.04) * 10000) / 10000,
           tier: chance === null ? null : chance >= 0.5 ? "must-add" : chance >= 0.25 ? "speculative" : "watch",
-          reasons: withChance ? [`Seed reason A for ${p.displayName}`, `Seed reason B for rank ${r}`] : [],
+          reasons: withChance ? [`Seed reason A for ${p.displayName}`, `Seed reason B for rank ${r}`, ...(r === 1 ? [SEED.thirdPartyReason(pos)] : [])] : [],
         });
         const final = season < 2026;
         const hit = final ? (r + week) % 3 === 0 || r === 1 : null;

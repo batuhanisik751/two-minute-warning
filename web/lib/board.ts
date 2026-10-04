@@ -3,6 +3,7 @@
 // tests/unit/board.test.ts. Every number they show comes from the published rows or lib/method.ts.
 import { signedNum, type Driver } from "./hot-seat";
 import { BOARD_BANDS, BOARD_CLIFF_DROP, BOARD_DISAGREE_TOP, BOARD_ECR_FIRST_SEASON, BOARD_MIN_GAMES } from "./method";
+import { showThirdPartyRanks } from "./third-party";
 
 export { driverEffect, parseDrivers, wholePct, type Driver } from "./hot-seat";
 
@@ -73,6 +74,12 @@ export function disagreeWords(d: Disagree, position: string, r: RankRow): { shor
   return d === "model"
     ? { short: "We see more risk than the experts", long: `in our top ${BOARD_DISAGREE_TOP} for a Cliff; ${ranks}` }
     : { short: "The experts see more risk than we do", long: `${ranks}, among the ${BOARD_DISAGREE_TOP} they drop furthest; not in our top ${BOARD_DISAGREE_TOP}` };
+}
+
+/** The cards' link to /board: the experts' ranks are named only where they are shown
+ *  (lib/third-party.ts). */
+export function boardLinkText(show: boolean = showThirdPartyRanks()): string {
+  return `Every player, ${show ? "the experts' ranks, " : ""}the drivers and how to read it`;
 }
 
 /** Whether a board season can have the experts' ranks at all. */

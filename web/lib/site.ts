@@ -27,6 +27,8 @@ export const MODEL_CARDS = [
   { file: "decisions_wp.md", title: "Decision Report Card (the win-probability model and its grading)" },
   { file: "hot_seat.md", title: "Hot-Seat Meter" },
   { file: "board_cliff.md", title: "Cliff board (with the Breakout research note)" },
+  { file: "questionable.md", title: "Questionable outcomes" },
+  { file: "startsit.md", title: "Start/sit odds (the owner's local report only, not on this site)" },
 ] as const;
 
 export const MODEL_CARDS_INDEX = "docs/model_cards/README.md";

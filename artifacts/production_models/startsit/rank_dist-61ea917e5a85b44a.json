@@ -1,0 +1,50 @@
+{
+ "c": 0.2,
+ "dnp_share": 0.268921,
+ "files": {
+  "calibration": {
+   "file": "artifacts/production_models/startsit/rank_dist-61ea917e5a85b44a/calibration.parquet",
+   "rows": 8,
+   "sha256": "ebb9c92395f8157685871e6a420b7930e78e369f4c9236d773bfb29e80a2e1fd"
+  },
+  "folds": {
+   "file": "artifacts/production_models/startsit/rank_dist-61ea917e5a85b44a/folds.parquet",
+   "rows": 4,
+   "sha256": "5d78054eff5c1c227af2c9d1dd9d298eb22d2dd8c61eb4c752210918f28ca2f3"
+  },
+  "metrics": {
+   "file": "artifacts/production_models/startsit/rank_dist-61ea917e5a85b44a/metrics.parquet",
+   "rows": 11,
+   "sha256": "dd125ee2135b23c64e74a1255423570a9ec7c16cd227d8c6ad27b40236cae559"
+  },
+  "rank_gap": {
+   "file": "artifacts/production_models/startsit/rank_dist-61ea917e5a85b44a/rank_gap.parquet",
+   "rows": 5,
+   "sha256": "62a1e910bf79e1fd052ba77cec2ded775c4638c57146f4cd60969501dd9fed6b"
+  },
+  "rank_points": {
+   "file": "artifacts/production_models/startsit/rank_dist-61ea917e5a85b44a/rank_points.parquet",
+   "rows": 52000,
+   "sha256": "28ba10f86f3bbdbcf2e834b45031394268ee0d2929def19e80904c383cebec90"
+  },
+  "teammates": {
+   "file": "artifacts/production_models/startsit/rank_dist-61ea917e5a85b44a/teammates.parquet",
+   "rows": 2,
+   "sha256": "bfe37dd12eec457e3508ac5f1074d753b15c7b43fd6721bc927a5ad439f3b857"
+  }
+ },
+ "model": "rank_dist",
+ "model_version": "rank_dist-61ea917e5a85b44a",
+ "module": "startsit",
+ "n_atoms": 200,
+ "rank_cap": {
+  "QB": 40,
+  "RB": 80,
+  "TE": 40,
+  "WR": 100
+ },
+ "rank_rows": 35925,
+ "season": 2026,
+ "test_seasons": "2022-2025",
+ "train_seasons": "2020-2025"
+}

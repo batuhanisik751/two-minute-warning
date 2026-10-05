@@ -77,6 +77,8 @@ order `twm offseason status` checks them:
 | 5 | Decision Report Card (`decisions`) | `uv run twm decisions wp-backtest --season F+1`; `uv run twm decisions submodels-backtest --season F+1`; `uv run twm decisions grade` (F graded by its own fold models); `uv run twm decisions clock`; `uv run twm decisions pin` | 2006-F |
 | 6 | Hot-Seat Meter (`hot_seat`) | `uv run twm hotseat features`; `uv run twm hotseat backtest --labels verified`; `uv run twm hotseat pin` (needs step 1.4) | 2006-F |
 | 7 | Cliff board (`board`) | `uv run twm board backtest --snapshot preseason`; `uv run twm board pin` | snapshots 2007-(F-1), i.e. the boards of 2008-F |
+| 8 | Questionable outcomes (`questionable`) | `uv run twm questionable build` (writes `reports/questionable/*.csv`); `uv run twm questionable pin` (refused unless it reproduces them) | 2016-F |
+| 9 | Start/sit odds, local only (`startsit`) | `uv run twm league startsit-pin` (needs F's weekly FantasyPros ranks in the warehouse) | 2020-F |
 
 Check each command's `--help` for its season and store options before running it. The
 commands default to `current_season` (step 1.2). The Radar also has a **preview** that may run

@@ -103,6 +103,19 @@ league weekly`) has the same journal as its "You vs the model" section, never pu
   across syncs): sync at least weekly or older moves are lost. Trades are not reviewed (`twm
   league trade` checks one before you make it).
 
+## Start/sit odds (local only: FantasyPros ranks)
+
+`uv run twm league startsit "Player A" "Player B"` answers "start A or B?" with the chance A
+outscores B this week, from how players at each FantasyPros weekly expert rank scored in
+2020-2025, plus both players' 10th/50th/90th percentile points and a one-line verdict ("close
+call" under 55%). It needs no ESPN. The weekly ranks land on Fridays; before that it says so and
+stops (exit 3). `--play-chance-a/--play-chance-b` (0-1) set a player's chance to play (a missed
+game scores 0; default: as players at his rank did). When a league is synced, `twm league
+report` adds **Start/sit odds for your closest calls**: each starter at QB/RB/WR/TE/FLEX against
+your best bench option for that slot, calls under 55% flagged. The section and the command use
+FantasyPros' ranks, which may not be republished: they stay local, never published. Method,
+backtest and limits: [docs/start_sit.md](start_sit.md).
+
 ## Trade checker
 
 ```

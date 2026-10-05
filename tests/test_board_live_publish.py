@@ -162,7 +162,7 @@ def test_the_job_skips_the_board_outside_its_window(tmp_path) -> None:
 
 def test_the_job_scores_the_live_board_once_in_its_window(tmp_path) -> None:
     fake, res = _job(tmp_path, lambda s, now: (True, "the 2026 live board: open: ..."))
-    assert fake.stages()[-2:] == ["board_score", "publish"] and res.exit_code == 0
+    assert fake.stages()[-3:] == ["board_score", "questionable", "publish"] and res.exit_code == 0
     args = fake.args("board_score")[0]
     assert args[:5] == ["board", "score", "--season", "2026", "--live-publish"]
     assert "--now" in args  # a pretend clock: stored as reconstructed, never live

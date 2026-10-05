@@ -1,0 +1,7 @@
+report_status,key,value,n,median,dud_rate,matched,healthy_rows,healthy_median,healthy_dud_rate
+Questionable,missed_prev,all,1715,0.776978,0.321866,1702,10523,0.851117,0.276031
+Questionable,missed_prev,false,1307,0.796731,0.305279,1300,8959,0.849242,0.278395
+Questionable,missed_prev,true,408,0.718352,0.375000,402,3390,0.865356,0.268386
+Doubtful,missed_prev,all,4,0.687208,0.250000,4,43,1.096282,0.207341
+Doubtful,missed_prev,false,3,0.866071,0.000000,3,35,1.096282,0.193122
+Doubtful,missed_prev,true,1,0.000000,1.000000,1,8,0.970414,0.250000

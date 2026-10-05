@@ -63,6 +63,14 @@ How many more of his targets he caught than an average receiver would have.
 - **Formula:** (receptions - receptions_exp) / targets, over the games of one half of a player-season (summed, then divided)
 - **Source:** twm.modules.regression_watch.stability
 
+### Chance he plays
+
+Out of 100 players like him in past seasons, about this many played. Teams name their inactive players about 90 minutes before kickoff: check then.
+
+- **Name:** `play_chance`; **unit:** share (0-1); **used by:** questionable
+- **Formula:** share of past tagged players with the same tag, position and 'missed his team's previous game' who took at least one offensive snap (fact_snaps), seasons 2016 to last season, each group shrunk toward its parent group (20 pseudo-rows)
+- **Source:** twm.modules.questionable (frozen table, docs/questionable.md)
+
 ### Clear call or toss-up
 
 Only decisions with a clear answer count against a coach.
@@ -94,6 +102,14 @@ The chance that going for it on this down and distance works.
 - **Name:** `p_convert`; **unit:** probability (0-1); **used by:** decisions
 - **Formula:** LightGBM on the go-for-it features, trained walk-forward (seasons < S)
 - **Source:** twm.modules.decisions.conversion
+
+### Dud rate
+
+How often a tagged player who did play scored less than half his usual. Healthy players do that too (about 1 in 4), so compare the two numbers.
+
+- **Name:** `dud_rate`; **unit:** share (0-1); **used by:** questionable
+- **Formula:** among tagged players who played, with 2+ earlier games and 5+ points per game so far: share whose points that week were below 50% of their points per game so far; compared with healthy players matched on season, week, position and points-per-game band
+- **Source:** twm.modules.questionable.plays
 
 ### EP left on the table (end of half)
 
@@ -521,6 +537,14 @@ How much a number repeats within a season: near 1 it is a lasting trait (role or
 - **Name:** `split_half_correlation`; **unit:** correlation (-1 to 1); **used by:** regression_watch
 - **Formula:** Pearson correlation, across player-seasons (8+ games with a target, carry or pass; 2009 on; one position per player-season), of a metric in one half of his games with the same metric in the other half: odd against even games, or his first n // 2 games against the rest
 - **Source:** twm.modules.regression_watch.stability
+
+### Start/sit odds
+
+Choosing between two players? This is how often a player ranked like the first outscored one ranked like the second. Under 55% it is a close call: either is a reasonable start. Local only: it uses the experts' weekly ranks, which may not be republished.
+
+- **Name:** `start_sit_odds`; **unit:** share (0-1); **used by:** my_league
+- **Formula:** P(A outscores B) for independent draws of the league points of players at A's and B's weekly expert ranks in 2020-2025 (each rank pooled with its neighbours), a tie counting one half; walk-forward checked on 2022-2025 (docs/start_sit.md)
+- **Source:** twm.modules.startsit (twm league startsit; the local weekly report)
 
 ### Starter finish
 
@@ -2540,6 +2564,14 @@ When a row of data became public. A prediction at an as-of time sees only rows w
 - **Formula:** per table rule in twm.warehouse.available (e.g. game data: estimated game end + 6 h); later when unsure
 - **Source:** every event table's available_at column
 
+### Doubtful
+
+The team says the player is unlikely to play. Since 2016 almost none of the Doubtful QBs, RBs, WRs and TEs took an offensive snap (about 1 in 100).
+
+- **Name:** `doubtful`; **unit:** injury tag; **used by:** questionable
+- **Formula:** fact_injury_report.report_status = 'Doubtful' on the team's final injury report of the week
+- **Source:** fact_injury_report.report_status (nflverse injuries)
+
 ### Interim coach (row flag)
 
 Interim coaches are left out of training (spec 8.5). Uses the owner's hindsight file, so it selects rows and is never a model feature.
@@ -2571,6 +2603,14 @@ A scoring format that gives a point for every catch, on top of yards and touchdo
 - **Name:** `ppr`; **unit:** points per catch; **used by:** shared
 - **Formula:** config/scoring.yaml receiving.receptions (1 = full PPR, 0.5 = half, 0 = standard)
 
+### Practice status
+
+How much he practiced late in the week. Shown for context only: the 2025+ injury data no longer matches earlier seasons here, so the chance does not use it.
+
+- **Name:** `practice_status`; **unit:** full / limited / did not practice / none; **used by:** questionable
+- **Formula:** fact_injury_report.practice_status of the week's final report: Full Participation, Limited Participation, Did Not Participate (blank: none)
+- **Source:** fact_injury_report.practice_status
+
 ### Previous playoff result (text)
 
 Last season's playoff exit, spelled out.
@@ -2578,6 +2618,14 @@ Last season's playoff exit, spelled out.
 - **Name:** `prev_playoff_result`; **unit:** text; **used by:** hot_seat
 - **Formula:** prev_playoff_round as text: none, lost_wc, lost_div, lost_conf, lost_sb, won_sb
 - **Source:** twm.modules.hot_seat.features
+
+### Questionable
+
+The team says the player is uncertain to play. Since 2016 about 6 in 10 Questionable QBs, RBs, WRs and TEs played; the list shows the chance for players like him.
+
+- **Name:** `questionable`; **unit:** injury tag; **used by:** questionable
+- **Formula:** fact_injury_report.report_status = 'Questionable' on the team's final injury report of the week (2016 on: the NFL's definition since dropping Probable)
+- **Source:** fact_injury_report.report_status (nflverse injuries)
 
 ### Regression Watch universe
 

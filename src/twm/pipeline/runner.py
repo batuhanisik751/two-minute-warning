@@ -97,7 +97,8 @@ TIMEOUTS = {"ingest": 25 * 60, "build": 15 * 60, "dataset": 15 * 60, "backtest":
             "score": 15 * 60, "streamer_dataset": 15 * 60, "streamer_backtest": 10 * 60,
             "streamer_score": 15 * 60, "regression_backtest": 10 * 60,
             "regression_score": 15 * 60, "decisions_backtest": 10 * 60, "decisions": 15 * 60,
-            "hotseat_score": 15 * 60, "board_score": 15 * 60, "publish": 15 * 60}  # fmt: skip
+            "hotseat_score": 15 * 60, "board_score": 15 * 60, "questionable": 10 * 60,
+            "publish": 15 * 60}  # fmt: skip
 # The modules scored after the Radar (step P2): stage, the `twm` command, the report's title.
 MODULE_SCORES = {
     "streamer": ("streamer_score", ["streamer", "score"], "streamer"),
@@ -800,6 +801,27 @@ class _Run:
         self.add("board_score", "ok", t0, why, code=0, logs=[self.rel(log)])
         return True
 
+    def questionable(self) -> bool:
+        """Feature #1: tonight's Questionable / Doubtful list with the pinned table (sha256
+        checked before it is read; never rebuilt), stored as this as-of's snapshot
+        (append-only): ``twm questionable weekly``. Exit code 3 (no regular-season week at
+        this time) is skipped; any other failure stops the run."""
+        t0 = time.perf_counter()
+        args = ["questionable", "weekly", "--season", str(self.season)]
+        if self.opts.now is not None:
+            args += ["--as-of", self.opts.now.isoformat()]
+        code, log = self.cli("questionable", args)
+        if code == SCORE_NOT_READY:
+            self.add("questionable", "skipped", t0, _tail(log, 2), code=code,
+                     logs=[self.rel(log)])  # fmt: skip
+            return True
+        if code != 0:
+            self.fail("questionable", f"`twm questionable weekly` exited with {code}", t0,
+                      code=code, logs=[log])  # fmt: skip
+            return False
+        self.add("questionable", "ok", t0, _tail(log, 1), code=0, logs=[self.rel(log)])
+        return True
+
     def publish(self) -> bool:
         t0 = time.perf_counter()
         if self.target is None:
@@ -926,5 +948,8 @@ def _stages(r: _Run) -> None:
     # step I6b: the season's live Cliff board, once a season while its window is open
     if ok and p is not None:
         ok = r.board()
+    # feature #1: the Questionable / Doubtful list, one append-only snapshot per run
+    if ok and p is not None:
+        ok = r.questionable()
     if ok and p is not None:
         r.publish()

@@ -25,6 +25,8 @@ Source: `config/production_models.yaml`
 | [Decision Report Card](decisions_wp.md) | `decisions` | `grading-100604cddaabf068` | grading spec: WP model, sub-models, rules | 2026-10-01 |
 | [Hot-Seat Meter](hot_seat.md) | `hot_seat` | `logit-0ede038915531ea3` | L2 logistic regression | 2026-10-02 |
 | [Cliff board](board_cliff.md) | `board` | `board_spec-1581a6da7602c3f7` | spec: Cliff + missed-time logistic regressions (Breakout: research note) | 2026-10-02 |
+| [Questionable outcomes](questionable.md) | `questionable` | `lookup-5f0566085a6b1f24` | lookup table: counted rates, shrunk toward parent cells | 2026-10-05 |
+| [Start/sit odds](startsit.md) (local only) | `startsit` | `rank_dist-61ea917e5a85b44a` | spec: rank -> points distributions (FantasyPros weekly ranks; never published) | 2026-10-05 |
 
 **Reproducing any card's model:** `uv run twm model check <module>` (the pin, every file's
 sha256 and the reports it must reproduce) and `uv run twm timemachine verify --module <module>`

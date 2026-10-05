@@ -83,6 +83,15 @@ hot_seat:
       file: artifacts/production_models/hot_seat/backtest-logit-0ede038915531ea3/model_versions.parquet
       sha256: d3770a0961413a65ba445e389c229f312eae1829954eae3ca6cbe6e1e6174848
       rows: 20
+questionable:
+  season: 2026
+  model_version: lookup-5f0566085a6b1f24
+  file: artifacts/production_models/questionable/lookup-5f0566085a6b1f24.json
+  sha256: 5650ee8026963c92889ea4848530a463a60b58cdc99f7d56db7742916e7e5cb1
+  model: lookup
+  approved: '2026-10-05'
+  backtest:
+    seasons: 2016-2025
 regression_watch:
   season: 2026
   model_version: zero_flat_all-9d98d6f251ee054c
@@ -138,6 +147,15 @@ regression_watch:
       file: artifacts/production_models/regression_watch/backtest-zero_flat_all-9d98d6f251ee054c/player_xfp.parquet
       sha256: 72d1378b846fd09f29382786806f0ebd3c229a6fef5faa195ec9eb3550b07334
       rows: 73677
+startsit:
+  season: 2026
+  model_version: rank_dist-61ea917e5a85b44a
+  file: artifacts/production_models/startsit/rank_dist-61ea917e5a85b44a.json
+  sha256: a987c6d1b19d27669afcb9ba4d528e2e31e3ffd3da7506f6e84a2627c226cee6
+  model: rank_dist
+  approved: '2026-10-05'
+  backtest:
+    seasons: 2020-2025
 streamer_dst:
   season: 2026
   model_version: baseline_opponent_dst-e76f31d80f3a905e

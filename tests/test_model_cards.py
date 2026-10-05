@@ -29,6 +29,8 @@ CARD_OF_PIN = {
     "decisions": "decisions_wp.md",
     "hot_seat": "hot_seat.md",
     "board": "board_cliff.md",
+    "questionable": "questionable.md",  # feature #1: Questionable outcomes
+    "startsit": "startsit.md",  # feature #2: start/sit odds (local only)
 }
 HEADINGS = [
     "Purpose and intended use",

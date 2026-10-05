@@ -195,6 +195,9 @@ def run_report(
     con = store.connect(path, read_only=True)
     try:
         data = gather(con, predictions, paths()[1], week=week, pins_path=pins)
+        from twm.modules.startsit.league import for_report  # feature #2 (local only)
+
+        data.startsit = for_report(con, paths()[1], now)
     except PersonalUnavailableError as e:
         echo(str(e))
         return EXIT_UNAVAILABLE

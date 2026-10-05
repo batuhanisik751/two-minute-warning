@@ -161,7 +161,7 @@ class Pin:
             out["approved"] = self.approved
         if self.xfp is not None:
             out["xfp"] = self.xfp.as_dict()
-        if self.backtest:
+        if self.backtest or self.backtest_seasons:
             out["backtest"] = {
                 "seasons": self.backtest_seasons,
                 **{t: self.backtest[t].as_dict() for t in SNAPSHOT_TABLES if t in self.backtest},

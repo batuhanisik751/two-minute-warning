@@ -36,6 +36,7 @@ MODULES = (
     "decisions",
     "hot_seat",
     "board",
+    "questionable",
 )
 _NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 # Placeholders a reason template may use (C6, twm.modules.waiver_radar.reasons, fills them
@@ -1726,6 +1727,82 @@ def _board_entries() -> list[Entry]:
     return out
 
 
+def _questionable_entries() -> list[Entry]:
+    """Feature #1 (twm.modules.questionable, docs/questionable.md): the injury tags and the
+    two numbers the Questionable list shows."""
+    from twm.modules.questionable import plays as pp
+
+    src = "fact_injury_report.report_status (nflverse injuries)"
+    mods = ("questionable",)
+    return [
+        Entry(
+            name="questionable",
+            title="Questionable",
+            kind="concept",
+            modules=mods,
+            unit="injury tag",
+            formula="fact_injury_report.report_status = 'Questionable' on the team's final "
+            "injury report of the week (2016 on: the NFL's definition since dropping Probable)",
+            explanation="The team says the player is uncertain to play. Since 2016 about 6 in 10 "
+            "Questionable QBs, RBs, WRs and TEs played; the list shows the chance for players "
+            "like him.",
+            source=src,
+        ),
+        Entry(
+            name="doubtful",
+            title="Doubtful",
+            kind="concept",
+            modules=mods,
+            unit="injury tag",
+            formula="fact_injury_report.report_status = 'Doubtful' on the team's final injury "
+            "report of the week",
+            explanation="The team says the player is unlikely to play. Since 2016 almost none "
+            "of the Doubtful QBs, RBs, WRs and TEs took an offensive snap (about 1 in 100).",
+            source=src,
+        ),
+        Entry(
+            name="practice_status",
+            title="Practice status",
+            kind="concept",
+            modules=mods,
+            unit="full / limited / did not practice / none",
+            formula="fact_injury_report.practice_status of the week's final report: Full "
+            "Participation, Limited Participation, Did Not Participate (blank: none)",
+            explanation="How much he practiced late in the week. Shown for context only: the "
+            "2025+ injury data no longer matches earlier seasons here, so the chance does not "
+            "use it.",
+            source="fact_injury_report.practice_status",
+        ),
+        Entry(
+            name="play_chance",
+            title="Chance he plays",
+            kind="metric",
+            modules=mods,
+            unit="share (0-1)",
+            formula="share of past tagged players with the same tag, position and 'missed his "
+            "team's previous game' who took at least one offensive snap (fact_snaps), seasons "
+            "2016 to last season, each group shrunk toward its parent group (20 pseudo-rows)",
+            explanation="Out of 100 players like him in past seasons, about this many played. "
+            "Teams name their inactive players about 90 minutes before kickoff: check then.",
+            source="twm.modules.questionable (frozen table, docs/questionable.md)",
+        ),
+        Entry(
+            name="dud_rate",
+            title="Dud rate",
+            kind="metric",
+            modules=mods,
+            unit="share (0-1)",
+            formula=f"among tagged players who played, with {pp.MIN_PRIOR_GAMES}+ earlier games "
+            f"and {pp.MIN_PRIOR_PPG:g}+ points per game so far: share whose points that week were "
+            f"below {pp.DUD:.0%} of their points per game so far; compared with healthy players "
+            "matched on season, week, position and points-per-game band",
+            explanation="How often a tagged player who did play scored less than half his usual. "
+            "Healthy players do that too (about 1 in 4), so compare the two numbers.",
+            source="twm.modules.questionable.plays",
+        ),
+    ]
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
     pool = _pool_texts()
@@ -1747,6 +1824,22 @@ def _entries() -> list[Entry]:
             verified="the nflverse_ppr preset reproduces nflverse's fantasy_points_ppr exactly "
             "on all 150,691 QB/RB/WR/TE player-weeks 1999-2026 (tests/test_scoring.py)",
             reason_template="{player} scored {value:.1f} fantasy points",
+        ),
+        Entry(  # feature #2: start/sit odds (local only: it reads FantasyPros weekly ranks)
+            name="start_sit_odds",
+            title="Start/sit odds",
+            kind="metric",
+            modules=("my_league",),
+            unit="share (0-1)",
+            formula="P(A outscores B) for independent draws of the league points of players at "
+            "A's and B's weekly expert ranks in 2020-2025 (each rank pooled with its neighbours), "
+            "a tie counting one half; walk-forward checked on 2022-2025 (docs/start_sit.md)",
+            explanation="Choosing between two players? This is how often a player ranked like "
+            "the first outscored one ranked like the second. Under 55% it is a close call: "
+            "either is a reasonable start. Local only: it uses the experts' weekly ranks, "
+            "which may not be republished.",
+            source="twm.modules.startsit (twm league startsit; the local weekly report)",
+            step="feature #2",
         ),
         Entry(
             name="ppr",
@@ -2154,6 +2247,7 @@ def _entries() -> list[Entry]:
         *_clock_entries(),
         *_hot_seat_entries(),
         *_board_entries(),
+        *_questionable_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
             name="weekly_pos_rank",

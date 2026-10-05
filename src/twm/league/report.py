@@ -75,6 +75,11 @@ class ReportData:
     notes: list[str] = field(default_factory=list)
     journal: Journal | None = None  # "You vs the model" (twm.league.journal)
     journal_error: str = ""
+    # feature #1: twm.modules.questionable.league.Section; None = no section (no roster)
+    questionable: object | None = None
+    # feature #2: twm.modules.startsit.league.StartSitSection (FantasyPros ranks: local only);
+    # None = no section. Set by commands.run_report after gather.
+    startsit: object | None = None
 
 
 def owner_tags(radar: PersonalRadar) -> list[TagRow]:
@@ -155,7 +160,19 @@ def gather(
         scoring=scoring, scoring_error=scoring_error, settings=settings_summary(con),
         weeks=week_check(con, warehouse), scoring_note=scoring_note(con), notes=list(radar.notes),
         journal=journal, journal_error=journal_error,
+        questionable=questionable_section(predictions, radar),
     )  # fmt: skip
+
+
+def questionable_section(predictions: Path, radar: PersonalRadar) -> object | None:
+    """Feature #1: the owner's tagged players from the stored Questionable list (None: no
+    roster; a broken store never breaks the report)."""
+    from twm.modules.questionable.league import for_report
+
+    try:
+        return for_report(predictions, radar.roster, radar.season)
+    except Exception:  # noqa: BLE001 - informative only
+        return None
 
 
 # ---- HTML ----------------------------------------------------------------------------------
@@ -597,6 +614,18 @@ def render(d: ReportData, generated: datetime, limit: int = 10) -> str:
     body = [radar_section(d, limit), streamer_section(d, limit), drops_section(d)]
     body += [tags_section(d), regret_section(d), journal_section(d), scoring_section(d),
              settings_section(d)]  # fmt: skip
+    if d.startsit is not None:  # feature #2: start/sit odds (FantasyPros ranks: local only)
+        from twm.modules.startsit.league import SECTION_ID, TITLE, render_section
+
+        nav += f'<li><a href="#{SECTION_ID}">{esc(TITLE)}</a></li>'
+        body.append(render_section(d.startsit))
+    if d.questionable is not None:  # feature #1: tagged players (twm.modules.questionable)
+        from twm.modules.questionable.league import SECTION_ID as Q_ID
+        from twm.modules.questionable.league import TITLE as Q_TITLE
+        from twm.modules.questionable.league import render_section as q_section
+
+        nav += f'<li><a href="#{Q_ID}">{esc(Q_TITLE)}</a></li>'
+        body.append(q_section(d.questionable))
     foot = para("A local report: never published, never sent anywhere. Chances and projections "
                 "are estimates from past seasons, not promises. NFL data: nflverse. League "
                 "data: ESPN (your cookies are not in this file).", "muted small")  # fmt: skip

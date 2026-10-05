@@ -1,0 +1,1525 @@
+{
+ "backtest": [
+  {
+   "brier": 0.222794,
+   "grouping": "status",
+   "log_loss": 0.627833,
+   "mean_p": 0.610914,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.214691,
+   "grouping": "status",
+   "log_loss": 0.606956,
+   "mean_p": 0.578353,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.212235,
+   "grouping": "status",
+   "log_loss": 0.607348,
+   "mean_p": 0.575699,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.191575,
+   "grouping": "status",
+   "log_loss": 0.553164,
+   "mean_p": 0.562222,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.20449,
+   "grouping": "status",
+   "log_loss": 0.584042,
+   "mean_p": 0.585707,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.22268,
+   "grouping": "status",
+   "log_loss": 0.626735,
+   "mean_p": 0.590642,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.210574,
+   "grouping": "status",
+   "log_loss": 0.588005,
+   "mean_p": 0.548081,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.226556,
+   "grouping": "status",
+   "log_loss": 0.632681,
+   "mean_p": 0.587557,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.212709,
+   "grouping": "status",
+   "log_loss": 0.602242,
+   "mean_p": 0.579515,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.2158,
+   "grouping": "practice",
+   "log_loss": 0.613089,
+   "mean_p": 0.606108,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.20366,
+   "grouping": "practice",
+   "log_loss": 0.582822,
+   "mean_p": 0.564468,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.197062,
+   "grouping": "practice",
+   "log_loss": 0.577078,
+   "mean_p": 0.56382,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.179326,
+   "grouping": "practice",
+   "log_loss": 0.527593,
+   "mean_p": 0.54315,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.200077,
+   "grouping": "practice",
+   "log_loss": 0.575116,
+   "mean_p": 0.577651,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.215555,
+   "grouping": "practice",
+   "log_loss": 0.612745,
+   "mean_p": 0.590621,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.205711,
+   "grouping": "practice",
+   "log_loss": 0.578833,
+   "mean_p": 0.55149,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.233113,
+   "grouping": "practice",
+   "log_loss": 0.648192,
+   "mean_p": 0.596299,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.205509,
+   "grouping": "practice",
+   "log_loss": 0.587727,
+   "mean_p": 0.573583,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.214903,
+   "grouping": "practice+position",
+   "log_loss": 0.61346,
+   "mean_p": 0.605821,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.1981,
+   "grouping": "practice+position",
+   "log_loss": 0.571999,
+   "mean_p": 0.562531,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.194387,
+   "grouping": "practice+position",
+   "log_loss": 0.570855,
+   "mean_p": 0.559559,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.179751,
+   "grouping": "practice+position",
+   "log_loss": 0.52819,
+   "mean_p": 0.537951,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.195423,
+   "grouping": "practice+position",
+   "log_loss": 0.566644,
+   "mean_p": 0.578483,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.213629,
+   "grouping": "practice+position",
+   "log_loss": 0.608539,
+   "mean_p": 0.591417,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.200088,
+   "grouping": "practice+position",
+   "log_loss": 0.567927,
+   "mean_p": 0.546589,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.225224,
+   "grouping": "practice+position",
+   "log_loss": 0.63289,
+   "mean_p": 0.593165,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.202058,
+   "grouping": "practice+position",
+   "log_loss": 0.581124,
+   "mean_p": 0.571379,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.199417,
+   "grouping": "practice+missed_prev",
+   "log_loss": 0.577396,
+   "mean_p": 0.594822,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.185752,
+   "grouping": "practice+missed_prev",
+   "log_loss": 0.54361,
+   "mean_p": 0.555367,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.186876,
+   "grouping": "practice+missed_prev",
+   "log_loss": 0.550817,
+   "mean_p": 0.559944,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.177984,
+   "grouping": "practice+missed_prev",
+   "log_loss": 0.524073,
+   "mean_p": 0.543449,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.19409,
+   "grouping": "practice+missed_prev",
+   "log_loss": 0.565617,
+   "mean_p": 0.579479,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.203229,
+   "grouping": "practice+missed_prev",
+   "log_loss": 0.58356,
+   "mean_p": 0.582542,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.189107,
+   "grouping": "practice+missed_prev",
+   "log_loss": 0.542535,
+   "mean_p": 0.530203,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.224593,
+   "grouping": "practice+missed_prev",
+   "log_loss": 0.631501,
+   "mean_p": 0.585375,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.194501,
+   "grouping": "practice+missed_prev",
+   "log_loss": 0.563448,
+   "mean_p": 0.566011,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.216332,
+   "grouping": "practice+body_part",
+   "log_loss": 0.619551,
+   "mean_p": 0.599154,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.204065,
+   "grouping": "practice+body_part",
+   "log_loss": 0.584151,
+   "mean_p": 0.55642,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.195982,
+   "grouping": "practice+body_part",
+   "log_loss": 0.57385,
+   "mean_p": 0.558111,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.178398,
+   "grouping": "practice+body_part",
+   "log_loss": 0.525482,
+   "mean_p": 0.546406,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.201393,
+   "grouping": "practice+body_part",
+   "log_loss": 0.578424,
+   "mean_p": 0.578391,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.211315,
+   "grouping": "practice+body_part",
+   "log_loss": 0.606279,
+   "mean_p": 0.589867,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.204736,
+   "grouping": "practice+body_part",
+   "log_loss": 0.576975,
+   "mean_p": 0.552866,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.231661,
+   "grouping": "practice+body_part",
+   "log_loss": 0.644952,
+   "mean_p": 0.602033,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.204654,
+   "grouping": "practice+body_part",
+   "log_loss": 0.5869,
+   "mean_p": 0.572316,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.196388,
+   "grouping": "practice+missed_prev+position",
+   "log_loss": 0.570721,
+   "mean_p": 0.593589,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.179986,
+   "grouping": "practice+missed_prev+position",
+   "log_loss": 0.529847,
+   "mean_p": 0.552345,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.185394,
+   "grouping": "practice+missed_prev+position",
+   "log_loss": 0.545802,
+   "mean_p": 0.554932,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.178297,
+   "grouping": "practice+missed_prev+position",
+   "log_loss": 0.526587,
+   "mean_p": 0.544587,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.191518,
+   "grouping": "practice+missed_prev+position",
+   "log_loss": 0.562383,
+   "mean_p": 0.581781,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.201869,
+   "grouping": "practice+missed_prev+position",
+   "log_loss": 0.580899,
+   "mean_p": 0.584241,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.18525,
+   "grouping": "practice+missed_prev+position",
+   "log_loss": 0.535402,
+   "mean_p": 0.528657,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.217461,
+   "grouping": "practice+missed_prev+position",
+   "log_loss": 0.619168,
+   "mean_p": 0.583199,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.191583,
+   "grouping": "practice+missed_prev+position",
+   "log_loss": 0.557816,
+   "mean_p": 0.565176,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.201924,
+   "grouping": "practice+missed_prev+body_part",
+   "log_loss": 0.586038,
+   "mean_p": 0.58905,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.184525,
+   "grouping": "practice+missed_prev+body_part",
+   "log_loss": 0.542425,
+   "mean_p": 0.548398,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.18592,
+   "grouping": "practice+missed_prev+body_part",
+   "log_loss": 0.548851,
+   "mean_p": 0.556509,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.17915,
+   "grouping": "practice+missed_prev+body_part",
+   "log_loss": 0.526832,
+   "mean_p": 0.543861,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.195761,
+   "grouping": "practice+missed_prev+body_part",
+   "log_loss": 0.570545,
+   "mean_p": 0.58301,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.201411,
+   "grouping": "practice+missed_prev+body_part",
+   "log_loss": 0.580059,
+   "mean_p": 0.582486,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.186258,
+   "grouping": "practice+missed_prev+body_part",
+   "log_loss": 0.536408,
+   "mean_p": 0.528259,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.222413,
+   "grouping": "practice+missed_prev+body_part",
+   "log_loss": 0.628401,
+   "mean_p": 0.586354,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.194069,
+   "grouping": "practice+missed_prev+body_part",
+   "log_loss": 0.56351,
+   "mean_p": 0.564488,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.197099,
+   "grouping": "practice+missed_prev+position+body_part",
+   "log_loss": 0.573999,
+   "mean_p": 0.589,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.17915,
+   "grouping": "practice+missed_prev+position+body_part",
+   "log_loss": 0.528794,
+   "mean_p": 0.548493,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.186767,
+   "grouping": "practice+missed_prev+position+body_part",
+   "log_loss": 0.548631,
+   "mean_p": 0.551415,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.180204,
+   "grouping": "practice+missed_prev+position+body_part",
+   "log_loss": 0.531684,
+   "mean_p": 0.542375,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.191658,
+   "grouping": "practice+missed_prev+position+body_part",
+   "log_loss": 0.564151,
+   "mean_p": 0.584029,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.197814,
+   "grouping": "practice+missed_prev+position+body_part",
+   "log_loss": 0.572274,
+   "mean_p": 0.583487,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.183319,
+   "grouping": "practice+missed_prev+position+body_part",
+   "log_loss": 0.530167,
+   "mean_p": 0.529189,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.218699,
+   "grouping": "practice+missed_prev+position+body_part",
+   "log_loss": 0.622964,
+   "mean_p": 0.585523,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.191313,
+   "grouping": "practice+missed_prev+position+body_part",
+   "log_loss": 0.55783,
+   "mean_p": 0.563965,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.209822,
+   "grouping": "missed_prev",
+   "log_loss": 0.603775,
+   "mean_p": 0.601471,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.198292,
+   "grouping": "missed_prev",
+   "log_loss": 0.572585,
+   "mean_p": 0.572269,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.206982,
+   "grouping": "missed_prev",
+   "log_loss": 0.596526,
+   "mean_p": 0.574242,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.193704,
+   "grouping": "missed_prev",
+   "log_loss": 0.556955,
+   "mean_p": 0.564863,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.200328,
+   "grouping": "missed_prev",
+   "log_loss": 0.575003,
+   "mean_p": 0.588195,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.214899,
+   "grouping": "missed_prev",
+   "log_loss": 0.610617,
+   "mean_p": 0.583676,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.201663,
+   "grouping": "missed_prev",
+   "log_loss": 0.569679,
+   "mean_p": 0.529044,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.218297,
+   "grouping": "missed_prev",
+   "log_loss": 0.615801,
+   "mean_p": 0.57667,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.20528,
+   "grouping": "missed_prev",
+   "log_loss": 0.58705,
+   "mean_p": 0.57366,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.22253,
+   "grouping": "position",
+   "log_loss": 0.629883,
+   "mean_p": 0.612046,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.211669,
+   "grouping": "position",
+   "log_loss": 0.604118,
+   "mean_p": 0.578874,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.20827,
+   "grouping": "position",
+   "log_loss": 0.598938,
+   "mean_p": 0.572769,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.193471,
+   "grouping": "position",
+   "log_loss": 0.556964,
+   "mean_p": 0.555552,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.199095,
+   "grouping": "position",
+   "log_loss": 0.57237,
+   "mean_p": 0.586897,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.218741,
+   "grouping": "position",
+   "log_loss": 0.618653,
+   "mean_p": 0.5894,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.205989,
+   "grouping": "position",
+   "log_loss": 0.578797,
+   "mean_p": 0.545135,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.218151,
+   "grouping": "position",
+   "log_loss": 0.615484,
+   "mean_p": 0.585503,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.209339,
+   "grouping": "position",
+   "log_loss": 0.595912,
+   "mean_p": 0.577847,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.219764,
+   "grouping": "body_part",
+   "log_loss": 0.624007,
+   "mean_p": 0.607522,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.215983,
+   "grouping": "body_part",
+   "log_loss": 0.610112,
+   "mean_p": 0.574801,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.208625,
+   "grouping": "body_part",
+   "log_loss": 0.600385,
+   "mean_p": 0.573625,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.190266,
+   "grouping": "body_part",
+   "log_loss": 0.550265,
+   "mean_p": 0.56959,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.20669,
+   "grouping": "body_part",
+   "log_loss": 0.58873,
+   "mean_p": 0.584441,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.220154,
+   "grouping": "body_part",
+   "log_loss": 0.621658,
+   "mean_p": 0.588565,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.209528,
+   "grouping": "body_part",
+   "log_loss": 0.586664,
+   "mean_p": 0.553802,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.228681,
+   "grouping": "body_part",
+   "log_loss": 0.637306,
+   "mean_p": 0.592976,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.211882,
+   "grouping": "body_part",
+   "log_loss": 0.601081,
+   "mean_p": 0.580244,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.208001,
+   "grouping": "missed_prev+position",
+   "log_loss": 0.601536,
+   "mean_p": 0.601233,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.195786,
+   "grouping": "missed_prev+position",
+   "log_loss": 0.570418,
+   "mean_p": 0.571016,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.204693,
+   "grouping": "missed_prev+position",
+   "log_loss": 0.590284,
+   "mean_p": 0.570553,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.194486,
+   "grouping": "missed_prev+position",
+   "log_loss": 0.558602,
+   "mean_p": 0.560027,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.196466,
+   "grouping": "missed_prev+position",
+   "log_loss": 0.566304,
+   "mean_p": 0.589513,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.21145,
+   "grouping": "missed_prev+position",
+   "log_loss": 0.603115,
+   "mean_p": 0.583318,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.198044,
+   "grouping": "missed_prev+position",
+   "log_loss": 0.56194,
+   "mean_p": 0.527774,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.21081,
+   "grouping": "missed_prev+position",
+   "log_loss": 0.600981,
+   "mean_p": 0.575783,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.202348,
+   "grouping": "missed_prev+position",
+   "log_loss": 0.581199,
+   "mean_p": 0.572256,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.207693,
+   "grouping": "missed_prev+body_part",
+   "log_loss": 0.601247,
+   "mean_p": 0.597908,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.199507,
+   "grouping": "missed_prev+body_part",
+   "log_loss": 0.578402,
+   "mean_p": 0.569323,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.20468,
+   "grouping": "missed_prev+body_part",
+   "log_loss": 0.59366,
+   "mean_p": 0.572443,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.192415,
+   "grouping": "missed_prev+body_part",
+   "log_loss": 0.554144,
+   "mean_p": 0.569397,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.200823,
+   "grouping": "missed_prev+body_part",
+   "log_loss": 0.575982,
+   "mean_p": 0.588381,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.213973,
+   "grouping": "missed_prev+body_part",
+   "log_loss": 0.608753,
+   "mean_p": 0.583111,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.199004,
+   "grouping": "missed_prev+body_part",
+   "log_loss": 0.563701,
+   "mean_p": 0.53465,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.220196,
+   "grouping": "missed_prev+body_part",
+   "log_loss": 0.620714,
+   "mean_p": 0.5794,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.204486,
+   "grouping": "missed_prev+body_part",
+   "log_loss": 0.586261,
+   "mean_p": 0.574225,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  },
+  {
+   "brier": 0.206483,
+   "grouping": "missed_prev+position+body_part",
+   "log_loss": 0.599975,
+   "mean_p": 0.597134,
+   "n": 442,
+   "played_rate": 0.547511,
+   "season": "2018"
+  },
+  {
+   "brier": 0.196574,
+   "grouping": "missed_prev+position+body_part",
+   "log_loss": 0.573547,
+   "mean_p": 0.568757,
+   "n": 421,
+   "played_rate": 0.536817,
+   "season": "2019"
+  },
+  {
+   "brier": 0.206613,
+   "grouping": "missed_prev+position+body_part",
+   "log_loss": 0.595175,
+   "mean_p": 0.567326,
+   "n": 478,
+   "played_rate": 0.564854,
+   "season": "2020"
+  },
+  {
+   "brier": 0.194282,
+   "grouping": "missed_prev+position+body_part",
+   "log_loss": 0.558725,
+   "mean_p": 0.560844,
+   "n": 496,
+   "played_rate": 0.592742,
+   "season": "2021"
+  },
+  {
+   "brier": 0.198066,
+   "grouping": "missed_prev+position+body_part",
+   "log_loss": 0.569883,
+   "mean_p": 0.590721,
+   "n": 511,
+   "played_rate": 0.589041,
+   "season": "2022"
+  },
+  {
+   "brier": 0.208433,
+   "grouping": "missed_prev+position+body_part",
+   "log_loss": 0.597605,
+   "mean_p": 0.583103,
+   "n": 539,
+   "played_rate": 0.545455,
+   "season": "2023"
+  },
+  {
+   "brier": 0.19686,
+   "grouping": "missed_prev+position+body_part",
+   "log_loss": 0.559066,
+   "mean_p": 0.535696,
+   "n": 484,
+   "played_rate": 0.493802,
+   "season": "2024"
+  },
+  {
+   "brier": 0.213283,
+   "grouping": "missed_prev+position+body_part",
+   "log_loss": 0.607032,
+   "mean_p": 0.57985,
+   "n": 381,
+   "played_rate": 0.540682,
+   "season": "2025"
+  },
+  {
+   "brier": 0.202358,
+   "grouping": "missed_prev+position+body_part",
+   "log_loss": 0.581946,
+   "mean_p": 0.572785,
+   "n": 3752,
+   "played_rate": 0.552239,
+   "season": "all"
+  }
+ ],
+ "body_parts": [
+  "knee",
+  "ankle",
+  "hamstring",
+  "shoulder",
+  "foot",
+  "illness",
+  "groin",
+  "hip"
+ ],
+ "calibration": [
+  {
+   "actual": 0.012255,
+   "bucket": "<30%",
+   "n": 408,
+   "predicted": 0.014606
+  },
+  {
+   "actual": 0.423913,
+   "bucket": "30-50%",
+   "n": 552,
+   "predicted": 0.452471
+  },
+  {
+   "actual": 0.598513,
+   "bucket": "50-70%",
+   "n": 1345,
+   "predicted": 0.609302
+  },
+  {
+   "actual": 0.710435,
+   "bucket": "70-85%",
+   "n": 1447,
+   "predicted": 0.740754
+  },
+  {
+   "actual": null,
+   "bucket": "85%+",
+   "n": 0,
+   "predicted": null
+  }
+ ],
+ "cells": [
+  {
+   "depth": 0,
+   "missed_prev": null,
+   "n": 520,
+   "played": 6.0,
+   "position": null,
+   "rate": 0.011538,
+   "report_status": "Doubtful"
+  },
+  {
+   "depth": 0,
+   "missed_prev": null,
+   "n": 4294,
+   "played": 2709.0,
+   "position": null,
+   "rate": 0.63088,
+   "report_status": "Questionable"
+  },
+  {
+   "depth": 1,
+   "missed_prev": "false",
+   "n": 291,
+   "played": 4.0,
+   "position": null,
+   "rate": 0.013604,
+   "report_status": "Doubtful"
+  },
+  {
+   "depth": 1,
+   "missed_prev": "true",
+   "n": 229,
+   "played": 2.0,
+   "position": null,
+   "rate": 0.008959,
+   "report_status": "Doubtful"
+  },
+  {
+   "depth": 1,
+   "missed_prev": "false",
+   "n": 2763,
+   "played": 1933.0,
+   "position": null,
+   "rate": 0.699108,
+   "report_status": "Questionable"
+  },
+  {
+   "depth": 1,
+   "missed_prev": "true",
+   "n": 1531,
+   "played": 776.0,
+   "position": null,
+   "rate": 0.508458,
+   "report_status": "Questionable"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "false",
+   "n": 27,
+   "played": 0.0,
+   "position": "QB",
+   "rate": 0.005789,
+   "report_status": "Doubtful"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "false",
+   "n": 79,
+   "played": 0.0,
+   "position": "RB",
+   "rate": 0.002748,
+   "report_status": "Doubtful"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "false",
+   "n": 62,
+   "played": 1.0,
+   "position": "TE",
+   "rate": 0.015513,
+   "report_status": "Doubtful"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "false",
+   "n": 123,
+   "played": 3.0,
+   "position": "WR",
+   "rate": 0.022882,
+   "report_status": "Doubtful"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "true",
+   "n": 28,
+   "played": 0.0,
+   "position": "QB",
+   "rate": 0.003733,
+   "report_status": "Doubtful"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "true",
+   "n": 79,
+   "played": 2.0,
+   "position": "RB",
+   "rate": 0.022012,
+   "report_status": "Doubtful"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "true",
+   "n": 39,
+   "played": 0.0,
+   "position": "TE",
+   "rate": 0.003037,
+   "report_status": "Doubtful"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "true",
+   "n": 83,
+   "played": 0.0,
+   "position": "WR",
+   "rate": 0.00174,
+   "report_status": "Doubtful"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "false",
+   "n": 187,
+   "played": 105.0,
+   "position": "QB",
+   "rate": 0.574793,
+   "report_status": "Questionable"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "false",
+   "n": 665,
+   "played": 444.0,
+   "position": "RB",
+   "rate": 0.668587,
+   "report_status": "Questionable"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "false",
+   "n": 557,
+   "played": 395.0,
+   "position": "TE",
+   "rate": 0.708808,
+   "report_status": "Questionable"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "false",
+   "n": 1354,
+   "played": 989.0,
+   "position": "WR",
+   "rate": 0.729972,
+   "report_status": "Questionable"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "true",
+   "n": 132,
+   "played": 41.0,
+   "position": "QB",
+   "rate": 0.336639,
+   "report_status": "Questionable"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "true",
+   "n": 450,
+   "played": 201.0,
+   "position": "RB",
+   "rate": 0.449296,
+   "report_status": "Questionable"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "true",
+   "n": 277,
+   "played": 170.0,
+   "position": "TE",
+   "rate": 0.60663,
+   "report_status": "Questionable"
+  },
+  {
+   "depth": 2,
+   "missed_prev": "true",
+   "n": 672,
+   "played": 364.0,
+   "position": "WR",
+   "rate": 0.540707,
+   "report_status": "Questionable"
+  }
+ ],
+ "check_season": 2025,
+ "format": 1,
+ "grouping": "missed_prev+position",
+ "if_plays": [
+  {
+   "dud_rate": 0.321866,
+   "healthy_dud_rate": 0.276031,
+   "healthy_median": 0.851117,
+   "healthy_rows": 10523,
+   "key": "missed_prev",
+   "matched": 1702,
+   "median": 0.776978,
+   "n": 1715,
+   "report_status": "Questionable",
+   "value": "all"
+  },
+  {
+   "dud_rate": 0.305279,
+   "healthy_dud_rate": 0.278395,
+   "healthy_median": 0.849242,
+   "healthy_rows": 8959,
+   "key": "missed_prev",
+   "matched": 1300,
+   "median": 0.796731,
+   "n": 1307,
+   "report_status": "Questionable",
+   "value": "false"
+  },
+  {
+   "dud_rate": 0.375,
+   "healthy_dud_rate": 0.268386,
+   "healthy_median": 0.865356,
+   "healthy_rows": 3390,
+   "key": "missed_prev",
+   "matched": 402,
+   "median": 0.718352,
+   "n": 408,
+   "report_status": "Questionable",
+   "value": "true"
+  },
+  {
+   "dud_rate": 0.25,
+   "healthy_dud_rate": 0.207341,
+   "healthy_median": 1.096282,
+   "healthy_rows": 43,
+   "key": "missed_prev",
+   "matched": 4,
+   "median": 0.687208,
+   "n": 4,
+   "report_status": "Doubtful",
+   "value": "all"
+  },
+  {
+   "dud_rate": 0.0,
+   "healthy_dud_rate": 0.193122,
+   "healthy_median": 1.096282,
+   "healthy_rows": 35,
+   "key": "missed_prev",
+   "matched": 3,
+   "median": 0.866071,
+   "n": 3,
+   "report_status": "Doubtful",
+   "value": "false"
+  },
+  {
+   "dud_rate": 1.0,
+   "healthy_dud_rate": 0.25,
+   "healthy_median": 0.970414,
+   "healthy_rows": 8,
+   "key": "missed_prev",
+   "matched": 1,
+   "median": 0.0,
+   "n": 1,
+   "report_status": "Doubtful",
+   "value": "true"
+  }
+ ],
+ "keys": [
+  "missed_prev",
+  "position"
+ ],
+ "model_version": "lookup-5f0566085a6b1f24",
+ "module": "questionable",
+ "path": [
+  "status",
+  "missed_prev",
+  "missed_prev+position"
+ ],
+ "plays_rules": {
+  "by": "missed_prev",
+  "dud": 0.5,
+  "min_bucket_n": 30,
+  "min_prior_games": 2,
+  "min_prior_ppg": 5.0,
+  "ppg_bands": [
+   5.0,
+   8.0,
+   11.0,
+   14.0,
+   18.0
+  ]
+ },
+ "positions": [
+  "QB",
+  "RB",
+  "WR",
+  "TE"
+ ],
+ "practice_dropped": true,
+ "pseudo_count": 20.0,
+ "rule": "lower pooled log loss and Brier, and lower log loss in at least 6 of the test seasons",
+ "season": 2026,
+ "status_counts": [
+  {
+   "n": 520,
+   "played_rate": 0.011538,
+   "report_status": "Doubtful"
+  },
+  {
+   "n": 3165,
+   "played_rate": 0.000632,
+   "report_status": "Out"
+  },
+  {
+   "n": 4294,
+   "played_rate": 0.63088,
+   "report_status": "Questionable"
+  }
+ ],
+ "statuses": [
+  "Questionable",
+  "Doubtful"
+ ],
+ "test_seasons": [
+  2018,
+  2019,
+  2020,
+  2021,
+  2022,
+  2023,
+  2024,
+  2025
+ ],
+ "train_seasons": "2016-2025",
+ "with_practice": "practice+missed_prev+position"
+}

@@ -17,7 +17,7 @@ from twm import pins as pn
 
 HISTORY = {"waiver_radar": "2014-{e}", "streamer_k": "2013-{e}", "streamer_dst": "2013-{e}",
            "regression_watch": "2011-{e}", "decisions": "2006-{e}", "hot_seat": "2006-{e}",
-           "board": "2007-{b}"}  # fmt: skip
+           "board": "2007-{b}", "questionable": "2016-{e}", "startsit": "2020-{e}"}  # fmt: skip
 
 
 def pin_file(tmp_path: Path, season: int, **override: int) -> dict[str, pn.Pin]:
@@ -55,7 +55,8 @@ def test_history_coverage_and_module_steps(tmp_path: Path) -> None:
     assert not any(m.current for m in after) and all(m.due == 2027 for m in after)
     assert all(m.covers is False and m.step.startswith("re-approve for 2027 on the Mac")
                for m in after)  # fmt: skip
-    assert "uv run twm board pin" in after[-1].step
+    assert "uv run twm board pin" in after[list(off.MODULES).index("board")].step
+    assert "uv run twm league startsit-pin" in after[-1].step
     missing = off.module_status("hot_seat", None, 2026)
     assert missing.pinned is None and missing.step.startswith("not pinned")
 

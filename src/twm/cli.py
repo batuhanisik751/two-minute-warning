@@ -13,6 +13,7 @@ from twm.modules.decisions import production_cli as _decisions_pins  # noqa: F40
 from twm.modules.decisions.cli import decisions_app
 from twm.modules.hot_seat import production_cli as _hot_seat_pins  # noqa: F401 (H4a commands)
 from twm.modules.hot_seat.cli import hotseat_app
+from twm.modules.questionable.cli import questionable_app
 from twm.modules.streamer.cli import streamer_app
 from twm.offseason_cli import offseason_app
 from twm.timemachine.cli import timemachine_app
@@ -331,6 +332,7 @@ app.add_typer(hotseat_app, name="hotseat")  # H1: candidates + label check (modu
 app.add_typer(board_app, name="board")  # I1b: Cliff & Breakout (src/twm/modules/board/cli.py)
 app.add_typer(timemachine_app, name="timemachine")  # I3a: reproducibility check
 app.add_typer(offseason_app, name="offseason")  # I6b: the yearly routine (docs/offseason.md)
+app.add_typer(questionable_app, name="questionable")  # feature #1 (docs/questionable.md)
 
 
 def _warehouse_or_exit(db: Path | None) -> Path:
@@ -2220,8 +2222,8 @@ def _check_against_evaluation(store: Path, evaluation_csv: Path) -> list[str]:
 def model_check(
     module: str = typer.Argument(
         "all",
-        help="Module: waiver_radar, streamer, regression_watch, decisions, hot_seat, board, or all "
-        "(every pinned module).",
+        help="Module: waiver_radar, streamer, regression_watch, decisions, hot_seat, board, "
+        "questionable, or all (every pinned module).",
     ),
     season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
     evaluation_csv: Path = typer.Option(
@@ -2265,10 +2267,20 @@ def model_check(
 
         check_hot_seat_pin(chosen)
         return
+    if module.strip().lower() == "questionable":  # feature #1: the frozen lookup table
+        from twm.modules.questionable.cli import check_pin as check_questionable_pin
+
+        check_questionable_pin(chosen)
+        return
     if module.strip().lower() == "board":  # I2c-a: the board's models + frozen backtest
         from twm.modules.board.production_cli import check_pin as check_board_pin
 
         check_board_pin(chosen)
+        return
+    if module.strip().lower() == "startsit":  # feature #2: frozen start/sit odds (local only)
+        from twm.modules.startsit.cli import check_pin as check_startsit_pin
+
+        check_startsit_pin(chosen)
         return
     key = "waiver_radar" if module.strip().lower() == "all" else _module_or_exit(module)
     try:
@@ -2309,6 +2321,14 @@ def model_check(
         from twm.modules.board.production_cli import check_pin as check_board_pin
 
         check_board_pin(chosen)
+    if module.strip().lower() == "all" and "questionable" in pins.read_pins():
+        from twm.modules.questionable.cli import check_pin as check_questionable_pin
+
+        check_questionable_pin(chosen)
+    if module.strip().lower() == "all" and "startsit" in pins.read_pins():
+        from twm.modules.startsit.cli import check_pin as check_startsit_pin
+
+        check_startsit_pin(chosen)
 
 
 @model_app.command("restore-backtest")
@@ -3026,6 +3046,66 @@ def league_trade(
     from twm.league.commands import run_trade
 
     raise typer.Exit(code=run_trade(give, get, week, as_json))
+
+
+# ---- Start/sit odds (feature #2): LOCAL ONLY (FantasyPros weekly ranks may not be republished).
+# No ESPN needed. twm.modules.startsit is imported inside the commands, never at import time.
+
+
+@league_app.command("startsit")
+def league_startsit(
+    player_a: str = typer.Argument(..., help='Player A, e.g. "Jane Doe" (add "WR" if needed).'),
+    player_b: str = typer.Argument(..., help="Player B."),
+    season: int | None = typer.Option(None, "--season", help="Season (default: the as-of's)."),
+    week: int | None = typer.Option(None, "--week", help="Week (default: the next to be played)."),
+    as_of: str | None = typer.Option(
+        None, "--as-of", help="ISO time with a zone (default: now); ranks available then only."
+    ),
+    play_a: float | None = typer.Option(
+        None, "--play-chance-a", help="A's chance to play, 0-1 (default: his rank's history)."
+    ),
+    play_b: float | None = typer.Option(None, "--play-chance-b", help="B's chance to play."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse (default: config paths)."),
+) -> None:
+    """Start A or B? The chance A outscores B this week, from how players at each FantasyPros
+    weekly expert rank scored in 2020-2025 (frozen, `twm model check startsit`), with both
+    players' 10th/50th/90th percentile points and a one-line verdict ("close call" under 55%).
+    Local only: prints FantasyPros ranks, never published. Exit 1 no usable pin, 2 a name does
+    not resolve (choices listed), 3 the week's ranks are not out yet (they arrive Fridays)."""
+    from datetime import datetime
+
+    from twm.asof import AsOfParseError, parse_as_of
+    from twm.modules.startsit.cli import run_startsit
+
+    when = None
+    if as_of is not None:
+        parsed = None
+        try:
+            parsed = parse_as_of(as_of)
+        except AsOfParseError as e:
+            typer.echo(str(e), err=True)
+        if not isinstance(parsed, datetime):
+            typer.echo("--as-of needs an ISO time with a zone (2026-10-04T15:00Z)", err=True)
+            raise typer.Exit(code=2)
+        when = parsed
+    path = _warehouse_or_exit(db)
+    raise typer.Exit(code=run_startsit(player_a, player_b, db=path, season=season, week=week,
+                                       as_of=when, play_a=play_a, play_b=play_b))  # fmt: skip
+
+
+@league_app.command("startsit-pin")
+def league_startsit_pin(
+    season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
+    db: Path | None = typer.Option(None, "--db", help="Warehouse (default: config paths)."),
+) -> None:
+    """Freeze the start/sit distributions (2020-2025) and their walk-forward backtest under
+    artifacts/production_models/startsit/, write reports/startsit/backtest.md and pin them in
+    config/production_models.yaml (other pins kept). Review, then commit."""
+    from twm.config import settings
+    from twm.modules.startsit.cli import run_pin
+
+    chosen = season if season is not None else settings().current_season
+    raise typer.Exit(code=run_pin(chosen, _warehouse_or_exit(db)))
 
 
 if __name__ == "__main__":

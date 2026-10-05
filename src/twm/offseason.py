@@ -35,6 +35,9 @@ MODULES: dict[str, tuple[str, str]] = {
                  "uv run twm hotseat pin"),
     "board": ("Cliff board", "uv run twm board backtest --snapshot preseason; "
               "uv run twm board pin"),
+    "questionable": ("Questionable outcomes", "uv run twm questionable build; "
+                     "uv run twm questionable pin"),
+    "startsit": ("Start/sit odds (local)", "uv run twm league startsit-pin"),
 }  # fmt: skip
 HISTORY_LAG = {"board": 1}  # the board's history is in snapshot seasons (the board of S + 1)
 LABELLED_KINDS = ("in_season", "offseason")  # schedule candidates that need a label row

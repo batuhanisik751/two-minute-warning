@@ -2483,6 +2483,52 @@ def _entries() -> list[Entry]:
             source="twm.modules.startsit (twm league startsit; the local weekly report)",
             step="feature #2",
         ),
+        Entry(  # feature #9: luck and playoff odds (local only: the owner's ESPN league)
+            name="all_play_record",
+            title="All-play record",
+            kind="metric",
+            modules=("my_league",),
+            unit="wins-losses",
+            formula="over the regular-season weeks whose games are all final: each week, one win "
+            "for every other team the team outscored and one loss for every team that outscored "
+            "it (a tie counts as a tie)",
+            explanation="Your record if you had played every team every week. It shows how good "
+            "your scores were, whatever the schedule: 9-2 in a week means only two teams scored "
+            "more than you.",
+            source="twm.league.luck (twm league odds; the local weekly report)",
+            step="feature #9",
+        ),
+        Entry(
+            name="luck",
+            title="Luck (wins above expected)",
+            kind="metric",
+            modules=("my_league",),
+            unit="wins",
+            formula="wins (a tie half) - expected wins; expected wins = the sum over the final "
+            "regular-season weeks of the share of the other teams the team outscored that week "
+            "(a tie half)",
+            explanation="How many more games you won than your scores deserved. +1.5 means the "
+            "schedule handed you about one and a half extra wins; a negative number means you "
+            "lost games your points would usually win.",
+            source="twm.league.luck (twm league odds; the local weekly report)",
+            step="feature #9",
+        ),
+        Entry(
+            name="playoff_odds",
+            title="Playoff odds",
+            kind="metric",
+            modules=("my_league",),
+            unit="share (0-1)",
+            formula="share of 20,000 seeded simulated seasons in which the team finishes in the "
+            "playoff places: every remaining matchup on the real schedule, each team's weekly "
+            "score drawn around its season mean shrunk toward the league mean (6 pseudo-weeks), "
+            "seeded by record then ESPN's tiebreak, then the playoff bracket (docs/my_league.md)",
+            explanation="Your chance to make the playoffs, from playing out the rest of the "
+            "season thousands of times on your real schedule. Early in the season it leans on "
+            "the league average, so it moves a lot week to week. Local only.",
+            source="twm.league.odds (twm league odds; the local weekly report)",
+            step="feature #9",
+        ),
         Entry(
             name="ppr",
             title="PPR (points per reception)",

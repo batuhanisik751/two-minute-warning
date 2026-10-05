@@ -105,6 +105,34 @@ class BoxScoreTeam:
 
 
 @dataclass(frozen=True)
+class ScheduleSide:
+    """One team's side of one matchup of ESPN's season schedule (view mMatchupScore)."""
+
+    matchup_period: int  # ESPN's matchupPeriodId (one week each in this league)
+    matchup_id: int  # ESPN's schedule entry id
+    team_id: int
+    opponent_id: int | None  # None on a bye (no "away" side)
+    is_home: bool
+    playoff_tier: str  # ESPN's playoffTierType: NONE (regular season), WINNERS_BRACKET, ...
+    winner: str  # HOME, AWAY, TIE or UNDECIDED (not final yet)
+    score: float | None  # totalPoints once the matchup is decided, else None
+    live_score: float | None  # totalPointsLive while ESPN sends it (the week in progress)
+
+
+@dataclass(frozen=True)
+class SeedingRule:
+    """How ESPN seeds the playoffs (settings.scheduleSettings, verified 2026-10-05 on the real
+    league: docs/my_league.md "Luck and playoff odds") and the league's earlier seasons."""
+
+    seeding_rule: str  # playoffSeedingRule, e.g. TOTAL_POINTS_SCORED
+    seeding_rule_by: int | None  # playoffSeedingRuleBy (stored, not used)
+    reseed: bool | None  # playoffReseed
+    tie_rule: str  # scoringSettings.matchupTieRule (NONE: a tie stands)
+    playoff_tie_rule: str  # scoringSettings.playoffMatchupTieRule
+    previous_seasons: tuple[int, ...]  # status.previousSeasons (espn-api's previousSeasons)
+
+
+@dataclass(frozen=True)
 class ActivityRow:
     date_ms: int  # ESPN's epoch milliseconds
     seq: int  # position of the action inside the activity
@@ -291,6 +319,38 @@ class EspnClient:
 
         return self._call("reading the raw league settings", read)
 
+    def seeding(self) -> SeedingRule:
+        """The playoff seeding rule as ESPN reports it: espn-api keeps scheduleSettings raw
+        (base_settings.py:20-21 _raw_schedule_settings, playoff_seed_tie_rule) and the league's
+        earlier seasons (base_league.py:37 previousSeasons); no extra request."""
+
+        def read() -> SeedingRule:
+            s = self._league.settings
+            raw = getattr(s, "_raw_schedule_settings", None) or {}
+            reseed = raw.get("playoffReseed")
+            prev = getattr(self._league, "previousSeasons", None) or []
+            return SeedingRule(
+                seeding_rule=_text(raw.get("playoffSeedingRule", s.playoff_seed_tie_rule)),
+                seeding_rule_by=_int(raw.get("playoffSeedingRuleBy")),
+                reseed=reseed if isinstance(reseed, bool) else None,
+                tie_rule=_text(getattr(s, "tie_rule", "")),
+                playoff_tie_rule=_text(getattr(s, "playoff_tie_rule", "")),
+                previous_seasons=tuple(sorted(int(y) for y in prev if _int(y) is not None)),
+            )
+
+        return self._call("reading the playoff seeding rule", read)
+
+    def schedule(self) -> list[ScheduleSide]:
+        """Every matchup ESPN lists for the season, past, live and future (one request, view
+        mMatchupScore: teams and totals only; checked on the real league 2026-10-05: the 14
+        regular-season periods; ESPN adds the playoff matchups once the bracket is set)."""
+
+        def read() -> list[ScheduleSide]:
+            data = self._league.espn_request.league_get(params={"view": "mMatchupScore"})
+            return schedule_sides(data.get("schedule") or [])
+
+        return self._call("reading the season schedule", read)
+
     # ---- teams and rosters (football/team.py, football/player.py) ---------------------------
 
     def teams(self) -> list[FantasyTeam]:
@@ -401,3 +461,29 @@ def _player(p: Any, *, box: bool = False, slot: str | None = None) -> PlayerRow:
         percent_owned=owned if owned is not None and owned >= 0 else None,
         on_bye=bool(p.on_bye_week) if box else None,
     )
+
+
+def schedule_sides(entries: list[Any]) -> list[ScheduleSide]:
+    """ESPN's raw ``schedule`` entries -> one :class:`ScheduleSide` per team and matchup. An
+    entry without an "away" side is a bye. ``score`` is None until ESPN decides the matchup
+    (winner UNDECIDED: a future week shows totalPoints 0.0, the live week totalPointsLive)."""
+    out: list[ScheduleSide] = []
+    for e in entries:
+        period, mid = _int(e.get("matchupPeriodId")), _int(e.get("id"))
+        sides = {k: e.get(k) for k in ("home", "away") if isinstance(e.get(k), dict)}
+        ids = {k: _int(v.get("teamId")) for k, v in sides.items()}
+        if period is None or mid is None or ids.get("home") is None:
+            continue
+        winner = _text(e.get("winner")) or "UNDECIDED"
+        for side, v in sides.items():
+            tid = ids[side]
+            if tid is None:
+                continue
+            other = ids.get("away" if side == "home" else "home")
+            out.append(ScheduleSide(
+                matchup_period=period, matchup_id=mid, team_id=tid, opponent_id=other,
+                is_home=side == "home", playoff_tier=_text(e.get("playoffTierType")) or "NONE",
+                winner=winner, score=_num(v.get("totalPoints")) if winner != "UNDECIDED" else None,
+                live_score=_num(v.get("totalPointsLive")),
+            ))  # fmt: skip
+    return out

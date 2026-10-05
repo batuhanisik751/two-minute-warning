@@ -82,6 +82,8 @@ class ReportData:
     startsit: object | None = None
     # feature #5: twm.modules.teammate_out.league.Section; None = no section
     teammate_out: object | None = None
+    # feature #9: twm.league.odds_view.OddsView (luck and playoff odds); None = no section
+    odds: object | None = None
 
 
 def owner_tags(radar: PersonalRadar) -> list[TagRow]:
@@ -164,7 +166,22 @@ def gather(
         journal=journal, journal_error=journal_error,
         questionable=questionable_section(predictions, radar),
         teammate_out=teammate_out_section(con, predictions, radar),
+        odds=odds_section(con, warehouse, predictions, pins_path),
     )  # fmt: skip
+
+
+def odds_section(
+    con: duckdb.DuckDBPyConnection, warehouse: Path | None, predictions: Path,
+    pins_path: Path | None,
+) -> object | None:  # fmt: skip
+    """Feature #9: the luck table and playoff odds (None: no schedule synced, no final week;
+    a broken input never breaks the report)."""
+    from twm.league.odds_view import for_report
+
+    try:
+        return for_report(con, warehouse, predictions, pins_path)
+    except Exception:  # noqa: BLE001 - informative only
+        return None
 
 
 def questionable_section(predictions: Path, radar: PersonalRadar) -> object | None:
@@ -649,6 +666,13 @@ def render(d: ReportData, generated: datetime, limit: int = 10) -> str:
 
         nav += f'<li><a href="#{T_ID}">{esc(T_TITLE)}</a></li>'
         body.append(t_section(d.teammate_out))
+    if d.odds is not None:  # feature #9: luck and playoff odds (twm.league.odds_view)
+        from twm.league.odds_view import SECTION_ID as O_ID
+        from twm.league.odds_view import TITLE as O_TITLE
+        from twm.league.odds_view import render_section as o_section
+
+        nav += f'<li><a href="#{O_ID}">{esc(O_TITLE)}</a></li>'
+        body.append(o_section(d.odds))
     foot = para("A local report: never published, never sent anywhere. Chances and projections "
                 "are estimates from past seasons, not promises. NFL data: nflverse. League "
                 "data: ESPN (your cookies are not in this file).", "muted small")  # fmt: skip

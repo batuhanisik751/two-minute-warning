@@ -29,7 +29,8 @@ REPORT = Path("reports/league/unmatched_players.md")
 LABELS = {"league_settings": "settings", "league_scoring": "scoring items", "league_teams":
           "teams", "league_rosters": "roster spots", "league_free_agents": "free agents",
           "league_matchups": "matchup sides", "league_box_scores": "box-score lines",
-          "league_activity": "activity rows", "league_player_map": "players"}  # fmt: skip
+          "league_activity": "activity rows", "league_player_map": "players",
+          "league_schedule": "schedule sides"}  # fmt: skip
 
 
 def _env(echo: Callable[[str], None]) -> LeagueEnv | None:
@@ -275,5 +276,36 @@ def run_journal(
     finally:
         con.close()
     for line in text(res):
+        echo(line)
+    return 0
+
+
+def run_odds(
+    week: int | None, sims: int, seed: int, echo: Callable[[str], None] = typer.echo
+) -> int:
+    """`twm league odds`: the luck index and the playoff odds (twm.league.odds_view; reads
+    only, writes nothing)."""
+    from twm.league import store
+    from twm.league.luck import LuckUnavailableError
+    from twm.league.odds import OddsUnavailableError
+    from twm.league.odds_view import build, text
+
+    if sims < 1000:
+        echo("My League: --sims must be at least 1000")
+        return EXIT_UNAVAILABLE
+    path = _synced_db(echo)
+    if path is None:
+        return EXIT_UNAVAILABLE
+    predictions, pins = lists_paths()
+    con = store.connect(path, read_only=True)
+    try:
+        view = build(con, paths()[1], predictions, week=week, sims=sims, seed=seed,
+                     pins_path=pins)  # fmt: skip
+    except (LuckUnavailableError, OddsUnavailableError) as e:
+        echo(str(e))
+        return EXIT_UNAVAILABLE
+    finally:
+        con.close()
+    for line in text(view):
         echo(line)
     return 0

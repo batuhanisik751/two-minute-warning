@@ -3000,6 +3000,28 @@ def league_journal(
     raise typer.Exit(code=run_journal(season, week))
 
 
+@league_app.command("odds")
+def league_odds(
+    sims: int = typer.Option(20_000, "--sims", help="Simulated seasons (at least 1000)."),
+    seed: int = typer.Option(2026_10_05, "--seed", help="Random seed (same seed, same odds)."),
+    week: int | None = typer.Option(
+        None,
+        "--week",
+        help="The odds as they stood after week N's games (later results ignored; default: "
+        "now, with the week in progress).",
+    ),
+) -> None:
+    """Luck and playoff odds: every team's record, points for and against, all-play record,
+    expected wins and luck (exact, from the synced schedule), and by simulation of the rest of
+    the season on the real schedule and the playoff bracket its chance to make the playoffs,
+    to be the 1 seed and to win the title; your row marked '*', your leverage this week (odds
+    if you win vs lose) and your record under each other team's schedule. Reads only; local
+    output with team names. Exit 2 when My League is off or no schedule is synced."""
+    from twm.league.commands import run_odds
+
+    raise typer.Exit(code=run_odds(week, sims, seed))
+
+
 @league_app.command("report")
 def league_report(
     week: int | None = typer.Option(

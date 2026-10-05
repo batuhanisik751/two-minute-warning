@@ -120,6 +120,25 @@ def team_payload(team_id: int, abbrev: str, name: str) -> dict[str, Any]:
     }
 
 
+def schedule_payload(periods: int = 14) -> list[dict[str, Any]]:
+    """ESPN's mMatchupScore ``schedule`` for the two fake teams: periods before WEEK decided
+    (team 1 wins period 1, team 2 period 2), WEEK live (UNDECIDED, totalPointsLive), later
+    periods future (totalPoints 0.0), plus one bye entry (no "away" side) in the last period."""
+    out = []
+    for p in range(1, periods + 1):
+        home, away = {"teamId": 1, "totalPoints": 0.0}, {"teamId": 2, "totalPoints": 0.0}
+        winner = "UNDECIDED"
+        if p < WEEK:
+            home["totalPoints"], away["totalPoints"] = (110.5, 90.0) if p == 1 else (80.0, 99.5)
+            winner = "HOME" if p == 1 else "AWAY"
+        elif p == WEEK:
+            home["totalPointsLive"], away["totalPointsLive"] = 61.25, 70.0
+        entry = {"id": p, "matchupPeriodId": p, "playoffTierType": "NONE", "winner": winner,
+                 "home": home, "away": away}  # fmt: skip
+        out.append(entry if p < periods else {**entry, "away": None})
+    return out
+
+
 WAIVER_RAW = {"isUsingAcquisitionBudget": False, "acquisitionBudget": 100,
               "waiverProcessDays": ["WEDNESDAY"], "waiverHours": 24,
               "nested": {"x": 1}}  # fmt: skip
@@ -154,6 +173,8 @@ class FakeLeague:
 
     def _league_get(self, params: dict | None = None, **_: Any) -> dict[str, Any]:
         self.calls.append(("league_get", params))
+        if (params or {}).get("view") == "mMatchupScore":  # feature #9: the season schedule
+            return {"schedule": schedule_payload()}
         roster = self.settings_payload["rosterSettings"]
         return {"settings": {"acquisitionSettings": dict(WAIVER_RAW), "rosterSettings": roster}}
 

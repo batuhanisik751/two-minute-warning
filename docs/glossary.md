@@ -30,6 +30,14 @@ How often a coach goes for it when the numbers clearly say go.
 - **Formula:** clear fourth downs where going for it was best AND the coach went / clear fourth downs where going for it was best (the go rate when go was clearly best)
 - **Source:** twm.modules.decisions.coach
 
+### All-play record
+
+Your record if you had played every team every week. It shows how good your scores were, whatever the schedule: 9-2 in a week means only two teams scored more than you.
+
+- **Name:** `all_play_record`; **unit:** wins-losses; **used by:** my_league
+- **Formula:** over the regular-season weeks whose games are all final: each week, one win for every other team the team outscored and one loss for every team that outscored it (a tie counts as a tie)
+- **Source:** twm.league.luck (twm league odds; the local weekly report)
+
 ### Allocation
 
 How much of the missing starter's work a teammate in that role took on average: 0.46 means the backup RB got about 46% of the RB1's carries.
@@ -474,6 +482,14 @@ Like the Brier score, it grades probabilities against what happened, but it puni
 - **Formula:** mean over the rows of -[y ln(p) + (1 - y) ln(1 - p)], y = 1 when it happened, the probability p kept a hair away from 0 and 1
 - **Source:** twm.modules.decisions.wp.log_loss; twm.modules.questionable.table.log_loss
 
+### Luck (wins above expected)
+
+How many more games you won than your scores deserved. +1.5 means the schedule handed you about one and a half extra wins; a negative number means you lost games your points would usually win.
+
+- **Name:** `luck`; **unit:** wins; **used by:** my_league
+- **Formula:** wins (a tie half) - expected wins; expected wins = the sum over the final regular-season weeks of the share of the other teams the team outscored that week (a tie half)
+- **Source:** twm.league.luck (twm league odds; the local weekly report)
+
 ### Mean absolute error (MAE)
 
 How far a projection missed on average, whether it was too high or too low. Lower is better. Example: projections of 12 and 8 points per game for two players who both then scored 10 per game miss by 2 each, so the MAE is 2.
@@ -553,6 +569,14 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Name:** `passing_yards`; **unit:** yards; **used by:** regression_watch
 - **Formula:** fact_opportunity_week.pass_yards_gained, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Playoff odds
+
+Your chance to make the playoffs, from playing out the rest of the season thousands of times on your real schedule. Early in the season it leans on the league average, so it moves a lot week to week. Local only.
+
+- **Name:** `playoff_odds`; **unit:** share (0-1); **used by:** my_league
+- **Formula:** share of 20,000 seeded simulated seasons in which the team finishes in the playoff places: every remaining matchup on the real schedule, each team's weekly score drawn around its season mean shrunk toward the league mean (6 pseudo-weeks), seeded by record then ESPN's tiebreak, then the playoff bracket (docs/my_league.md)
+- **Source:** twm.league.odds (twm league odds; the local weekly report)
 
 ### Points per game (PPG)
 

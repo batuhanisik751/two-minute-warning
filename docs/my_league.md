@@ -4,7 +4,7 @@ My League reads the owner's ESPN league into `data/league.duckdb` (never publish
 only when `ENABLE_MY_LEAGUE=true` and the ESPN keys are in `.env` (PROJECT_SPEC 4.3, 8.3).
 Every `twm league` command prints one line and exits with code 2 otherwise. The commands:
 `sync`, `settings-diff`, `radar`, `regret`, `report` (steps F2-F4, docs/progress.md),
-`trade`, `weekly` and `journal` (below).
+`trade`, `weekly`, `journal` and `odds` (below).
 
 ## Weekly routine
 
@@ -115,6 +115,76 @@ report` adds **Start/sit odds for your closest calls**: each starter at QB/RB/WR
 your best bench option for that slot, calls under 55% flagged. The section and the command use
 FantasyPros' ranks, which may not be republished: they stay local, never published. Method,
 backtest and limits: [docs/start_sit.md](start_sit.md).
+
+## Luck and playoff odds (feature #9)
+
+```
+uv run twm league odds [--sims 20000] [--seed 20261005] [--week N]
+```
+
+Code: `src/twm/league/luck.py` (exact counts), `odds.py` (the simulation), `odds_roster.py`
+(score model (b), checked only), `odds_view.py` (output), `commands.run_odds`; tests:
+`tests/test_league_odds.py` (synthetic leagues). Reads only. `twm league report` adds the same
+numbers as **Luck and playoff odds** (no section when no schedule is synced). One table: team,
+record, points for (PF) and against (PA), all-play record, expected wins, luck, P(playoffs),
+P(seed 1), P(title); your row is marked `*`. `--week N` shows the odds as they stood after week
+N's games (later results ignored).
+
+- **What the sync adds**: `twm league sync` stores ESPN's whole season schedule (table
+  `league_schedule`, view `mMatchupScore`, one request): every matchup period ESPN lists, a side's
+  `score` only once ESPN decided the matchup (NULL for future weeks), `live_score` while a week is
+  played. ESPN lists the playoff matchups only once the bracket is set (checked 2026-10-05: the 14
+  regular-season periods). It also stores the seeding rule as ESPN reports it
+  (`scheduleSettings.playoffSeedingRule`, kept by espn-api; no extra request) and
+  `status.previousSeasons`. A failed schedule read is a note; the stored schedule is kept.
+- **The tiebreak** (checked on the real league 2026-10-05): `playoffSeedingRule =
+  TOTAL_POINTS_SCORED` (`playoffSeedingRuleBy` 0, `playoffReseed` false; ties: `matchupTieRule`
+  NONE). Mapped as: seeds by record (a tie half a win), equal records by regular-season points
+  for, then a coin flip. Any other value is refused ("not mapped"), never guessed.
+- **Luck (exact, no model)**: only regular-season weeks whose games are ALL final count. All-play
+  record: each week against every other team's score. Expected wins: the sum over weeks of the
+  share of other teams outscored (a tie half). Luck = wins - expected wins (it sums to zero over
+  the league). "Your record under each other team's schedule": your weekly scores against the
+  opponents that team faced (where it faced you, you face it).
+- **The odds (Monte Carlo, seeded, 20,000 seasons)**: every remaining regular-season matchup on
+  the real schedule; seeding as above; then the playoffs (assumed from ESPN's settings, 8 teams,
+  one week per round, no reseeding): week 15 1v8, 4v5, 2v7, 3v6; week 16 the winners of 1v8 and
+  4v5, of 2v7 and 3v6; week 17 the final; the higher seed advances on a tie (assumed). A week in
+  progress keeps the points already scored (ESPN's live total) and simulates only the starters
+  whose NFL games had not finished at the sync: ESPN's projection times the share of the game
+  left (kickoff to the warehouse's estimated end, linear), sd = the weekly sd x sqrt(that share).
+- **Leverage**: your playoff (and title) odds if you win vs lose the next week still open; a week
+  already settled (one result in under 200 simulated seasons) is named and skipped.
+- **Team score model** (chosen by a rule fixed before any model was scored): (a) each team's
+  season mean shrunk toward the league mean by K = 6 pseudo-weeks, with the pooled within-team
+  weekly sd sigma; a simulated season draws each team's true level once from N(shrunk mean,
+  sigma^2 / (weeks + K)), then every week around it. Candidate (b): the current roster's best
+  legal lineup by Regression Watch's rest-of-season points per game (the trade checker's rules:
+  byes, OUT / IR excluded, season average for a player without a list row) plus K and D/ST at the
+  league's average per slot, sd = (a)'s sigma. **The rule**: each final week is predicted from the
+  weeks before it; the score is the mean Gaussian negative log-likelihood (NLL) per team-week;
+  (b) is used only if both scored the same >= 36 team-weeks and (b)'s NLL is lower by more than
+  one standard error of the paired difference; otherwise (a). The command prints the check
+  every run and says so if the rule would now pick (b) (the odds do not switch by themselves).
+  Result 2026-10-05 (weeks 1-3 final): (a) 24 team-weeks, NLL 4.76, MAE 24.2, RMSE 27.9; (b) 0
+  team-weeks: Regression Watch needs 3 games, so a season's first list is week 3's and (b) can
+  first predict week 4. Small sample: 24 team-weeks.
+- **K, the pseudo-weeks**: 6 is an assumption, not a measurement (after 3 weeks a team's own
+  mean gets 3 / (3 + 6) = a third of the weight). The command also estimates it by the method of
+  moments: tau^2 = variance of the team means - sigma^2 / weeks (floored at 1), K = sigma^2 /
+  tau^2; the command prints sigma, tau^2 and the estimate every run (on the owner's league after
+  3 final weeks it came out close to 6). The odds keep the fixed 6 (decided before the odds were
+  looked at): with 3 weeks the estimate is the difference of two noisy numbers and swings widely
+  week to week. How much the prior matters is printed every run: the owner's P(playoffs) with
+  K = 3 / 6 / 12 (a team far from the cutoff barely moves; one near it moves more). The league's
+  own numbers stay in the local output, never in this public repo.
+- **Validation**: none possible on this league: ESPN lists no earlier season of it
+  (`previousSeasons` is empty), so no past season can check the odds (e.g. their Brier score at
+  weeks 4/6/8/10 against "current top 8" and the 8/12 base rate). Read the odds as a model's
+  estimate, not a track record. The optional `--history` sync was therefore not built.
+- **Limits**: a team's weekly scores are independent normal draws around its level (no roster
+  moves, injuries or byes); K and D/ST are inside the team score; the bracket and the playoff
+  tie rule are assumptions from ESPN's settings (ESPN adds the real bracket later).
 
 ## Trade checker
 

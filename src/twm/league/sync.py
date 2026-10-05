@@ -14,7 +14,15 @@ from pathlib import Path
 from typing import Any
 
 from twm.league import store
-from twm.league.espn_client import NOT_STARTING, EspnClient, EspnError, PlayerRow, RawSettings
+from twm.league.espn_client import (
+    NOT_STARTING,
+    EspnClient,
+    EspnError,
+    PlayerRow,
+    RawSettings,
+    ScheduleSide,
+    SeedingRule,
+)
 
 FREE_AGENT_POSITIONS = ("QB", "RB", "WR", "TE", "K", "D/ST")
 FREE_AGENTS_PER_POSITION = 50
@@ -47,6 +55,8 @@ class _Read:
     free_agents: list[PlayerRow]
     boxes: list
     activity: list
+    schedule: list[ScheduleSide] | None = None  # None: not read (the stored one is kept)
+    seeding: SeedingRule | None = None
 
 
 def read_league(client: EspnClient, week: int | None, notes: list[str]) -> tuple[_Read, int]:
@@ -75,6 +85,11 @@ def read_league(client: EspnClient, week: int | None, notes: list[str]) -> tuple
         boxes=client.box_scores(w),
         activity=client.activity(ACTIVITY_SIZE),
     )
+    try:  # feature #9 (luck and playoff odds): optional, the sync goes on without it
+        got.seeding = client.seeding()
+        got.schedule = client.schedule()
+    except EspnError as e:
+        notes.append(f"season schedule not read ({e}): the stored one is kept")
     return got, w
 
 
@@ -88,6 +103,13 @@ def _rows(got: _Read) -> dict[str, list[dict]]:
                 s.reg_season_final_week, "playoff_team_count": s.playoff_team_count,
                 "playoff_matchup_period_length": s.playoff_matchup_period_length}  # fmt: skip
     settings |= {k: v for k, v in playoffs.items() if v is not None}
+    if got.seeding is not None:  # feature #9: ESPN's playoff seeding rule, as ESPN names it
+        g = got.seeding
+        seeding = {"playoff_seeding_rule": g.seeding_rule, "playoff_seeding_rule_by":
+                   g.seeding_rule_by, "playoff_reseed": g.reseed, "matchup_tie_rule": g.tie_rule,
+                   "playoff_matchup_tie_rule": g.playoff_tie_rule,
+                   "previous_seasons": ",".join(map(str, g.previous_seasons))}  # fmt: skip
+        settings |= {k: v for k, v in seeding.items() if v is not None}
     settings |= {f"slot:{k}": v for k, v in s.roster_slots.items()}
     settings |= {f"waiver:{k}": v for k, v in got.waiver.items()}
     box_players, matchups = [], []
@@ -117,7 +139,7 @@ def _rows(got: _Read) -> dict[str, list[dict]]:
             "espn_id": a.espn_id, "player_name": a.name or None, "position": a.position or None,
             "pro_team": None, "bid_amount": a.bid_amount,
         }  # fmt: skip
-    return {
+    out = {
         "league_settings": [{"key": k, "value": str(v)} for k, v in settings.items()],
         "league_scoring": [asdict(i) for i in s.scoring],
         "league_teams": [{"league_team_id": t.team_id, "league_team_abbrev": t.abbrev,
@@ -134,6 +156,14 @@ def _rows(got: _Read) -> dict[str, list[dict]]:
         "league_box_scores": box_players,
         "league_activity": list(activity.values()),
     }  # fmt: skip
+    if got.schedule is not None:
+        out["league_schedule"] = [
+            {"matchup_period": x.matchup_period, "matchup_id": x.matchup_id,
+             "league_team_id": x.team_id, "league_opponent_id": x.opponent_id,
+             "is_home": x.is_home, "playoff_tier": x.playoff_tier, "winner": x.winner,
+             "score": x.score, "live_score": x.live_score} for x in got.schedule
+        ]  # fmt: skip
+    return out
 
 
 def _join(rows: dict[str, list[dict]], bridge: dict[str, str] | None) -> list[dict]:

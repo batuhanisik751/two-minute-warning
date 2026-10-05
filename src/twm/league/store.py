@@ -6,8 +6,8 @@ columns start with ``league_`` (listed in :data:`PRIVATE_COLUMNS`). No cookie is
 
 Every row has ``league_id``, ``season``, ``week`` (the week the sync read) and ``synced_at``
 (UTC). Writes are idempotent: a snapshot table (settings, scoring, rosters, free agents, box
-scores, matchups) replaces the rows of the partition it read, keyed tables (teams, activity,
-the player map) insert-or-replace by primary key; one transaction per sync.
+scores, matchups, the season schedule) replaces the rows of the partition it read, keyed tables
+(teams, activity, the player map) insert-or-replace by primary key; one transaction per sync.
 """
 
 from __future__ import annotations
@@ -56,6 +56,13 @@ TABLES: dict[str, Table] = {t.name: t for t in (
           ("league_opponent_id", "INTEGER"), ("is_home", "BOOLEAN"), ("is_playoff", "BOOLEAN"),
           ("score", "DOUBLE"), ("projected", "DOUBLE")),
           WEEK + ("league_team_id",), WEEK),
+    # the whole season's schedule as ESPN lists it (feature #9): replaced on every sync; score
+    # only once ESPN decided the matchup, live_score while it is being played
+    Table("league_schedule", BASE + (("matchup_period", "INTEGER"), ("matchup_id", "INTEGER"),
+          ("league_team_id", "INTEGER"), ("league_opponent_id", "INTEGER"),
+          ("is_home", "BOOLEAN"), ("playoff_tier", "VARCHAR"), ("winner", "VARCHAR"),
+          ("score", "DOUBLE"), ("live_score", "DOUBLE")),
+          SEASON + ("matchup_period", "league_team_id"), SEASON),
     Table("league_box_scores", BASE + (("league_team_id", "INTEGER"),) + PLAYER
           + (("lineup_slot", "VARCHAR"), ("is_starter", "BOOLEAN"), ("points", "DOUBLE"),
              ("projected_points", "DOUBLE"), ("on_bye", "BOOLEAN")) + JOIN,

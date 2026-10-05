@@ -656,6 +656,13 @@ def test_every_module_is_published_and_a_second_run_rewrites_nothing(
         == [(["buy_low"],)]  # fmt: skip
     assert rows(db, "SELECT count(*) FROM regression_row WHERE 'legit' = ANY(tags) "
                     "OR tag = 'legit'")[0][0] == 0  # fmt: skip
+    # feature #4: the 80% range is published (migration 0006); the live list has none (NULL)
+    assert rows(db, "SELECT kind, count(projection_lo), count(projection_hi), count(*) FROM "
+                    "regression_row GROUP BY kind ORDER BY kind") == [("backtest", 12, 12, 12),
+                                                                     ("live", 0, 0, 6)]  # fmt: skip
+    assert rows(db, "SELECT projection_lo, projection, projection_hi FROM regression_row WHERE "
+                    "kind = 'backtest' ORDER BY season, week, projection LIMIT 1") \
+        == [(6.5, 9.5, 13.0)]  # fmt: skip
     assert rows(db, "SELECT count(*) FROM stream_pick WHERE model_prob IS NULL")[0][0] == 20
     content = dump(db)
     res = publish_all(db, syn.inputs)
@@ -747,7 +754,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
             assert mg.apply_migrations(owner) == ["0001_streamer_regression_watch",
                                                   "0002_regression_stability",
                                                   "0003_decisions", "0004_hot_seat",
-                                                  "0005_board"]  # fmt: skip
+                                                  "0005_board",
+                                                  "0006_regression_ranges"]  # fmt: skip
         job = tg.resolve("local", env={tg.LOCAL_ENV: make_conninfo(
             url, user="twm_job", password=roles["twm_job"])}, env_file=NO_ENV_FILE)  # fmt: skip
         syn = ps.build(tmp_path / "syn", live_weeks=(3,))

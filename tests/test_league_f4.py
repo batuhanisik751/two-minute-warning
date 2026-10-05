@@ -188,7 +188,8 @@ def test_scoring_check_needs_box_scores_and_a_warehouse(tmp_path):
 # `twm league report` on the FakeLeague fixtures
 # --------------------------------------------------------------------------------------
 
-SECTION_IDS = ("radar", "streamer", "drops", "tags", "regret", "scoring", "settings")
+SECTION_IDS = ("radar", "streamer", "drops", "tags", "regret", "journal", "scoring",
+               "settings")  # fmt: skip
 
 
 def _report(f3_sync) -> tuple[int, str, Path]:  # noqa: F811
@@ -392,4 +393,4 @@ def test_report_sections_carry_the_numbers(tmp_path):
     assert "Mystery Back" in html and "not derivable from the stats we hold" in html
     assert "fumble(s) lost on a kick or punt return: ESPN did not charge it" in html
     assert "No differences: the config matches your league." not in html  # lineup.IR differs
-    assert html.count("<section ") == 7 and "Fake Team Alpha: your league this week" in html
+    assert html.count("<section ") == 8 and "Fake Team Alpha: your league this week" in html

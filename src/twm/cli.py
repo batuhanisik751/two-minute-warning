@@ -1589,6 +1589,14 @@ def _regression_approved(season: int):
     return live, params
 
 
+def _regression_misses():
+    """The approved frozen backtest's graded misses (sha256-checked): the 80% ranges of the
+    weekly list (feature #4, :mod:`twm.modules.regression_watch.ranges`)."""
+    from twm.modules.regression_watch import ranges
+
+    return ranges.pinned_misses()
+
+
 def _regression_xfp(xfp: str | None) -> str:
     """--xfp, else the pinned source (exit 1 when the pin names none: never a default)."""
     from twm import pins
@@ -1651,8 +1659,9 @@ def regression_score(
     """Regression Watch's weekly list with the owner-approved frozen parameters
     (config/production_models.yaml, sha256-checked; nothing is re-estimated): checks the
     week's data (exit code 3 if it has not arrived), stores every universe player's
-    rest-of-season projection and tag, grades stored lists of finished seasons, writes the
-    weekly report and prints the Sell-high and Buy-low tops (docs/regression_watch.md)."""
+    rest-of-season projection, its 80% range (from the frozen backtest's misses) and tag,
+    grades stored lists of finished seasons, writes the weekly report and prints the
+    Sell-high and Buy-low tops (docs/regression_watch.md)."""
     import polars as pl
 
     from twm import pins
@@ -1677,9 +1686,10 @@ def regression_score(
     store_path = _project_path(store if store is not None else pr.default_path())
     try:
         live, params = _regression_approved(chosen)
+        misses = _regression_misses()
         run = rwk.run_week(path, chosen, wk, params=params, league=league(), now=clock,
                            allow_incomplete=allow_incomplete, real_clock=now is None,
-                           live=live)  # fmt: skip
+                           live=live, misses=misses)  # fmt: skip
     except rwk.rw.NotReadyError as e:  # pragma: no cover - checked above; data changed meanwhile
         typer.echo(str(e), err=True)
         raise typer.Exit(code=rwk.EXIT_NOT_READY) from e
@@ -2931,6 +2941,25 @@ def league_regret(
     from twm.league.commands import run_regret
 
     raise typer.Exit(code=run_regret(season))
+
+
+@league_app.command("journal")
+def league_journal(
+    season: int | None = typer.Option(None, help="Season (default: the latest synced)."),
+    week: int | None = typer.Option(
+        None, help="One week only: the moves made for week N's games and its lineup."
+    ),
+) -> None:
+    """You vs the model: your adds, drops and lineups against what the app said at the time
+    (the newest lists made before each move; a list made later is never used): each add's
+    Radar / streamer rank, chance and priority or "not on the lists", and its outcome; each
+    drop's points since vs the add; the Radar's must-adds you left on waivers; your lineups vs
+    the decision-time best (lineup regret). Counts, never a verdict: one season is a small
+    sample. Reads only; local output with player names. Exit 2 when My League is off or
+    nothing is synced."""
+    from twm.league.commands import run_journal
+
+    raise typer.Exit(code=run_journal(season, week))
 
 
 @league_app.command("report")

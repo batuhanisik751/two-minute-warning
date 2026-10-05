@@ -249,3 +249,28 @@ def run_weekly(week: int | None, limit: int, echo: Callable[[str], None] = typer
     if _env(echo) is None:
         return EXIT_UNAVAILABLE
     return run(week, limit, echo, default_parts())
+
+
+def run_journal(
+    season: int | None, week: int | None, echo: Callable[[str], None] = typer.echo
+) -> int:
+    """`twm league journal`: "You vs the model", your adds, drops and lineups against what the
+    app said at the time (twm.league.journal; reads only, writes nothing)."""
+    from twm.league import store
+    from twm.league.journal import JournalUnavailableError, build, text
+
+    path = _synced_db(echo)
+    if path is None:
+        return EXIT_UNAVAILABLE
+    predictions, pins = lists_paths()
+    con = store.connect(path, read_only=True)
+    try:
+        res = build(con, predictions, paths()[1], season=season, week=week, pins_path=pins)
+    except JournalUnavailableError as e:
+        echo(str(e))
+        return EXIT_UNAVAILABLE
+    finally:
+        con.close()
+    for line in text(res):
+        echo(line)
+    return 0

@@ -1,0 +1,3 @@
+ALTER TABLE "regression_row" ADD COLUMN "projection_lo" double precision;--> statement-breakpoint
+ALTER TABLE "regression_row" ADD COLUMN "projection_hi" double precision;--> statement-breakpoint
+ALTER TABLE "regression_row" ADD CONSTRAINT "regression_row_range_check" CHECK (("regression_row"."projection_lo" is null) = ("regression_row"."projection_hi" is null) and ("regression_row"."projection_lo" is null or "regression_row"."projection_lo" <= "regression_row"."projection_hi"));

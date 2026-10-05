@@ -319,7 +319,9 @@ class ResidualPool:
 def residual_pool(horizon: int, pins_path: Path | None = None) -> ResidualPool:
     """Rows of the approved Regression Watch backtest snapshot (sha256-checked) graded (3+
     games left), per position: those within :data:`HORIZON_WINDOW` weeks of ``horizon``, else
-    the nearest weeks left available."""
+    the nearest weeks left available (the machinery Regression Watch's 80% ranges share:
+    :mod:`twm.modules.regression_watch.ranges`)."""
+    from twm.modules.regression_watch import ranges as rg
     from twm.pins import PinError, read_pins, read_snapshot
 
     try:
@@ -329,23 +331,12 @@ def residual_pool(horizon: int, pins_path: Path | None = None) -> ResidualPool:
         f = read_snapshot(pin, ("predictions", "outcomes"))
     except PinError as e:
         raise TradeError(f"My League: Regression Watch's backtest cannot be read ({e})") from e
-    rows = (
-        f["predictions"].select("season", "week", "entity_id", "rank_group", "score", "horizon")
-        .join(f["outcomes"].select("season", "week", "entity_id", "ros_ppg"),
-              on=["season", "week", "entity_id"], how="inner")
-        .filter(pl.col("ros_ppg").is_not_null() & pl.col("score").is_not_null())
-        .with_columns((pl.col("ros_ppg") - pl.col("score")).alias("miss"),
-                      (pl.col("horizon") - horizon).abs().alias("gap"))
-    )  # fmt: skip
+    rows = rg.graded_misses(f["predictions"], f["outcomes"])
     out, used = {}, {}
     for pos in SKILL:
-        sub = rows.filter(pl.col("rank_group") == pos)
-        if sub.height == 0:
-            continue
-        gap = max(HORIZON_WINDOW, int(sub.get_column("gap").min()))
-        sub = sub.filter(pl.col("gap") <= gap)
-        out[pos] = sub.get_column("miss").to_numpy()
-        used[pos] = (int(sub.get_column("horizon").min()), int(sub.get_column("horizon").max()))
+        pool = rg.near_horizon(rows, pos, horizon, HORIZON_WINDOW)
+        if pool is not None:
+            out[pos], used[pos] = pool.misses, pool.horizons
     return ResidualPool(out, used, pin.backtest_seasons)
 
 

@@ -4,7 +4,7 @@ import Term from "@/components/Term";
 import { KindBadge } from "@/components/ui";
 import { fmtPoints } from "@/lib/format";
 import type { RegressionHistoryRow } from "@/lib/queries/regression";
-import { regressionHref, signed, statsOf, tagTitle } from "@/lib/regression";
+import { projectionText, regressionHref, signed, statsOf, tagTitle } from "@/lib/regression";
 
 const val = (v: number | null, f: (x: number) => string) => (v === null ? "no data" : f(v));
 
@@ -12,6 +12,8 @@ const val = (v: number | null, f: (x: number) => string) => (v === null ? "no da
  *  time), projection and what he scored afterwards. */
 export default function RegressionHistory({ rows, season, name, withGarbage }: { rows: RegressionHistoryRow[]; season: number; name: string; withGarbage: boolean }) {
   if (!rows.length) return <p className="mt-2 text-muted">He is not on any published Regression Watch list of {season}.</p>;
+  // the 80% range (feature #4) beside the projection; lists without one show the projection alone
+  const ranged = rows.some((r) => r.projectionLo !== null && r.projectionHi !== null);
   return (
     <FoldTable
       label={`Regression Watch lists with ${name}, ${season}`}
@@ -40,6 +42,12 @@ export default function RegressionHistory({ rows, season, name, withGarbage }: {
                 </th>
                 <th scope="col" className="num">
                   <Term name="ppg_ros">Projection</Term>
+                  {ranged ? (
+                    <>
+                      {" "}
+                      (<Term name="projection_range">80% range</Term>)
+                    </>
+                  ) : null}
                 </th>
                 <th scope="col">
                   <Term name="rest_of_season_ppg">Rest of season</Term>
@@ -66,7 +74,9 @@ export default function RegressionHistory({ rows, season, name, withGarbage }: {
                 <td className="num">{val(s.ppg, fmtPoints)}</td>
                 <td className="num">{val(s.xfp, fmtPoints)}</td>
                 <td className="num">{val(s.fpoe, (x) => signed(x))}</td>
-                <td className="num">{fmtPoints(r.projection)}</td>
+                <td className="num whitespace-nowrap" data-testid="rw-history-projection">
+                  {projectionText(r)}
+                </td>
                 <td className="tnum">
                   {o?.status === "final"
                     ? o.rosPpg !== null

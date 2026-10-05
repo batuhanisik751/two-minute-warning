@@ -148,6 +148,9 @@ describe("/regression (seed)", () => {
     const first = rows(m.querySelector("[data-testid=tag-sell_high]")!, "rw-row")[0];
     assert.match(text(first), /Games 3 PPG 20\.0 xFP\/game 13\.0 FPOE\/game \+7\.0 Projection 14\.0/);
     assert.match(text(first), /Sell-high: seed reason for 00-9000001\./);
+    // the live week-3 list has no 80% range (published before feature #4): no brackets, no term
+    assert.equal(m.querySelectorAll("[data-testid=rw-range]").length, 0);
+    assert.doesNotMatch(text(m), /80% range/);
     assert.equal(m.querySelector("[data-testid=gt-toggle] a[aria-current=page]")?.textContent, "With garbage time");
   });
 
@@ -183,6 +186,16 @@ describe("/regression (seed)", () => {
     assert.equal(rows(fold, "rw-row").length, M.rwLong.buyLow - 10);
     assert.equal(bl.querySelector("ol[data-testid=rw-list]:not([data-fold-rest])")!.children.length, 10);
     assert.equal(m.querySelector("[data-testid=tag-sell_high] details"), null, "Sell-high (3) does not fold");
+    // the 80% range under every projection: seed-modules.ts rwRows (projection - 3 or - 0.5, + 3)
+    assert.match(text(m.querySelector("[data-testid=tag-sell_high]")!), /in brackets its 80% range\./);
+    const ranged = rows(m, "rw-row");
+    assert.equal(m.querySelectorAll("[data-testid=rw-range]").length, ranged.length);
+    for (const r of ranged) {
+      const got = /Projection (\d+\.\d) \((\d+\.\d)–(\d+\.\d)\)/.exec(text(r));
+      assert.ok(got, text(r));
+      const [p, lo, hi] = got.slice(1).map(Number);
+      assert.ok(Math.abs(hi - p - 3) < 0.051 && [3, 0.5].some((d) => Math.abs(p - lo - d) < 0.051), text(r));
+    }
     assert.match(prose(m.querySelector("[data-testid=rw-track]")!), /Graded on 900 player-weeks of the 2024–2025 test seasons, as-of weeks 4, 6 \(/);
     const weeks = Array.from(m.querySelectorAll<HTMLOptionElement>("select[name=week] option")).map((o) => normalise(o.textContent ?? ""));
     assert.deepEqual(weeks, ["Week 4 (reconstructed)", "Week 6 (reconstructed)"]);
@@ -203,6 +216,11 @@ describe("player page and methodology (seed)", () => {
     assert.doesNotMatch(text(hist), /Legit/, "his Legit tags are dropped");
     assert.match(text(hist), /No tag/);
     assert.match(text(hist), /PPG in 10 games/);
+    // the 80% range beside each backtest projection, with its term in the header
+    assert.match(text(hist.querySelector("thead")!), /Projection \(80% range/);
+    const proj = Array.from(hist.querySelectorAll("[data-testid=rw-history-projection]")).map((c) => normalise(c.textContent ?? ""));
+    assert.equal(proj.length, 2);
+    assert.ok(proj.every((x) => /^\d+\.\d \(\d+\.\d–\d+\.\d\)$/.test(x)), proj.join(" | "));
     const season = Array.from(off.querySelectorAll<HTMLAnchorElement>("nav[aria-label=Season] a")).map((a) => a.getAttribute("href"));
     assert.ok(season.every((h) => h?.endsWith("gt=off")), "the season links keep the view");
   });
@@ -234,6 +252,12 @@ describe("player page and methodology (seed)", () => {
     assert.equal(text(sh.querySelector("tbody tr")!), "QB 100 0.50 20.0 -0.50 40 0.09 0.05 to 0.13 0.13 0.09 to 0.17 0.30");
     assert.ok(st.querySelector("[data-testid=stability-shrink-fpoe_ng] tbody tr"));
     assert.equal(m.querySelectorAll("[data-testid=rw-position-mae] tbody tr").length, 2);
+    // the 80% range's coverage check, computed from the published rows (seed: M.rwCoverage)
+    const cov = Array.from(m.querySelectorAll("[data-testid=rw-range-coverage] tbody tr")).map((r) => text(r));
+    const want = Object.entries(M.rwCoverage).map(([p, [n, inside]]) =>
+      `${p} ${n} ${((inside / n) * 100).toFixed(1)}% ${(((n - inside) / n) * 100).toFixed(1)}% 0.0%`);
+    assert.deepEqual(cov, want);
+    assert.match(prose(m.querySelector("[data-testid=rw-range-section]")!), /backtest lists of 2025 .* inside the range for 88\.6% of 70 graded players/);
     assert.match(text(m.querySelector("#regression")!.parentElement!), /PROJECT_SPEC 6\.3/);
     assert.match(text(m), /mean_flat_all/);
   });

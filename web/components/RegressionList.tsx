@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { fmtPoints } from "@/lib/format";
-import { signed, statsOf, type RegressionRow } from "@/lib/regression";
+import { rangeText, signed, statsOf, type RegressionRow } from "@/lib/regression";
 import { teamStyle } from "@/lib/team-colors";
 import { FoldList } from "./Fold";
 import { MiniLabel, PosBadge } from "./ui";
@@ -71,6 +71,8 @@ function Row({ r, withGarbage, reasons, outcomes }: { r: RegressionRow; withGarb
     fpoe: val(s.fpoe, (x) => signed(x)),
     proj: fmtPoints(r.projection),
   };
+  // the projection's 80% range (feature #4) under it, "(9.1–15.6)"; nothing when the list has none
+  const range = rangeText(r.projectionLo, r.projectionHi);
   const o = r.outcome;
   // a pending outcome says nothing per row: the page says it once
   const final = outcomes && o !== null && o.status === "final";
@@ -103,7 +105,14 @@ function Row({ r, withGarbage, reasons, outcomes }: { r: RegressionRow; withGarb
             <dt>
               <MiniLabel className="@3xl:sr-only">{c.label}</MiniLabel>
             </dt>
-            <dd className={c.key === "proj" ? "text-lg font-bold" : "text-base"}>{values[c.key]}</dd>
+            <dd className={c.key === "proj" ? "text-lg font-bold" : "text-base"}>
+              {values[c.key]}
+              {c.key === "proj" && range ? (
+                <span data-testid="rw-range" className="ml-1 text-xs font-normal whitespace-nowrap text-muted @3xl:ml-0 @3xl:block">
+                  ({range})
+                </span>
+              ) : null}
+            </dd>
           </div>
         ))}
       </dl>

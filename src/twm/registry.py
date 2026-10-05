@@ -795,7 +795,37 @@ def _projection_entries() -> list[Entry]:
             model_output=model,
         )  # fmt: skip
         for name, title, kind, unit, formula, explanation, model in rows
-    ]
+    ] + [_range_entry()]
+
+
+def _range_entry() -> Entry:
+    """The projection's 80% range (feature #4: twm.modules.regression_watch.ranges)."""
+    from twm.modules.regression_watch import ranges as rg
+
+    tail = round((1 - rg.LEVEL) / 2 * 100)
+    return Entry(
+        name="projection_range",
+        title=f"{rg.LEVEL:.0%} range",
+        kind="metric",
+        modules=("regression_watch",),
+        unit="points per game",
+        formula=(
+            f"ppg_ros + the {tail}th and {100 - tail}th percentiles of the frozen backtest's "
+            "per-game misses (rest_of_season_ppg - ppg_ros) at his position, from lists with "
+            f"weeks left within {rg.HORIZON_WINDOW} of his list's (else the nearest weeks left), "
+            "of seasons before the list's only (walk-forward); none with fewer than "
+            f"{rg.MIN_MISSES} misses"
+        ),
+        explanation=(
+            "Where his rest-of-season points per game should land 8 times in 10: the "
+            "projection plus how far off it was for similar players in earlier seasons. In "
+            "the backtest the real result fell inside about 80% of the time at every position "
+            "(the Methodology page shows each share); it says nothing about games he misses."
+        ),
+        source="twm.modules.regression_watch.ranges",
+        step="F4",
+        model_output=True,
+    )
 
 
 # The streamer's reason sentences (step S2a, twm.modules.streamer.reasons): (yes / value, no).

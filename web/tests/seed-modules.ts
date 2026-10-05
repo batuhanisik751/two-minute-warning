@@ -34,6 +34,10 @@ export const MODULES_SEED = {
   /** the reconstructed week whose Buy-low table is long (its extra players 7-12 of each
    *  position are all Buy-low): it folds after 10 rows */
   rwLong: { season: 2025, week: 6, buyLow: 27 },
+  /** the 80% range's coverage check on the seeded backtest lists (graded rows, inside), per
+   *  position: 2025 W4 (6 a position) + W6 (12), the first WR of each list ungraded, and each
+   *  position's 6th player below his range */
+  rwCoverage: { QB: [18, 16], RB: [18, 16], WR: [16, 14], TE: [18, 16], Pooled: [70, 62] } as Record<string, [number, number]>,
   /** the stability study's window (regression_stability; fictional numbers) */
   stabilityWindow: "2012-2025",
   /** the fictional league's starter cutoffs the seed glossary's y_start formula states */
@@ -192,6 +196,10 @@ function rwRows(season: number, week: number, kind: "live" | "backtest") {
         season, week, kind, gsisId, position: pos, team: TEAMS[i % TEAMS.length], games: week,
         ppg: r2(ppg), ppgNg: r2(ppg - 1), xfpPg: r2(xfp), xfpPgNg: r2(xfp - 0.5), fpoePg: r2(ppg - xfp), fpoePgNg: r2(ppg - 1 - (xfp - 0.5)),
         projection: r2(projection), shrinkage: 0.1,
+        // the 80% range (migration 0006): the backtest lists only (the live week-3 list has none,
+        // like the real frozen one); each position's 6th player ends below his range (outcomes)
+        projectionLo: kind === "backtest" ? r2(projection - (i === 5 ? 0.5 : 3)) : null,
+        projectionHi: kind === "backtest" ? r2(projection + 3) : null,
         tag: first, tags: tags.filter((t): t is NonNullable<Kind> => t !== null),
         // like the weekly reasons: one sentence per tag, "Buy-low: ... Legit: ..." (Legit is dropped on the site)
         tagReason: first ? tags.map((t) => `${TITLE[t!]}: seed reason for ${gsisId}.`).join(" ") : null,

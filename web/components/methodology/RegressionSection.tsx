@@ -1,4 +1,5 @@
 import Link from "next/link";
+import RangeCoverage from "@/components/methodology/RangeCoverage";
 import StabilityStudy from "@/components/methodology/StabilityStudy";
 import RegressionTrack from "@/components/RegressionTrack";
 import Term from "@/components/Term";
@@ -175,6 +176,7 @@ export default async function RegressionSection() {
           <EmptyState title="No Regression Watch track record published yet" />
         </div>
       )}
+      <RangeCoverage />
       <RegressionLimits />
     </section>
   );

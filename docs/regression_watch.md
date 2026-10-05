@@ -384,7 +384,8 @@ freezes the backtest lists; review and commit everything together.
   the tag (`sell_high`, `buy_low` or empty; since step R1 no `legit`: lists stored before
   keep it in their rows), `horizon` = the regular-season weeks left (the column is a number
   of weeks), `reasons_json` = the numbers behind it (PPG, xFP/game, FPOE/game, games, the shrinkage and
-  the value it shrinks toward, the gap to his PPG, the X, and the same without garbage time).
+  the value it shrinks toward, the gap to his PPG, the X, and the same without garbage time;
+  since feature #4 also the projection's 80% `range`: see "The 80% range" below).
 - **Outcomes**: once a season's regular season is over, every stored row gets his actual
   points per game over the rest of it (`outcomes.y_value`, a numeric outcome column added in
   D4a; empty with fewer than 3 games left, which the backtest does not grade either).
@@ -409,6 +410,52 @@ freezes the backtest lists; review and commit everything together.
   tags: the frozen backtest lists (made with D3's three tags) lose Legit at publish time (a row
   whose tag was Legit has none); live lists already published are frozen and keep their rows
   (2026 week 3), so the site hides 'legit'.
+
+## The 80% range (feature #4, owner's decision of 2026-10-04)
+
+**What it is.** Every projection comes with a range: the projection plus the 10th and the
+90th percentile of the frozen backtest's per-game misses (actual rest-of-season points per
+game minus the projection) of players at his position whose lists had about as many weeks
+left (within 2 weeks left of his list's; when none are that close, the nearest weeks left
+available), taken ONLY from seasons before the list's (walk-forward). A pool with fewer than
+30 misses gives no range. So 80% of comparable past misses fall inside it; it is about how
+well he scores per game, not about games he misses (the backtest grades only players with 3+
+games left). Code: `src/twm/modules/regression_watch/ranges.py` (`walk_forward`). The My
+League trade checker resamples the same misses with the same pool function
+(`ranges.near_horizon`); its output did not change (checked byte for byte on a real trade).
+
+**Where it comes from.**
+
+- **Live and reconstructed weekly lists scored from now on**: `twm regression score` reads the
+  pinned frozen backtest (sha256-checked) and stores each row's range in its `reasons_json`
+  (`range`: level, lo, hi, the number of misses, the weeks left and seasons they came from).
+  For the 2026 lists that is the pinned 2011-2025 backtest; a week-3 list (15 weeks left) uses
+  the lists with 13 and 14 weeks left, a week-4 list (14) those with 12-14.
+- **The 2026 week-3 live list** was scored before the feature: it has no range (NULL on the
+  site) and is never rewritten (a published live list is frozen).
+- **Backtest lists** (the frozen 2011-2025 lists of the time machine and the season's
+  reconstructed lists stored without one): computed at publish time from the frozen
+  snapshot's misses of earlier seasons; the pinned files are only read, their bytes do not
+  change. The 2011 lists have no earlier season, so no range.
+- **Published** as `regression_row.projection_lo` / `projection_hi` (web migration 0006:
+  two nullable columns, both NULL or lo <= hi). The site shows "12.3 (9.1-15.6)".
+
+**Is the 80% honest?** Every graded row of the frozen backtest from 2012 on, ranged
+walk-forward exactly as above, against what the player then scored per game (`uv run python
+-c "from twm.modules.regression_watch import ranges as r; print(r.backtest_coverage(r.pinned_misses()))"`):
+
+| Position | Graded rows | Inside | Below | Above |
+|---|---|---|---|---|
+| QB | 1,109 | 77.8% | 12.3% | 9.9% |
+| RB | 2,954 | 79.5% | 9.9% | 10.6% |
+| WR | 3,173 | 80.6% | 9.0% | 10.3% |
+| TE | 2,092 | 79.0% | 8.3% | 12.7% |
+| All | 9,328 | 79.6% | 9.5% | 10.9% |
+
+Close to 80% at every position (seasons 2012-2025). The QB range is a little narrow and
+misses low more often than high; the TE range misses high more often. The /methodology page
+computes the same shares from the PUBLISHED rows and outcomes (nothing typed), so the two
+agree as long as the published data does.
 
 ## Our own expected points, without hindsight (step H6-b; live since H6-b2)
 

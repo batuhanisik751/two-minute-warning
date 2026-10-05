@@ -2,6 +2,8 @@
 // Every number comes from the database (regression_row, regression_outcome,
 // regression_track_record, model_versions.params); this file only picks rows and words.
 
+import { fmtPoints } from "./format";
+
 /** The tags the site shows. A third tag (legit) was tested and dropped (owner decision,
  *  2026-09-30: it predicted nothing better than its base rate); see DROPPED_TAGS. */
 export const TAGS = ["sell_high", "buy_low"] as const;
@@ -39,6 +41,10 @@ export type RegressionRow = {
   fpoePg: number | null;
   fpoePgNg: number | null;
   projection: number;
+  /** The projection's 80% range (regression_row.projection_lo / _hi, migration 0006); null
+   *  when the list has none (the 2026 week 3 live list, the 2011 backtest lists). */
+  projectionLo: number | null;
+  projectionHi: number | null;
   shrinkage: number | null;
   tag: string | null;
   tags: string[];
@@ -104,6 +110,39 @@ export function signed(x: number, digits = 1): string {
   const s = x.toFixed(digits);
   if (Number(s) === 0) return (0).toFixed(digits);
   return x > 0 ? `+${s}` : s;
+}
+
+/** An 80% range as the site writes it: (9.1, 15.62) -> "9.1–15.6"; null without both bounds. */
+export function rangeText(lo: number | null | undefined, hi: number | null | undefined): string | null {
+  if (lo === null || lo === undefined || hi === null || hi === undefined) return null;
+  return `${fmtPoints(lo)}–${fmtPoints(hi)}`;
+}
+
+/** The projection with its 80% range: "12.3 (9.1–15.6)"; the projection alone without one. */
+export function projectionText(r: Pick<RegressionRow, "projection" | "projectionLo" | "projectionHi">): string {
+  const range = rangeText(r.projectionLo, r.projectionHi);
+  return range ? `${fmtPoints(r.projection)} (${range})` : fmtPoints(r.projection);
+}
+
+/** One position's coverage check of the 80% range (published backtest rows with a range and a
+ *  final, graded outcome): how many actual rest-of-season PPGs fell inside, below, above. */
+export type RangeCoverageRow = { position: string; n: number; inside: number; below: number; above: number; first: number; last: number };
+
+/** QB, RB, WR, TE (those published) and the pooled row ("All"), each with its share inside. */
+export function coverageRows(rows: readonly RangeCoverageRow[]): (RangeCoverageRow & { coverage: number })[] {
+  const byPos = POSITION_ORDER.flatMap((p) => rows.filter((r) => r.position === p && r.n > 0));
+  if (!byPos.length) return [];
+  const sum = (k: "n" | "inside" | "below" | "above") => byPos.reduce((a, r) => a + r[k], 0);
+  const all: RangeCoverageRow = {
+    position: "All",
+    n: sum("n"),
+    inside: sum("inside"),
+    below: sum("below"),
+    above: sum("above"),
+    first: Math.min(...byPos.map((r) => r.first)),
+    last: Math.max(...byPos.map((r) => r.last)),
+  };
+  return [...byPos, all].map((r) => ({ ...r, coverage: r.inside / r.n }));
 }
 
 /** One row of regression_track_record (reports/regression_watch/backtest.csv). */

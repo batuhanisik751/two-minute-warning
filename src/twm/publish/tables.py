@@ -159,6 +159,7 @@ TABLES: dict[str, Table] = {
             ("fpoe_pg", "double precision"), ("fpoe_pg_ng", "double precision"),
             ("projection", "double precision"), ("shrinkage", "double precision"),
             ("tag", "text"), ("tags", "text[]"), ("tag_reason", "text"),
+            ("projection_lo", "double precision"), ("projection_hi", "double precision"),
         ),
         _t(
             "regression_outcome", ("season", "week", "gsis_id"), "replace",

@@ -333,7 +333,10 @@ export const regressionList = pgTable(
 /** Every universe player of each list: season-to-date points, expected points (xFP) and the
  * difference (FPOE) per game, with and without garbage time (_ng), the rest-of-season
  * projection and its shrinkage, and the tag (the first of sell_high, buy_low, legit he has;
- * `tags` lists all of them; tag_reason says why in plain English). */
+ * `tags` lists all of them; tag_reason says why in plain English). projection_lo/_hi (feature
+ * #4, migration 0006): the projection's 80% range, from the frozen backtest's per-game misses
+ * of earlier seasons at the player's position and weeks left; NULL when the list has none (a
+ * live list scored before the feature, the 2011 backtest lists: no earlier season). */
 export const regressionRow = pgTable(
   "regression_row",
   {
@@ -359,6 +362,8 @@ export const regressionRow = pgTable(
     tag: text("tag"),
     tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
     tagReason: text("tag_reason"),
+    projectionLo: doublePrecision("projection_lo"),
+    projectionHi: doublePrecision("projection_hi"),
   },
   (t) => [
     primaryKey({ columns: [t.season, t.week, t.kind, t.gsisId] }),
@@ -378,6 +383,10 @@ export const regressionRow = pgTable(
       sql`${t.tags} <@ array['sell_high', 'buy_low', 'legit']::text[] and (${t.tag} is null) = (cardinality(${t.tags}) = 0)`,
     ),
     check("regression_row_games_check", sql`${t.games} >= 1`),
+    check(
+      "regression_row_range_check",
+      sql`(${t.projectionLo} is null) = (${t.projectionHi} is null) and (${t.projectionLo} is null or ${t.projectionLo} <= ${t.projectionHi})`,
+    ),
   ],
 );
 

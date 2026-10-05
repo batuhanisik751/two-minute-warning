@@ -17,7 +17,8 @@ One run for a season and week N mirrors the Radar's weekly run
 4. **Storing**: every universe row (``module`` 'regression_watch', ``entity_type`` 'player',
    ``horizon`` = the regular-season weeks left after N (the rest of the season), ``score`` =
    projected points per game, ``rank`` within the position, ``band`` = the tag, ``reasons_json``
-   = the numbers behind it). A stored live week is never overwritten.
+   = the numbers behind it, with the projection's 80% ``range`` since feature #4:
+   :mod:`.ranges`). A stored live week is never overwritten.
 5. **Outcomes** (:func:`season_outcomes`): once a season's regular season is over, each stored
    row gets its actual rest-of-season points per game (``outcomes.y_value``, 'final').
 6. **The report** ``reports/regression_watch/weekly/<season>-W<nn>.md`` (:func:`build_report`).
@@ -199,6 +200,7 @@ def run_week(
     allow_incomplete: bool = False,
     real_clock: bool = True,
     live: Any = None,
+    misses: pl.DataFrame | None = None,
 ) -> WeeklyRun:
     """Check the week's data and make the list (nothing is stored here);
     :class:`~twm.modules.waiver_radar.weekly.NotReadyError` when data is missing and
@@ -208,7 +210,11 @@ def run_week(
     ``live``: the approved own xFP models (:func:`.production.load_pinned_xfp`), required when
     the parameters were made with the own xFP (step H6-b2): the season's plays public at the
     as-of are scored with them (nothing is fit) and replace ffopportunity's expected points in
-    the frame (:func:`.own_xfp.live_frame`; the player pages' season in progress too)."""
+    the frame (:func:`.own_xfp.live_frame`; the player pages' season in progress too).
+
+    ``misses``: the approved frozen backtest's graded misses (:func:`.ranges.pinned_misses`):
+    every row gets its 80% range (``range_lo`` / ``range_hi`` and the reasons' ``range``;
+    feature #4), from the misses of seasons before ``season`` at the list's weeks left."""
     from twm.asof import AsOfView, weekly_as_of
     from twm.modules.regression_watch.player_week import player_games_for
 
@@ -240,6 +246,10 @@ def run_week(
         names = view.sql("SELECT gsis_id, display_name AS name FROM dim_player")
     table = score_week(std, names, params, league, week)
     horizon = (last - week) if last is not None else 0
+    if misses is not None:
+        from twm.modules.regression_watch.ranges import with_ranges
+
+        table = with_ranges(table, misses, horizon)
     return WeeklyRun(season, week, as_of, now, kind, fresh, params, table, kickoff, horizon)
 
 

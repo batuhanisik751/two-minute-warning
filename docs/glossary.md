@@ -6,6 +6,14 @@ output (PROJECT_SPEC 6.3: trained on many seasons, a mild known leak in backtest
 
 ## Metrics
 
+### 80% range \*
+
+Where his rest-of-season points per game should land 8 times in 10: the projection plus how far off it was for similar players in earlier seasons. In the backtest the real result fell inside about 80% of the time at every position (the Methodology page shows each share); it says nothing about games he misses.
+
+- **Name:** `projection_range`; **unit:** points per game; **used by:** regression_watch
+- **Formula:** ppg_ros + the 10th and 90th percentiles of the frozen backtest's per-game misses (rest_of_season_ppg - ppg_ros) at his position, from lists with weeks left within 2 of his list's (else the nearest weeks left), of seasons before the list's only (walk-forward); none with fewer than 30 misses
+- **Source:** twm.modules.regression_watch.ranges
+
 ### Aggressiveness
 
 How often a coach goes for it when the numbers clearly say go.

@@ -22,6 +22,11 @@ Sources (opened read-only), with the Radar's rules (:mod:`twm.publish.collect`):
 - **tags**: the product's Sell-high and Buy-low only; the frozen backtest lists still carry D3's
   third tag, Legit, which is stripped here (:func:`shown_tags`; owner, 2026-09-30). Live lists
   published before that keep their rows (frozen): the site hides 'legit';
+- **80% ranges** (feature #4, :mod:`twm.modules.regression_watch.ranges`): a stored list's
+  rows carry theirs in the reasons (``range``; lists scored before feature #4 have none: NULL,
+  a frozen live list is never rewritten); the 'backtest' lists without one (the frozen
+  snapshot's, the season's reconstructed ones) get it here, walk-forward from the snapshot's
+  misses of earlier seasons (:func:`backtest_bounds`; the pinned files are only read);
 - **player_week_summary**'s xFP and FPOE, with and without garbage time: the own walk-forward
   xFP (step PXFP, :func:`own_player_weeks`: the pin's frozen history + the pinned season
   scored live with the pinned models).
@@ -40,6 +45,7 @@ from typing import Any
 import polars as pl
 
 from twm.modules.regression_watch.frozen import no_negative_zero
+from twm.modules.regression_watch.ranges import graded_misses
 from twm.modules.regression_watch.weekly import BAND_ORDER, DROPPED_TAG
 from twm.publish.collect import (
     ListData,
@@ -68,7 +74,9 @@ ROW_SCHEMA: dict[str, Any] = {
     "ppg_ng": pl.Float64, "xfp_pg": pl.Float64, "xfp_pg_ng": pl.Float64, "fpoe_pg": pl.Float64,
     "fpoe_pg_ng": pl.Float64, "projection": pl.Float64, "shrinkage": pl.Float64,
     "tag": pl.String, "tags": pl.List(pl.String), "tag_reason": pl.String,
+    "projection_lo": pl.Float64, "projection_hi": pl.Float64,  # the 80% range (feature #4)
 }  # fmt: skip
+BOUND_KEYS = ["season", "week", "kind", "gsis_id"]
 OUTCOME_SCHEMA: dict[str, Any] = {
     "season": pl.Int32, "week": pl.Int32, "gsis_id": pl.String, "ros_ppg": pl.Float64,
     "ros_games": pl.Int32, "label_status": pl.String,
@@ -133,6 +141,36 @@ def live_outcomes(
     ).cast(OUTCOME_SCHEMA).sort("season", "week", "gsis_id"))  # type: ignore[arg-type]  # fmt: skip
 
 
+def weeks_left(snap: pl.DataFrame, db: Path, season: int, rows: pl.DataFrame) -> pl.DataFrame:
+    """(season, week, horizon) of the chosen lists: the frozen snapshot's weeks left for its
+    seasons; ``season``'s = its last regular-season week minus the list's week (as scored)."""
+    from twm.modules.waiver_radar.weekly import last_reg_week
+
+    frozen = snap.select("season", "week", "horizon").unique()
+    cur = rows.filter(pl.col("season") == season).select("season", "week").unique()
+    last = last_reg_week(db, season) if cur.height else None
+    cur = cur.with_columns(pl.lit(None if last is None else int(last), dtype=pl.Int32).alias("h"))
+    cur = cur.select("season", "week", (pl.col("h") - pl.col("week")).alias("horizon"))
+    keys = {"season": pl.Int32, "week": pl.Int32, "horizon": pl.Int32}
+    return pl.concat([frozen.cast(keys), cur.cast(keys)]).drop_nulls()  # type: ignore[arg-type]
+
+
+def backtest_bounds(rows: pl.DataFrame, horizons: pl.DataFrame, misses: pl.DataFrame):
+    """(season, week, kind, gsis_id, projection_lo, projection_hi) of the chosen 'backtest'
+    rows (store layout): the 80% range walk-forward (:func:`twm.modules.regression_watch.ranges.
+    walk_forward`: the misses of seasons before the list's, at its weeks left)."""
+    from twm.modules.regression_watch import ranges as rg
+
+    b = rows.filter(pl.col("kind") == "backtest").select(
+        "season", "week", "kind", pl.col("entity_id").alias("gsis_id"),
+        pl.col("position").alias("rank_group"), pl.col("score").cast(pl.Float64),
+    ).join(horizons, on=["season", "week"], how="inner")  # fmt: skip
+    return rg.walk_forward(b, misses).select(
+        *BOUND_KEYS, pl.col("range_lo").alias("projection_lo"),
+        pl.col("range_hi").alias("projection_hi"),
+    )  # fmt: skip
+
+
 def shown_tags(tags: list[str] | None) -> list[str]:
     """A row's tags as published: the product's (Sell-high, Buy-low), in band order; Legit, which
     the frozen backtest lists still carry, is stripped (owner, 2026-09-30)."""
@@ -161,10 +199,13 @@ def tag_reason(r: dict[str, Any]) -> str | None:
     return " ".join(texts) or None
 
 
-def regression_lists(rows: pl.DataFrame, teams: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
+def regression_lists(
+    rows: pl.DataFrame, teams: pl.DataFrame, bounds: pl.DataFrame | None = None
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     """(lists, rows) from the chosen rows (store layout): one list per (season, week, kind)
     with every universe player, his numbers read from the stored reasons; tags as
-    :func:`shown_tags` (a row whose band was Legit has no tag)."""
+    :func:`shown_tags` (a row whose band was Legit has no tag); the 80% range from the reasons,
+    else from ``bounds`` (:func:`backtest_bounds`), else NULL."""
     from twm.modules.regression_watch.weekly import early_note
 
     if rows.height == 0:
@@ -176,6 +217,7 @@ def regression_lists(rows: pl.DataFrame, teams: pl.DataFrame) -> tuple[pl.DataFr
     recs = [json.loads(r) for r in rows.get_column("reasons_json").to_list()]
     ng = [r.get("without_garbage_time") or {} for r in recs]
     reasons = [tag_reason(r) for r in recs]
+    stored = [r.get("range") or {} for r in recs]
     for r, s in zip(recs, rows.get_column("score").to_list(), strict=True):
         r.setdefault("projection", s)
 
@@ -203,9 +245,17 @@ def regression_lists(rows: pl.DataFrame, teams: pl.DataFrame) -> tuple[pl.DataFr
             num("shrinkage"),
             pl.Series("tags", [shown_tags(r.get("tags")) for r in recs], dtype=pl.List(pl.String)),
             pl.Series("tag_reason", reasons, dtype=pl.String),
+            num("lo", stored).alias("projection_lo"),
+            num("hi", stored).alias("projection_hi"),
         )
         .join(teams, on=["season", "week", "gsis_id"], how="left")
     )
+    if bounds is not None and bounds.height:
+        b = bounds.rename({"projection_lo": "_lo", "projection_hi": "_hi"})
+        out = out.join(b, on=BOUND_KEYS, how="left", maintain_order="left").with_columns(
+            pl.coalesce("projection_lo", "_lo").alias("projection_lo"),
+            pl.coalesce("projection_hi", "_hi").alias("projection_hi"),
+        ).drop("_lo", "_hi")  # fmt: skip
     lists = lists.select(list(LIST_SCHEMA)).cast(LIST_SCHEMA)  # type: ignore[arg-type]
     out = out.select(list(ROW_SCHEMA)).cast(ROW_SCHEMA)  # type: ignore[arg-type]
     return (lists.sort("season", "week", "kind"),
@@ -276,12 +326,14 @@ def collect_regression(
     back, snap = frozen_lists(season, created)
     rows = choose_lists(pl.concat([live, back.select(live.columns)], how="vertical_relaxed"),
                         LIST_KEY)  # fmt: skip
+    misses = graded_misses(snap["predictions"], snap["outcomes"])
+    bounds = backtest_bounds(rows, weeks_left(snap["predictions"], db, season, rows), misses)
     mine = rows.join(back.select("season", "week").unique(), on=["season", "week"], how="anti")
     keys = mine.select("season", "week", "as_of").unique()
     frozen_team = snap["predictions"].select("season", "week", pl.col("entity_id").alias(
         "gsis_id"), "team")  # fmt: skip
     teams = pl.concat([fz.teams_at(frame, keys).select(frozen_team.columns), frozen_team])
-    lists, out = regression_lists(rows, teams)
+    lists, out = regression_lists(rows, teams, bounds)
     frozen_out = snap["outcomes"].select(
         "season", "week", pl.col("entity_id").alias("gsis_id"), "ros_ppg", "ros_games",
         "label_status",

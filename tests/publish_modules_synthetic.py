@@ -119,6 +119,10 @@ def regression(
                 "xfp_pg": 9.0, "xfp_pg_ng": 8.5, "fpoe_pg": ppg - 9.0, "fpoe_pg_ng": ppg - 9.0,
                 "projection": 9.5 + 0.1 * i, "shrinkage": 0.1, "tag": tag, "tags": tags,
                 "tag_reason": f"{tag} because" if tag else None,
+                # the 80% range (feature #4): the backtest lists' only (a live list scored
+                # before the feature has none)
+                "projection_lo": None if kind == "live" else 6.5 + 0.1 * i,
+                "projection_hi": None if kind == "live" else 13.0 + 0.1 * i,
             })  # fmt: skip
     lists_df = pl.DataFrame(lists, schema=RW_LIST, orient="row")
     rows_df = pl.DataFrame(rows, schema=RW_ROW, orient="row")

@@ -4,6 +4,9 @@ import {
   DROPPED_TAGS,
   TAGS,
   backtestWeeks,
+  coverageRows,
+  projectionText,
+  rangeText,
   droppedRates,
   dropTags,
   paramNumber,
@@ -24,7 +27,8 @@ import {
 
 const r = (id: string, p: Partial<RegressionRow>): RegressionRow => ({
   gsisId: id, name: id, position: "WR", team: "AAA", teamName: "A", teamColor: null, teamColor2: null, games: 4,
-  ppg: 10, ppgNg: 9, xfpPg: 9, xfpPgNg: 8, fpoePg: 1, fpoePgNg: 1, projection: 9.5, shrinkage: 0.1,
+  ppg: 10, ppgNg: 9, xfpPg: 9, xfpPgNg: 8, fpoePg: 1, fpoePgNg: 1, projection: 9.5, projectionLo: null,
+  projectionHi: null, shrinkage: 0.1,
   tag: null, tags: [], tagReason: null, outcome: null, ...p,
 });
 
@@ -132,4 +136,26 @@ test("the backtest's as-of weeks: its lists in the published test seasons, not t
   assert.deepEqual(backtestWeeks([], null), []);
   // a test season's live list never counts
   assert.deepEqual(backtestWeeks([{ season: 2024, week: 5, kind: "live" }], { from: 2024, to: 2024 }), []);
+});
+
+test("the 80% range: '12.3 (9.1–15.6)', the projection alone without both bounds", () => {
+  assert.equal(projectionText(r("00-1", { projection: 12.34, projectionLo: 9.07, projectionHi: 15.62 })), "12.3 (9.1–15.6)");
+  assert.equal(projectionText(r("00-1", { projection: 3.0, projectionLo: -2.54, projectionHi: 9.1 })), "3.0 (-2.5–9.1)");
+  assert.equal(projectionText(r("00-1", { projection: 12.34 })), "12.3");
+  assert.equal(rangeText(9.1, null), null);
+  assert.equal(rangeText(undefined, 3), null);
+  assert.equal(rangeText(0, 0.04), "0.0–0.0");
+});
+
+test("the range's coverage check: positions in order, the pooled row summed, shares inside", () => {
+  const row = (position: string, n: number, inside: number, first = 2012, last = 2025) => ({
+    position, n, inside, below: Math.floor((n - inside) / 2), above: n - inside - Math.floor((n - inside) / 2), first, last,
+  });
+  const got = coverageRows([row("WR", 100, 81), row("QB", 50, 38, 2013), row("TE", 0, 0), row("K", 9, 9)]);
+  assert.deepEqual(got.map((x) => x.position), ["QB", "WR", "All"]);
+  assert.equal(got[0].coverage, 0.76);
+  const all = got[2];
+  assert.deepEqual([all.n, all.inside, all.below + all.above, all.first, all.last], [150, 119, 31, 2012, 2025]);
+  assert.equal(all.coverage, 119 / 150);
+  assert.deepEqual(coverageRows([]), []);
 });

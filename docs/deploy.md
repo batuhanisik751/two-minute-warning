@@ -748,7 +748,10 @@ re-checked here where possible.
   the same rule). `decisions.py` builds their rows. `web/drizzle/0004_hot_seat.sql` adds the
   Hot-Seat Meter's five tables (step H4a; the same rule); `hot_seat_lists.py` builds their
   rows. `web/drizzle/0005_board.sql` adds the Cliff board's five tables (step I2c-a; the same
-  rule); `board_lists.py` builds their rows.
+  rule); `board_lists.py` builds their rows. `web/drizzle/0006_regression_ranges.sql` adds two
+  nullable columns to `regression_row`, `projection_lo` / `projection_hi` (the projection's
+  80% range, feature #4) and a check (both NULL or lo <= hi); apply it to Neon before the first
+  publish that carries them (the publish writes the columns, so it fails without them).
 - `scripts/neon/roles.sql`, `scripts/neon/apply_roles.py`: the two Neon roles.
 - `.github/workflows/pipeline.yml`, `src/twm/pipeline/` (`schedule.py` the calendar,
   `runner.py` the stages and exit codes, `report.py` the job summary and the run's files): the

@@ -1,11 +1,11 @@
 import "server-only";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { dimPlayer, dimTeam, modelVersions, regressionList, regressionOutcome, regressionRow, regressionStability, regressionTrackRecord } from "@/db/schema";
 import { cached } from "@/lib/cache";
 import type { ListKey } from "@/lib/params";
 import type { StabilityRow } from "@/lib/stability";
-import { backtestWeeks, dropTags, testSeasons, type RegressionRow, type RegressionTrackRow } from "@/lib/regression";
+import { backtestWeeks, dropTags, testSeasons, type RangeCoverageRow, type RegressionRow, type RegressionTrackRow } from "@/lib/regression";
 
 // Regression Watch's published lists (regression_list / regression_row / regression_outcome),
 // its frozen parameters (model_versions.params) and its track record (regression_track_record).
@@ -53,6 +53,8 @@ const rowColumns = {
   fpoePg: regressionRow.fpoePg,
   fpoePgNg: regressionRow.fpoePgNg,
   projection: regressionRow.projection,
+  projectionLo: regressionRow.projectionLo,
+  projectionHi: regressionRow.projectionHi,
   shrinkage: regressionRow.shrinkage,
   tag: regressionRow.tag,
   tags: regressionRow.tags,
@@ -228,3 +230,29 @@ async function getRegressionStabilityRaw(): Promise<StabilityRow[]> {
     .orderBy(asc(regressionStability.line));
 }
 export const getRegressionStability = cached("regression.getRegressionStability", getRegressionStabilityRaw);
+
+/** The 80% range's coverage check, per position, computed from the PUBLISHED rows (nothing
+ *  typed): every backtest row with a range whose outcome is final and graded (rest-of-season
+ *  PPG not null), and how many of those PPGs fell inside [projection_lo, projection_hi]. */
+async function getRegressionRangeCoverageRaw(): Promise<RangeCoverageRow[]> {
+  const ros = regressionOutcome.rosPpg;
+  const [lo, hi] = [regressionRow.projectionLo, regressionRow.projectionHi];
+  return db()
+    .select({
+      position: regressionRow.position,
+      n: sql<number>`count(*)::int`,
+      inside: sql<number>`(count(*) filter (where ${ros} >= ${lo} and ${ros} <= ${hi}))::int`,
+      below: sql<number>`(count(*) filter (where ${ros} < ${lo}))::int`,
+      above: sql<number>`(count(*) filter (where ${ros} > ${hi}))::int`,
+      first: sql<number>`min(${regressionRow.season})::int`,
+      last: sql<number>`max(${regressionRow.season})::int`,
+    })
+    .from(regressionRow)
+    .innerJoin(
+      regressionOutcome,
+      and(eq(regressionOutcome.season, regressionRow.season), eq(regressionOutcome.week, regressionRow.week), eq(regressionOutcome.gsisId, regressionRow.gsisId)),
+    )
+    .where(and(eq(regressionRow.kind, "backtest"), eq(regressionOutcome.labelStatus, "final"), isNotNull(ros), isNotNull(lo), isNotNull(hi)))
+    .groupBy(regressionRow.position);
+}
+export const getRegressionRangeCoverage = cached("regression.getRegressionRangeCoverage", getRegressionRangeCoverageRaw);

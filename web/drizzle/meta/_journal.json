@@ -43,6 +43,13 @@
       "when": 1790965248362,
       "tag": "0005_board",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791154397811,
+      "tag": "0006_regression_ranges",
+      "breakpoints": true
     }
   ]
 }

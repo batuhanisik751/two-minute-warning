@@ -146,6 +146,9 @@ function WeekBody({ data, withGarbage, currentSeason }: { data: RegressionListDa
   const chosen = { season: header.season, week: header.week, kind: header.kind };
   const view = withGarbage ? "with garbage time" : "without garbage time";
   const label = (t: Tag) => `${tagTitle(t)}, ${seasonWeek(header.season, header.week)}, ${header.kind === "live" ? "live" : "reconstructed"}`;
+  // lists published before the 80% ranges (the 2026 week 3 live list) and the 2011 backtest
+  // lists (no earlier season to draw misses from) have none: the sentence is left out
+  const ranged = rows.some((r) => r.projectionLo !== null && r.projectionHi !== null);
   return (
     <>
       <p className="mt-2 text-sm text-muted">
@@ -192,7 +195,13 @@ function WeekBody({ data, withGarbage, currentSeason }: { data: RegressionListDa
               </h3>
             </div>
             <p className="mt-1 mb-3 text-sm text-muted">
-              {TAG_INTRO[t]} PPG, xFP/game and FPOE/game {view}; projection = the <Term name="ppg_ros">rest-of-season projection</Term> (points per game).
+              {TAG_INTRO[t]} PPG, xFP/game and FPOE/game {view}; projection = the <Term name="ppg_ros">rest-of-season projection</Term> (points per game)
+              {ranged ? (
+                <>
+                  , in brackets its <Term name="projection_range">80% range</Term>
+                </>
+              ) : null}
+              .
             </p>
             {list.length ? (
               <RegressionList rows={list} label={label(t)} withGarbage={withGarbage} />

@@ -480,6 +480,13 @@ def test_cli_scores_stores_and_writes_the_report(world, tmp_path, monkeypatch):
     assert "stored as 'backtest'" in res.output and "4 final outcomes" in res.output
     assert "Sell-high (2):" in res.output and out.read_text().startswith("# Regression Watch")
     assert pr.read_table(store, "predictions").height == 4
+    # feature #4: every stored row carries its 80% range, walk-forward from the pinned frozen
+    # backtest (seasons before 2025), at the nearest weeks left it holds (7: 17-week seasons)
+    stored = pr.read_table(store, "predictions")
+    ranges = [json.loads(t)["range"] for t in stored.get_column("reasons_json")]
+    assert all(r["level"] == 0.8 and r["lo"] < s < r["hi"] and r["seasons"] == "2011-2020"
+               and r["weeks_left"] == [7, 7] and r["misses"] >= 30
+               for r, s in zip(ranges, stored.get_column("score"), strict=True))  # fmt: skip
     early = runner.invoke(app, [*args[:5], "2", *args[6:]])  # nobody has 3 games yet
     assert early.exit_code == 0 and "no Regression Watch list this week" in early.output
     graded = runner.invoke(app, ["regression", "outcomes", "--db", str(world), "--store",

@@ -4,7 +4,7 @@ My League reads the owner's ESPN league into `data/league.duckdb` (never publish
 only when `ENABLE_MY_LEAGUE=true` and the ESPN keys are in `.env` (PROJECT_SPEC 4.3, 8.3).
 Every `twm league` command prints one line and exits with code 2 otherwise. The commands:
 `sync`, `settings-diff`, `radar`, `regret`, `report` (steps F2-F4, docs/progress.md),
-`trade` and `weekly` (below).
+`trade`, `weekly` and `journal` (below).
 
 ## Weekly routine
 
@@ -51,6 +51,57 @@ otherwise the newest stored version for that week, and the output says so, e.g. 
 Watch's projections from the previous model version mean_flat_all-77146b2e5d2169fc: the
 approved zero_flat_all-9d98d6f251ee054c has no list stored for week 3 (`uv run twm league
 weekly --week 3` scores it)". Same rule in `radar`, `report` and `trade`.
+
+## You vs the model (journal)
+
+```
+uv run twm league journal [--season S] [--week N]
+```
+
+A learning log the owner asked for (2026-10-04): his own adds, drops and lineups next to what
+the app said at the time. It counts, it never grades: one season is a tiny sample, and every
+output says so. Code: `src/twm/league/journal.py`, `commands.run_journal`; tests:
+`tests/test_league_journal.py` (synthetic league and predictions stores; the warehouse's labels
+and weekly points are passed in). It reads the league store, the predictions store and the
+warehouse, all read-only, and writes nothing; the output names NFL players (never a fantasy team
+or member id) and stays on your terminal. The weekly report (`twm league report`, so also `twm
+league weekly`) has the same journal as its "You vs the model" section, never published.
+
+- **Point in time.** Each move is compared with the newest list whose as-of is at or before the
+  move's time (ESPN's activity time, stored in UTC); a list made later is never used. One model
+  version per list, as in `radar` (above). A list stored after the move (a reconstructed list,
+  `created_at` later than the move) is marked "a list stored after the move": the numbers are
+  what the app would have shown, not what you saw. A move made before any stored list says
+  "no list stored before the move".
+- **The week of a move**: the regular-season week whose as-of window holds it (`dim_week`: after
+  the previous Tuesday 14:00 UTC as-of, up to its own), i.e. the week whose games it was made
+  for; without a warehouse, 1 + the newest Radar list week made before it. `--week N` keeps the
+  moves of week N, the must-adds of the week N-1 list and week N's lineup.
+- **Adds** (FA ADDED / WAIVER ADDED by your team): the Radar's (QB/RB/WR/TE) or the streamer's
+  (K, D/ST) rank, chance and priority, Regression Watch's Sell-high / Buy-low tag, or "not on
+  the lists". Outcome: the Radar's hit label (`y_hit`: a starter finish in his team's next 3
+  games, docs/waiver_radar.md) when final, else pending: the predictions store's final label
+  first, else the labels as they stand now in the warehouse (the outcome filling of `twm radar
+  week`); "-" off the Radar. Points for you: his points in your starting lineup (ESPN box
+  scores) in the finished weeks (lineup regret's rule) from the add's week to the week you
+  dropped him, with his starts and weeks on your roster.
+- **Drops**: the dropped player's points since the drop against the player added in the same
+  move, else your best add of that week, else "no add that week". Both from the warehouse's
+  weekly points (config/scoring.yaml, nflverse stats: your league may score a little
+  differently) over the same finished weeks; K and D/ST are not compared.
+- **Missed must-adds**: the Radar's must-adds of list week N who were free agents in the
+  league's sync of ESPN week N+1 and whom you did not add before the next as-of (7 days), with
+  their outcome. ESPN lists the free agents of the sync moment: a week synced after it ended (a
+  backfill, `twm league sync --week N`) is flagged in a note, since a player may have been
+  rostered during the week; a week without a free-agent sync is skipped (a note says so).
+- **Lineups**: per finished week, your started lineup against the decision-time best (the lineup
+  ESPN's own projections would have started), straight from `twm league regret`.
+- **So far**: counts only: adds on the lists, must-adds, hits / misses / pending; drops
+  compared and how often the dropped player outscored the add; missed must-adds by outcome;
+  lineup weeks, how often you started the decision-time best and the points lost to decisions.
+- **Limits**: moves come from ESPN's recent activity (the last 50 league actions per sync, kept
+  across syncs): sync at least weekly or older moves are lost. Trades are not reviewed (`twm
+  league trade` checks one before you make it).
 
 ## Trade checker
 

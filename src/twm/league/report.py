@@ -30,6 +30,8 @@ from pathlib import Path
 import duckdb
 
 from twm.league import store
+from twm.league.journal import Journal, JournalUnavailableError
+from twm.league.journal import build as build_journal
 from twm.league.personal import PersonalRadar, PositionList, build, scoring_note
 from twm.league.regret import RegretUnavailableError, SeasonRegret, load_season
 from twm.league.scoring_check import ScoringCheck, ScoringCheckUnavailableError, check
@@ -71,6 +73,8 @@ class ReportData:
     weeks: WeekCheck | None
     scoring_note: str | None
     notes: list[str] = field(default_factory=list)
+    journal: Journal | None = None  # "You vs the model" (twm.league.journal)
+    journal_error: str = ""
 
 
 def owner_tags(radar: PersonalRadar) -> list[TagRow]:
@@ -139,11 +143,18 @@ def gather(
     except ScoringCheckUnavailableError as e:
         scoring_error = str(e)
     slots = starting_slots(store.slot_counts(store.settings_of(con, fa.league_id, radar.season)))
+    journal, journal_error = None, ""
+    try:
+        journal = build_journal(con, predictions, warehouse, season=radar.season,
+                                pins_path=pins_path)  # fmt: skip
+    except JournalUnavailableError as e:
+        journal_error = str(e).removeprefix("My League: ")
     return ReportData(
         radar=radar, synced_at=fa.synced_at, team_name=team_name(con, fa.league_id, radar.season),
         tags=owner_tags(radar), regret=regret, regret_error=regret_error, slots=slots[0],
         scoring=scoring, scoring_error=scoring_error, settings=settings_summary(con),
         weeks=week_check(con, warehouse), scoring_note=scoring_note(con), notes=list(radar.notes),
+        journal=journal, journal_error=journal_error,
     )  # fmt: skip
 
 
@@ -415,6 +426,51 @@ def regret_section(d: ReportData) -> Raw:
     return section("regret", "Lineup regret", parts)
 
 
+def journal_section(d: ReportData) -> Raw:
+    from twm.league import journal as jr
+
+    title = "You vs the model"
+    parts: list[object] = [
+        "A learning log: your own adds, drops and lineups next to what the app said at the "
+        "time. " + jr.POINT_IN_TIME,
+    ]
+    j = d.journal
+    if j is None:
+        parts.append(para(d.journal_error or "Nothing to review yet.", "muted"))
+        return section("journal", title, parts)
+    parts += [Raw("<h3>So far</h3>"), bullets(jr.summary(j))]
+    adds = [[jr.week_label(a.week), jr.time_label(a.at), a.how, a.name, a.position,
+             a.said.text(), a.outcome, f"{a.points:.2f} ({a.started} start(s), "
+             f"{a.rostered} week(s))"] for a in j.adds]  # fmt: skip
+    drops = [[jr.week_label(x.week), jr.time_label(x.at), x.name, x.position, x.said.text(),
+              jr.points_label(x.points), f"{x.other or '-'} ({x.basis})",
+              jr.points_label(x.other_points), x.weeks] for x in j.drops]  # fmt: skip
+    missed = [[jr.week_label(x.week), x.list_week, x.name, x.position, x.rank, x.chance,
+               x.outcome] for x in j.missed]  # fmt: skip
+    weeks = [[w.week, f"{w.actual:.2f}", f"{w.decision:.2f}", f"{w.lost_decisions:+.2f}"]
+             for w in jr.lineup_weeks(j)]  # fmt: skip
+    tables = (
+        ("Adds", ["week", "when", "how", "player", "pos", "what the app said", "outcome",
+                  "points for you"], adds, {7}),
+        ("Drops", ["week", "when", "player", "pos", "what the app said", "points since",
+                   "compared with", "its points", "finished weeks"], drops, {5, 7, 8}),
+        ("Radar must-adds left on waivers", ["week", "list week", "player", "pos", "rank",
+                                             "chance", "outcome"], missed, {1, 4}),
+        ("Lineups", ["week", "started", "decision-time best", "lost to decisions"], weeks,
+         {1, 2, 3}),
+    )  # fmt: skip
+    for name, head, rows, numeric in tables:
+        parts.append(Raw(f"<h3>{esc(name)} ({len(rows)})</h3>"))
+        parts.append(table(head, rows, numeric) if rows else para("None.", "muted small"))
+    parts += [para(jr.OUTCOME, "muted small"),
+              para("Drops compare points by config/scoring.yaml from nflverse stats, the same "
+                   "finished weeks for both players (QB/RB/WR/TE). Lineups: the decision-time "
+                   "best is the lineup ESPN's own projections would have started (Lineup "
+                   "regret above).", "muted small")]  # fmt: skip
+    parts += [para(f"Note: {n}", "muted small") for n in j.notes]
+    return section("journal", title, parts)
+
+
 def _explained(r) -> str:  # noqa: ANN001 - a scoring_check.PlayerWeek
     if r.explained_by is None:
         return "not derivable from the stats we hold (a stat correction, or a rule we do not model)"
@@ -509,7 +565,8 @@ def settings_section(d: ReportData) -> Raw:
 
 SECTIONS = (("radar", "Waiver Radar"), ("streamer", "K and D/ST streamer"),
             ("drops", "Drop candidates"), ("tags", "Regression Watch on your players"),
-            ("regret", "Lineup regret"), ("scoring", "Scoring check"),
+            ("regret", "Lineup regret"), ("journal", "You vs the model"),
+            ("scoring", "Scoring check"),
             ("settings", "Settings against the config"))  # fmt: skip
 
 
@@ -538,7 +595,8 @@ def render(d: ReportData, generated: datetime, limit: int = 10) -> str:
     head += [para(f"Note: {n}", "muted small") for n in d.notes]
     nav = "".join(f'<li><a href="#{sid}">{esc(name)}</a></li>' for sid, name in SECTIONS)
     body = [radar_section(d, limit), streamer_section(d, limit), drops_section(d)]
-    body += [tags_section(d), regret_section(d), scoring_section(d), settings_section(d)]
+    body += [tags_section(d), regret_section(d), journal_section(d), scoring_section(d),
+             settings_section(d)]  # fmt: skip
     foot = para("A local report: never published, never sent anywhere. Chances and projections "
                 "are estimates from past seasons, not promises. NFL data: nflverse. League "
                 "data: ESPN (your cookies are not in this file).", "muted small")  # fmt: skip

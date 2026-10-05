@@ -236,10 +236,14 @@ def test_the_publish_and_the_pipeline_never_import_it() -> None:
     res = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
                          timeout=240, cwd=ROOT)  # fmt: skip
     assert res.returncode == 0, res.stdout + res.stderr
+    # the one allowed mention: /methodology lists every model card by file name (a doc link,
+    # no data; web/tests/unit/site.test.ts requires the whole folder)
+    card = 'file: "startsit.md"'
     for folder in ("src/twm/publish", "src/twm/pipeline", "web/lib", "web/app"):
         for f in (ROOT / folder).rglob("*"):
             if f.is_file() and f.suffix in {".py", ".ts", ".tsx"}:
-                assert "startsit" not in f.read_text(errors="ignore"), f
+                text = f.read_text(errors="ignore").replace(card, "")
+                assert "startsit" not in text, f
 
 
 def test_the_committed_pin_checks_and_a_changed_file_is_refused(tmp_path) -> None:

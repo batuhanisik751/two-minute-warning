@@ -1,0 +1,1049 @@
+{
+ "backtest": [
+  {
+   "candidate": "nothing",
+   "events": 86,
+   "mae_carry": 0.043795,
+   "mae_points": 4.506853,
+   "mae_target": 0.051281,
+   "n": 766,
+   "season": "2016",
+   "top_hit": 0.127907
+  },
+  {
+   "candidate": "nothing",
+   "events": 64,
+   "mae_carry": 0.046188,
+   "mae_points": 4.316383,
+   "mae_target": 0.051267,
+   "n": 615,
+   "season": "2017",
+   "top_hit": 0.09375
+  },
+  {
+   "candidate": "nothing",
+   "events": 76,
+   "mae_carry": 0.046232,
+   "mae_points": 4.34992,
+   "mae_target": 0.050684,
+   "n": 695,
+   "season": "2018",
+   "top_hit": 0.078947
+  },
+  {
+   "candidate": "nothing",
+   "events": 77,
+   "mae_carry": 0.043905,
+   "mae_points": 4.755036,
+   "mae_target": 0.053253,
+   "n": 691,
+   "season": "2019",
+   "top_hit": 0.103896
+  },
+  {
+   "candidate": "nothing",
+   "events": 89,
+   "mae_carry": 0.048982,
+   "mae_points": 4.477149,
+   "mae_target": 0.04904,
+   "n": 798,
+   "season": "2020",
+   "top_hit": 0.123596
+  },
+  {
+   "candidate": "nothing",
+   "events": 104,
+   "mae_carry": 0.048973,
+   "mae_points": 4.330123,
+   "mae_target": 0.0523,
+   "n": 974,
+   "season": "2021",
+   "top_hit": 0.115385
+  },
+  {
+   "candidate": "nothing",
+   "events": 78,
+   "mae_carry": 0.036739,
+   "mae_points": 4.174401,
+   "mae_target": 0.05305,
+   "n": 727,
+   "season": "2022",
+   "top_hit": 0.076923
+  },
+  {
+   "candidate": "nothing",
+   "events": 77,
+   "mae_carry": 0.043954,
+   "mae_points": 4.205574,
+   "mae_target": 0.051515,
+   "n": 738,
+   "season": "2023",
+   "top_hit": 0.142857
+  },
+  {
+   "candidate": "nothing",
+   "events": 106,
+   "mae_carry": 0.041081,
+   "mae_points": 4.180257,
+   "mae_target": 0.052996,
+   "n": 985,
+   "season": "2024",
+   "top_hit": 0.150943
+  },
+  {
+   "candidate": "nothing",
+   "events": 83,
+   "mae_carry": 0.040132,
+   "mae_points": 4.376398,
+   "mae_target": 0.054619,
+   "n": 762,
+   "season": "2025",
+   "top_hit": 0.108434
+  },
+  {
+   "candidate": "nothing",
+   "events": 840,
+   "mae_carry": 0.044046,
+   "mae_points": 4.360331,
+   "mae_target": 0.052034,
+   "n": 7751,
+   "season": "all",
+   "top_hit": 0.114286
+  },
+  {
+   "candidate": "pro_rata",
+   "events": 86,
+   "mae_carry": 0.04394,
+   "mae_points": 4.604023,
+   "mae_target": 0.054424,
+   "n": 766,
+   "season": "2016",
+   "top_hit": 0.255814
+  },
+  {
+   "candidate": "pro_rata",
+   "events": 64,
+   "mae_carry": 0.037511,
+   "mae_points": 4.350416,
+   "mae_target": 0.052299,
+   "n": 615,
+   "season": "2017",
+   "top_hit": 0.28125
+  },
+  {
+   "candidate": "pro_rata",
+   "events": 76,
+   "mae_carry": 0.040474,
+   "mae_points": 4.517926,
+   "mae_target": 0.051855,
+   "n": 695,
+   "season": "2018",
+   "top_hit": 0.184211
+  },
+  {
+   "candidate": "pro_rata",
+   "events": 77,
+   "mae_carry": 0.044753,
+   "mae_points": 4.92008,
+   "mae_target": 0.054833,
+   "n": 691,
+   "season": "2019",
+   "top_hit": 0.272727
+  },
+  {
+   "candidate": "pro_rata",
+   "events": 89,
+   "mae_carry": 0.045484,
+   "mae_points": 4.770931,
+   "mae_target": 0.054263,
+   "n": 798,
+   "season": "2020",
+   "top_hit": 0.247191
+  },
+  {
+   "candidate": "pro_rata",
+   "events": 104,
+   "mae_carry": 0.040401,
+   "mae_points": 4.499822,
+   "mae_target": 0.055442,
+   "n": 974,
+   "season": "2021",
+   "top_hit": 0.336538
+  },
+  {
+   "candidate": "pro_rata",
+   "events": 78,
+   "mae_carry": 0.03898,
+   "mae_points": 4.595282,
+   "mae_target": 0.057792,
+   "n": 727,
+   "season": "2022",
+   "top_hit": 0.230769
+  },
+  {
+   "candidate": "pro_rata",
+   "events": 77,
+   "mae_carry": 0.034859,
+   "mae_points": 4.461821,
+   "mae_target": 0.054898,
+   "n": 738,
+   "season": "2023",
+   "top_hit": 0.25974
+  },
+  {
+   "candidate": "pro_rata",
+   "events": 106,
+   "mae_carry": 0.040014,
+   "mae_points": 4.507957,
+   "mae_target": 0.055987,
+   "n": 985,
+   "season": "2024",
+   "top_hit": 0.264151
+  },
+  {
+   "candidate": "pro_rata",
+   "events": 83,
+   "mae_carry": 0.033872,
+   "mae_points": 4.521237,
+   "mae_target": 0.057694,
+   "n": 762,
+   "season": "2025",
+   "top_hit": 0.361446
+  },
+  {
+   "candidate": "pro_rata",
+   "events": 840,
+   "mae_carry": 0.040087,
+   "mae_points": 4.573741,
+   "mae_target": 0.055054,
+   "n": 7751,
+   "season": "all",
+   "top_hit": 0.271429
+  },
+  {
+   "candidate": "group",
+   "events": 86,
+   "mae_carry": 0.044068,
+   "mae_points": 4.4504,
+   "mae_target": 0.050344,
+   "n": 766,
+   "season": "2016",
+   "top_hit": 0.093023
+  },
+  {
+   "candidate": "group",
+   "events": 64,
+   "mae_carry": 0.044128,
+   "mae_points": 4.29981,
+   "mae_target": 0.050395,
+   "n": 615,
+   "season": "2017",
+   "top_hit": 0.21875
+  },
+  {
+   "candidate": "group",
+   "events": 76,
+   "mae_carry": 0.046555,
+   "mae_points": 4.445338,
+   "mae_target": 0.049626,
+   "n": 695,
+   "season": "2018",
+   "top_hit": 0.157895
+  },
+  {
+   "candidate": "group",
+   "events": 77,
+   "mae_carry": 0.044489,
+   "mae_points": 4.738388,
+   "mae_target": 0.051161,
+   "n": 691,
+   "season": "2019",
+   "top_hit": 0.220779
+  },
+  {
+   "candidate": "group",
+   "events": 89,
+   "mae_carry": 0.049612,
+   "mae_points": 4.560332,
+   "mae_target": 0.048704,
+   "n": 798,
+   "season": "2020",
+   "top_hit": 0.179775
+  },
+  {
+   "candidate": "group",
+   "events": 104,
+   "mae_carry": 0.047886,
+   "mae_points": 4.470511,
+   "mae_target": 0.052308,
+   "n": 974,
+   "season": "2021",
+   "top_hit": 0.192308
+  },
+  {
+   "candidate": "group",
+   "events": 78,
+   "mae_carry": 0.035299,
+   "mae_points": 4.313518,
+   "mae_target": 0.053254,
+   "n": 727,
+   "season": "2022",
+   "top_hit": 0.141026
+  },
+  {
+   "candidate": "group",
+   "events": 77,
+   "mae_carry": 0.041609,
+   "mae_points": 4.449236,
+   "mae_target": 0.051457,
+   "n": 738,
+   "season": "2023",
+   "top_hit": 0.142857
+  },
+  {
+   "candidate": "group",
+   "events": 106,
+   "mae_carry": 0.038713,
+   "mae_points": 4.211271,
+   "mae_target": 0.05108,
+   "n": 985,
+   "season": "2024",
+   "top_hit": 0.264151
+  },
+  {
+   "candidate": "group",
+   "events": 83,
+   "mae_carry": 0.038818,
+   "mae_points": 4.481718,
+   "mae_target": 0.053209,
+   "n": 762,
+   "season": "2025",
+   "top_hit": 0.228916
+  },
+  {
+   "candidate": "group",
+   "events": 840,
+   "mae_carry": 0.043131,
+   "mae_points": 4.437258,
+   "mae_target": 0.051188,
+   "n": 7751,
+   "season": "all",
+   "top_hit": 0.185714
+  },
+  {
+   "candidate": "role",
+   "events": 86,
+   "mae_carry": 0.042203,
+   "mae_points": 4.422544,
+   "mae_target": 0.050239,
+   "n": 766,
+   "season": "2016",
+   "top_hit": 0.162791
+  },
+  {
+   "candidate": "role",
+   "events": 64,
+   "mae_carry": 0.040288,
+   "mae_points": 4.246707,
+   "mae_target": 0.049964,
+   "n": 615,
+   "season": "2017",
+   "top_hit": 0.34375
+  },
+  {
+   "candidate": "role",
+   "events": 76,
+   "mae_carry": 0.043956,
+   "mae_points": 4.422712,
+   "mae_target": 0.049393,
+   "n": 695,
+   "season": "2018",
+   "top_hit": 0.342105
+  },
+  {
+   "candidate": "role",
+   "events": 77,
+   "mae_carry": 0.042142,
+   "mae_points": 4.696643,
+   "mae_target": 0.050732,
+   "n": 691,
+   "season": "2019",
+   "top_hit": 0.220779
+  },
+  {
+   "candidate": "role",
+   "events": 89,
+   "mae_carry": 0.045146,
+   "mae_points": 4.505036,
+   "mae_target": 0.04901,
+   "n": 798,
+   "season": "2020",
+   "top_hit": 0.292135
+  },
+  {
+   "candidate": "role",
+   "events": 104,
+   "mae_carry": 0.043302,
+   "mae_points": 4.400395,
+   "mae_target": 0.051671,
+   "n": 974,
+   "season": "2021",
+   "top_hit": 0.346154
+  },
+  {
+   "candidate": "role",
+   "events": 78,
+   "mae_carry": 0.034771,
+   "mae_points": 4.293632,
+   "mae_target": 0.052814,
+   "n": 727,
+   "season": "2022",
+   "top_hit": 0.205128
+  },
+  {
+   "candidate": "role",
+   "events": 77,
+   "mae_carry": 0.037384,
+   "mae_points": 4.387051,
+   "mae_target": 0.051,
+   "n": 738,
+   "season": "2023",
+   "top_hit": 0.220779
+  },
+  {
+   "candidate": "role",
+   "events": 106,
+   "mae_carry": 0.036744,
+   "mae_points": 4.190515,
+   "mae_target": 0.050568,
+   "n": 985,
+   "season": "2024",
+   "top_hit": 0.235849
+  },
+  {
+   "candidate": "role",
+   "events": 83,
+   "mae_carry": 0.035673,
+   "mae_points": 4.416171,
+   "mae_target": 0.052334,
+   "n": 762,
+   "season": "2025",
+   "top_hit": 0.325301
+  },
+  {
+   "candidate": "role",
+   "events": 840,
+   "mae_carry": 0.040152,
+   "mae_points": 4.393169,
+   "mae_target": 0.0508,
+   "n": 7751,
+   "season": "all",
+   "top_hit": 0.269048
+  }
+ ],
+ "candidates": [
+  "nothing",
+  "pro_rata",
+  "group",
+  "role"
+ ],
+ "carry_out": [
+  "RB"
+ ],
+ "cells": [
+  {
+   "carry": 0.084876,
+   "carry_group": 0.29336,
+   "n": 206,
+   "n_group": 945,
+   "out_pos": "RB",
+   "position": "RB",
+   "role": "RB+",
+   "target": 0.110073,
+   "target_group": 0.275504
+  },
+  {
+   "carry": 0.454242,
+   "carry_group": 0.29336,
+   "n": 408,
+   "n_group": 945,
+   "out_pos": "RB",
+   "position": "RB",
+   "role": "RB2",
+   "target": 0.405479,
+   "target_group": 0.275504
+  },
+  {
+   "carry": 0.231284,
+   "carry_group": 0.29336,
+   "n": 331,
+   "n_group": 945,
+   "out_pos": "RB",
+   "position": "RB",
+   "role": "RB3",
+   "target": 0.223656,
+   "target_group": 0.275504
+  },
+  {
+   "carry": 0.000958,
+   "carry_group": 0.000548,
+   "n": 291,
+   "n_group": 1117,
+   "out_pos": "RB",
+   "position": "TE",
+   "role": "TE+",
+   "target": 0.048849,
+   "target_group": 0.038837
+  },
+  {
+   "carry": 0.001003,
+   "carry_group": 0.000548,
+   "n": 423,
+   "n_group": 1117,
+   "out_pos": "RB",
+   "position": "TE",
+   "role": "TE1",
+   "target": 0.084153,
+   "target_group": 0.038837
+  },
+  {
+   "carry": -0.000229,
+   "carry_group": 0.000548,
+   "n": 403,
+   "n_group": 1117,
+   "out_pos": "RB",
+   "position": "TE",
+   "role": "TE2",
+   "target": -0.015675,
+   "target_group": 0.038837
+  },
+  {
+   "carry": 0.007478,
+   "carry_group": 0.003398,
+   "n": 232,
+   "n_group": 1880,
+   "out_pos": "RB",
+   "position": "WR",
+   "role": "WR+",
+   "target": 0.05961,
+   "target_group": 0.018079
+  },
+  {
+   "carry": 0.001148,
+   "carry_group": 0.003398,
+   "n": 424,
+   "n_group": 1880,
+   "out_pos": "RB",
+   "position": "WR",
+   "role": "WR1",
+   "target": -0.156853,
+   "target_group": 0.018079
+  },
+  {
+   "carry": 0.004794,
+   "carry_group": 0.003398,
+   "n": 424,
+   "n_group": 1880,
+   "out_pos": "RB",
+   "position": "WR",
+   "role": "WR2",
+   "target": 0.001632,
+   "target_group": 0.018079
+  },
+  {
+   "carry": 0.003103,
+   "carry_group": 0.003398,
+   "n": 419,
+   "n_group": 1880,
+   "out_pos": "RB",
+   "position": "WR",
+   "role": "WR3",
+   "target": 0.117145,
+   "target_group": 0.018079
+  },
+  {
+   "carry": 0.002048,
+   "carry_group": 0.003398,
+   "n": 381,
+   "n_group": 1880,
+   "out_pos": "RB",
+   "position": "WR",
+   "role": "WR4",
+   "target": 0.095126,
+   "target_group": 0.018079
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 26,
+   "n_group": 259,
+   "out_pos": "TE",
+   "position": "RB",
+   "role": "RB+",
+   "target": -0.010028,
+   "target_group": 0.005685
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 89,
+   "n_group": 259,
+   "out_pos": "TE",
+   "position": "RB",
+   "role": "RB1",
+   "target": -0.010848,
+   "target_group": 0.005685
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 82,
+   "n_group": 259,
+   "out_pos": "TE",
+   "position": "RB",
+   "role": "RB2",
+   "target": 0.012372,
+   "target_group": 0.005685
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 62,
+   "n_group": 259,
+   "out_pos": "TE",
+   "position": "RB",
+   "role": "RB3",
+   "target": 0.028644,
+   "target_group": 0.005685
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 105,
+   "n_group": 192,
+   "out_pos": "TE",
+   "position": "TE",
+   "role": "TE+",
+   "target": 0.122503,
+   "target_group": 0.186241
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 87,
+   "n_group": 192,
+   "out_pos": "TE",
+   "position": "TE",
+   "role": "TE2",
+   "target": 0.262121,
+   "target_group": 0.186241
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 43,
+   "n_group": 390,
+   "out_pos": "TE",
+   "position": "WR",
+   "role": "WR+",
+   "target": 0.107284,
+   "target_group": 0.111814
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 89,
+   "n_group": 390,
+   "out_pos": "TE",
+   "position": "WR",
+   "role": "WR1",
+   "target": 0.145569,
+   "target_group": 0.111814
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 89,
+   "n_group": 390,
+   "out_pos": "TE",
+   "position": "WR",
+   "role": "WR2",
+   "target": 0.120559,
+   "target_group": 0.111814
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 89,
+   "n_group": 390,
+   "out_pos": "TE",
+   "position": "WR",
+   "role": "WR3",
+   "target": 0.104144,
+   "target_group": 0.111814
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 80,
+   "n_group": 390,
+   "out_pos": "TE",
+   "position": "WR",
+   "role": "WR4",
+   "target": 0.076929,
+   "target_group": 0.111814
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 80,
+   "n_group": 1037,
+   "out_pos": "WR",
+   "position": "RB",
+   "role": "RB+",
+   "target": -0.000504,
+   "target_group": 0.026978
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 369,
+   "n_group": 1037,
+   "out_pos": "WR",
+   "position": "RB",
+   "role": "RB1",
+   "target": 0.028025,
+   "target_group": 0.026978
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 355,
+   "n_group": 1037,
+   "out_pos": "WR",
+   "position": "RB",
+   "role": "RB2",
+   "target": 0.046555,
+   "target_group": 0.026978
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 233,
+   "n_group": 1037,
+   "out_pos": "WR",
+   "position": "RB",
+   "role": "RB3",
+   "target": 0.006603,
+   "target_group": 0.026978
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 293,
+   "n_group": 1017,
+   "out_pos": "WR",
+   "position": "TE",
+   "role": "TE+",
+   "target": 0.029075,
+   "target_group": 0.05662
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 368,
+   "n_group": 1017,
+   "out_pos": "WR",
+   "position": "TE",
+   "role": "TE1",
+   "target": 0.097421,
+   "target_group": 0.05662
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 356,
+   "n_group": 1017,
+   "out_pos": "WR",
+   "position": "TE",
+   "role": "TE2",
+   "target": 0.037441,
+   "target_group": 0.05662
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 322,
+   "n_group": 1380,
+   "out_pos": "WR",
+   "position": "WR",
+   "role": "WR+",
+   "target": 0.153334,
+   "target_group": 0.177583
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 369,
+   "n_group": 1380,
+   "out_pos": "WR",
+   "position": "WR",
+   "role": "WR2",
+   "target": 0.150887,
+   "target_group": 0.177583
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 362,
+   "n_group": 1380,
+   "out_pos": "WR",
+   "position": "WR",
+   "role": "WR3",
+   "target": 0.184445,
+   "target_group": 0.177583
+  },
+  {
+   "carry": 0.0,
+   "carry_group": 0.0,
+   "n": 327,
+   "n_group": 1380,
+   "out_pos": "WR",
+   "position": "WR",
+   "role": "WR4",
+   "target": 0.223966,
+   "target_group": 0.177583
+  }
+ ],
+ "chosen": "role",
+ "chosen_by": "owner override of the pre-set rule (2026-10-05): the feature answers who gets the work; role beats nothing-changes on carry-share MAE (0.0402 vs 0.0440), target-share MAE (0.0508 vs 0.0520) and top-gainer hit (26.9% vs 11.4%); nothing-changes wins pooled points MAE 4.360 vs 4.393",
+ "coverage": [
+  {
+   "above": 197,
+   "below": 209,
+   "coverage": 0.785412,
+   "inside": 1486,
+   "n": 1892,
+   "position": "RB"
+  },
+  {
+   "above": 204,
+   "below": 204,
+   "coverage": 0.797317,
+   "inside": 1605,
+   "n": 2013,
+   "position": "TE"
+  },
+  {
+   "above": 300,
+   "below": 396,
+   "coverage": 0.774026,
+   "inside": 2384,
+   "n": 3080,
+   "position": "WR"
+  },
+  {
+   "above": 701,
+   "below": 809,
+   "coverage": 0.783822,
+   "inside": 5475,
+   "n": 6985,
+   "position": "all"
+  }
+ ],
+ "event_rule": {
+  "left_statuses": [
+   "CUT",
+   "TRD",
+   "RET",
+   "UFA",
+   "RFA"
+  ],
+  "min_base_games": 2,
+  "min_window_games": 2,
+  "positions": [
+   "RB",
+   "WR",
+   "TE"
+  ],
+  "rb_carry_share": 0.45,
+  "role_cap": {
+   "RB": 3,
+   "TE": 2,
+   "WR": 4
+  },
+  "target_share": 0.2,
+  "window": 4
+ },
+ "events": [
+  {
+   "events": 511,
+   "gone_status": 7,
+   "kept": 516,
+   "multi": 87,
+   "no_roster_row": 43,
+   "out_pos": "RB",
+   "sat": 566,
+   "single": 424,
+   "teammate_rows": 4655
+  },
+  {
+   "events": 462,
+   "gone_status": 2,
+   "kept": 477,
+   "multi": 93,
+   "no_roster_row": 45,
+   "out_pos": "WR",
+   "sat": 524,
+   "single": 369,
+   "teammate_rows": 4195
+  },
+  {
+   "events": 106,
+   "gone_status": 0,
+   "kept": 106,
+   "multi": 17,
+   "no_roster_row": 7,
+   "out_pos": "TE",
+   "sat": 113,
+   "single": 89,
+   "teammate_rows": 981
+  },
+  {
+   "events": 984,
+   "gone_status": 9,
+   "kept": 1099,
+   "multi": 102,
+   "no_roster_row": 95,
+   "out_pos": "all",
+   "sat": 1203,
+   "single": 882,
+   "teammate_rows": 9053
+  }
+ ],
+ "format": 1,
+ "model_version": "alloc-a9b857bb4f1b6a00",
+ "module": "teammate_out",
+ "path": [
+  "nothing"
+ ],
+ "ppo_mean": {
+  "RB": 0.826775,
+  "TE": 1.733246,
+  "WR": 1.695241
+ },
+ "ppo_pseudo": 20.0,
+ "pseudo_count": 20.0,
+ "ranges": {
+  "cells": [
+   {
+    "band": "12+",
+    "hi": 10.553863,
+    "lo": -11.956153,
+    "n": 498,
+    "position": "RB"
+   },
+   {
+    "band": "6-12",
+    "hi": 10.378852,
+    "lo": -6.996725,
+    "n": 666,
+    "position": "RB"
+   },
+   {
+    "band": "<6",
+    "hi": 5.444897,
+    "lo": -3.589281,
+    "n": 939,
+    "position": "RB"
+   },
+   {
+    "band": "all",
+    "hi": 8.343356,
+    "lo": -7.060614,
+    "n": 2103,
+    "position": "RB"
+   },
+   {
+    "band": "12+",
+    "hi": 7.161781,
+    "lo": -10.402639,
+    "n": 125,
+    "position": "TE"
+   },
+   {
+    "band": "6-12",
+    "hi": 8.469412,
+    "lo": -6.536337,
+    "n": 471,
+    "position": "TE"
+   },
+   {
+    "band": "<6",
+    "hi": 4.899598,
+    "lo": -2.935016,
+    "n": 1620,
+    "position": "TE"
+   },
+   {
+    "band": "all",
+    "hi": 5.856757,
+    "lo": -4.237679,
+    "n": 2216,
+    "position": "TE"
+   },
+   {
+    "band": "12+",
+    "hi": 10.325147,
+    "lo": -11.982628,
+    "n": 788,
+    "position": "WR"
+   },
+   {
+    "band": "6-12",
+    "hi": 8.654007,
+    "lo": -7.354135,
+    "n": 1153,
+    "position": "WR"
+   },
+   {
+    "band": "<6",
+    "hi": 6.028492,
+    "lo": -4.230968,
+    "n": 1491,
+    "position": "WR"
+   },
+   {
+    "band": "all",
+    "hi": 8.178643,
+    "lo": -7.459973,
+    "n": 3432,
+    "position": "WR"
+   }
+  ],
+  "level": 0.8,
+  "min_misses": 30,
+  "point_bands": [
+   6.0,
+   12.0
+  ],
+  "q_hi": 0.9,
+  "q_lo": 0.1
+ },
+ "rule": "from 'nothing', the next candidate (pro_rata, group, role) replaces the choice only if its pooled PPR-points MAE is lower and lower in at least 6 test seasons",
+ "rule_choice": "nothing",
+ "season": 2026,
+ "test_seasons": [
+  2016,
+  2017,
+  2018,
+  2019,
+  2020,
+  2021,
+  2022,
+  2023,
+  2024,
+  2025
+ ],
+ "train_seasons": "2013-2025"
+}

@@ -109,7 +109,8 @@ def test_a_full_run_in_season(tmp_path: Path) -> None:
     assert fake.stages() == ["ingest", "build", "dataset", "backtest", "score", "streamer_dataset",
                              "streamer_backtest", "regression_backtest", "streamer_score",
                              "regression_score", "decisions_backtest", "decisions",
-                             "hotseat_score", "questionable", "publish"]  # fmt: skip
+                             "hotseat_score", "questionable", "teammate_out",
+                             "publish"]  # fmt: skip
     assert fake.args("ingest") == [["ingest", "--start", "2026", "--force"]]
     # Regression Watch's backtest lists are frozen: the job's warehouse still starts in 2012
     assert fake.args("build") == [["build", "--start", "2012", "--end", "2026"]]
@@ -151,7 +152,7 @@ def test_a_full_run_in_season(tmp_path: Path) -> None:
              "export", "streamer_dataset", "streamer_backtest", "regression_backtest",
              "streamer_score", "streamer_export", "regression_score", "regression_export",
              "decisions_backtest", "decisions", "hotseat_score", "hotseat_export",
-             "board_score", "questionable", "publish"]  # fmt: skip
+             "board_score", "questionable", "teammate_out", "publish"]  # fmt: skip
     assert [s.name for s in res.stages] == order
     assert res.stage("board_score").status == "skipped"  # step I6b: outside its window
     assert res.week == 3 and res.list_kind == "live" and res.publish == "published"
@@ -214,8 +215,9 @@ def test_the_streamer_and_regression_watch_follow_the_same_not_ready_rules(
     res = run(fake, tmp_path / "a", now="2026-09-29T15:20")
     assert res.exit_code == rn.EXIT_OK and res.status == "warning" and res.score == "scored"
     assert res.modules["streamer"]["score"] == "not_ready"
-    assert fake.stages()[-6:] == ["regression_score", "decisions_backtest", "decisions",
-                                  "hotseat_score", "questionable", "publish"]  # fmt: skip
+    assert fake.stages()[-7:] == ["regression_score", "decisions_backtest", "decisions",
+                                  "hotseat_score", "questionable", "teammate_out",
+                                  "publish"]  # fmt: skip
     assert res.stage("streamer_export") is None
     assert any(w.startswith("streamer: week 3's data has not fully arrived") for w in res.warnings)
     # the last attempt: late (exit code 3), still published once
@@ -301,7 +303,8 @@ def test_no_list_due_still_refreshes_and_publishes(tmp_path: Path) -> None:
     assert res.exit_code == 0 and res.week is None and "score" not in fake.stages()
     assert "publish" in fake.stages() and "window closed" in res.plan
     # the decisions are graded whether or not a list is due (fresh games every night)
-    assert fake.stages()[-4:] == ["decisions_backtest", "decisions", "questionable", "publish"]
+    assert fake.stages()[-5:] == ["decisions_backtest", "decisions", "questionable",
+                                  "teammate_out", "publish"]  # fmt: skip
 
 
 def test_github_outputs_summary_and_annotations(tmp_path: Path, capsys) -> None:
@@ -425,7 +428,7 @@ def test_the_hot_seat_end_of_season_snapshot_is_scored_once_due_before_black_mon
     assert res.modules["hot_seat"]["score"] == "scored" and res.modules["hot_seat"]["week"] == "18"
     summary = (tmp_path / "a" / "run" / "summary.md").read_text()
     assert "**Hot-Seat Meter:** week 18: scored" in summary
-    assert fake.stages()[-3:] == ["hotseat_score", "questionable", "publish"]
+    assert fake.stages()[-4:] == ["hotseat_score", "questionable", "teammate_out", "publish"]
     # data not arrived yet: a warning (the deadline is the last week's last Tuesday retry)
     fake = Fake(eos_due=EOS_DUE, codes={"hotseat_score": rn.SCORE_NOT_READY})
     res = run(fake, tmp_path / "b", now=now, cron=MONDAY_CRON)

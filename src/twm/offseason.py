@@ -38,6 +38,8 @@ MODULES: dict[str, tuple[str, str]] = {
     "questionable": ("Questionable outcomes", "uv run twm questionable build; "
                      "uv run twm questionable pin"),
     "startsit": ("Start/sit odds (local)", "uv run twm league startsit-pin"),
+    "teammate_out": ("Teammate out", "uv run twm teammate_out build; uv run twm teammate_out "
+                     "pin (keep --candidate/--reason only if the owner re-approves an override)"),
 }  # fmt: skip
 HISTORY_LAG = {"board": 1}  # the board's history is in snapshot seasons (the board of S + 1)
 LABELLED_KINDS = ("in_season", "offseason")  # schedule candidates that need a label row

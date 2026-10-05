@@ -190,6 +190,15 @@ streamer_k:
       file: artifacts/production_models/streamer/backtest-logit_k-dd21dd427fddf989/model_versions.parquet
       sha256: 1572cb32b8ee310fc45b607e5e8252c925cddfee13c76fe3ffed5ca491e11967
       rows: 13
+teammate_out:
+  season: 2026
+  model_version: alloc-a9b857bb4f1b6a00
+  file: artifacts/production_models/teammate_out/alloc-a9b857bb4f1b6a00.json
+  sha256: 3f4bbe69e1dac7d22d77628a11bba00043cea00cc36eaacd1379928ea5180d53
+  model: alloc
+  approved: '2026-10-05'
+  backtest:
+    seasons: 2016-2025
 waiver_radar:
   season: 2026
   model_version: logit-5828a082c9e09093

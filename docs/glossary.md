@@ -30,6 +30,14 @@ How often a coach goes for it when the numbers clearly say go.
 - **Formula:** clear fourth downs where going for it was best AND the coach went / clear fourth downs where going for it was best (the go rate when go was clearly best)
 - **Source:** twm.modules.decisions.coach
 
+### Allocation
+
+How much of the missing starter's work a teammate in that role took on average: 0.46 means the backup RB got about 46% of the RB1's carries.
+
+- **Name:** `allocation`; **unit:** share of the vacated share; **used by:** teammate_out
+- **Formula:** over past single-starter-out games (2013 on): sum of a role's share changes (game share minus his baseline share) / sum of the vacated shares; shrunk toward its position group with 20 teammate-games; carries only when a RB is out
+- **Source:** twm.modules.teammate_out (frozen table, docs/teammate_out.md)
+
 ### Average FPOE per game (prior) \*
 
 The value a shrunk FPOE/game is pulled toward when shrinking toward the position average instead of zero.
@@ -554,6 +562,14 @@ A player's fantasy points divided by the games he played: what he scores in a ty
 - **Formula:** fantasy points (config/scoring.yaml) summed over the games counted / the number of those games (each page says which games: e.g. this season so far, or last season)
 - **Source:** fact_player_week (twm.scoring.score_sql)
 
+### Points per opportunity
+
+How much he scores with each carry or target; more work times this gives the predicted points.
+
+- **Name:** `points_per_opportunity`; **unit:** PPR points per carry or target; **used by:** teammate_out
+- **Formula:** his PPR points / (carries + targets) over his baseline games, with 20 opportunities at his position's past average added
+- **Source:** twm.modules.teammate_out (frozen table, docs/teammate_out.md)
+
 ### Precision@10
 
 The share of a list's top 10 who became a fantasy starter soon (a hit). If you had picked up the top 10 at a position that week, it is the share that would have given you a starter week. The track record averages it over every weekly list.
@@ -729,6 +745,14 @@ How often a two-point try succeeds.
 - **Name:** `two_point_rate`; **unit:** share (0-1); **used by:** decisions
 - **Formula:** successful two-point tries / tries in the last 5 seasons before S
 - **Source:** twm.modules.decisions.tries
+
+### Vacated share
+
+The part of his team's running plays (passes) the missing starter usually gets: the work that is up for grabs.
+
+- **Name:** `vacated_share`; **unit:** share (0-1); **used by:** teammate_out
+- **Formula:** the absent starter's mean carry (target) share in the team's games this season in which he played (summed when several starters are out)
+- **Source:** twm.modules.teammate_out (frozen table, docs/teammate_out.md)
 
 ### WP if going for it
 
@@ -997,7 +1021,7 @@ Mileage: wear accumulated over a career.
 
 The share of his team's running plays given to a player: the running-back version of target share.
 
-- **Name:** `carry_share`; **unit:** share (0-1); **used by:** waiver_radar, regression_watch
+- **Name:** `carry_share`; **unit:** share (0-1); **used by:** waiver_radar, regression_watch, teammate_out
 - **Formula:** player carries / team carries in that game (fact_player_week.carries / fact_team_week.carries; 0 when the team had no carry)
 - **Source:** fact_player_week.carries, fact_team_week.carries
 - **Verified:** team carries equal the sum of the team's player carries on all 6,814 regular-season team-games 2013-2025; player carries equal his play-by-play runs and kneels without two-point tries on 99.996% of player-games
@@ -2109,7 +2133,7 @@ Interceptions and recovered fumbles: both score for a team defense.
 
 The share of his team's passes thrown to a player. Targets are the raw material of receiving points.
 
-- **Name:** `target_share`; **unit:** share (0-1); **used by:** waiver_radar, regression_watch
+- **Name:** `target_share`; **unit:** share (0-1); **used by:** waiver_radar, regression_watch, teammate_out
 - **Formula:** player targets / team targets in that game (nflverse player_stats)
 - **Source:** fact_player_week.target_share
 - **Verified:** equals targets / (sum of targets of the player's team that week) on 358,395 of 358,434 player-weeks 2006-2026
@@ -2882,6 +2906,14 @@ A player who scores far above his opportunity usually comes back down; one who s
 - **Name:** `regression_to_the_mean`; **unit:** -; **used by:** regression_watch
 - **Formula:** extreme results drift back toward the average when luck made them extreme
 
+### Starter out
+
+One of the team's main ball carriers or pass catchers misses the game, so his carries and targets go to someone else.
+
+- **Name:** `starter_out`; **unit:** event (team game); **used by:** teammate_out
+- **Formula:** a RB with a carry share of 45%+ or a WR/TE with a target share of 20%+ over the games he played among his team's previous 4 (at least 2) who takes no offensive snap while still on the team (traded, released and retired players do not count); live: Out or Doubtful on the week's injury report, or on a reserve list (IR, PUP ...)
+- **Source:** fact_snaps, fact_player_week, fact_team_week, fact_roster_week, fact_injury_report
+
 ### Streaming pool
 
 The kickers and team defenses who are probably still on waivers: those ranked low both by the experts before the season and by points per game so far. It is an estimate, the same kind as the Waiver Radar's candidate pool, because past waiver wires are not public.
@@ -2913,6 +2945,14 @@ Teams are shown by today's franchise code and name, also for past seasons: a fra
 - **Name:** `current_franchise`; **unit:** team code; **used by:** shared
 - **Formula:** every team column holds today's franchise code (OAK -> LV, SD -> LAC, STL -> LA, LAR -> LA), with today's name
 - **Source:** dim_team.current_abbr
+
+### Teammate role
+
+Where the teammate stands in line: with the WR1 out, the next receiver is 'WR2'.
+
+- **Name:** `teammate_role`; **unit:** label (RB2, WR3, TE1 ...); **used by:** teammate_out
+- **Formula:** position + usage rank (baseline carry share + target share, then snap share) among the teammates who play; the absent starters of his position count first; deeper than RB3 / WR4 / TE2 is '<pos>+'
+- **Source:** twm.modules.teammate_out.history
 
 ### Toss-up
 

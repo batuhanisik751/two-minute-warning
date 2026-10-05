@@ -15,6 +15,7 @@ from twm.modules.hot_seat import production_cli as _hot_seat_pins  # noqa: F401 
 from twm.modules.hot_seat.cli import hotseat_app
 from twm.modules.questionable.cli import questionable_app
 from twm.modules.streamer.cli import streamer_app
+from twm.modules.teammate_out.cli import teammate_out_app
 from twm.offseason_cli import offseason_app
 from twm.timemachine.cli import timemachine_app
 
@@ -333,6 +334,7 @@ app.add_typer(board_app, name="board")  # I1b: Cliff & Breakout (src/twm/modules
 app.add_typer(timemachine_app, name="timemachine")  # I3a: reproducibility check
 app.add_typer(offseason_app, name="offseason")  # I6b: the yearly routine (docs/offseason.md)
 app.add_typer(questionable_app, name="questionable")  # feature #1 (docs/questionable.md)
+app.add_typer(teammate_out_app, name="teammate_out")  # feature #5 (docs/teammate_out.md)
 
 
 def _warehouse_or_exit(db: Path | None) -> Path:
@@ -2223,7 +2225,7 @@ def model_check(
     module: str = typer.Argument(
         "all",
         help="Module: waiver_radar, streamer, regression_watch, decisions, hot_seat, board, "
-        "questionable, or all (every pinned module).",
+        "questionable, teammate_out, or all (every pinned module).",
     ),
     season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
     evaluation_csv: Path = typer.Option(
@@ -2271,6 +2273,11 @@ def model_check(
         from twm.modules.questionable.cli import check_pin as check_questionable_pin
 
         check_questionable_pin(chosen)
+        return
+    if module.strip().lower().replace("-", "_") == "teammate_out":  # feature #5
+        from twm.modules.teammate_out.cli import check_pin as check_teammate_out_pin
+
+        check_teammate_out_pin(chosen)
         return
     if module.strip().lower() == "board":  # I2c-a: the board's models + frozen backtest
         from twm.modules.board.production_cli import check_pin as check_board_pin
@@ -2329,6 +2336,10 @@ def model_check(
         from twm.modules.startsit.cli import check_pin as check_startsit_pin
 
         check_startsit_pin(chosen)
+    if module.strip().lower() == "all" and "teammate_out" in pins.read_pins():
+        from twm.modules.teammate_out.cli import check_pin as check_teammate_out_pin
+
+        check_teammate_out_pin(chosen)
 
 
 @model_app.command("restore-backtest")

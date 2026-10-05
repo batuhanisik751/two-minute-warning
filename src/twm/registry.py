@@ -39,6 +39,7 @@ MODULES = (
     "hot_seat",
     "board",
     "questionable",
+    "teammate_out",
 )
 _NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 # Placeholders a reason template may use (C6, twm.modules.waiver_radar.reasons, fills them
@@ -1805,6 +1806,86 @@ def _questionable_entries() -> list[Entry]:
     ]
 
 
+def _teammate_out_entries() -> list[Entry]:
+    """Feature #5 (twm.modules.teammate_out, docs/teammate_out.md): the starter-out event
+    and the numbers the Teammate-out list shows."""
+    from twm.modules.teammate_out import history as hs
+    from twm.modules.teammate_out import table as tb
+
+    mods = ("teammate_out",)
+    src = "twm.modules.teammate_out (frozen table, docs/teammate_out.md)"
+    return [
+        Entry(
+            name="starter_out",
+            title="Starter out",
+            kind="concept",
+            modules=mods,
+            unit="event (team game)",
+            formula=f"a RB with a carry share of {hs.RB_CARRY_SHARE:.0%}+ or a WR/TE with a "
+            f"target share of {hs.TARGET_SHARE:.0%}+ over the games he played among his team's "
+            f"previous {hs.WINDOW} (at least {hs.MIN_WINDOW_GAMES}) who takes no offensive snap "
+            "while still on the team (traded, released and retired players do not count); live: "
+            "Out or Doubtful on the week's injury report, or on a reserve list (IR, PUP ...)",
+            explanation="One of the team's main ball carriers or pass catchers misses the game, "
+            "so his carries and targets go to someone else.",
+            source="fact_snaps, fact_player_week, fact_team_week, fact_roster_week, "
+            "fact_injury_report",
+        ),
+        Entry(
+            name="vacated_share",
+            title="Vacated share",
+            kind="metric",
+            modules=mods,
+            unit="share (0-1)",
+            formula="the absent starter's mean carry (target) share in the team's games this "
+            "season in which he played (summed when several starters are out)",
+            explanation="The part of his team's running plays (passes) the missing starter "
+            "usually gets: the work that is up for grabs.",
+            source=src,
+        ),
+        Entry(
+            name="allocation",
+            title="Allocation",
+            kind="metric",
+            modules=mods,
+            unit="share of the vacated share",
+            formula="over past single-starter-out games (2013 on): sum of a role's share "
+            "changes (game share minus his baseline share) / sum of the vacated shares; shrunk "
+            f"toward its position group with {tb.PSEUDO_COUNT:g} teammate-games; carries only "
+            "when a RB is out",
+            explanation="How much of the missing starter's work a teammate in that role took "
+            "on average: 0.46 means the backup RB got about 46% of the RB1's carries.",
+            source=src,
+        ),
+        Entry(
+            name="teammate_role",
+            title="Teammate role",
+            kind="concept",
+            modules=mods,
+            unit="label (RB2, WR3, TE1 ...)",
+            formula="position + usage rank (baseline carry share + target share, then snap "
+            "share) among the teammates who play; the absent starters of his position count "
+            f"first; deeper than RB{hs.ROLE_CAP['RB']} / WR{hs.ROLE_CAP['WR']} / "
+            f"TE{hs.ROLE_CAP['TE']} is '<pos>+'",
+            explanation="Where the teammate stands in line: with the WR1 out, the next "
+            "receiver is 'WR2'.",
+            source="twm.modules.teammate_out.history",
+        ),
+        Entry(
+            name="points_per_opportunity",
+            title="Points per opportunity",
+            kind="metric",
+            modules=mods,
+            unit="PPR points per carry or target",
+            formula="his PPR points / (carries + targets) over his baseline games, with "
+            f"{tb.PPO_PSEUDO:g} opportunities at his position's past average added",
+            explanation="How much he scores with each carry or target; more work times this "
+            "gives the predicted points.",
+            source=src,
+        ),
+    ]
+
+
 def _site_entries() -> list[Entry]:
     """Terms the site uses to present the modules (how to read a chance, live or reconstructed,
     the intervals, the Report Card's calls, the board's markers), moved word for word from
@@ -2576,7 +2657,7 @@ def _entries() -> list[Entry]:
             name="target_share",
             title="Target share",
             kind="feature",
-            modules=("waiver_radar", "regression_watch"),
+            modules=("waiver_radar", "regression_watch", "teammate_out"),
             unit="share (0-1)",
             formula="player targets / team targets in that game (nflverse player_stats)",
             explanation="The share of his team's passes thrown to a player. Targets are the "
@@ -2618,7 +2699,7 @@ def _entries() -> list[Entry]:
             name="carry_share",
             title="Carry share",
             kind="feature",
-            modules=("waiver_radar", "regression_watch"),
+            modules=("waiver_radar", "regression_watch", "teammate_out"),
             unit="share (0-1)",
             formula="player carries / team carries in that game (fact_player_week.carries / "
             "fact_team_week.carries; 0 when the team had no carry)",
@@ -2809,6 +2890,7 @@ def _entries() -> list[Entry]:
         *_hot_seat_entries(),
         *_board_entries(),
         *_questionable_entries(),
+        *_teammate_out_entries(),
         *_site_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(

@@ -31,6 +31,7 @@ CARD_OF_PIN = {
     "board": "board_cliff.md",
     "questionable": "questionable.md",  # feature #1: Questionable outcomes
     "startsit": "startsit.md",  # feature #2: start/sit odds (local only)
+    "teammate_out": "teammate_out.md",  # feature #5: who gains when a starter sits
 }
 HEADINGS = [
     "Purpose and intended use",

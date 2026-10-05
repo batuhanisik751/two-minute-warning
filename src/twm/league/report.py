@@ -80,6 +80,8 @@ class ReportData:
     # feature #2: twm.modules.startsit.league.StartSitSection (FantasyPros ranks: local only);
     # None = no section. Set by commands.run_report after gather.
     startsit: object | None = None
+    # feature #5: twm.modules.teammate_out.league.Section; None = no section
+    teammate_out: object | None = None
 
 
 def owner_tags(radar: PersonalRadar) -> list[TagRow]:
@@ -161,6 +163,7 @@ def gather(
         weeks=week_check(con, warehouse), scoring_note=scoring_note(con), notes=list(radar.notes),
         journal=journal, journal_error=journal_error,
         questionable=questionable_section(predictions, radar),
+        teammate_out=teammate_out_section(con, predictions, radar),
     )  # fmt: skip
 
 
@@ -171,6 +174,19 @@ def questionable_section(predictions: Path, radar: PersonalRadar) -> object | No
 
     try:
         return for_report(predictions, radar.roster, radar.season)
+    except Exception:  # noqa: BLE001 - informative only
+        return None
+
+
+def teammate_out_section(
+    con: duckdb.DuckDBPyConnection, predictions: Path, radar: PersonalRadar
+) -> object | None:
+    """Feature #5: the owner's players and the free agents who gain from the stored
+    Teammate-out list (None: no roster or no list; a broken store never breaks the report)."""
+    from twm.modules.teammate_out.league import for_report
+
+    try:
+        return for_report(con, predictions, radar.roster, radar.season)
     except Exception:  # noqa: BLE001 - informative only
         return None
 
@@ -626,6 +642,13 @@ def render(d: ReportData, generated: datetime, limit: int = 10) -> str:
 
         nav += f'<li><a href="#{Q_ID}">{esc(Q_TITLE)}</a></li>'
         body.append(q_section(d.questionable))
+    if d.teammate_out is not None:  # feature #5: who gains when a starter sits
+        from twm.modules.teammate_out.league import SECTION_ID as T_ID
+        from twm.modules.teammate_out.league import TITLE as T_TITLE
+        from twm.modules.teammate_out.league import render_section as t_section
+
+        nav += f'<li><a href="#{T_ID}">{esc(T_TITLE)}</a></li>'
+        body.append(t_section(d.teammate_out))
     foot = para("A local report: never published, never sent anywhere. Chances and projections "
                 "are estimates from past seasons, not promises. NFL data: nflverse. League "
                 "data: ESPN (your cookies are not in this file).", "muted small")  # fmt: skip

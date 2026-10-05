@@ -29,6 +29,7 @@ export const MODEL_CARDS = [
   { file: "board_cliff.md", title: "Cliff board (with the Breakout research note)" },
   { file: "questionable.md", title: "Questionable outcomes" },
   { file: "startsit.md", title: "Start/sit odds (the owner's local report only, not on this site)" },
+  { file: "teammate_out.md", title: "Teammate out (who gains when a starter sits)" },
 ] as const;
 
 export const MODEL_CARDS_INDEX = "docs/model_cards/README.md";

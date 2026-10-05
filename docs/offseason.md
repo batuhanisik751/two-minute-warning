@@ -79,6 +79,7 @@ order `twm offseason status` checks them:
 | 7 | Cliff board (`board`) | `uv run twm board backtest --snapshot preseason`; `uv run twm board pin` | snapshots 2007-(F-1), i.e. the boards of 2008-F |
 | 8 | Questionable outcomes (`questionable`) | `uv run twm questionable build` (writes `reports/questionable/*.csv`); `uv run twm questionable pin` (refused unless it reproduces them) | 2016-F |
 | 9 | Start/sit odds, local only (`startsit`) | `uv run twm league startsit-pin` (needs F's weekly FantasyPros ranks in the warehouse) | 2020-F |
+| 10 | Teammate out (`teammate_out`) | `uv run twm teammate_out build` (writes `reports/teammate_out/`); `uv run twm teammate_out pin` (refused unless it reproduces them). The 2026 pin is an owner override (`--candidate role --reason ...`, recorded as `chosen_by`): repeat it only if the owner re-approves it | 2016-F (test seasons; the cells are fit on 2013-F) |
 
 Check each command's `--help` for its season and store options before running it. The
 commands default to `current_season` (step 1.2). The Radar also has a **preview** that may run

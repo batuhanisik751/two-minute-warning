@@ -46,6 +46,11 @@
       "explanation": "His share of the deep game.",
       "formula": "his receiving air yards / his team's in his games of S"
     },
+    "allocation": {
+      "title": "Allocation",
+      "explanation": "How much of the missing starter's work a teammate in that role took on average: 0.46 means the backup RB got about 46% of the RB1's carries.",
+      "formula": "over past single-starter-out games (2013 on): sum of a role's share changes (game share minus his baseline share) / sum of the vacated shares; shrunk toward its position group with 20 teammate-games; carries only when a RB is out"
+    },
     "as_of": {
       "title": "As-of time",
       "explanation": "The moment a prediction is made. It may only use data that was public by then; the time machine replays any past as-of exactly.",
@@ -1006,6 +1011,11 @@
       "explanation": "The points he scored while the game was still in doubt. Late points in a blowout come against soft defenses and say little about next week.",
       "formula": "fantasy_points - points_garbage: the weekly stat line's points minus those scored on his garbage-time plays (fact_play.is_garbage_time)"
     },
+    "points_per_opportunity": {
+      "title": "Points per opportunity",
+      "explanation": "How much he scores with each carry or target; more work times this gives the predicted points.",
+      "formula": "his PPR points / (carries + targets) over his baseline games, with 20 opportunities at his position's past average added"
+    },
     "pos_rank_s": {
       "title": "PPG rank at his position",
       "explanation": "Where he finished; also the prior-season-rank baseline's only input.",
@@ -1386,6 +1396,11 @@
       "explanation": "Choosing between two players? This is how often a player ranked like the first outscored one ranked like the second. Under 55% it is a close call: either is a reasonable start. Local only: it uses the experts' weekly ranks, which may not be republished.",
       "formula": "P(A outscores B) for independent draws of the league points of players at A's and B's weekly expert ranks in 2020-2025 (each rank pooled with its neighbours), a tie counting one half; walk-forward checked on 2022-2025 (docs/start_sit.md)"
     },
+    "starter_out": {
+      "title": "Starter out",
+      "explanation": "One of the team's main ball carriers or pass catchers misses the game, so his carries and targets go to someone else.",
+      "formula": "a RB with a carry share of 45%+ or a WR/TE with a target share of 20%+ over the games he played among his team's previous 4 (at least 2) who takes no offensive snap while still on the team (traded, released and retired players do not count); live: Out or Doubtful on the week's injury report, or on a reserve list (IR, PUP ...)"
+    },
     "starter_threshold": {
       "title": "Weekly starter threshold",
       "explanation": "A player 'finished as a starter' in a week when he scored well enough that a typical 12-team league would have started him.",
@@ -1516,6 +1531,11 @@
       "explanation": "How often the offense gets inside the opponent's 20-yard line.",
       "formula": "the as-of team's red-zone trips / its games with play-by-play (red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's 20 or closer (pass, run, field goal, kneel, spike or a penalty snap; two-point tries excluded); stall = a trip whose drive result is not 'Touchdown')"
     },
+    "teammate_role": {
+      "title": "Teammate role",
+      "explanation": "Where the teammate stands in line: with the WR1 out, the next receiver is 'WR2'.",
+      "formula": "position + usage rank (baseline carry share + target share, then snap share) among the teammates who play; the absent starters of his position count first; deeper than RB3 / WR4 / TE2 is '<pos>+'"
+    },
     "teammate_same_pos_unavailable": {
       "title": "Teammates out at his position",
       "explanation": "How many players at his position are out.",
@@ -1605,6 +1625,11 @@
       "title": "Vacated carry share",
       "explanation": "Carries freed up by teammates who are out.",
       "formula": "as vacated_target_share, with carry_share"
+    },
+    "vacated_share": {
+      "title": "Vacated share",
+      "explanation": "The part of his team's running plays (passes) the missing starter usually gets: the work that is up for grabs.",
+      "formula": "the absent starter's mean carry (target) share in the team's games this season in which he played (summed when several starters are out)"
     },
     "vacated_target_share": {
       "title": "Vacated target share",

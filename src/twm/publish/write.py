@@ -23,7 +23,9 @@ Regression Watch) with the same code:
 6b. feature #1, when the publish carries the Questionable list (``data.questionable``): insert
    every local snapshot whose (season, week, as_of) is not in the target (append-only: never
    deleted or changed; *insert* decisions are reported, the others kept silently); its tables
-   (:data:`twm.publish.tables.QUESTIONABLE`) are replaced like the others (hash, guard);
+   (:data:`twm.publish.tables.QUESTIONABLE`) are replaced like the others (hash, guard), the
+   live record graded from every snapshot of the season the target holds after the run (the
+   published ones included: :func:`twm.publish.questionable.live_record`);
 7. append a 'success' pipeline_runs row, count the rows and measure the tables, commit.
 
 Any error rolls everything back; a 'failed' pipeline_runs row is then written in a new
@@ -43,6 +45,7 @@ from typing import Any
 
 import polars as pl
 
+from twm.publish import questionable as qn
 from twm.publish.collect import PublishData
 from twm.publish.tables import (
     DECISIONS,
@@ -707,6 +710,9 @@ def _publish(
             frames.update({n: t[n] for n in DECISIONS.replaced})
         if qd is not None:
             frames.update({n: t[n] for n in QUESTIONABLE.replaced})
+            # the live record: every snapshot of the season the target holds after this run,
+            # the published ones included (a fresh runner's store has only the night's)
+            frames["questionable_live"] = qn.live_record(qd, qn.published_rows(conn, qd.season))
         new_counts = {n: f.height for n, f in frames.items()}
         for m, (back, back_rows) in backs.items():
             new_counts[FAMILIES[m].lists] = back.height

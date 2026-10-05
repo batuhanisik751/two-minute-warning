@@ -967,7 +967,7 @@ def test_the_board_lists_follow_the_families_rules(db: tg.Target, tmp_path: Path
 def publish_questionable(target: tg.Target, inputs, store: Path, **kwargs) -> wr.PublishResult:
     from tests import publish_questionable_synthetic as pq
 
-    q_kw = {k: kwargs.pop(k) for k in ("n_out", "calibration") if k in kwargs}
+    q_kw = {k: kwargs.pop(k) for k in ("n_out", "calibration", "played") if k in kwargs}
     data = pq.add_questionable(col.collect(inputs), store, **q_kw)
     assert col.validate(data) == []
     return wr.publish(target, data, **kwargs)
@@ -1016,3 +1016,36 @@ def test_the_questionable_snapshots_are_append_only(db: tg.Target, tmp_path: Pat
     with pytest.raises(wr.PublishError, match="questionable_calibration would go from 5 to 2"):
         publish_questionable(db, syn.inputs, store, calibration=2)
     assert dump(db) == content
+
+
+def test_the_questionable_live_record_counts_the_published_snapshots(
+    db: tg.Target, tmp_path: Path
+) -> None:
+    from datetime import timedelta
+
+    from tests import publish_questionable_synthetic as pq
+
+    live = "SELECT n, predicted, actual, pending, weeks FROM questionable_live WHERE season = 2026 "
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    # night 1 publishes snapshot A (week 5): player 1's game is in, he played
+    publish_questionable(db, syn.inputs, pq.write_store(tmp_path / "a.duckdb"))
+    assert rows(db, live + "AND report_status = 'all'") == [(1, 0.65, 1.0, 2, 1)]
+    # night 2, a fresh runner: its store holds only snapshot B (week 6); week 5 is in
+    b = pq.write_store(tmp_path / "b.duckdb", (pq.FRIDAY + timedelta(days=7),), week=6)
+    played = pq.game_snaps({0: 0, 1: 40, 2: 30})
+    content = dump(db)
+    res = publish_questionable(db, syn.inputs, b, played=played, dry_run=True)
+    assert res.dry_run and dump(db) == content  # the dry run writes nothing
+    publish_questionable(db, syn.inputs, b, played=played)
+    [(n, predicted, actual, pending, weeks)] = rows(db, live + "AND report_status = 'all'")
+    assert (n, pending, weeks) == (3, 3, 1)  # A's three players graded, B's three pending
+    assert predicted == pytest.approx((0.01 + 0.65 + 0.70) / 3) and actual == pytest.approx(2 / 3)
+    assert rows(db, live + "AND report_status <> 'all' ORDER BY report_status") == [
+        (1, 0.01, 0.0, None, None), (2, 0.675, 1.0, None, None)]  # fmt: skip
+    record = rows(db, live + "ORDER BY report_status")
+    # a night with no local snapshot keeps the full record (not refused, not rewritten); a
+    # store still holding the published snapshots counts them once
+    for store in (tmp_path / "empty.duckdb", pq.write_store(b, (pq.FRIDAY,))):
+        res = publish_questionable(db, syn.inputs, store, played=played)
+        assert "questionable_live" in res.unchanged and not res.written["questionable_list"]
+        assert rows(db, live + "ORDER BY report_status") == record

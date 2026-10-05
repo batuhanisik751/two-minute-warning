@@ -98,3 +98,46 @@ def test_only_snapshots_absent_in_the_target_are_planned(tmp_path: Path) -> None
     assert [d.label for d in decisions] == ["questionable 2026-W05 as of 2026-10-10 12:00 UTC"]
     assert keys.get_column("as_of").to_list() == [later]
     assert wr.plan_snapshots(q, set())[1].height == 2
+
+
+def _frames(store: Path) -> tuple[pl.DataFrame, pl.DataFrame]:
+    return qn.snapshot_frames(wk.read_snapshots(store))
+
+
+def test_the_live_record_grades_the_published_snapshots_too(tmp_path: Path) -> None:
+    # night 1 published snapshot A (week 5); night 2 runs on a fresh runner: its store holds
+    # only snapshot B (week 6), and week 5's games are in (player 0 sat, 1 and 2 played)
+    published = _frames(pq.write_store(tmp_path / "a.duckdb"))[1].select(qn.GRADED)
+    week6 = (pq.FRIDAY + timedelta(days=7),)
+    b_lists, b_rows = _frames(pq.write_store(tmp_path / "b.duckdb", week6, week=6))
+    q = qn.QuestionableData(2026, "lookup-test", b_lists, b_rows,
+                            played=pq.game_snaps({0: 0, 1: 40, 2: 30}))  # fmt: skip
+    live = qn.live_record(q, published)
+    assert live.row(0)[:3] == (2026, "all", 3) and live.row(0)[-2:] == (3, 1)  # B: pending
+    assert live.row(0, named=True)["predicted"] == pytest.approx((0.01 + 0.65 + 0.70) / 3)
+    assert live.row(0, named=True)["actual"] == pytest.approx(2 / 3)
+    assert live.select("n", "actual").rows()[1:] == [(2, 1.0), (1, 0.0)]  # Q, D
+    # the local store alone (the bug: a fresh runner's record) knows none of A's players
+    assert qn.live_record(q, qn.no_published()).row(0)[2:] == (0, None, None, 3, 0)
+    # a night with no local snapshot keeps the full record
+    empty = qn.QuestionableData(2026, "", *_frames(tmp_path / "none.duckdb"), played=q.played)
+    assert qn.live_record(empty, published).row(0)[2:] == (3, *live.row(0)[3:5], 0, 1)
+
+
+def test_published_and_local_snapshots_are_counted_once(tmp_path: Path) -> None:
+    later = pq.FRIDAY + timedelta(hours=16)
+    rows = _frames(pq.write_store(tmp_path / "a.duckdb", (pq.FRIDAY, later)))[1]
+    published = rows.filter(pl.col("as_of") == pq.FRIDAY).select(qn.GRADED)
+    # the local store still holds the published snapshot (identical) and a new one
+    both = qn.record_snapshots(rows, published, 2026)
+    assert both.height == 6 and not both.select("as_of", "gsis_id").is_duplicated().any()
+    assert both.columns == [*qn.GRADED[:5], "kickoff_utc", *qn.GRADED[6:]]
+    assert qn.record_snapshots(rows, rows.select(qn.GRADED), 2026).height == 6
+    q = qn.QuestionableData(2026, "lookup-test", pl.DataFrame(), rows, played=pq.game_snaps())
+    assert qn.live_record(q, published).equals(qn.live_record(q, qn.no_published()))
+    # a local snapshot differing from the published one of the same as-of never counts
+    other = _frames(pq.write_store(tmp_path / "b.duckdb", shift=0.1))[1]
+    got = qn.record_snapshots(other, published, 2026)
+    assert got.get_column("play_chance").to_list() == published["play_chance"].to_list()
+    # another season's rows are not this season's record
+    assert qn.record_snapshots(rows, published, 2025).is_empty()

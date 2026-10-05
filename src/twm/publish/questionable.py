@@ -15,7 +15,10 @@ Sources (opened read-only):
   own :mod:`twm.modules.questionable.history`); each tag's total must equal the pin's
   ``status_counts`` (else the warehouse is not the one the table was built from: refused);
 - **live record** (``questionable_live``): the pinned season's graded snapshots
-  (:func:`twm.modules.questionable.weekly.summary`), per tag.
+  (:func:`twm.modules.questionable.weekly.summary`), per tag, graded with the warehouse's snap
+  counts of the season (``fact_snaps``). The publish grades every snapshot of the season the
+  target holds afterwards, the ones already published included (:func:`live_record`): the
+  nightly runner's store holds only the night's snapshot.
 
 No FantasyPros data and no league data: everything here is public.
 """
@@ -36,6 +39,11 @@ from twm.publish.tables import QUESTIONABLE, TABLES
 MODULE = "questionable"
 LIVE_STATUSES = ("all", "Questionable", "Doubtful")
 UTC_TS = pl.Datetime("us", "UTC")
+# questionable_row's columns the live record grades (weekly.grade; kickoff = kickoff_utc)
+GRADED = ("season", "week", "as_of", "gsis_id", "team", "kickoff", "report_status",
+          "play_chance")  # fmt: skip
+PLAYED = {"season": pl.Int32, "week": pl.Int32, "team": pl.String, "gsis_id": pl.String,
+          "offense_snaps": pl.Float64}  # fmt: skip
 
 
 @dataclass
@@ -51,6 +59,8 @@ class QuestionableData:
     tables: dict[str, pl.DataFrame] = field(default_factory=dict)
     versions: pl.DataFrame | None = None
     names: pl.DataFrame | None = None  # (gsis_id, name) of the snapshots' players (dim_player)
+    # the season's snap counts (weekly.read_game_snaps): grade the live record at publish
+    played: pl.DataFrame = field(default_factory=lambda: pl.DataFrame(schema=PLAYED))
 
 
 def _utc(df: pl.DataFrame, *cols: str) -> pl.DataFrame:
@@ -187,6 +197,44 @@ def live_rows(graded: pl.DataFrame, season: int) -> pl.DataFrame:
     )  # fmt: skip
 
 
+def published_rows(conn: Any, season: int) -> pl.DataFrame:
+    """The ``questionable_row`` rows of ``season`` already in the target (``conn``: an open
+    psycopg connection; reads only), the columns the live record grades (:data:`GRADED`)."""
+    cols = ", ".join(f'"{c}"' for c in GRADED)
+    got = conn.execute(f'SELECT {cols} FROM "{QUESTIONABLE.rows}" WHERE season = %s',
+                       [int(season)]).fetchall()  # fmt: skip
+    return pl.DataFrame(got, schema=no_published().schema, orient="row")
+
+
+def no_published() -> pl.DataFrame:
+    """:func:`published_rows` of a target holding no snapshot."""
+    return _empty(QUESTIONABLE.rows).select(GRADED)
+
+
+def record_snapshots(local: pl.DataFrame, published: pl.DataFrame, season: int) -> pl.DataFrame:
+    """The snapshot rows of ``season`` the live record grades (weekly.grade's layout): what
+    the target holds after the publish, i.e. the ``published`` rows plus the ``local`` ones
+    (questionable_row layout) of the snapshots not published yet. Snapshots are append-only:
+    a published (season, week, as_of) wins over a local one; no (snapshot, player) twice."""
+    key, cols, this = list(QUESTIONABLE.key), list(GRADED), pl.col("season") == int(season)
+    published, mine = published.filter(this).select(cols), local.filter(this).select(cols)
+    new = mine.join(published.select(key).unique(), on=key, how="anti")
+    both = pl.concat([published, new], how="vertical_relaxed")
+    both = both.unique([*key, "gsis_id"], keep="first", maintain_order=True)
+    return both.rename({"kickoff": "kickoff_utc"}).sort(*key, "gsis_id")
+
+
+def live_record(q: QuestionableData, published: pl.DataFrame) -> pl.DataFrame:
+    """``questionable_live`` as the target will hold it after the publish: :func:`live_rows`
+    of :func:`record_snapshots` (``q.rows`` and the target's ``published`` rows of
+    ``q.season``), graded with the season's snap counts (``q.played``)."""
+    from twm.modules.questionable import weekly as wk
+
+    snaps = record_snapshots(q.rows, published, q.season)
+    played = q.played.with_columns(pl.col("season", "week").cast(pl.Int32))
+    return live_rows(wk.grade(snaps, played), q.season)
+
+
 def collect_questionable(store: Path, warehouse: Path, season: int, now: datetime,
                          con: Any = None) -> QuestionableData:  # fmt: skip
     """Everything the module publishes (module docstring); ``con``: an open read-only
@@ -216,17 +264,20 @@ def collect_questionable(store: Path, warehouse: Path, season: int, now: datetim
                                 + "; ".join(problems) + ")")  # fmt: skip
     snaps = wk.read_snapshots(store)
     lists, rows = snapshot_frames(snaps)
-    mine = snaps.filter(pl.col("season") == int(season)) if snaps.height else snaps
-    graded = wk.grade(mine, wk.read_game_snaps(warehouse, int(season))) if mine.height else mine
+    played = wk.read_game_snaps(warehouse, int(season)).select(
+        pl.col(c).cast(t) for c, t in PLAYED.items())  # fmt: skip
     approved = datetime.fromisoformat(pin.approved).replace(tzinfo=UTC) if pin.approved else now
-    tables = {"questionable_history": history, **pin_tables(c),
-              "questionable_live": live_rows(graded, int(season))}  # fmt: skip
     names = pl.DataFrame(schema={"gsis_id": pl.String, "name": pl.String})
     if snaps.height:
         names = snaps.select("gsis_id", pl.col("player").cast(pl.String).alias("name"))
-    return QuestionableData(season=int(season), version=spec.model_version, lists=lists,
-                            rows=rows, tables=tables, names=names,
-                            versions=version_row(c, approved.astimezone(UTC)))  # fmt: skip
+    q = QuestionableData(season=int(season), version=spec.model_version, lists=lists,
+                         rows=rows, tables={"questionable_history": history, **pin_tables(c)},
+                         names=names, versions=version_row(c, approved.astimezone(UTC)),
+                         played=played)  # fmt: skip
+    # the local store's record; the publish regrades it with the target's snapshots (a fresh
+    # runner's store holds only the night's): write.publish, live_record
+    q.tables["questionable_live"] = live_record(q, no_published())
+    return q
 
 
 def problems(d: QuestionableData, teams: set[str], players: set[str],

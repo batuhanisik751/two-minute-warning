@@ -71,7 +71,9 @@ once, never deleted or changed; a fresh runner loses nothing), and its replaced 
 `questionable_history` (how often tagged players played, by tag and practice status, from the
 warehouse's 2016-2025 rows, checked against the pinned table's counts),
 `questionable_backtest` and `questionable_calibration` (the pinned table's, as
-`reports/questionable/*.csv`) and `questionable_live` (the season's graded snapshots);
+`reports/questionable/*.csv`) and `questionable_live` (the season's graded snapshots: every
+snapshot of the season the target holds after the run, the published ones included, so a
+fresh runner's store, which holds only the night's, keeps the whole record);
 `site_meta` gains `questionable_season` / `questionable_week` (the week whose games are next)
 and `questionable_latest_season` / `_week` / `_as_of` (the newest published snapshot).
 

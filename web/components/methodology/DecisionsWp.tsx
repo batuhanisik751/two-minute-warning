@@ -31,7 +31,7 @@ export default function DecisionsWp({ rows }: { rows: TrackRow[] }) {
         <Term name="own_wp">Our win-probability model</Term> is trained walk-forward: each test season {c.span.replace("-", "–")}{" "}
         is scored by a model that learned only from earlier seasons. On {c.n !== null ? fmtInt(c.n) : "the"} test plays it is
         compared with nflfastR&apos;s two public models (partly in-sample: they were fit on many seasons, including these).
-        Lower Brier and log loss are better; the calibration error is the average gap, in percentage points, between
+        Lower <Term name="brier">Brier</Term> and <Term name="log_loss">log loss</Term> are better; the calibration error is the average gap, in percentage points, between
         forecasts and how often teams really won.
       </p>
       <div className="table-scroll mt-3">
@@ -42,8 +42,12 @@ export default function DecisionsWp({ rows }: { rows: TrackRow[] }) {
           <thead>
             <tr>
               <th scope="col">Method</th>
-              <th scope="col" className="num">Brier</th>
-              <th scope="col" className="num">Log loss</th>
+              <th scope="col" className="num">
+                <Term name="brier">Brier</Term>
+              </th>
+              <th scope="col" className="num">
+                <Term name="log_loss">Log loss</Term>
+              </th>
               <th scope="col" className="num">Calibration error (points)</th>
             </tr>
           </thead>

@@ -42,8 +42,8 @@ export default async function QuestionableSection() {
             fixed before the test.
           </p>
           <p>
-            <strong>If he plays</strong>: among tagged players who played, with {rules.min_prior_games ?? "–"}+ earlier games and {rules.min_prior_ppg ?? "–"}+ points per
-            game so far, the median of that week&apos;s points over his points per game so far, and the <Term name="dud_rate">dud rate</Term> (under{" "}
+            <strong>If he plays</strong>: among tagged players who played, with {rules.min_prior_games ?? "–"}+ earlier games and {rules.min_prior_ppg ?? "–"}+{" "}
+            <Term name="ppg">points per game</Term> so far, the median of that week&apos;s points over his points per game so far, and the <Term name="dud_rate">dud rate</Term> (under{" "}
             {rules.dud !== undefined ? pct(rules.dud) : "–"} of his usual). Healthy players with similar averages are shown next to it, because any player&apos;s
             ratio drifts below 1. A group with fewer than {rules.min_bucket_n ?? "–"} past players shows its tag&apos;s overall line, or nothing.
           </p>

@@ -23,7 +23,7 @@ export default function HowToRead({ cal, record }: { cal: BoardCalCell[]; record
         <p>
           <strong>Two separate chances</strong>, each a statistical estimate from how past seasons went, made only from what was public at
           the time. The <Term name="board_cliff_chance">chance of a Cliff</Term> is the estimated chance that he plays {BOARD_MIN_GAMES} or more
-          games next season and his points per game drop by {pct(BOARD_CLIFF_DROP)} or more. It only means something if he plays: the model
+          games next season and his <Term name="ppg">points per game</Term> drop by {pct(BOARD_CLIFF_DROP)} or more. It only means something if he plays: the model
           learned it from players who did. The <Term name="board_missed_chance">chance of missed time</Term> is the estimated chance that he
           plays fewer than {BOARD_MIN_GAMES} games (an injury, a benching, a release or retirement), from its own simpler model. The two
           answer different questions and are never added together.

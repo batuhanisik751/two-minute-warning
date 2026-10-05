@@ -1,5 +1,6 @@
 import Link from "next/link";
 import RegressionTrack from "@/components/RegressionTrack";
+import Term from "@/components/Term";
 import { fmtInt, seasonWeek } from "@/lib/format";
 import { getRegressionParams, getRegressionTrack } from "@/lib/queries/regression";
 import { getRegressionLive } from "@/lib/queries/track-record";
@@ -33,7 +34,7 @@ export default async function RegressionTrackSection() {
         )}
         <H4>Calibration</H4>
         <NotPublished what="A calibration plot">
-          Regression Watch projects points per game and tags players; it gives no probability, and no calibration groups are
+          Regression Watch projects <Term name="ppg">points per game</Term> and tags players; it gives no probability, and no calibration groups are
           published for it.
         </NotPublished>
         <p className="text-sm">

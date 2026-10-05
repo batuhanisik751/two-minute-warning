@@ -1,3 +1,4 @@
+import Term from "@/components/Term";
 import { boardCell, diffWords, type BoardCell, type BoardTrackRow } from "@/lib/board";
 import { signedNum } from "@/lib/hot-seat";
 import { pct } from "@/lib/format";
@@ -43,8 +44,12 @@ export default function BoardBacktest({ rows, variants, testId, first = "Chance"
         <thead>
           <tr>
             <th scope="col">{first}</th>
-            <th scope="col" className="num">PR-AUC, every board</th>
-            <th scope="col" className="num">Against last season&apos;s PPG rank</th>
+            <th scope="col" className="num">
+              <Term name="pr_auc">PR-AUC</Term>, every board
+            </th>
+            <th scope="col" className="num">
+              Against last season&apos;s <Term name="ppg">PPG</Term> rank
+            </th>
             {withEos ? <th scope="col" className="num">Against the end-of-season snapshot</th> : null}
             <th scope="col" className="num">Experts&apos; era: against the experts</th>
           </tr>

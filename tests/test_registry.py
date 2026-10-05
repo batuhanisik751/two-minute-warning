@@ -204,3 +204,5 @@ def test_glossary_cli(tmp_path, monkeypatch):
     wrote = runner.invoke(app, ["glossary", "--write"])
     assert wrote.exit_code == 0
     assert (tmp_path / "docs" / "glossary.md").read_text() == rg.glossary_markdown()
+    web = tmp_path / "web" / "lib" / "glossary-fallback.json"
+    assert web.read_text() == rg.glossary_fallback_json()

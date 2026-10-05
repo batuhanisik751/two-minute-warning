@@ -3,12 +3,14 @@ import { fmtPoints } from "@/lib/format";
 import { rangeText, signed, statsOf, type RegressionRow } from "@/lib/regression";
 import { teamStyle } from "@/lib/team-colors";
 import { FoldList } from "./Fold";
+import Term from "./Term";
 import { MiniLabel, PosBadge } from "./ui";
 
 // One Regression Watch table (Sell-high or Buy-low) as rows that lay out by their
 // container's width (the Waiver Radar's approach, components/PickList.tsx): below 48rem the
 // player, then his numbers as labelled pairs, then the reason; from 48rem one column per number
-// with a header row, the reason across the row. Every cell is a grid area with a minimum width
+// with a header row (its abbreviations are glossary terms: a button each, so the row is not
+// aria-hidden), the reason across the row. Every cell is a grid area with a minimum width
 // (tests/smoke/layout.test.ts measures the rows in Chrome from 320 to 1920 px).
 const GRID =
   "grid grid-cols-[minmax(0,1fr)] gap-x-3 gap-y-2 [grid-template-areas:'player'_'stats'_'reason'] @3xl:grid-cols-[minmax(0,1fr)_3rem_4.5rem_4.5rem_4.75rem_5.25rem] @3xl:[grid-template-areas:'player_games_ppg_xfp_fpoe_proj'_'reason_reason_reason_reason_reason_reason']";
@@ -16,11 +18,11 @@ const HEAD =
   "hidden gap-x-3 @3xl:grid @3xl:grid-cols-[minmax(0,1fr)_3rem_4.5rem_4.5rem_4.75rem_5.25rem] @3xl:[grid-template-areas:'player_games_ppg_xfp_fpoe_proj']";
 
 const CELLS = [
-  { key: "games", area: "@3xl:[grid-area:games]", label: "Games", short: "G" },
-  { key: "ppg", area: "@3xl:[grid-area:ppg]", label: "PPG", short: "PPG" },
-  { key: "xfp", area: "@3xl:[grid-area:xfp]", label: "xFP/game", short: "xFP/g" },
-  { key: "fpoe", area: "@3xl:[grid-area:fpoe]", label: "FPOE/game", short: "FPOE/g" },
-  { key: "proj", area: "@3xl:[grid-area:proj]", label: "Projection", short: "Proj." },
+  { key: "games", area: "@3xl:[grid-area:games]", label: "Games", short: "G", term: "games" },
+  { key: "ppg", area: "@3xl:[grid-area:ppg]", label: "PPG", short: "PPG", term: "ppg" },
+  { key: "xfp", area: "@3xl:[grid-area:xfp]", label: "xFP/game", short: "xFP/g", term: "xfp" },
+  { key: "fpoe", area: "@3xl:[grid-area:fpoe]", label: "FPOE/game", short: "FPOE/g", term: "fpoe" },
+  { key: "proj", area: "@3xl:[grid-area:proj]", label: "Projection", short: "Proj.", term: "ppg_ros" },
 ] as const;
 
 const val = (v: number | null, f: (x: number) => string) => (v === null ? "–" : f(v));
@@ -40,13 +42,13 @@ export default function RegressionList({
 }) {
   return (
     <div className="@container">
-      <div aria-hidden="true" data-row="header" className={`${HEAD} px-3 pb-1.5 pl-4 font-display text-[0.8rem] font-bold tracking-wider text-muted uppercase`}>
+      <div data-row="header" className={`${HEAD} px-3 pb-1.5 pl-4 font-display text-[0.8rem] font-bold tracking-wider text-muted uppercase`}>
         <span data-cell="player" className="[grid-area:player]">
           Player
         </span>
         {CELLS.map((c) => (
           <span key={c.key} data-cell={c.key} className={`${c.area} text-right`}>
-            {c.short}
+            <Term name={c.term}>{c.short}</Term>
           </span>
         ))}
       </div>

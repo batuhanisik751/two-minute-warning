@@ -14,6 +14,14 @@ Where his rest-of-season points per game should land 8 times in 10: the projecti
 - **Formula:** ppg_ros + the 10th and 90th percentiles of the frozen backtest's per-game misses (rest_of_season_ppg - ppg_ros) at his position, from lists with weeks left within 2 of his list's (else the nearest weeks left), of seasons before the list's only (walk-forward); none with fewer than 30 misses
 - **Source:** twm.modules.regression_watch.ranges
 
+### Against convention
+
+A clear call where the aggressive option was best and the coach took it: he went for it on fourth down, or went for two. The number is how much win probability that gained over the best kicking option, by the model.
+
+- **Name:** `against_convention`; **unit:** WP points; **used by:** decisions
+- **Formula:** a clear call with chosen = recommended = go (fourth down) or two-point (try); the number = WP(go) - max(WP(field goal), WP(punt)), or WP(two) - WP(kick)
+- **Source:** web/lib/decisions.ts (againstConvention); web/lib/queries/decisions.ts
+
 ### Aggressiveness
 
 How often a coach goes for it when the numbers clearly say go.
@@ -29,6 +37,14 @@ The value a shrunk FPOE/game is pulled toward when shrinking toward the position
 - **Name:** `prior_mean`; **unit:** points; **used by:** regression_watch
 - **Formula:** sum of FPOE over sum of games, over the player-seasons of a position
 - **Source:** twm.modules.regression_watch.stability
+
+### Brier score
+
+How close the probabilities came to what happened: the average squared gap between each probability and the outcome (1 if it happened, 0 if not). Lower is better and 0 is perfect. Example: saying 80% for something that happens adds 0.04; saying 80% for something that does not happen adds 0.64.
+
+- **Name:** `brier`; **unit:** 0-1 (lower is better); **used by:** decisions, hot_seat, questionable
+- **Formula:** mean over the rows of (probability - outcome)^2, the outcome 1 when it happened and 0 when not
+- **Source:** twm.backtest.metrics.brier
 
 ### Buy-low \*
 
@@ -63,6 +79,22 @@ How many more of his targets he caught than an average receiver would have.
 - **Formula:** (receptions - receptions_exp) / targets, over the games of one half of a player-season (summed, then divided)
 - **Source:** twm.modules.regression_watch.stability
 
+### Chance
+
+How often players the Radar rated like him became a fantasy starter soon, in earlier seasons' backtests. The range beside it is how sure that rate is. It is the track record of similar players, not a promise, and not the model's own probability (which ran too high for the top players in the backtest).
+
+- **Name:** `chance`; **unit:** share (0-1), with a 90% range; **used by:** waiver_radar
+- **Formula:** the observed y_hit rate of the backtest predictions in the same similar-players bin as his model probability: the walk-forward predictions of the same model and label from the seasons before the list's season, sorted by probability, cut into groups of at least 500 (a probability is never split) and merged so the rate never falls as the probability rises; the range is the bin's 90% Wilson interval
+- **Source:** twm.modules.waiver_radar.confidence (similar_bins, Confidence.band)
+
+### Chance (K and D/ST)
+
+How often picks the streamer rated alike scored like a starter the very next week, in earlier seasons' backtests: for kickers, picks with a similar model score; for team defenses, the rule's pick at the same rank. The range beside it is how sure that rate is. A track record, not a promise.
+
+- **Name:** `stream_chance`; **unit:** share (0-1), with a 90% range; **used by:** streamer
+- **Formula:** read off the frozen streamer backtest of the seasons before the list's season: kickers: the y_start rate of the bin of backtest picks with a similar model score (bins of at least 200 picks); D/STs: the y_start rate of the rule's picks at that rank (rank bins of at least 100 picks); a better score or rank never shows a lower chance; 90% interval
+- **Source:** twm.modules.streamer.confidence
+
 ### Chance he plays
 
 Out of 100 players like him in past seasons, about this many played. Teams name their inactive players about 90 minutes before kickoff: check then.
@@ -70,6 +102,22 @@ Out of 100 players like him in past seasons, about this many played. Teams name 
 - **Name:** `play_chance`; **unit:** share (0-1); **used by:** questionable
 - **Formula:** share of past tagged players with the same tag, position and 'missed his team's previous game' who took at least one offensive snap (fact_snaps), seasons 2016 to last season, each group shrunk toward its parent group (20 pseudo-rows)
 - **Source:** twm.modules.questionable (frozen table, docs/questionable.md)
+
+### Chance of a Cliff
+
+The model's estimated chance that the player plays enough games next season to judge and loses a large share of his points per game. It is only meaningful for a player who plays: the chance of missing time is a separate number, and the two are never added together.
+
+- **Name:** `board_cliff_chance`; **unit:** probability (0-1); **used by:** board
+- **Formula:** the pinned Cliff model's own probability of y_cliff (an L2 logistic regression on the preseason features at the kickoff-eve as-of)
+- **Source:** twm.modules.board.production (ROLES: cliff)
+
+### Chance of missed time
+
+The model's estimated chance that the player plays only a few games next season or none (injury, a benching, a release or retirement), from a separate, simpler model.
+
+- **Name:** `board_missed_chance`; **unit:** probability (0-1); **used by:** board
+- **Formula:** the pinned missed-time model's own probability of y_missed (a simpler logistic regression on fewer inputs, the same as-of)
+- **Source:** twm.modules.board.production (ROLES: missed)
 
 ### Clear call or toss-up
 
@@ -103,6 +151,14 @@ The chance that going for it on this down and distance works.
 - **Formula:** LightGBM on the go-for-it features, trained walk-forward (seasons < S)
 - **Source:** twm.modules.decisions.conversion
 
+### Decisions
+
+Every fourth down and every try after a touchdown the Report Card priced: clear calls and toss-ups together. Kneels, the half's last seconds and snaps wiped out by a penalty are left out.
+
+- **Name:** `decisions_graded`; **unit:** decisions; **used by:** decisions
+- **Formula:** fourth downs (2006 on) and tries after a touchdown without an exclusion (not a snap, a penalty with no play, a kneel or spike, an aborted snap, the half's last seconds, the late game, a state the models cannot score): clear calls + toss-ups
+- **Source:** twm.modules.decisions.grade (docs/decision_metrics.md)
+
 ### Dud rate
 
 How often a tagged player who did play scored less than half his usual. Healthy players do that too (about 1 in 4), so compare the two numbers.
@@ -134,6 +190,14 @@ Running out the first half with time, timeouts and field position good enough th
 - **Name:** `half_passivity`; **unit:** case (boolean) per first half; **used by:** decisions
 - **Formula:** a first-half drive that ended the half with a tail of kneels / designed runs (no team timeout, no pass) whose first 1st down had >= 40 s and >= 1 timeout; a case when half_value there >= decisions.clock.passivity_min_ep (1.0 point)
 - **Source:** twm.modules.decisions.clock
+
+### Estimated chance
+
+The model's estimate of the chance that the head coach is let go (fired during or after the season, or a mutual parting) and that it is announced within a set number of days after his team's final game. An estimate from past seasons' patterns, not a prediction that it will happen.
+
+- **Name:** `hot_seat_estimate`; **unit:** probability (0-1); **used by:** hot_seat
+- **Formula:** the live L2 logistic regression's own probability (no recalibration) that the coach is let go (hot_seat_let_go) and it is announced from the row's day through the window's end, a set number of days after his team's final game, playoffs included
+- **Source:** twm.modules.hot_seat (targets.py: the window; production.py: the pinned model)
 
 ### Expected WP after a punt
 
@@ -255,6 +319,14 @@ Whether the experts' ranking existed at that moment; the expert baseline is only
 - **Formula:** a rest-of-season or weekly FantasyPros page of the player's roster position of this season is public at the as-of (the archive starts in December 2019)
 - **Source:** fact_ranking
 
+### Experts' preseason rank (ECR)
+
+FantasyPros' expert consensus ranking: many fantasy experts' preseason ranks at the position, combined into one, from the last scrape before week 1. It is the experts' consensus, not draft position (ADP), and it exists for recent seasons only.
+
+- **Name:** `board_ecr`; **unit:** position rank; **used by:** board
+- **Formula:** the expert consensus rank at his position on the preseason ranking page of the last scrape before week 1 public by the board's as-of; none when he is not ranked or before the ranking archive's first season
+- **Source:** fact_ranking.pos_rank (page_kind 'preseason')
+
 ### Extra-point rate
 
 How often the kick after a touchdown is good.
@@ -321,6 +393,14 @@ The chance the kick is good from here, in these conditions.
 - **Formula:** LightGBM on distance, roof, wind, temperature, surface and era, walk-forward
 - **Source:** twm.modules.decisions.fieldgoal
 
+### Games (G)
+
+How many games a player's numbers are based on. More games make a per-game number more trustworthy: a hot start over 2 games says less than a full season. Example: G 3 with 15 PPG means 45 points over 3 games.
+
+- **Name:** `games`; **unit:** games; **used by:** shared
+- **Formula:** the number of games behind the numbers beside it: regular-season games with a stat line in the window shown (on Regression Watch: this season's games up to the as-of, the games behind his PPG, xFP/game and FPOE/game)
+- **Source:** fact_player_week; twm.modules.regression_watch.projection (player_state)
+
 ### Games for half weight \*
 
 After this many games a player's FPOE/game deserves half its face value.
@@ -336,6 +416,14 @@ Plays after the game is effectively decided. Stats piled up then say little abou
 - **Name:** `is_garbage_time`; **unit:** boolean; **used by:** shared, regression_watch
 - **Formula:** win probability below 0.05 or above 0.95, except in the final 120 seconds of a half when the score is within 8 points
 - **Source:** fact_play.is_garbage_time (twm.situations)
+
+### Hit rate by rank
+
+How often players ranked this high hit, counted over earlier reconstructed lists of the same position (seasons before this list's season, so the badge never uses outcomes the list could not have known).
+
+- **Name:** `rank_bucket_hit_rate`; **unit:** share (0-1); **used by:** waiver_radar
+- **Formula:** hits / picks at ranks 1-5, 6-10 or 11-25 of the reconstructed (backtest) lists of the same position, over the seasons before the list's season
+- **Source:** twm.backtest.metrics.DEFAULT_BUCKETS; web/lib/buckets.ts
 
 ### Implied team total
 
@@ -370,6 +458,30 @@ Tested, not shown: a starter whose production is carried by his opportunity, not
 - **Formula:** tested, not shown: PPG rank inside the starter threshold (QB top 12, RB top 24, WR top 24, TE top 12) AND FPOE/game not in the top decile of his position's universe; D3's backtest only, dropped from the product on 2026-09-30
 - **Source:** twm.modules.regression_watch.tags
 
+### Log loss
+
+Like the Brier score, it grades probabilities against what happened, but it punishes a confident miss much harder. Lower is better. Example: saying 99% for something that does not happen costs far more than saying 60% for it.
+
+- **Name:** `log_loss`; **unit:** 0 and up (lower is better); **used by:** decisions, questionable
+- **Formula:** mean over the rows of -[y ln(p) + (1 - y) ln(1 - p)], y = 1 when it happened, the probability p kept a hair away from 0 and 1
+- **Source:** twm.modules.decisions.wp.log_loss; twm.modules.questionable.table.log_loss
+
+### Mean absolute error (MAE)
+
+How far a projection missed on average, whether it was too high or too low. Lower is better. Example: projections of 12 and 8 points per game for two players who both then scored 10 per game miss by 2 each, so the MAE is 2.
+
+- **Name:** `mae`; **unit:** points per game (lower is better); **used by:** regression_watch
+- **Formula:** mean over the graded players of |actual rest-of-season points per game - the projection|
+- **Source:** twm.modules.regression_watch.backtest (metric mae)
+
+### Model probability
+
+The model's own calibrated probability. The site shows the chance instead: in the backtest the model's probabilities ran too high for the most likely players.
+
+- **Name:** `model_probability`; **unit:** probability (0-1); **used by:** waiver_radar
+- **Formula:** the production model's predicted probability of y_hit after an isotonic calibration fit on the validation season (stored as score in the predictions store)
+- **Source:** twm.modules.waiver_radar.models
+
 ### Neutral situation \*
 
 Plays where the game is still in the balance and neither team is forced to pass or run; the fairest view of how a team really plays.
@@ -402,6 +514,14 @@ How many of his chances came after the game was decided.
 - **Formula:** n_opportunities on garbage-time plays (fact_play.is_garbage_time)
 - **Source:** twm.modules.regression_watch.player_week
 
+### PR-AUC
+
+How cleanly the top of a model's list is filled with the cases that really happened, for rare events. Higher is better, but guessing does not score 0.5: a random order scores the share of cases that happened. Example: if 1 player in 4 really fell off a cliff, a random order scores about 0.25, and a useful model clearly more.
+
+- **Name:** `pr_auc`; **unit:** 0-1 (guessing = the share of cases that happened); **used by:** board, hot_seat
+- **Formula:** average precision: the precision at each case that happened, going down the list from the highest probability, averaged over those cases (the area under the precision-recall curve)
+- **Source:** twm.backtest.metrics.pr_auc (sklearn average_precision_score)
+
 ### Pass attempts
 
 The actual number in the game, counted by ffopportunity over the same plays as its expected value.
@@ -425,6 +545,30 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Name:** `passing_yards`; **unit:** yards; **used by:** regression_watch
 - **Formula:** fact_opportunity_week.pass_yards_gained, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Points per game (PPG)
+
+A player's fantasy points divided by the games he played: what he scores in a typical game. Higher is better for your team. Example: 45 points in 3 games is 15 PPG.
+
+- **Name:** `ppg`; **unit:** fantasy points per game; **used by:** shared
+- **Formula:** fantasy points (config/scoring.yaml) summed over the games counted / the number of those games (each page says which games: e.g. this season so far, or last season)
+- **Source:** fact_player_week (twm.scoring.score_sql)
+
+### Precision@10
+
+The share of a list's top 10 who became a fantasy starter soon (a hit). If you had picked up the top 10 at a position that week, it is the share that would have given you a starter week. The track record averages it over every weekly list.
+
+- **Name:** `precision_at_10`; **unit:** share (0-1); **used by:** waiver_radar
+- **Formula:** per weekly list: players among its top 10 with y_hit / 10 (a list with fewer than 10 players divides by its size); pooled = the mean over every list (weeks x positions) of the seasons
+- **Source:** twm.backtest.metrics
+
+### ROC-AUC
+
+How well a model puts the cases that happened above the ones that did not. 0.5 is no better than guessing and 1 is a perfect order, so higher is better. Example: 0.80 means that in 8 of 10 pairs of one coach who was let go and one who was not, the model gave the first a higher estimate.
+
+- **Name:** `roc_auc`; **unit:** 0-1 (0.5 = guessing); **used by:** hot_seat
+- **Formula:** the probability that a random row whose outcome happened gets a higher probability than a random row whose outcome did not (ties count half): the area under the ROC curve, over the pooled walk-forward test rows
+- **Source:** twm.modules.hot_seat.evaluation
 
 ### Receiving touchdowns
 
@@ -2564,6 +2708,30 @@ When a row of data became public. A prediction at an as-of time sees only rows w
 - **Formula:** per table rule in twm.warehouse.available (e.g. game data: estimated game end + 6 h); later when unsure
 - **Source:** every event table's available_at column
 
+### Calibration
+
+Whether probabilities mean what they say: among all players given a similar probability, the share who really hit should be close to that probability.
+
+- **Name:** `calibration`; **unit:** predicted against observed rate; **used by:** shared
+- **Formula:** the predictions sorted by probability and cut into equal-count groups (10 by default); each group's mean probability is compared with the share of its rows whose outcome happened (perfect calibration: equal)
+- **Source:** twm.backtest.metrics.calibration_bins
+
+### Clear call
+
+A decision where one option's win probability beat the next best by more than the toss-up margin (Methodology page). Only clear calls are graded: a wrong one counts against the coach.
+
+- **Name:** `clear_call`; **unit:** decision; **used by:** decisions
+- **Formula:** WP(best option) - WP(second best) > decisions.toss_up_margin (config/settings.yaml), every option priced by our win-probability model of that season
+- **Source:** twm.modules.decisions.grade
+
+### Clock case
+
+A game where one of the three clock-management metrics applies: timeouts unused in a lost one-score game, a passive end of the first half, or seconds wasted late while trailing with timeouts in hand. Each has an exact written definition; situations outside them are never graded.
+
+- **Name:** `clock_case`; **unit:** game; **used by:** decisions
+- **Formula:** a game where timeouts_unused, half_passivity or timeout_seconds_wasted applies, by its written definition (decisions.clock in config/settings.yaml)
+- **Source:** twm.modules.decisions.clock
+
 ### Doubtful
 
 The team says the player is unlikely to play. Since 2016 almost none of the Doubtful QBs, RBs, WRs and TEs took an offensive snap (about 1 in 100).
@@ -2571,6 +2739,22 @@ The team says the player is unlikely to play. Since 2016 almost none of the Doub
 - **Name:** `doubtful`; **unit:** injury tag; **used by:** questionable
 - **Formula:** fact_injury_report.report_status = 'Doubtful' on the team's final injury report of the week
 - **Source:** fact_injury_report.report_status (nflverse injuries)
+
+### Drivers
+
+The three inputs that move this coach's estimate the most, up or down, compared with an average coach: the logistic regression's own terms (its weight times how far the value is from average).
+
+- **Name:** `hot_seat_driver`; **unit:** log-odds term; **used by:** hot_seat
+- **Formula:** the logistic regression's term of each input: coefficient x standardized value (a value's term and its missing-indicator term summed); the 3 largest by absolute size, signed. A row's terms sum to its log-odds minus the intercept
+- **Source:** twm.modules.hot_seat.production
+
+### FLEX
+
+A week's running back, wide receiver and tight end lists merged into one and ordered by chance. Each chance is the chance of a starter finish at the player's own position, so FLEX compares three slightly different targets: it is a way to browse the three lists together, not a separate model.
+
+- **Name:** `flex`; **unit:** list; **used by:** waiver_radar
+- **Formula:** the week's RB, WR and TE picks of one kind merged: highest chance first, then the higher model probability, the better rank in his own list, RB/WR/TE and the id; each player once
+- **Source:** web/lib/flex.ts (mergeFlex)
 
 ### Interim coach (row flag)
 
@@ -2580,6 +2764,22 @@ Interim coaches are left out of training (spec 8.5). Uses the owner's hindsight 
 - **Formula:** took_over_mid_season OR the owner's data/manual/coach_departures.csv says the coach-team-season was interim (departure_type interim_not_retained or interim_suspected true)
 - **Source:** twm.modules.hot_seat.features
 
+### Interval
+
+The range a number would plausibly move within if the same kind of seasons were played again. It comes from a season-block bootstrap: whole seasons are redrawn at random many times and the number is recomputed each time.
+
+- **Name:** `interval`; **unit:** range (low to high); **used by:** shared
+- **Formula:** season-block bootstrap: draw as many test seasons as there are, with replacement, recompute the number on the drawn seasons, 2,000 times with a fixed seed, and keep the middle 95%; a difference between two methods is paired (both are graded on the same drawn seasons)
+- **Source:** twm.backtest.metrics (block_indices, N_BOOT, LEVEL)
+
+### Interval (stability study)
+
+The range the number would plausibly move within with other players: the player-seasons are redrawn at random many times and the number is recomputed each time. The same player appears in several seasons, so the true range is a little wider.
+
+- **Name:** `stability_interval`; **unit:** range (low to high); **used by:** regression_watch
+- **Formula:** bootstrap over player-seasons: redraw them with replacement 1,000 times, recompute the split-half correlation each time and keep the middle 95%
+- **Source:** twm.modules.regression_watch.stability (bootstrap_corr, N_BOOT)
+
 ### Kneel-out seconds K(d, t)
 
 The most clock an offense can burn by kneeling from this down; if it is at least the time left, the game is over unless the defense's timeouts cut it.
@@ -2587,6 +2787,38 @@ The most clock an offense can burn by kneeling from this down; if it is at least
 - **Name:** `kneel_out_seconds`; **unit:** seconds; **used by:** decisions
 - **Formula:** n x p + max(0, n - 1 - t) x (g - p), n = 5 - down kneels, t = the defense's timeouts; p (kneel_play) and g (kneel_cycle) = median seconds from a kneel to the next snap with / without a defensive timeout between, measured on the 5 seasons before S
 - **Source:** twm.modules.decisions.clock
+
+### Let go
+
+Fired during the season, fired after it, or a mutual parting, announced in the window. Other departures (retired, resigned, left for another job) are not counted as let go.
+
+- **Name:** `hot_seat_let_go`; **unit:** yes/no; **used by:** hot_seat
+- **Formula:** departure type fired_in_season, fired_after_season or mutual_parting, announced in the window (the owner-verified departures file); retired, resigned (also under pressure) or left for another job: not let go
+- **Source:** the owner-verified departures file (data/manual); twm.modules.hot_seat.targets
+
+### Listed position
+
+The position nflverse lists the player at today, also on his past weekly rows. A Radar list ranks each player at the position of his team's roster that week, which can differ for a player who changed position.
+
+- **Name:** `listed_position`; **unit:** position; **used by:** waiver_radar
+- **Formula:** nflverse's current position of the player (today's snapshot, also shown on his past rows); a Radar list ranks him at his team's roster position that week
+- **Source:** dim_player.position
+
+### Live or reconstructed
+
+A live list was made in real time on the Tuesday and is never changed afterwards. A reconstructed (backtest) list was made later from the data as it stood on that Tuesday: what the Radar would have said then, not a list anyone saw at the time.
+
+- **Name:** `list_kind`; **unit:** live / backtest; **used by:** shared
+- **Formula:** live: scored on the real clock after its as-of and before the next kickoff, stored once and never rescored (append-only); backtest (reconstructed): scored later from the data public at the as-of, through the same point-in-time view
+- **Source:** kind column of the predictions store and of the published lists
+
+### Live or reconstructed board
+
+A live board is made before the season's first kickoff from the data public then, and never changed afterwards. A reconstructed board (backtest) was scored later, from the data as it stood on the eve of week 1: what the model would have said then, not a board anyone saw at the time.
+
+- **Name:** `board_kind`; **unit:** live / backtest; **used by:** board
+- **Formula:** live: scored on the real clock between the board's as-of (the eve of week 1) and the first kickoff, stored once (append-only); backtest: scored later by the pinned models from the input rows as they stood at the as-of
+- **Source:** twm.modules.board.live; twm.publish.board_lists
 
 ### Own walk-forward xFP
 
@@ -2602,6 +2834,14 @@ A scoring format that gives a point for every catch, on top of yards and touchdo
 
 - **Name:** `ppr`; **unit:** points per catch; **used by:** shared
 - **Formula:** config/scoring.yaml receiving.receptions (1 = full PPR, 0.5 = half, 0 = standard)
+
+### Player-season
+
+One player's regular season. The stability study counts each season he played enough games in once, at the position of most of his games, and splits his games into two halves.
+
+- **Name:** `player_season`; **unit:** player x season; **used by:** regression_watch
+- **Formula:** a QB, RB, WR or TE's regular season (2009 on) with at least 8 games with an opportunity (a target, carry or pass), at the position of most of his games; his games split odd/even and first/second half
+- **Source:** twm.modules.regression_watch.stability (MIN_GAMES, halves)
 
 ### Practice status
 
@@ -2642,6 +2882,22 @@ A player who scores far above his opportunity usually comes back down; one who s
 - **Name:** `regression_to_the_mean`; **unit:** -; **used by:** regression_watch
 - **Formula:** extreme results drift back toward the average when luck made them extreme
 
+### Streaming pool
+
+The kickers and team defenses who are probably still on waivers: those ranked low both by the experts before the season and by points per game so far. It is an estimate, the same kind as the Waiver Radar's candidate pool, because past waiver wires are not public.
+
+- **Name:** `stream_pool`; **unit:** kickers and D/STs; **used by:** streamer
+- **Formula:** the Waiver Radar's candidate-pool rule for K and D/ST: outside the pool cutoff both in the experts' preseason ranking (last season's points per game before 2020) and in points per game so far this season
+- **Source:** twm.modules.streamer.pool
+
+### Suggested priority
+
+A suggestion from the chance: must-add, speculative or watch. The cutoffs, and how often each priority hit in the backtest, are on the Methodology page.
+
+- **Name:** `priority`; **unit:** must-add / speculative / watch; **used by:** waiver_radar, streamer
+- **Formula:** from the chance, for the top 25 of a list: must-add when it is at least 0.50, speculative from 0.25 up to that, watch below; ranks 26 and lower get none. The bins only go up, so each priority is a cutoff on the model probability
+- **Source:** twm.modules.waiver_radar.confidence (MUST_ADD, SPECULATIVE, tier_table)
+
 ### Tag threshold X
 
 How far the projection must sit from his current PPG before we tag him.
@@ -2649,6 +2905,22 @@ How far the projection must sit from his current PPG before we tag him.
 - **Name:** `tag_threshold_x`; **unit:** points per game; **used by:** regression_watch
 - **Formula:** per season, the X in 0, 0.5 .. 6 with the best Sell-high (Buy-low) precision on the earlier seasons among those tagging at least 3 players per week; never chosen on the season it is used in
 - **Source:** twm.modules.regression_watch.projection
+
+### Team
+
+Teams are shown by today's franchise code and name, also for past seasons: a franchise that moved appears under its current name.
+
+- **Name:** `current_franchise`; **unit:** team code; **used by:** shared
+- **Formula:** every team column holds today's franchise code (OAK -> LV, SD -> LAC, STL -> LA, LAR -> LA), with today's name
+- **Source:** dim_team.current_abbr
+
+### Toss-up
+
+A decision whose best two options were within the toss-up margin of each other: the model cannot tell them apart with confidence, so it is counted but never graded, whatever the coach chose.
+
+- **Name:** `toss_up`; **unit:** decision; **used by:** decisions
+- **Formula:** WP(best option) - WP(second best) <= decisions.toss_up_margin: counted, never graded
+- **Source:** twm.modules.decisions.grade
 
 ### Unavailable teammate
 
@@ -2658,6 +2930,14 @@ A teammate who is out now: his targets and carries are up for grabs. Each rule i
 - **Formula:** a teammate (same as-of team, QB/RB/WR/TE, who played for the team this season) is unavailable at the as-of if ANY of: roster_status = his row on the team's latest visible weekly roster has a status other than ACT, INA, DEV (RES, PUP, SUS, CUT ...), used only in seasons whose roster statuses change from week to week (2016 on: the 2002-2015 rosters repeat one, season-final status on every week); left_team = he was on the team's roster earlier this season but not on its latest visible roster (released or traded); injury_report = the team's latest visible injury report of the season lists him Out or Doubtful; missed_last_game = no offensive snap or stat line in the team's last game after averaging at least 50% snap share in the up to 3 team games before it
 - **Source:** twm.modules.waiver_radar.features (fact_roster_week, fact_injury_report, fact_snaps)
 
+### WP points
+
+Win probability in percentage points: one WP point is one percentage point of the team's chance to win, by our win-probability model.
+
+- **Name:** `wp_points`; **unit:** percentage points (0-100); **used by:** decisions
+- **Formula:** 100 x a win probability (or a difference of two) on the 0-1 scale
+- **Source:** twm.modules.decisions.wp
+
 ### Waiver Radar candidate pool
 
 The players who are probably still on waivers in a typical 12-team league. There is no record of which players sat on fantasy rosters before 2020, so anyone ranked high before the season or scoring well since counts as taken; the rest are the players the Waiver Radar ranks.
@@ -2666,6 +2946,14 @@ The players who are probably still on waivers in a typical 12-team league. There
 - **Formula:** on an NFL roster at the as-of (his latest public weekly roster row of the season, on his team's latest public roster, with status ACT, INA, DEV, at QB/RB/WR/TE) and outside the top N at his position by BOTH preseason_pos_rank and ppg_to_date; N = weekly starter threshold x candidate_pool_multiplier (1.5): QB 18, RB 36, WR 36, TE 18; in seasons without a preseason cheat sheet, rookies drafted in rounds 1-2 count as drafted
 - **Source:** twm.modules.waiver_radar.pool.candidate_pool (fact_roster_week, fact_ranking, fact_player_week)
 
+### Walk-forward backtest
+
+Grading a model the honest way: every season is predicted by a model trained only on the seasons before it, using only data that was public at each Tuesday's as-of time.
+
+- **Name:** `walk_forward`; **unit:** method; **used by:** shared
+- **Formula:** for each test season S: fit only on seasons before S (settings chosen on the last season before S), score every as-of of S from the data public then, no refit during S; the harness refuses any training row of S or later
+- **Source:** twm.backtest (TestSeasonInTrainingError)
+
 ### Weekly starter threshold
 
 A player 'finished as a starter' in a week when he scored well enough that a typical 12-team league would have started him.
@@ -2673,6 +2961,30 @@ A player 'finished as a starter' in a week when he scored well enough that a typ
 - **Name:** `starter_threshold`; **unit:** rank; **used by:** waiver_radar, shared
 - **Formula:** teams x dedicated starters at the position (derived from config/league.yaml teams and lineup): QB top 12, RB top 24, WR top 24, TE top 12 by fantasy points that week; FLEX-worthy (teams x (dedicated starters + multi-position slots the position can fill), for the positions in flex_worthy_positions): RB/WR top 36
 - **Source:** config/league.yaml; twm.modules.waiver_radar.labels.LabelRules
+
+### Where we disagree
+
+A player near the top of our list for a Cliff who is not among the same number of players the experts' ranking drops furthest below last season's finish, or the reverse. The record of past disagreements shows how both kinds turned out.
+
+- **Name:** `board_disagree`; **unit:** marker; **used by:** board
+- **Formula:** ours: the top N of the board by the Cliff chance; theirs: the N players with the largest experts' rank minus last season's position rank by points per game (not ranked first); marked when on one of the two only; nothing without the experts' ranks
+- **Source:** web/lib/board.ts (disagreements, BOARD_DISAGREE_TOP)
+
+### With or without garbage time
+
+Points, expected points and points over expected either over every play, or only over the plays while the game was still in doubt. Stats piled up once a game is decided say little about next week. The projection itself is the same in both views.
+
+- **Name:** `garbage_time_view`; **unit:** view; **used by:** regression_watch
+- **Formula:** with garbage time: points, xFP and FPOE per game over every play; without: points_ng, xfp_ng and fpoe_ng per game (plays with is_garbage_time false only); the projection is computed once and shown in both
+- **Source:** fact_play.is_garbage_time; twm.modules.regression_watch.player_week
+
+### Wrong call
+
+A clear call where the coach did not choose the option with the highest win probability.
+
+- **Name:** `wrong_call`; **unit:** decision; **used by:** decisions
+- **Formula:** a clear call whose chosen option is not the recommended one (the highest WP); it costs WP lost = WP(best) - WP(chosen)
+- **Source:** twm.modules.decisions.grade
 
 ## Identifiers (never model features)
 

@@ -32,12 +32,23 @@ export default async function DecisionsTrack() {
             <p>
               Every grade rests on <Term name="own_wp">our win-probability model</Term>. Each test season {c.span.replace("-", "–")} is
               scored by a model that learned only from earlier seasons, on {c.n !== null ? fmtInt(c.n) : "every"} plays, and compared
-              with nflfastR&apos;s two public models (partly in-sample: they were fit on these seasons too). Log loss: lower is better.
+              with nflfastR&apos;s two public models (partly in-sample: they were fit on these seasons too).{" "}
+              <Term name="log_loss">Log loss</Term>: lower is better.
             </p>
             <StatTiles
               testId="decisions-headline"
               stats={[
-                { label: "Our model's log loss", value: f4(own.logLoss.value), interval: iv(own.logLoss), note: own.brier ? `Brier score ${f4(own.brier.value)}` : null },
+                {
+                  label: "Our model's log loss",
+                  term: { name: "log_loss", text: "log loss" },
+                  value: f4(own.logLoss.value),
+                  interval: iv(own.logLoss),
+                  note: own.brier ? (
+                    <>
+                      <Term name="brier">Brier score</Term> {f4(own.brier.value)}
+                    </>
+                  ) : null,
+                },
                 ...c.diffs
                   .filter((d): d is typeof d & { logLoss: Cell } => d.logLoss !== null)
                   .map((d) => ({ label: `Ours minus ${NAMES[d.method] ?? d.method}`, value: f4(d.logLoss.value, true), interval: iv(d.logLoss, true), note: verdict(d.logLoss) })),

@@ -25,8 +25,12 @@ export function BacktestScore({ rows }: { rows: QBacktestRow[] }) {
           <thead>
             <tr>
               <th scope="col">Chance</th>
-              <th scope="col" className="num">Log loss</th>
-              <th scope="col" className="num">Brier score</th>
+              <th scope="col" className="num">
+                <Term name="log_loss">Log loss</Term>
+              </th>
+              <th scope="col" className="num">
+                <Term name="brier">Brier score</Term>
+              </th>
             </tr>
           </thead>
           <tbody>

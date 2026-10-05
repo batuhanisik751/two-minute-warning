@@ -1,3 +1,5 @@
+import Term from "@/components/Term";
+
 /** The Decision Report Card's honesty notes (docs/decision_metrics.md "Honesty note",
  *  reports/decisions/{submodels,wp_backtest}.md), in plain words. The seasons named come from
  *  the database: the validation seasons from the smoothness rows, the clean test season from
@@ -16,7 +18,7 @@ export function HonestyNotes({ validation, cleanSeason }: { validation: string |
         <strong>The smoothed WP model&apos;s candidate rounds.</strong> The smoothness limits were fixed before any fix was
         tried, and every candidate was chosen on the validation seasons{validation ? ` ${validation.replace("-", "–")}` : ""}{" "}
         only. But two later rounds of candidates (the late-game hand-over and the redefined value of the ball before
-        halftime) were prompted by looking at regraded seasons, and the pooled test log loss of a first refit had been seen
+        halftime) were prompted by looking at regraded seasons, and the pooled test <Term name="log_loss">log loss</Term> of a first refit had been seen
         before them. The WP and grading numbers of the past seasons are therefore slightly optimistic; {clean}.
       </li>
       <li>

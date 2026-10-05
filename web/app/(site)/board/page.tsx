@@ -26,7 +26,7 @@ export function generateMetadata(): Metadata {
 function Intro() {
   return (
     <PageHeader title="Cliff board" kicker="Veterans, next season, estimated">
-      For established veterans ({BOARD_MIN_PRIOR}+ seasons in the league, top {BOARD_TOP_PPG} at their position in points per game), two
+      For established veterans ({BOARD_MIN_PRIOR}+ seasons in the league, top {BOARD_TOP_PPG} at their position in <Term name="ppg">points per game</Term>), two
       estimated chances for the coming season: a drop of {Math.round(BOARD_CLIFF_DROP * 100)}% or more in points per game (a Cliff), and
       playing fewer than {BOARD_MIN_GAMES} games (missed time){showThirdPartyRanks() ? ", beside the experts' preseason ranks" : ""}. Estimates from past seasons&apos;
       patterns, not verdicts; how to read them is below the board.

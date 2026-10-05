@@ -1,0 +1,1855 @@
+{
+  "about": "Generated from src/twm/registry.py by `uv run twm glossary --write`; do not edit by hand (tests/test_registry_site.py fails when it is out of date). The site's tooltips (web/components/Term.tsx) read the published glossary table first and this file second, so a term added to the registry has its tooltip as soon as the site deploys, before the next publish. Name, title, explanation and formula only: no reason sentences.",
+  "terms": {
+    "against_convention": {
+      "title": "Against convention",
+      "explanation": "A clear call where the aggressive option was best and the coach took it: he went for it on fourth down, or went for two. The number is how much win probability that gained over the best kicking option, by the model.",
+      "formula": "a clear call with chosen = recommended = go (fourth down) or two-point (try); the number = WP(go) - max(WP(field goal), WP(punt)), or WP(two) - WP(kick)"
+    },
+    "age": {
+      "title": "Age after the season",
+      "explanation": "How old he is when the season ends; production falls with age, at different ages by position.",
+      "formula": "(February 1 after season S - dim_player.birth_date) / 365.25; NULL without a birth date"
+    },
+    "age_at_asof": {
+      "title": "Age",
+      "explanation": "Younger players are likelier to grow into a bigger role.",
+      "formula": "(as-of date - dim_player.birth_date) / 365.25; NULL without a public birth date"
+    },
+    "age_at_draft": {
+      "title": "Age at the draft",
+      "explanation": "Young draftees break out more often: they were productive in college earlier.",
+      "formula": "(first day of his draft - birth_date) / 365.25; his entry year's draft when undrafted (available.DRAFT_FIRST_DAY, 2000-2026)"
+    },
+    "age_curve_ratio": {
+      "title": "Aging curve",
+      "explanation": "What a typical player of his position and age keeps of his points per game next season, learned only from earlier seasons.",
+      "formula": "the position's quadratic fit of PPG(s+1) / PPG(s) on age over earlier season pairs (s + 1 <= S; top-48 in s, 6+ games in s+1; 50+ pairs), evaluated at his age (clipped to the fitted ages)"
+    },
+    "aggressiveness": {
+      "title": "Aggressiveness",
+      "explanation": "How often a coach goes for it when the numbers clearly say go.",
+      "formula": "clear fourth downs where going for it was best AND the coach went / clear fourth downs where going for it was best (the go rate when go was clearly best)"
+    },
+    "air_yards_share": {
+      "title": "Air-yards share",
+      "explanation": "Air yards are how far the ball travels past the line of scrimmage before it is caught or falls. A big share means a player gets the deep, valuable looks.",
+      "formula": "player's receiving air yards / his team's air yards on all pass attempts (completions, incompletions and interceptions) in that game"
+    },
+    "air_yards_share_avg3": {
+      "title": "Air-yards share, last 3 games",
+      "explanation": "How much of the team's downfield passing is aimed at him.",
+      "formula": "mean nflverse air_yards_share over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game); can be slightly negative (passes behind the line)"
+    },
+    "air_yards_share_s": {
+      "title": "Air-yards share",
+      "explanation": "His share of the deep game.",
+      "formula": "his receiving air yards / his team's in his games of S"
+    },
+    "as_of": {
+      "title": "As-of time",
+      "explanation": "The moment a prediction is made. It may only use data that was public by then; the time machine replays any past as-of exactly.",
+      "formula": "dim_week.asof_weekly_utc: the first Tuesday 14:00 UTC after the Eastern date of the week's first kickoff (after Monday night for a normal week)"
+    },
+    "available_at": {
+      "title": "Available at",
+      "explanation": "When a row of data became public. A prediction at an as-of time sees only rows with available_at at or before it.",
+      "formula": "per table rule in twm.warehouse.available (e.g. game data: estimated game end + 6 h); later when unsure"
+    },
+    "best_rank": {
+      "title": "Best weekly rank in the window",
+      "explanation": "His best week at his position in the window. A label detail: never a model feature.",
+      "formula": "min(weekly_pos_rank) over the window weeks (NULL if never ranked)"
+    },
+    "board_cliff_chance": {
+      "title": "Chance of a Cliff",
+      "explanation": "The model's estimated chance that the player plays enough games next season to judge and loses a large share of his points per game. It is only meaningful for a player who plays: the chance of missing time is a separate number, and the two are never added together.",
+      "formula": "the pinned Cliff model's own probability of y_cliff (an L2 logistic regression on the preseason features at the kickoff-eve as-of)"
+    },
+    "board_disagree": {
+      "title": "Where we disagree",
+      "explanation": "A player near the top of our list for a Cliff who is not among the same number of players the experts' ranking drops furthest below last season's finish, or the reverse. The record of past disagreements shows how both kinds turned out.",
+      "formula": "ours: the top N of the board by the Cliff chance; theirs: the N players with the largest experts' rank minus last season's position rank by points per game (not ranked first); marked when on one of the two only; nothing without the experts' ranks"
+    },
+    "board_ecr": {
+      "title": "Experts' preseason rank (ECR)",
+      "explanation": "FantasyPros' expert consensus ranking: many fantasy experts' preseason ranks at the position, combined into one, from the last scrape before week 1. It is the experts' consensus, not draft position (ADP), and it exists for recent seasons only.",
+      "formula": "the expert consensus rank at his position on the preseason ranking page of the last scrape before week 1 public by the board's as-of; none when he is not ranked or before the ranking archive's first season"
+    },
+    "board_kind": {
+      "title": "Live or reconstructed board",
+      "explanation": "A live board is made before the season's first kickoff from the data public then, and never changed afterwards. A reconstructed board (backtest) was scored later, from the data as it stood on the eve of week 1: what the model would have said then, not a board anyone saw at the time.",
+      "formula": "live: scored on the real clock between the board's as-of (the eve of week 1) and the first kickoff, stored once (append-only); backtest: scored later by the pinned models from the input rows as they stood at the as-of"
+    },
+    "board_missed_chance": {
+      "title": "Chance of missed time",
+      "explanation": "The model's estimated chance that the player plays only a few games next season or none (injury, a benching, a release or retirement), from a separate, simpler model.",
+      "formula": "the pinned missed-time model's own probability of y_missed (a simpler logistic regression on fewer inputs, the same as-of)"
+    },
+    "brier": {
+      "title": "Brier score",
+      "explanation": "How close the probabilities came to what happened: the average squared gap between each probability and the outcome (1 if it happened, 0 if not). Lower is better and 0 is perfect. Example: saying 80% for something that happens adds 0.04; saying 80% for something that does not happen adds 0.64.",
+      "formula": "mean over the rows of (probability - outcome)^2, the outcome 1 when it happened and 0 when not"
+    },
+    "buy_low": {
+      "title": "Buy-low",
+      "explanation": "He has scored well below what his chances were worth: his points should rise, so he may be cheap to trade for.",
+      "formula": "FPOE/game in the bottom ceil(n / 10) FPOE/game of his position's universe at that as-of AND ppg_ros at least X above his PPG"
+    },
+    "bye_in_next3": {
+      "title": "Bye in the next 3 weeks",
+      "explanation": "A bye costs a week of production.",
+      "formula": "his team has no scheduled game in at least one of the calendar weeks N+1 to N+3 (capped at the last regular-season week)"
+    },
+    "calibration": {
+      "title": "Calibration",
+      "explanation": "Whether probabilities mean what they say: among all players given a similar probability, the share who really hit should be close to that probability.",
+      "formula": "the predictions sorted by probability and cut into equal-count groups (10 by default); each group's mean probability is compared with the share of its rows whose outcome happened (perfect calibration: equal)"
+    },
+    "candidate_pool": {
+      "title": "Waiver Radar candidate pool",
+      "explanation": "The players who are probably still on waivers in a typical 12-team league. There is no record of which players sat on fantasy rosters before 2020, so anyone ranked high before the season or scoring well since counts as taken; the rest are the players the Waiver Radar ranks.",
+      "formula": "on an NFL roster at the as-of (his latest public weekly roster row of the season, on his team's latest public roster, with status ACT, INA, DEV, at QB/RB/WR/TE) and outside the top N at his position by BOTH preseason_pos_rank and ppg_to_date; N = weekly starter threshold x candidate_pool_multiplier (1.5): QB 18, RB 36, WR 36, TE 18; in seasons without a preseason cheat sheet, rookies drafted in rounds 1-2 count as drafted"
+    },
+    "career_targets": {
+      "title": "Career targets",
+      "explanation": "Mileage as a receiver.",
+      "formula": "targets 1999 .. S"
+    },
+    "career_touches": {
+      "title": "Career touches",
+      "explanation": "Mileage: wear accumulated over a career.",
+      "formula": "carries + receptions in every regular season 1999 .. S (a career before 1999 is cut)"
+    },
+    "carries": {
+      "title": "Carries",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.rush_attempt (two-point tries excluded), from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "carry_share": {
+      "title": "Carry share",
+      "explanation": "The share of his team's running plays given to a player: the running-back version of target share.",
+      "formula": "player carries / team carries in that game (fact_player_week.carries / fact_team_week.carries; 0 when the team had no carry)"
+    },
+    "carry_share_avg3": {
+      "title": "Carry share, last 3 games",
+      "explanation": "How much of the running game goes to him lately.",
+      "formula": "mean carry_share over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "carry_share_last": {
+      "title": "Carry share, last game",
+      "explanation": "The share of his team's runs he got last game.",
+      "formula": "carry_share in the team's last game (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "catch_rate_over_expected": {
+      "title": "Catch rate over expected",
+      "explanation": "How many more of his targets he caught than an average receiver would have.",
+      "formula": "(receptions - receptions_exp) / targets, over the games of one half of a player-season (summed, then divided)"
+    },
+    "chance": {
+      "title": "Chance",
+      "explanation": "How often players the Radar rated like him became a fantasy starter soon, in earlier seasons' backtests. The range beside it is how sure that rate is. It is the track record of similar players, not a promise, and not the model's own probability (which ran too high for the top players in the backtest).",
+      "formula": "the observed y_hit rate of the backtest predictions in the same similar-players bin as his model probability: the walk-forward predictions of the same model and label from the seasons before the list's season, sorted by probability, cut into groups of at least 500 (a probability is never split) and merged so the rate never falls as the probability rises; the range is the bin's 90% Wilson interval"
+    },
+    "clear_call": {
+      "title": "Clear call",
+      "explanation": "A decision where one option's win probability beat the next best by more than the toss-up margin (Methodology page). Only clear calls are graded: a wrong one counts against the coach.",
+      "formula": "WP(best option) - WP(second best) > decisions.toss_up_margin (config/settings.yaml), every option priced by our win-probability model of that season"
+    },
+    "clock_case": {
+      "title": "Clock case",
+      "explanation": "A game where one of the three clock-management metrics applies: timeouts unused in a lost one-score game, a passive end of the first half, or seconds wasted late while trailing with timeouts in hand. Each has an exact written definition; situations outside them are never graded.",
+      "formula": "a game where timeouts_unused, half_passivity or timeout_seconds_wasted applies, by its written definition (decisions.clock in config/settings.yaml)"
+    },
+    "coach_id": {
+      "title": "Coach id",
+      "explanation": "An identifier: used to join tables, never as a model feature (a model would memorize who, not learn why).",
+      "formula": "slug of the head coach's name"
+    },
+    "combine_broad_jump": {
+      "title": "Broad jump",
+      "explanation": "Explosiveness.",
+      "formula": "fact_combine.broad_jump"
+    },
+    "combine_forty": {
+      "title": "40-yard dash",
+      "explanation": "Straight-line speed.",
+      "formula": "fact_combine.forty (his latest row)"
+    },
+    "combine_height": {
+      "title": "Combine height",
+      "explanation": "Size.",
+      "formula": "fact_combine.height_in"
+    },
+    "combine_speed_score": {
+      "title": "Speed score",
+      "explanation": "Speed adjusted for size.",
+      "formula": "weight x 200 / forty^4 (Bill Barnwell's Speed Score, Football Outsiders 2008)"
+    },
+    "combine_vertical": {
+      "title": "Vertical jump",
+      "explanation": "Explosiveness.",
+      "formula": "fact_combine.vertical"
+    },
+    "combine_weight": {
+      "title": "Combine weight",
+      "explanation": "Size.",
+      "formula": "fact_combine.wt"
+    },
+    "completion_rate_over_expected": {
+      "title": "Completion rate over expected (CPOE)",
+      "explanation": "How many more of his passes were completed than an average passer's would have been.",
+      "formula": "(completions - completions_exp) / pass_attempts, over the games of one half of a player-season (summed, then divided)"
+    },
+    "completions": {
+      "title": "Completions",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.pass_completions, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "completions_exp": {
+      "title": "Expected completions",
+      "explanation": "What an average player would have produced from the same chances; compare with the actual number to see efficiency.",
+      "formula": "fact_opportunity_week.pass_completions_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "consecutive_losing_seasons": {
+      "title": "Consecutive losing seasons",
+      "explanation": "How many losing seasons in a row the coach has had with this team before this one.",
+      "formula": "seasons right before this one, counted back until one is not losing or not coached by him, in which the coach coached the team and its regular-season win share (ties 0.5) was < 0.5"
+    },
+    "converted": {
+      "title": "Go label: the try converted",
+      "explanation": "Whether going for it worked: the offense kept the ball with a new set of downs.",
+      "formula": "third or fourth down pass/run: first_down = 1 or the offense's touchdown, and no interception or lost fumble (defensive penalties that give a first down count)"
+    },
+    "cpoe": {
+      "title": "CPOE (completion percentage over expected)",
+      "explanation": "Whether a quarterback completes more passes than an average passer would have on the same throws.",
+      "formula": "1 if the pass was complete else 0, minus nflfastR's expected completion probability, x 100"
+    },
+    "current_franchise": {
+      "title": "Team",
+      "explanation": "Teams are shown by today's franchise code and name, also for past seasons: a franchise that moved appears under its current name.",
+      "formula": "every team column holds today's franchise code (OAK -> LV, SD -> LAC, STL -> LA, LAR -> LA), with today's name"
+    },
+    "dc_absent": {
+      "title": "Not on a week-1 depth chart",
+      "explanation": "Cut, unsigned, retired or hurt before the season starts.",
+      "formula": "no row of his on any team's week-1 depth chart of S+1 visible at the preseason as-of (fact_depth_chart) while his S team's chart is visible; NULL when it is not (dc_team_chart_missing); the other preseason features are then NULL"
+    },
+    "dc_team_chart_missing": {
+      "title": "No depth chart for his team yet",
+      "explanation": "We cannot tell yet whether he made the team: a missing chart, not a cut.",
+      "formula": "no row of his on any visible week-1 chart of S+1 AND no visible chart of his S team at the preseason as-of (legacy charts are public the Wednesday before week 1; a team whose week-1 game moved has none)"
+    },
+    "decision_grade": {
+      "title": "Clear call or toss-up",
+      "explanation": "Only decisions with a clear answer count against a coach.",
+      "formula": "'clear' when the best option's WP beats the second best by more than decisions.toss_up_margin (1.5 WP points), else 'toss_up' (not graded); the 4th quarter's last 2:00 and overtime are not graded at all (decisions.late_game)"
+    },
+    "decisions_graded": {
+      "title": "Decisions",
+      "explanation": "Every fourth down and every try after a touchdown the Report Card priced: clear calls and toss-ups together. Kneels, the half's last seconds and snaps wiped out by a penalty are left out.",
+      "formula": "fourth downs (2006 on) and tries after a touchdown without an exclusion (not a snap, a penalty with no play, a kneel or spike, an aborted snap, the half's last seconds, the late game, a state the models cannot score): clear calls + toss-ups"
+    },
+    "def_epa_neutral": {
+      "title": "Defensive EPA per play allowed (neutral)",
+      "explanation": "How efficient opponents are against this defense; lower is better.",
+      "formula": "as off_epa_neutral for the opponents' plays against the team (defteam); higher = worse"
+    },
+    "def_epa_neutral_trend": {
+      "title": "Defensive EPA trend",
+      "explanation": "Positive: the defense has been allowing more lately than over the whole season.",
+      "formula": "def_epa_neutral over the last 4 games minus the season to date (NULL until more than 4 games); positive = the defense has been worse lately"
+    },
+    "defteam": {
+      "title": "Defense team code",
+      "explanation": "An identifier: used to join tables, never as a model feature (a model would memorize who, not learn why).",
+      "formula": "team on defense"
+    },
+    "defteam_timeouts_remaining": {
+      "title": "Defense timeouts left",
+      "explanation": "The other team's timeouts: they can stop the clock to get the ball back.",
+      "formula": "the defense's timeouts left in the half, before the snap"
+    },
+    "depth_listed": {
+      "title": "On the depth chart",
+      "explanation": "Whether the team lists him at all.",
+      "formula": "his gsis_id is on his team's chart in force at the as-of in any slot (offense, defense or special teams); NULL when the team has no visible chart"
+    },
+    "depth_rank_change": {
+      "title": "Depth-chart move",
+      "explanation": "How many spots he moved up the depth chart in a week.",
+      "formula": "depth_rank_prev - depth_rank_now (NULL unless both exist)"
+    },
+    "depth_rank_now": {
+      "title": "Depth-chart rank now",
+      "explanation": "Where the team lists him at his position: 1 is the starter.",
+      "formula": "on his team's depth chart in force at the as-of (daily charts 2025+: the team's latest snapshot with dt <= as-of; weekly charts: the latest visible week's chart), 1 + the number of players of his position group with a better (lower) depth rank in any offensive slot of the group; ties share the better rank. Slots map to groups by twm.modules.waiver_radar.features.slot_group (QB; RB, HB, FB, J; WR, LWR, RWR, SWR, WR1/WR2, WRE, WE; TE, LTE, RTE, H-B, F and combined slots with TE). NULL when he is not in a slot of his group"
+    },
+    "depth_rank_prev": {
+      "title": "Depth-chart rank a week earlier",
+      "explanation": "Where he was listed a week ago.",
+      "formula": "depth_rank_now computed from the chart in force 7 days before the as-of"
+    },
+    "depth_rank_s1": {
+      "title": "Week-1 depth rank",
+      "explanation": "Starter or backup going in.",
+      "formula": "his best depth_rank among his offense slots of his position (RB: RB/HB) on that chart; a daily pull's rank is renumbered within its slot"
+    },
+    "diff_time_ratio": {
+      "title": "Lead x time played",
+      "explanation": "The same lead is worth more late in the game; this number grows as time runs out.",
+      "formula": "score_differential / exp(-4 x elapsed share of regulation; overtime = 1)"
+    },
+    "division_rank": {
+      "title": "Division rank",
+      "explanation": "Where the team stands in its division right now.",
+      "formula": "rank in the division (dim_team.team_division) by win share (wins + 0.5 ties) / games to date among the division's teams with a game; tied teams share the better rank"
+    },
+    "doubtful": {
+      "title": "Doubtful",
+      "explanation": "The team says the player is unlikely to play. Since 2016 almost none of the Doubtful QBs, RBs, WRs and TEs took an offensive snap (about 1 in 100).",
+      "formula": "fact_injury_report.report_status = 'Doubtful' on the team's final injury report of the week"
+    },
+    "down": {
+      "title": "Down",
+      "explanation": "Which of the offense's four tries to gain the distance this is.",
+      "formula": "the down before the snap"
+    },
+    "draft_pos_best_pick_pd": {
+      "title": "Best pick drafted at his position",
+      "explanation": "How much capital the competition cost.",
+      "formula": "the lowest overall draft_pick among those picks; NULL when there is none"
+    },
+    "draft_pos_best_round_pd": {
+      "title": "Best round drafted at his position",
+      "explanation": "How much capital the competition cost.",
+      "formula": "the lowest draft_round among those picks; NULL when there is none"
+    },
+    "draft_pos_count_pd": {
+      "title": "Draft picks at his position",
+      "explanation": "His team drafted competition.",
+      "formula": "picks of his S team in the S+1 draft (dim_player draft fields, public May 15) whose combine position of that year is his (RB: RB/HB); NULL when no pick is visible"
+    },
+    "draft_qb_r1_pd": {
+      "title": "Rookie first-round QB",
+      "explanation": "A new quarterback may start.",
+      "formula": "his S team drafted a combine-listed QB in round 1 of the S+1 draft"
+    },
+    "draft_round": {
+      "title": "Draft round",
+      "explanation": "Teams give early picks more chances.",
+      "formula": "dim_player.draft_round; NULL when undrafted (see is_undrafted)"
+    },
+    "draft_unplaced_pd": {
+      "title": "Unplaced early pick",
+      "explanation": "The draft counts may miss a pick at his position.",
+      "formula": "his S team made a round 1-3 pick of that draft with no combine row (position unknown point-in-time)"
+    },
+    "drafted_pick": {
+      "title": "Draft pick",
+      "explanation": "Draft capital, finer than the round.",
+      "formula": "dim_player.draft_pick; NULL undrafted"
+    },
+    "drafted_round": {
+      "title": "Draft round",
+      "explanation": "Teams give early picks more chances.",
+      "formula": "dim_player.draft_round; NULL when undrafted"
+    },
+    "drive_value": {
+      "title": "Value of the ball before the half ends",
+      "explanation": "What having the ball here is worth before halftime (or the end), the other team's later possessions included: about 4 points at the opponent's 20 early in a half, about 2 at midfield, 0 when the half ends.",
+      "formula": "half_value(yardline_100, half_seconds_remaining): the offense's points minus the defense's from a 1st down at this spot and clock until halftime, a fixed table measured on the 1999-2005 first halves (wp_data.HALF_VALUE_TABLE), read linearly in yards and log seconds; 0 when the half is over"
+    },
+    "dst_points_allowed_per_game": {
+      "title": "Points allowed per game (ESPN rule)",
+      "explanation": "How many points the defense gives up; fewer points allowed earn more fantasy points.",
+      "formula": "mean points_allowed (the opponent's score minus 6 for each touchdown the team's own offense gave up on an interception or fumble return), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game); NULL for K rows"
+    },
+    "dst_sacks_per_game": {
+      "title": "Sacks per game",
+      "explanation": "How often the defense sacks the quarterback; every sack scores for a team defense.",
+      "formula": "mean def_sacks (half sacks count 0.5), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game); NULL for K rows"
+    },
+    "dst_takeaways_per_game": {
+      "title": "Takeaways per game",
+      "explanation": "Interceptions and recovered fumbles: both score for a team defense.",
+      "formula": "mean (def_interceptions + fumble_recovery_opp), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game); NULL for K rows"
+    },
+    "dst_tds_per_game": {
+      "title": "Defense and return touchdowns per game",
+      "explanation": "Touchdowns scored by the defense or the return teams: rare, but worth a lot.",
+      "formula": "mean (kickoff, punt, interception, fumble and blocked-kick return TDs), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game); NULL for K rows"
+    },
+    "dud_rate": {
+      "title": "Dud rate",
+      "explanation": "How often a tagged player who did play scored less than half his usual. Healthy players do that too (about 1 in 4), so compare the two numbers.",
+      "formula": "among tagged players who played, with 2+ earlier games and 5+ points per game so far: share whose points that week were below 50% of their points per game so far; compared with healthy players matched on season, week, position and points-per-game band"
+    },
+    "ecr_available": {
+      "title": "Expert ranks available",
+      "explanation": "Whether the experts' ranking existed at that moment; the expert baseline is only graded where it did.",
+      "formula": "a rest-of-season or weekly FantasyPros page of the player's roster position of this season is public at the as-of (the archive starts in December 2019)"
+    },
+    "ecr_page_kind": {
+      "title": "Expert rank source",
+      "explanation": "Whether the expert rank is a rest-of-season rank or this week's rank.",
+      "formula": "which page ecr_pos_rank comes from: 'ros' (rest of season) or 'weekly'; NULL when the player is unranked"
+    },
+    "ecr_pos_rank": {
+      "title": "Expert rank at the as-of",
+      "explanation": "How the FantasyPros experts ranked the player at his position at the time. Used only as a baseline to beat (the 'experts' ranking); no model learns from it. Their pages were saved on Fridays, so on Tuesday they had not seen the last weekend's games yet.",
+      "formula": "fact_ranking.pos_rank of the player on his roster position's page: the season's latest rest-of-season page public at the as-of if it lists him, else the latest weekly page listing him among those scraped up to twm.modules.waiver_radar.expert_ranks.WEEKLY_MAX_AGE_DAYS days before the latest weekly page; NULL when neither lists him (2020 on)"
+    },
+    "ecr_scrape_date": {
+      "title": "Expert rank date",
+      "explanation": "The day the experts' page was saved.",
+      "formula": "scrape_date of the page ecr_pos_rank comes from (public the next day at 00:00 UTC, fact_ranking.available_at)"
+    },
+    "epa": {
+      "title": "EPA (expected points added)",
+      "explanation": "How much a single play helped or hurt the offense's scoring chances. A 30-yard catch on 3rd and 10 adds a lot; a sack on 1st down costs points.",
+      "formula": "nflfastR's expected points after the play minus before it, for the offense"
+    },
+    "era_kickoff_2023": {
+      "title": "Era: new kickoff rules (2023+)",
+      "explanation": "Kickoff rules changed where drives start after a score.",
+      "formula": "1 for seasons 2023 and later (fair-catch touchbacks to the 25 in 2023, the dynamic kickoff from 2024)"
+    },
+    "era_pat_2015": {
+      "title": "Era: long extra point (2015+)",
+      "explanation": "Extra points got harder in 2015, which slightly changes what a touchdown is worth.",
+      "formula": "1 for seasons 2015 and later (extra points snapped from the 15-yard line)"
+    },
+    "espn_id": {
+      "title": "ESPN player id",
+      "explanation": "An identifier: used to join tables, never as a model feature (a model would memorize who, not learn why).",
+      "formula": "ESPN's player id"
+    },
+    "expected_wins": {
+      "title": "Market-expected wins to date",
+      "explanation": "How many games the betting market expected the team to have won by now.",
+      "formula": "sum over the games to date of the team's pregame win probability: de-vigged closing moneylines p = (1/o_team) / (1/o_team + 1/o_opp) on decimal odds (American +150 -> 2.5, -200 -> 1.5); a game without both moneylines uses 1 / (1 + exp(-k x spread_line)) (home side; k fit by maximum likelihood on every played game of the seasons before, ties out); NULL if a game has neither"
+    },
+    "fantasy_points": {
+      "title": "Fantasy points",
+      "explanation": "The score a player earns for your fantasy team in one game, computed from his yards, touchdowns, catches and mistakes with your league's settings.",
+      "formula": "sum over stats of (stat value x points per unit in config/scoring.yaml); full PPR by default"
+    },
+    "fantasy_points_avg3": {
+      "title": "Fantasy points, last 3 games",
+      "explanation": "His recent scoring per game.",
+      "formula": "mean fantasy points over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "fantasy_points_last": {
+      "title": "Fantasy points, last game",
+      "explanation": "What he scored last game.",
+      "formula": "fantasy points (config/scoring.yaml) in the team's last game (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "fg_distance": {
+      "title": "Field-goal distance",
+      "explanation": "How long the kick would be, known before the snap.",
+      "formula": "yardline_100 + 18 (10 yards of end zone + the hold about 8 yards behind the line; fact_play.kick_distance - yardline_100 is 18 on 88% of 2023-2025 kicks, 19 on 12%)"
+    },
+    "fg_made": {
+      "title": "FG label: the kick was good",
+      "explanation": "Whether the field goal went through.",
+      "formula": "fact_play.field_goal_result = 'made' (missed and blocked = 0)"
+    },
+    "flex": {
+      "title": "FLEX",
+      "explanation": "A week's running back, wide receiver and tight end lists merged into one and ordered by chance. Each chance is the chance of a starter finish at the player's own position, so FLEX compares three slightly different targets: it is a way to browse the three lists together, not a separate model.",
+      "formula": "the week's RB, WR and TE picks of one kind merged: highest chance first, then the higher model probability, the better rank in his own list, RB/WR/TE and the id; each player once"
+    },
+    "fourth_down_wp_lost_per_game": {
+      "title": "Fourth-down WP lost per game",
+      "explanation": "How much win probability the coach's fourth-down calls have cost per game.",
+      "formula": "sum of wp_lost on the team's clear (graded) fourth downs in its games to date / games to date, from the stored Decision Report Card grades (never regraded); NULL before 2006 or when one of the games has no grades"
+    },
+    "fpoe": {
+      "title": "FPOE (fantasy points over expected)",
+      "explanation": "Points above or below what his chances were worth: partly skill, largely luck, and it tends to shrink toward zero.",
+      "formula": "fantasy_points - xfp (the same player-game; a lost fumble or a return touchdown counts fully, having no expected value); in Regression Watch since H6-b2 and on the player pages since PXFP the xfp is the own walk-forward xFP (own_xfp)"
+    },
+    "fpoe_avg3": {
+      "title": "FPOE, last 3 games",
+      "explanation": "Scoring above or below his chances lately; mostly luck, so it is weighted low.",
+      "formula": "mean over the team's last 3 games of (fantasy_points - xfp) (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "fpoe_ng": {
+      "title": "FPOE without garbage time",
+      "explanation": "Points over expected, counting only plays while the game was in doubt.",
+      "formula": "points_ng - xfp_ng"
+    },
+    "fpoe_per_game_s": {
+      "title": "Points over expected per game",
+      "explanation": "Scoring beyond his opportunity, which tends not to last.",
+      "formula": "ppg_s - xfp_per_game_s"
+    },
+    "game_id": {
+      "title": "Game id",
+      "explanation": "An identifier: used to join tables, never as a model feature (a model would memorize who, not learn why).",
+      "formula": "season_week_away_home"
+    },
+    "game_seconds_remaining": {
+      "title": "Seconds left in the game",
+      "explanation": "How much time is left. A 7-point lead means little early and a lot late.",
+      "formula": "seconds left in regulation (in overtime: in the overtime period), before the snap"
+    },
+    "games": {
+      "title": "Games (G)",
+      "explanation": "How many games a player's numbers are based on. More games make a per-game number more trustworthy: a hot start over 2 games says less than a full season. Example: G 3 with 15 PPG means 45 points over 3 games.",
+      "formula": "the number of games behind the numbers beside it: regular-season games with a stat line in the window shown (on Regression Watch: this season's games up to the as-of, the games behind his PPG, xFP/game and FPOE/game)"
+    },
+    "games_for_half_weight": {
+      "title": "Games for half weight",
+      "explanation": "After this many games a player's FPOE/game deserves half its face value.",
+      "formula": "noise_variance / signal_variance: the g where r(g) = 0.5"
+    },
+    "games_played_to_date": {
+      "title": "Games played this season",
+      "explanation": "How many games he has a stat line in so far.",
+      "formula": "regular-season games with a stat line visible at the as-of (the pool's games_to_date)"
+    },
+    "games_remaining": {
+      "title": "Games remaining",
+      "explanation": "How many regular-season games the team still has to play.",
+      "formula": "season length (the most regular-season games any team has in the visible schedule) - games played - a listed cancelled game once gone (2022 BUF/CIN after week 17)"
+    },
+    "games_s": {
+      "title": "Games played",
+      "explanation": "How many games he played (with a recorded play).",
+      "formula": "regular-season games with a stat line in S"
+    },
+    "garbage_time_view": {
+      "title": "With or without garbage time",
+      "explanation": "Points, expected points and points over expected either over every play, or only over the plays while the game was still in doubt. Stats piled up once a game is decided say little about next week. The projection itself is the same in both views.",
+      "formula": "with garbage time: points, xFP and FPOE per game over every play; without: points_ng, xfp_ng and fpoe_ng per game (plays with is_garbage_time false only); the projection is computed once and shown in both"
+    },
+    "gl_opps_avg3": {
+      "title": "Goal-line opportunities per game",
+      "explanation": "Chances inside the 10-yard line: the most valuable touches in fantasy.",
+      "formula": "mean over the team's last 3 games of his targets plus carries (as above) with yardline_100 <= 10 (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "goal_to_go": {
+      "title": "Goal to go",
+      "explanation": "Near the goal line a first down is a touchdown, and the defense has less field to cover.",
+      "formula": "1 when the line to gain is the goal line (fact_play.goal_to_go; for a hypothetical state: ydstogo >= yardline_100)"
+    },
+    "gsis_id": {
+      "title": "NFL player id",
+      "explanation": "An identifier: used to join tables, never as a model feature (a model would memorize who, not learn why).",
+      "formula": "nflverse's canonical player key"
+    },
+    "half_number": {
+      "title": "Half",
+      "explanation": "Which half the play is in. Halftime resets timeouts and gives one team the ball.",
+      "formula": "1 = first half, 2 = second half, 3 = overtime (from fact_play.game_half)"
+    },
+    "half_passivity": {
+      "title": "End-of-half passivity",
+      "explanation": "Running out the first half with time, timeouts and field position good enough that attacking was clearly worth points.",
+      "formula": "a first-half drive that ended the half with a tail of kneels / designed runs (no team timeout, no pass) whose first 1st down had >= 40 s and >= 1 timeout; a case when half_value there >= decisions.clock.passivity_min_ep (1.0 point)"
+    },
+    "half_seconds_remaining": {
+      "title": "Seconds left in the half",
+      "explanation": "Time left before halftime or the end of the game; drives the two-minute drill.",
+      "formula": "seconds left in the current half (or overtime period), before the snap"
+    },
+    "hc_change_s1": {
+      "title": "New head coach (week-1 team)",
+      "explanation": "A new head coach on the team he will play for.",
+      "formula": "his week-1 chart team has a departure with last_season S in coach_departures.csv announced before the as-of's date (blank dates: the hc_departure rule)"
+    },
+    "hc_departure": {
+      "title": "Head-coach departure",
+      "explanation": "A new head coach usually means a new offense and new roles.",
+      "formula": "his S team (his last regular-season game's) has a departure with last_season S in data/manual/coach_departures.csv announced before the snapshot's date (a blank date counts for fired/mutual/interim types only)"
+    },
+    "hot_seat_driver": {
+      "title": "Drivers",
+      "explanation": "The three inputs that move this coach's estimate the most, up or down, compared with an average coach: the logistic regression's own terms (its weight times how far the value is from average).",
+      "formula": "the logistic regression's term of each input: coefficient x standardized value (a value's term and its missing-indicator term summed); the 3 largest by absolute size, signed. A row's terms sum to its log-odds minus the intercept"
+    },
+    "hot_seat_estimate": {
+      "title": "Estimated chance",
+      "explanation": "The model's estimate of the chance that the head coach is let go (fired during or after the season, or a mutual parting) and that it is announced within a set number of days after his team's final game. An estimate from past seasons' patterns, not a prediction that it will happen.",
+      "formula": "the live L2 logistic regression's own probability (no recalibration) that the coach is let go (hot_seat_let_go) and it is announced from the row's day through the window's end, a set number of days after his team's final game, playoffs included"
+    },
+    "hot_seat_let_go": {
+      "title": "Let go",
+      "explanation": "Fired during the season, fired after it, or a mutual parting, announced in the window. Other departures (retired, resigned, left for another job) are not counted as let go.",
+      "formula": "departure type fired_in_season, fired_after_season or mutual_parting, announced in the window (the owner-verified departures file); retired, resigned (also under pressure) or left for another job: not let go"
+    },
+    "implied_team_total": {
+      "title": "Implied team total",
+      "explanation": "How many points the betting market expected a team to score, from the spread and the over/under. Only known right before kickoff, so P1 uses it for games already played.",
+      "formula": "home: (total_line + spread_line) / 2; away: (total_line - spread_line) / 2 (spread_line > 0 = home favored); closing lines of played games only"
+    },
+    "interceptions": {
+      "title": "Interceptions thrown",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.pass_interception, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "interceptions_exp": {
+      "title": "Expected interceptions",
+      "explanation": "What an average player would have produced from the same chances; compare with the actual number to see efficiency.",
+      "formula": "fact_opportunity_week.pass_interception_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "interval": {
+      "title": "Interval",
+      "explanation": "The range a number would plausibly move within if the same kind of seasons were played again. It comes from a season-block bootstrap: whole seasons are redrawn at random many times and the number is recomputed each time.",
+      "formula": "season-block bootstrap: draw as many test seasons as there are, with replacement, recompute the number on the drawn seasons, 2,000 times with a fixed seed, and keep the middle 95%; a difference between two methods is paired (both are graded on the same drawn seasons)"
+    },
+    "is_first_year_coach": {
+      "title": "First-year coach",
+      "explanation": "The coach is in his first season with this team.",
+      "formula": "tenure_seasons = 1"
+    },
+    "is_flex_finish": {
+      "title": "FLEX-worthy finish",
+      "explanation": "The running back or receiver scored well enough to fill a FLEX slot that week. Informative only; it is not a label.",
+      "formula": "a RB or WR with weekly_pos_rank <= his position's FLEX-worthy rank (RB/WR top 36); always false for QB and TE"
+    },
+    "is_fourth_down": {
+      "title": "Fourth down",
+      "explanation": "Separates fourth-down tries (a chosen gamble) from third downs (which add sample).",
+      "formula": "1 when down = 4, 0 on third down"
+    },
+    "is_garbage_time": {
+      "title": "Garbage time",
+      "explanation": "Plays after the game is effectively decided. Stats piled up then say little about next week, so views can drop them.",
+      "formula": "win probability below 0.05 or above 0.95, except in the final 120 seconds of a half when the score is within 8 points"
+    },
+    "is_interim": {
+      "title": "Interim coach (row flag)",
+      "explanation": "Interim coaches are left out of training (spec 8.5). Uses the owner's hindsight file, so it selects rows and is never a model feature.",
+      "formula": "took_over_mid_season OR the owner's data/manual/coach_departures.csv says the coach-team-season was interim (departure_type interim_not_retained or interim_suspected true)"
+    },
+    "is_neutral": {
+      "title": "Neutral situation",
+      "explanation": "Plays where the game is still in the balance and neither team is forced to pass or run; the fairest view of how a team really plays.",
+      "formula": "win probability from 0.2 to 0.8 and more than 120 seconds left in the half"
+    },
+    "is_rookie": {
+      "title": "Rookie",
+      "explanation": "First-year players often earn more snaps as the season goes on.",
+      "formula": "his latest visible roster row's entry_year equals the season"
+    },
+    "is_second_year_coach": {
+      "title": "Second-year coach",
+      "explanation": "The coach is in his second season with this team.",
+      "formula": "tenure_seasons = 2"
+    },
+    "is_short_window": {
+      "title": "Short label window",
+      "explanation": "The window was cut short by the end of the regular season. A label detail: never a model feature.",
+      "formula": "window_games < 3"
+    },
+    "is_starter_finish": {
+      "title": "Starter finish",
+      "explanation": "The player scored like a weekly starter in a 12-team league that week.",
+      "formula": "weekly_pos_rank <= the position's starter threshold (QB top 12, RB top 24, WR top 24, TE top 12)"
+    },
+    "is_team_kicker": {
+      "title": "Team's kicker",
+      "explanation": "Whether he is the kicker his team is using now; practice-squad and camp kickers are in the pool but rarely kick.",
+      "formula": "the kicker has a kick attempt in his as-of team's latest visible regular-season game with one (the pool's is_team_kicker; NULL for DST rows)"
+    },
+    "is_undrafted": {
+      "title": "Undrafted",
+      "explanation": "He was not drafted.",
+      "formula": "no draft round in dim_player at the as-of"
+    },
+    "joined_team_recently": {
+      "title": "New team this season",
+      "explanation": "He changed teams during the season (trade or signing).",
+      "formula": "his latest visible roster team differs from his earliest roster team this season"
+    },
+    "k_fg_att_40_plus_per_game": {
+      "title": "Long field-goal attempts per game",
+      "explanation": "Long kicks score more fantasy points than short ones in the default scoring.",
+      "formula": "field goals made or missed from 40+ yards / games, over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one) (blocked kicks have no distance bucket)"
+    },
+    "k_fg_att_per_game": {
+      "title": "Field-goal attempts per game",
+      "explanation": "How often his team sends him out for field goals: the main source of kicker points.",
+      "formula": "sum of fg_att / games, over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one)"
+    },
+    "k_fg_pct_0_39": {
+      "title": "Field-goal accuracy, 0-39 yards",
+      "explanation": "How reliable he is on short kicks this season.",
+      "formula": "fg_made / (fg_made + fg_missed) in the distance bucket, summed over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one); blocked kicks are not in nflverse's distance buckets and are left out; NULL without an attempt there (0-19, 20-29 and 30-39 yards)"
+    },
+    "k_fg_pct_40_49": {
+      "title": "Field-goal accuracy, 40-49 yards",
+      "explanation": "How reliable he is on medium-long kicks this season.",
+      "formula": "fg_made / (fg_made + fg_missed) in the distance bucket, summed over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one); blocked kicks are not in nflverse's distance buckets and are left out; NULL without an attempt there (40-49 yards)"
+    },
+    "k_fg_pct_50_plus": {
+      "title": "Field-goal accuracy, 50+ yards",
+      "explanation": "How reliable he is from 50 yards and beyond; coaches trust a strong leg with more long tries.",
+      "formula": "fg_made / (fg_made + fg_missed) in the distance bucket, summed over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one); blocked kicks are not in nflverse's distance buckets and are left out; NULL without an attempt there (50-59 and 60+ yards)"
+    },
+    "k_pat_att_per_game": {
+      "title": "Extra-point attempts per game",
+      "explanation": "Extra points follow touchdowns, so this shows how often his offense scores.",
+      "formula": "sum of pat_att / games, over the kicker's regular-season games of the season with a field-goal or extra-point attempt visible at the as-of, for any team (NULL for DST rows and for a kicker without one)"
+    },
+    "kdst_games_to_date": {
+      "title": "K/DST games so far",
+      "explanation": "How many games the numbers so far are based on.",
+      "formula": "the pool's games_to_date (K: games with a kick attempt; DST: team games)"
+    },
+    "kdst_points_last": {
+      "title": "K/DST points, latest game",
+      "explanation": "What it scored last time out.",
+      "formula": "fantasy points in the entity's most recent visible regular-season game of the season (K: his latest game with a kick attempt, any team)"
+    },
+    "kdst_points_per_game": {
+      "title": "K/DST points per game",
+      "explanation": "How many fantasy points the kicker or defense has scored per game so far.",
+      "formula": "the pool's ppg_to_date: kicking: / defense: points (config/scoring.yaml) per regular-season game visible at the as-of (K: games with a kick attempt; DST: the team's games)"
+    },
+    "kdst_ppg_rank": {
+      "title": "K/DST points-per-game rank",
+      "explanation": "Where its points per game rank at its position so far.",
+      "formula": "the pool's ppg_pos_rank: rank of kdst_points_per_game among the position's universe with a game (ties share the better rank)"
+    },
+    "kdst_preseason_rank": {
+      "title": "K/DST preseason rank",
+      "explanation": "Where experts (or last season's scoring) placed it before the season.",
+      "formula": "the pool's preseason_pos_rank: 2020 on the rank on FantasyPros' last August/September K or DST cheat sheet before week 1; earlier the rank by last season's points per game"
+    },
+    "kickoff_spot": {
+      "title": "Kickoff spot after a score",
+      "explanation": "Where the other team starts after a score (the kickoff rules changed in 2024 and 2025, so it is measured, not assumed).",
+      "formula": "mean receiving start of the same season's kickoffs in earlier weeks (at least decisions.kickoff_min_kicks), else the previous season's, rounded to the yard"
+    },
+    "kneel_out_seconds": {
+      "title": "Kneel-out seconds K(d, t)",
+      "explanation": "The most clock an offense can burn by kneeling from this down; if it is at least the time left, the game is over unless the defense's timeouts cut it.",
+      "formula": "n x p + max(0, n - 1 - t) x (g - p), n = 5 - down kneels, t = the defense's timeouts; p (kneel_play) and g (kneel_cycle) = median seconds from a kneel to the next snap with / without a defensive timeout between, measured on the 5 seasons before S"
+    },
+    "label_status": {
+      "title": "Label status",
+      "explanation": "A pending label (the current season) is unknown, never guessed. A label detail: never a model feature.",
+      "formula": "'pending' until every game of every window week has a final score (fact_game.result) and stat lines in the cache, else 'final'"
+    },
+    "legit": {
+      "title": "Legit (tested, not shown)",
+      "explanation": "Tested, not shown: a starter whose production is carried by his opportunity, not by luck. It predicted nothing (in the backtest 59.0% of the players it tagged stayed starters, and so did 61.1% of every starter), so the lists do not carry it.",
+      "formula": "tested, not shown: PPG rank inside the starter threshold (QB top 12, RB top 24, WR top 24, TE top 12) AND FPOE/game not in the top decile of his position's universe; D3's backtest only, dropped from the product on 2026-09-30"
+    },
+    "list_kind": {
+      "title": "Live or reconstructed",
+      "explanation": "A live list was made in real time on the Tuesday and is never changed afterwards. A reconstructed (backtest) list was made later from the data as it stood on that Tuesday: what the Radar would have said then, not a list anyone saw at the time.",
+      "formula": "live: scored on the real clock after its as-of and before the next kickoff, stored once and never rescored (append-only); backtest (reconstructed): scored later from the data public at the as-of, through the same point-in-time view"
+    },
+    "listed_position": {
+      "title": "Listed position",
+      "explanation": "The position nflverse lists the player at today, also on his past weekly rows. A Radar list ranks each player at the position of his team's roster that week, which can differ for a player who changed position.",
+      "formula": "nflverse's current position of the player (today's snapshot, also shown on his past rows); a Radar list ranks him at his team's roster position that week"
+    },
+    "log_loss": {
+      "title": "Log loss",
+      "explanation": "Like the Brier score, it grades probabilities against what happened, but it punishes a confident miss much harder. Lower is better. Example: saying 99% for something that does not happen costs far more than saying 60% for it.",
+      "formula": "mean over the rows of -[y ln(p) + (1 - y) ln(1 - p)], y = 1 when it happened, the probability p kept a hair away from 0 and 1"
+    },
+    "mae": {
+      "title": "Mean absolute error (MAE)",
+      "explanation": "How far a projection missed on average, whether it was too high or too low. Lower is better. Example: projections of 12 and 8 points per game for two players who both then scored 10 per game miss by 2 each, so the MAE is 2.",
+      "formula": "mean over the graded players of |actual rest-of-season points per game - the projection|"
+    },
+    "model_probability": {
+      "title": "Model probability",
+      "explanation": "The model's own calibrated probability. The site shows the chance instead: in the backtest the model's probabilities ran too high for the most likely players.",
+      "formula": "the production model's predicted probability of y_hit after an isotonic calibration fit on the validation season (stored as score in the predictions store)"
+    },
+    "n_flex_finishes": {
+      "title": "FLEX-worthy finishes in the window",
+      "explanation": "Informative: how often he was worth a FLEX start. A label detail: never a model feature.",
+      "formula": "window weeks with is_flex_finish (RB/WR only)"
+    },
+    "n_opp_games_seen": {
+      "title": "Opponent games observed",
+      "explanation": "How much evidence the matchup number rests on (little early in the season).",
+      "formula": "sum of the visible games of the next opponents used by opp_fp_allowed_next3"
+    },
+    "n_opportunities": {
+      "title": "Opportunities",
+      "explanation": "How many chances he had in the game.",
+      "formula": "targets + carries + pass attempts (two-point tries included, sacks not) with an ffopportunity per-play row"
+    },
+    "n_opportunities_garbage": {
+      "title": "Opportunities in garbage time",
+      "explanation": "How many of his chances came after the game was decided.",
+      "formula": "n_opportunities on garbage-time plays (fact_play.is_garbage_time)"
+    },
+    "n_starter_finishes": {
+      "title": "Starter finishes in the window",
+      "explanation": "The count behind y_hit and y_sustained. A label detail: never a model feature.",
+      "formula": "window weeks with is_starter_finish"
+    },
+    "n_window_played": {
+      "title": "Window weeks played",
+      "explanation": "How many window weeks the player actually took the field on offense. A label detail: never a model feature.",
+      "formula": "window weeks with fact_snaps.offense_snaps > 0 or a stat line, for any team"
+    },
+    "new_competitor_s1": {
+      "title": "New competition",
+      "explanation": "A rookie or an arrival shares his role.",
+      "formula": "a same-position teammate at his depth rank or ahead on that chart was on none of that team's regular-season weekly rosters of S"
+    },
+    "next_is_home": {
+      "title": "Home game next week",
+      "explanation": "Teams tend to score more and allow less at home.",
+      "formula": "the as-of team is the home team of its week N+1 game and the venue is not neutral (fact_schedule.location, public from slot_available_at); NULL on a bye or while the venue is not public"
+    },
+    "next_opp_games_to_date": {
+      "title": "Next opponent: games so far",
+      "explanation": "How many games the opponent numbers are based on.",
+      "formula": "regular-season games with a final score of the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week)"
+    },
+    "next_opp_giveaways_per_game": {
+      "title": "Next opponent: giveaways per game",
+      "explanation": "An offense that throws interceptions and loses fumbles feeds a defense.",
+      "formula": "mean (def_interceptions + fumble_recovery_opp) of the defenses that faced the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game)"
+    },
+    "next_opp_points_allowed_per_game": {
+      "title": "Next opponent: points allowed per game",
+      "explanation": "A defense that gives up many points means more scoring chances for this team.",
+      "formula": "mean of the scores against the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game)"
+    },
+    "next_opp_points_per_game": {
+      "title": "Next opponent: points per game",
+      "explanation": "A weak offense next week is a good matchup for a team defense.",
+      "formula": "mean final score of the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game)"
+    },
+    "next_opp_rz_stall_rate_forced": {
+      "title": "Next opponent: red-zone stall rate forced",
+      "explanation": "A defense that holds teams to field goals in the red zone helps kickers.",
+      "formula": "stalls / trips of offenses facing the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week) (red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's 20 or closer (pass, run, field goal, kneel, spike or a penalty snap; two-point tries excluded); stall = a trip whose drive result is not 'Touchdown'); NULL without a trip"
+    },
+    "next_opp_rz_trips_allowed_per_game": {
+      "title": "Next opponent: red-zone trips allowed",
+      "explanation": "How often offenses reach the red zone against next week's opponent.",
+      "formula": "red-zone trips of offenses facing the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week) / its games with play-by-play (red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's 20 or closer (pass, run, field goal, kneel, spike or a penalty snap; two-point tries excluded); stall = a trip whose drive result is not 'Touchdown')"
+    },
+    "next_opp_sacks_allowed_per_game": {
+      "title": "Next opponent: sacks allowed per game",
+      "explanation": "An offense that gets sacked a lot gives a defense sack points.",
+      "formula": "mean def_sacks of the defenses that faced the entity's as-of team's week N+1 opponent (fact_schedule; NULL on a bye or after the last regular-season week), per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game)"
+    },
+    "next_venue_dome": {
+      "title": "Next game under a fixed roof",
+      "explanation": "No wind or rain indoors, so kicks are easier.",
+      "formula": "the week N+1 stadium (fact_schedule.stadium_id, used once fact_schedule.stadium is public) has a roof value 'dome' in earlier games visible at the as-of and never open/closed; NULL without an earlier game there"
+    },
+    "next_venue_retractable": {
+      "title": "Next game under a retractable roof",
+      "explanation": "A retractable roof is often closed in bad weather.",
+      "formula": "an earlier visible game at the week N+1 stadium has roof 'open' or 'closed' (the game-day state itself is never used: it is decided on game day); NULL without an earlier game there"
+    },
+    "ngs_ryoe_per_att_s": {
+      "title": "Rush yards over expected per carry",
+      "explanation": "Yards gained beyond what the blocking and defenders' positions predicted.",
+      "formula": "sum(rush_yards_over_expected) / sum(rush_attempts) over his weekly NGS rushing rows of S (games with 10+ carries; 2018 on: upstream has no RYOE for 2016-2017)"
+    },
+    "ngs_ryoe_trend": {
+      "title": "RYOE trend",
+      "explanation": "Negative: his running is losing its edge.",
+      "formula": "ngs_ryoe_per_att_s - the S-1 value"
+    },
+    "ngs_separation_s": {
+      "title": "Separation (Next Gen Stats)",
+      "explanation": "How open he gets at the catch point; falls as receivers lose speed.",
+      "formula": "target-weighted mean of avg_separation over his weekly NGS receiving rows of S (games with 5+ targets; 2016 on)"
+    },
+    "ngs_separation_trend": {
+      "title": "Separation trend",
+      "explanation": "Negative: he is getting less open than a year before.",
+      "formula": "ngs_separation_s - the S-1 value"
+    },
+    "noise_variance": {
+      "title": "Noise variance per game",
+      "explanation": "How much a single game's value swings by luck alone.",
+      "formula": "var(odd-game mean - even-game mean) / mean(1 / odd games + 1 / even games), across player-seasons of a position"
+    },
+    "off_epa_neutral": {
+      "title": "Offensive EPA per play (neutral)",
+      "explanation": "How efficient the offense is when the score does not force its hand.",
+      "formula": "sum(epa) / plays over the team's run and pass plays (no two-point tries) in neutral situations (fact_play.is_neutral), games to date; plays weighted equally"
+    },
+    "off_epa_neutral_trend": {
+      "title": "Offensive EPA trend",
+      "explanation": "Positive: the offense has been better lately than over the whole season.",
+      "formula": "off_epa_neutral over the team's last hot_seat.trend_games (4) games minus the season to date; NULL until the team has played more than 4 games"
+    },
+    "offense_snap_share": {
+      "title": "Snap share",
+      "explanation": "How often a player was on the field when his team had the ball. Coaches reveal their plans through snaps before the box score does.",
+      "formula": "fact_snaps.offense_pct: the player's offensive snaps divided by his team's offensive snaps in that game (Pro Football Reference, rounded to 0.01)"
+    },
+    "opp_fp_allowed_next3": {
+      "title": "Next opponents' points allowed",
+      "explanation": "Whether his next matchups are soft (above 1) or tough (below 1) for his position.",
+      "formula": "mean over his team's next 3 scheduled opponents (fact_schedule weeks after N, byes skipped; the listed cancelled games count until played) of: fantasy points the opponent's defense allowed per game to his position group this season (visible games; the scorer's snap-count position of that game, else his latest roster position) / the league average per team-game for the group; an opponent without a visible game counts 1.0; NULL when his team has no game left. No betting lines (spec 6.4)"
+    },
+    "own_wp": {
+      "title": "Win probability (our model)",
+      "explanation": "The chance the offense wins from this moment, from a model that never saw the season it scores. It replaces nflfastR's wp in the decision grades.",
+      "formula": "trained walk-forward on seasons before the play's season (G1); since G1b a smooth possession-symmetric spline logistic model of the play state up to 15:00 of the fourth quarter, handing over to a monotone LightGBM by 10:00 left (wp_select.CHOSEN); isotonic calibration only where it helped on the validation season and kept the model within the smoothness limits"
+    },
+    "own_xfp": {
+      "title": "Own walk-forward xFP",
+      "explanation": "Regression Watch's expected points since 2026-10-01 and the player pages' since 2026-10-02: the same idea as nflverse's ffopportunity, but each season is valued by models that never saw it or any later season, so a backtest cannot borrow from the future.",
+      "formula": "xfp from the project's own per-play models (catch chance, yards after the catch, pass touchdown and interception chances per target; yards and touchdown chance per carry; two-point success rates), LightGBM or a spline GLM per part, for a play of season S trained only on seasons 2006 to S-1; inputs are the situation before the snap (air yards, field position, down and distance, direction, quarter, score), never an nflfastR model column; scored with D1's per-play rules and config/scoring.yaml. The current season's models are pinned with their sha256 (config/production_models.yaml) and only loaded by the weekly job; the player pages' earlier seasons are frozen in the same pin (player_xfp)"
+    },
+    "owned_avg": {
+      "title": "Rostership (percent of leagues)",
+      "explanation": "How many real leagues have the player on a roster. It checks the candidate pool (a player owned in fewer than 50% of leagues is really available); the pool itself never uses it, because it does not exist before 2020.",
+      "formula": "FantasyPros' average share of leagues rostering the player across sites (fact_ranking.player_owned_avg) from the season's latest weekly ranking public at the as-of (the Friday before that week's games); owned_espn = ESPN's share (fact_ranking.player_owned_espn). 2020 partly, 2021 on"
+    },
+    "p_convert": {
+      "title": "Conversion probability",
+      "explanation": "The chance that going for it on this down and distance works.",
+      "formula": "LightGBM on the go-for-it features, trained walk-forward (seasons < S)"
+    },
+    "p_fg_make": {
+      "title": "Field-goal probability",
+      "explanation": "The chance the kick is good from here, in these conditions.",
+      "formula": "LightGBM on distance, roof, wind, temperature, surface and era, walk-forward"
+    },
+    "pass_attempts": {
+      "title": "Pass attempts",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.pass_attempt (sacks and two-point tries excluded), from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "passing_tds": {
+      "title": "Passing touchdowns",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.pass_touchdown, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "passing_tds_exp": {
+      "title": "Expected passing touchdowns",
+      "explanation": "What an average player would have produced from the same chances; compare with the actual number to see efficiency.",
+      "formula": "fact_opportunity_week.pass_touchdown_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "passing_yards": {
+      "title": "Passing yards",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.pass_yards_gained, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "passing_yards_exp": {
+      "title": "Expected passing yards",
+      "explanation": "What an average player would have produced from the same chances; compare with the actual number to see efficiency.",
+      "formula": "fact_opportunity_week.pass_yards_gained_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "passivity_ep_left": {
+      "title": "EP left on the table (end of half)",
+      "explanation": "How many points, net of the risk, a typical team got from that spot and clock.",
+      "formula": "G1b half_value(yardline_100, half_seconds_remaining) at the decision snap minus 0 (kneeling scores nothing): net points from a first-half 1st down to halftime, measured on 1999-2005"
+    },
+    "passivity_wp_left": {
+      "title": "WP left on the table (end of half)",
+      "explanation": "What running out the half cost in win probability, by the model.",
+      "formula": "WP(decision snap) - WP(the second half's first snap: same score, 3 timeouts each, the receiving team at the kickoff spot), both from season S's own WP fold model"
+    },
+    "pat_rate": {
+      "title": "Extra-point rate",
+      "explanation": "How often the kick after a touchdown is good.",
+      "formula": "made extra points / attempts in the last 5 seasons before S within the same rule era (2015+: from the 15)"
+    },
+    "pfr_player_id": {
+      "title": "Pro Football Reference id",
+      "explanation": "An identifier: used to join tables, never as a model feature (a model would memorize who, not learn why).",
+      "formula": "PFR player slug"
+    },
+    "play_chance": {
+      "title": "Chance he plays",
+      "explanation": "Out of 100 players like him in past seasons, about this many played. Teams name their inactive players about 90 minutes before kickoff: check then.",
+      "formula": "share of past tagged players with the same tag, position and 'missed his team's previous game' who took at least one offensive snap (fact_snaps), seasons 2016 to last season, each group shrunk toward its parent group (20 pseudo-rows)"
+    },
+    "play_points": {
+      "title": "Fantasy points added up play by play",
+      "explanation": "The same points as the weekly stat line, credited play by play so a game can be split into parts; equal to fantasy_points for 99.9% of player-games.",
+      "formula": "the sum over his plays of each play's stats scored with config/scoring.yaml (twm.scoring.score_sql): passer = passing yards, passing touchdown, interception; target = reception, receiving yards; rusher = rushing yards; lateral receiver or rusher = the lateral's yards; td_player_id = the touchdown (rushing, receiving, return or fumble-recovery); two-point conversions to the passer, target or rusher of the try; a lost fumble to the player who lost it"
+    },
+    "play_xfp": {
+      "title": "xFP added up play by play",
+      "explanation": "The same expected points as the weekly xFP, counted play by play (equal within rounding).",
+      "formula": "the sum over his plays of ffopportunity's per-play expected stats scored like xfp: a pass is worth pass_completion_exp catches (completions for the passer) and pass_completion_exp x (air_yards + yards_after_catch_exp) yards plus pass_touchdown_exp (and, for the passer, pass_interception_exp); a run rush_yards_exp and rush_touchdown_exp; a two-point try only two_point_conv_exp"
+    },
+    "player_id": {
+      "title": "Player id (player_stats)",
+      "explanation": "An identifier: used to join tables, never as a model feature (a model would memorize who, not learn why).",
+      "formula": "the gsis_id in player_stats"
+    },
+    "player_season": {
+      "title": "Player-season",
+      "explanation": "One player's regular season. The stability study counts each season he played enough games in once, at the position of most of his games, and splits his games into two halves.",
+      "formula": "a QB, RB, WR or TE's regular season (2009 on) with at least 8 games with an opportunity (a target, carry or pass), at the position of most of his games; his games split odd/even and first/second half"
+    },
+    "point_diff_per_game": {
+      "title": "Point differential per game",
+      "explanation": "By how much the team outscores (or is outscored by) its opponents on average.",
+      "formula": "(points scored - points allowed) / games, regular season to date"
+    },
+    "points_garbage": {
+      "title": "Fantasy points in garbage time",
+      "explanation": "Points he scored after the game was effectively decided.",
+      "formula": "the fantasy points of his garbage-time plays (fact_play.is_garbage_time), credited play by play as in play_points"
+    },
+    "points_ng": {
+      "title": "Fantasy points without garbage time",
+      "explanation": "The points he scored while the game was still in doubt. Late points in a blowout come against soft defenses and say little about next week.",
+      "formula": "fantasy_points - points_garbage: the weekly stat line's points minus those scored on his garbage-time plays (fact_play.is_garbage_time)"
+    },
+    "pos_rank_s": {
+      "title": "PPG rank at his position",
+      "explanation": "Where he finished; also the prior-season-rank baseline's only input.",
+      "formula": "rank by ppg_s among his position's players with 8+ games in S (ties: more points, then id); NULL under 8 games"
+    },
+    "pos_rb": {
+      "title": "Running back",
+      "explanation": "Position flag (QB is the case with every flag off). A category, not an identifier.",
+      "formula": "his point-in-time position in S is RB"
+    },
+    "pos_te": {
+      "title": "Tight end",
+      "explanation": "Position flag.",
+      "formula": "his point-in-time position in S is TE"
+    },
+    "pos_wr": {
+      "title": "Wide receiver",
+      "explanation": "Position flag.",
+      "formula": "his point-in-time position in S is WR"
+    },
+    "position": {
+      "title": "Position",
+      "explanation": "Which position he plays; hit rates differ by position. A category, not an identifier.",
+      "formula": "his point-in-time roster position (the pool's position)"
+    },
+    "posteam": {
+      "title": "Offense team code",
+      "explanation": "An identifier: used to join tables, never as a model feature (a model would memorize who, not learn why).",
+      "formula": "team with the ball"
+    },
+    "posteam_is_home": {
+      "title": "Offense at home",
+      "explanation": "Home teams win a bit more often; neutral-site games (London, Super Bowl) have no home team.",
+      "formula": "1 when the possession team is the home team, 0 when away, 0.5 at a neutral site (fact_game.location)"
+    },
+    "posteam_spread": {
+      "title": "Pregame spread (offense's view)",
+      "explanation": "How many points the betting market expected the team with the ball to win by, set right before kickoff (allowed: it is known when the game starts).",
+      "formula": "closing spread_line if the possession team is home, else minus spread_line (spread_line > 0 = home favored): the margin the market expected for the offense"
+    },
+    "posteam_timeouts_remaining": {
+      "title": "Offense timeouts left",
+      "explanation": "Timeouts stop the clock: a trailing team with timeouts has more time to come back.",
+      "formula": "the possession team's timeouts left in the half, before the snap"
+    },
+    "posteam_wins": {
+      "title": "WP label: the team with the ball won",
+      "explanation": "What the win-probability model learns to predict, play by play.",
+      "formula": "1 when the possession team before the snap won the game (fact_game.result from its side > 0), 0 when it lost; tie games are left out"
+    },
+    "ppg": {
+      "title": "Points per game (PPG)",
+      "explanation": "A player's fantasy points divided by the games he played: what he scores in a typical game. Higher is better for your team. Example: 45 points in 3 games is 15 PPG.",
+      "formula": "fantasy points (config/scoring.yaml) summed over the games counted / the number of those games (each page says which games: e.g. this season so far, or last season)"
+    },
+    "ppg_change": {
+      "title": "PPG change",
+      "explanation": "A big jump is likely to give some back.",
+      "formula": "ppg_s - PPG in S-1 (NULL without S-1)"
+    },
+    "ppg_pos_rank": {
+      "title": "PPG rank at his position",
+      "explanation": "Where his points per game rank at his position so far.",
+      "formula": "rank of ppg_to_date within his roster position among roster players with a game (ties share the better rank; the candidate pool's ppg_pos_rank)"
+    },
+    "ppg_ros": {
+      "title": "Rest-of-season projection",
+      "explanation": "The points per game we expect for the rest of the season: his opportunity, plus the small part of his luck-or-skill surplus that tends to last.",
+      "formula": "recency-weighted xFP/game + r(g) x FPOE/game (spec: shrink toward 0) or m + r(g) x (FPOE/game - m) (toward the position's average m); r(g) = shrinkage_factor after his g games with an opportunity, estimated only on seasons before this one; the variant (target, half-life, garbage time) is chosen on earlier seasons (docs/regression_watch.md)"
+    },
+    "ppg_s": {
+      "title": "Points per game",
+      "explanation": "His scoring rate last season.",
+      "formula": "regular-season fantasy points in S (config/scoring.yaml) / games_s"
+    },
+    "ppg_to_date": {
+      "title": "Points per game this season",
+      "explanation": "How much a player has scored per game so far this season. A player near the top has been picked up by now, so he is not in the candidate pool.",
+      "formula": "fantasy points (config/scoring.yaml) summed over the season's regular-season games public at the as-of / the number of those games (weeks with a stat line); ppg_pos_rank ranks it within the roster position (ties share the better rank)"
+    },
+    "ppr": {
+      "title": "PPR (points per reception)",
+      "explanation": "A scoring format that gives a point for every catch, on top of yards and touchdowns, which makes pass-catchers more valuable.",
+      "formula": "config/scoring.yaml receiving.receptions (1 = full PPR, 0.5 = half, 0 = standard)"
+    },
+    "pr_auc": {
+      "title": "PR-AUC",
+      "explanation": "How cleanly the top of a model's list is filled with the cases that really happened, for rare events. Higher is better, but guessing does not score 0.5: a random order scores the share of cases that happened. Example: if 1 player in 4 really fell off a cliff, a random order scores about 0.25, and a useful model clearly more.",
+      "formula": "average precision: the precision at each case that happened, going down the list from the highest probability, averaged over those cases (the area under the precision-recall curve)"
+    },
+    "practice_status": {
+      "title": "Practice status",
+      "explanation": "How much he practiced late in the week. Shown for context only: the 2025+ injury data no longer matches earlier seasons here, so the chance does not use it.",
+      "formula": "fact_injury_report.practice_status of the week's final report: Full Participation, Limited Participation, Did Not Participate (blank: none)"
+    },
+    "precision_at_10": {
+      "title": "Precision@10",
+      "explanation": "The share of a list's top 10 who became a fantasy starter soon (a hit). If you had picked up the top 10 at a position that week, it is the share that would have given you a starter week. The track record averages it over every weekly list.",
+      "formula": "per weekly list: players among its top 10 with y_hit / 10 (a list with fewer than 10 players divides by its size); pooled = the mean over every list (weeks x positions) of the seasons"
+    },
+    "preseason_pos_rank": {
+      "title": "Preseason position rank",
+      "explanation": "Where the player stood before the season: experts' consensus ranking (ECR) when it exists, otherwise last season's scoring. A player ranked high was drafted in almost every league.",
+      "formula": "2020 on (method ecr): the player's rank among his position's players on FantasyPros' last August/September redraft cheat sheet of that position before the season's first game (fact_ranking.pos_rank, page_kind preseason); not on his roster position's sheet: his rank on his own FantasyPros position's sheet, judged against that position's cutoff. 2013-2019 (method prior_ppg): his rank by last season's regular-season PPG among players of his current roster position with at least 4 games; ties share the better rank"
+    },
+    "preseason_ranked": {
+      "title": "Ranked before the season",
+      "explanation": "Whether any preseason list ranked him at all.",
+      "formula": "preseason_pos_rank is not NULL (FantasyPros ECR 2020 on; last season's PPG rank or a round 1-2 rookie before)"
+    },
+    "prev_playoff_result": {
+      "title": "Previous playoff result (text)",
+      "explanation": "Last season's playoff exit, spelled out.",
+      "formula": "prev_playoff_round as text: none, lost_wc, lost_div, lost_conf, lost_sb, won_sb"
+    },
+    "prev_playoff_round": {
+      "title": "Previous season playoff result",
+      "explanation": "How far the team went in last season's playoffs.",
+      "formula": "last season: 0 no playoffs, 1 lost wild card, 2 lost divisional, 3 lost conference, 4 lost Super Bowl, 5 won it (text in prev_playoff_result)"
+    },
+    "prev_season_wins": {
+      "title": "Previous season wins",
+      "explanation": "How the team did last year.",
+      "formula": "the team's regular-season wins last season (ties 0.5), whoever coached; NULL for a team without games last season"
+    },
+    "prior_mean": {
+      "title": "Average FPOE per game (prior)",
+      "explanation": "The value a shrunk FPOE/game is pulled toward when shrinking toward the position average instead of zero.",
+      "formula": "sum of FPOE over sum of games, over the player-seasons of a position"
+    },
+    "prior_seasons": {
+      "title": "Prior seasons",
+      "explanation": "Experience; the Cliff needs 3+, the Breakout 0 or 1.",
+      "formula": "S - fact_roster_week.entry_year (= years_exp): his seasons in the league before S"
+    },
+    "priority": {
+      "title": "Suggested priority",
+      "explanation": "A suggestion from the chance: must-add, speculative or watch. The cutoffs, and how often each priority hit in the backtest, are on the Methodology page.",
+      "formula": "from the chance, for the top 25 of a list: must-add when it is at least 0.50, speculative from 0.25 up to that, watch below; ranks 26 and lower get none. The bins only go up, so each priority is a cutoff on the model probability"
+    },
+    "projection_range": {
+      "title": "80% range",
+      "explanation": "Where his rest-of-season points per game should land 8 times in 10: the projection plus how far off it was for similar players in earlier seasons. In the backtest the real result fell inside about 80% of the time at every position (the Methodology page shows each share); it says nothing about games he misses.",
+      "formula": "ppg_ros + the 10th and 90th percentiles of the frozen backtest's per-game misses (rest_of_season_ppg - ppg_ros) at his position, from lists with weeks left within 2 of his list's (else the nearest weeks left), of seasons before the list's only (walk-forward); none with fewer than 30 misses"
+    },
+    "punt_expected_wp": {
+      "title": "Expected WP after a punt",
+      "explanation": "How good punting is, as a win chance, averaged over where punts from this spot really end up.",
+      "formula": "sum over the smoothed empirical distribution of punt results (receiving team's spot, kicking team recovers, return touchdown) of the kicking team's own WP (G1) in the resulting state"
+    },
+    "pythag_minus_wins": {
+      "title": "Pythagorean wins minus wins",
+      "explanation": "Positive: the team has been unlucky in close games; negative: lucky.",
+      "formula": "pythagorean_wins - reg_wins"
+    },
+    "pythagorean_wins": {
+      "title": "Pythagorean wins",
+      "explanation": "The wins a team 'deserves' from its points scored and allowed.",
+      "formula": "games x PF^e / (PF^e + PA^e), e = hot_seat.pythagorean_exponent (2.37, the NFL exponent Football Outsiders uses); NULL when PF + PA = 0"
+    },
+    "qb1_change_s1": {
+      "title": "New starting QB",
+      "explanation": "A new quarterback changes the targets.",
+      "formula": "the team's S primary starter (most regular-season pass attempts for it in S) is not among its best-ranked QBs on that chart"
+    },
+    "questionable": {
+      "title": "Questionable",
+      "explanation": "The team says the player is uncertain to play. Since 2016 about 6 in 10 Questionable QBs, RBs, WRs and TEs played; the list shows the chance for players like him.",
+      "formula": "fact_injury_report.report_status = 'Questionable' on the team's final injury report of the week (2016 on: the NFL's definition since dropping Probable)"
+    },
+    "rank_bucket_hit_rate": {
+      "title": "Hit rate by rank",
+      "explanation": "How often players ranked this high hit, counted over earlier reconstructed lists of the same position (seasons before this list's season, so the badge never uses outcomes the list could not have known).",
+      "formula": "hits / picks at ranks 1-5, 6-10 or 11-25 of the reconstructed (backtest) lists of the same position, over the seasons before the list's season"
+    },
+    "receives_2h_kickoff": {
+      "title": "Gets the ball after halftime",
+      "explanation": "In the first half, knowing you get the ball back after halftime is worth a little.",
+      "formula": "first half only: 1 when the possession team kicked the opening kickoff (it receives the second-half kickoff); 0 in the second half and overtime"
+    },
+    "receiving_tds": {
+      "title": "Receiving touchdowns",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.rec_touchdown, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "receiving_tds_exp": {
+      "title": "Expected receiving touchdowns",
+      "explanation": "What an average player would have produced from the same chances; compare with the actual number to see efficiency.",
+      "formula": "fact_opportunity_week.rec_touchdown_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "receiving_yards": {
+      "title": "Receiving yards",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.rec_yards_gained, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "receiving_yards_exp": {
+      "title": "Expected receiving yards",
+      "explanation": "What an average player would have produced from the same chances; compare with the actual number to see efficiency.",
+      "formula": "fact_opportunity_week.rec_yards_gained_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "recency_weighted_xfp": {
+      "title": "Recency-weighted xFP per game",
+      "explanation": "His expected points per game, with recent games counting a little more.",
+      "formula": "sum of 0.5 ** (k / h) x xFP over his games this season / sum of 0.5 ** (k / h), k = games before his latest one, h = the half-life (none / 8 / 4 / 2 games; chosen per season on earlier seasons)"
+    },
+    "receptions": {
+      "title": "Receptions",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.receptions, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "receptions_exp": {
+      "title": "Expected receptions",
+      "explanation": "What an average player would have produced from the same chances; compare with the actual number to see efficiency.",
+      "formula": "fact_opportunity_week.receptions_exp: the sum of the completion chances of his targets, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "reg_games_played": {
+      "title": "Games played to date",
+      "explanation": "How many games the team has played so far this season.",
+      "formula": "the team's played regular-season games of the season visible at the as-of (fact_game)"
+    },
+    "reg_wins": {
+      "title": "Wins to date",
+      "explanation": "The team's wins so far, ties counting as half a win.",
+      "formula": "regular-season wins to date, a tie = 0.5"
+    },
+    "regression_to_the_mean": {
+      "title": "Regression to the mean",
+      "explanation": "A player who scores far above his opportunity usually comes back down; one who scores far below usually rises. Opportunity is 'stickier' than efficiency.",
+      "formula": "extreme results drift back toward the average when luck made them extreme"
+    },
+    "regression_universe": {
+      "title": "Regression Watch universe",
+      "explanation": "The fantasy-relevant players Regression Watch projects and tags each week.",
+      "formula": "QB/RB/WR/TE with at least 3 games so far whose PPG or xFP/game ranks inside teams x (starting slots the position can fill, FLEX included) x 1.5: QB 18, RB 54, WR 54, TE 36"
+    },
+    "reliability": {
+      "title": "Reliability after g games",
+      "explanation": "The share of a g-game average that is real rather than luck; it grows with g.",
+      "formula": "r(g) = signal_variance / (signal_variance + noise_variance / g)"
+    },
+    "rest_of_season_ppg": {
+      "title": "Rest-of-season PPG (actual)",
+      "explanation": "What he really scored per game afterwards: what the projection is graded on.",
+      "formula": "fantasy points per game over his regular-season games public after the as-of (graded only with at least 3 such games)"
+    },
+    "roc_auc": {
+      "title": "ROC-AUC",
+      "explanation": "How well a model puts the cases that happened above the ones that did not. 0.5 is no better than guessing and 1 is a perfect order, so higher is better. Example: 0.80 means that in 8 of 10 pairs of one coach who was let go and one who was not, the model gave the first a higher estimate.",
+      "formula": "the probability that a random row whose outcome happened gets a higher probability than a random row whose outcome did not (ties count half): the area under the ROC curve, over the pooled walk-forward test rows"
+    },
+    "roof_closed": {
+      "title": "Indoors",
+      "explanation": "No wind or cold indoors.",
+      "formula": "1 when fact_game.roof is dome or closed; 0 for outdoors, open or unknown"
+    },
+    "rookie_r1_qb_on_roster": {
+      "title": "Rookie first-round QB",
+      "explanation": "The team drafted its quarterback of the future: owners tend to be patient.",
+      "formula": "a QB (fact_roster_week.position) on the team's latest visible weekly roster of the season (status not CUT/RET/UFA/TRD) was a first-round pick of this year's draft (dim_player draft_round = 1, draft_year = season); NULL without a visible roster"
+    },
+    "routes_proxy_avg3": {
+      "title": "Routes proxy",
+      "explanation": "About how many pass plays he was on the field for: a stand-in for routes run, which nflverse does not publish.",
+      "formula": "mean over the team's last 3 games of (team dropbacks in the game x his snap share in it); dropbacks = plays with qb_dropback = 1 that are not two-point tries (passes, sacks, scrambles) (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "rush_share_s": {
+      "title": "Rush share",
+      "explanation": "His share of the running game.",
+      "formula": "his carries / his team's carries in his games of S"
+    },
+    "rushing_tds": {
+      "title": "Rushing touchdowns",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.rush_touchdown, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "rushing_tds_exp": {
+      "title": "Expected rushing touchdowns",
+      "explanation": "What an average player would have produced from the same chances; compare with the actual number to see efficiency.",
+      "formula": "fact_opportunity_week.rush_touchdown_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "rushing_yards": {
+      "title": "Rushing yards",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.rush_yards_gained, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "rushing_yards_exp": {
+      "title": "Expected rushing yards",
+      "explanation": "What an average player would have produced from the same chances; compare with the actual number to see efficiency.",
+      "formula": "fact_opportunity_week.rush_yards_gained_exp, from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "rz_carries_avg3": {
+      "title": "Red-zone carries per game",
+      "explanation": "Carries inside the opponent's 20-yard line.",
+      "formula": "mean over the team's last 3 games of his runs (play_type run, not two-point tries; kneels excluded) with yardline_100 <= 20 (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "rz_targets_avg3": {
+      "title": "Red-zone targets per game",
+      "explanation": "Targets inside the opponent's 20-yard line, where touchdowns come from.",
+      "formula": "mean over the team's last 3 games of his targets on pass plays (not two-point tries) with yardline_100 <= 20 (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "same_pos_vacated_carry_share": {
+      "title": "Vacated carry share at his position",
+      "explanation": "Carries freed up by players at his own position.",
+      "formula": "vacated_carry_share over unavailable teammates of his own position group only"
+    },
+    "same_pos_vacated_target_share": {
+      "title": "Vacated target share at his position",
+      "explanation": "Targets freed up by players at his own position: the most direct path to more work.",
+      "formula": "vacated_target_share over unavailable teammates of his own position group only"
+    },
+    "score_differential": {
+      "title": "Score difference (offense minus defense)",
+      "explanation": "How far ahead (positive) or behind (negative) the team with the ball is.",
+      "formula": "possession team's score minus the defense's, before the snap"
+    },
+    "sell_high": {
+      "title": "Sell-high",
+      "explanation": "He has scored well above what his chances were worth, and the projection says it will fade: a good time to trade him away.",
+      "formula": "FPOE/game in the top ceil(n / 10) FPOE/game of his position's universe at that as-of AND ppg_ros at least X (tag_threshold_x) below his PPG"
+    },
+    "shrinkage_factor": {
+      "title": "Shrinkage factor",
+      "explanation": "How much of a player's points over expected to keep when projecting the rest of the season; the rest is expected to fade.",
+      "formula": "reliability r(g) of FPOE/game for his position after his g games, estimated only from seasons before the one projected (stability.shrinkage(seasons))"
+    },
+    "signal_variance": {
+      "title": "Signal variance",
+      "explanation": "How much players truly differ in the metric once luck is taken out.",
+      "formula": "covariance, across player-seasons of a position, of FPOE/game in his odd games and in his even games"
+    },
+    "snap_pct_s": {
+      "title": "Snap share",
+      "explanation": "How much of the time he is on the field.",
+      "formula": "mean fact_snaps.offense_pct over his regular-season games with an offensive snap in S (2013 on; NULL before)"
+    },
+    "snap_pct_trend": {
+      "title": "Snap-share trend",
+      "explanation": "Negative: his role is shrinking.",
+      "formula": "snap_pct_s - the S-1 value"
+    },
+    "snap_share_avg3": {
+      "title": "Snap share, last 3 games",
+      "explanation": "His usual playing time lately, less noisy than one game.",
+      "formula": "mean offense_snap_share over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "snap_share_delta": {
+      "title": "Snap share change",
+      "explanation": "Did his playing time just go up or down? A big rise means the coaches trust him more.",
+      "formula": "snap_share_last minus the mean snap share of the up to 3 team games before the last (NULL when the last game is the team's first)"
+    },
+    "snap_share_last": {
+      "title": "Snap share, last game",
+      "explanation": "How much he played in the most recent game. A jump is often the first sign of a bigger role.",
+      "formula": "offense_snap_share in the team's last game (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "snap_share_season": {
+      "title": "Snap share, season",
+      "explanation": "His playing time over the whole season so far.",
+      "formula": "mean offense_snap_share over all team games of the season (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "split_half_correlation": {
+      "title": "Split-half correlation",
+      "explanation": "How much a number repeats within a season: near 1 it is a lasting trait (role or skill), near 0 it was mostly luck.",
+      "formula": "Pearson correlation, across player-seasons (8+ games with a target, carry or pass; 2009 on; one position per player-season), of a metric in one half of his games with the same metric in the other half: odd against even games, or his first n // 2 games against the rest"
+    },
+    "spread_time": {
+      "title": "Spread x time left",
+      "explanation": "The pregame expectation fades as the game goes on; this lets the model weigh it less and less.",
+      "formula": "posteam_spread x exp(-4 x elapsed share of regulation; overtime = 1)"
+    },
+    "stability_interval": {
+      "title": "Interval (stability study)",
+      "explanation": "The range the number would plausibly move within with other players: the player-seasons are redrawn at random many times and the number is recomputed each time. The same player appears in several seasons, so the true range is a little wider.",
+      "formula": "bootstrap over player-seasons: redraw them with replacement 1,000 times, recompute the split-half correlation each time and keep the middle 95%"
+    },
+    "start_sit_odds": {
+      "title": "Start/sit odds",
+      "explanation": "Choosing between two players? This is how often a player ranked like the first outscored one ranked like the second. Under 55% it is a close call: either is a reasonable start. Local only: it uses the experts' weekly ranks, which may not be republished.",
+      "formula": "P(A outscores B) for independent draws of the league points of players at A's and B's weekly expert ranks in 2020-2025 (each rank pooled with its neighbours), a tie counting one half; walk-forward checked on 2022-2025 (docs/start_sit.md)"
+    },
+    "starter_threshold": {
+      "title": "Weekly starter threshold",
+      "explanation": "A player 'finished as a starter' in a week when he scored well enough that a typical 12-team league would have started him.",
+      "formula": "teams x dedicated starters at the position (derived from config/league.yaml teams and lineup): QB top 12, RB top 24, WR top 24, TE top 12 by fantasy points that week; FLEX-worthy (teams x (dedicated starters + multi-position slots the position can fill), for the positions in flex_worthy_positions): RB/WR top 36"
+    },
+    "starting_qb_changes": {
+      "title": "Starting-QB changes",
+      "explanation": "How many different quarterbacks beyond the first have started this season.",
+      "formula": "distinct starting QBs (fact_game home/away_qb_id) in the games to date minus 1"
+    },
+    "stream_chance": {
+      "title": "Chance (K and D/ST)",
+      "explanation": "How often picks the streamer rated alike scored like a starter the very next week, in earlier seasons' backtests: for kickers, picks with a similar model score; for team defenses, the rule's pick at the same rank. The range beside it is how sure that rate is. A track record, not a promise.",
+      "formula": "read off the frozen streamer backtest of the seasons before the list's season: kickers: the y_start rate of the bin of backtest picks with a similar model score (bins of at least 200 picks); D/STs: the y_start rate of the rule's picks at that rank (rank bins of at least 100 picks); a better score or rank never shows a lower chance; 90% interval"
+    },
+    "stream_pool": {
+      "title": "Streaming pool",
+      "explanation": "The kickers and team defenses who are probably still on waivers: those ranked low both by the experts before the season and by points per game so far. It is an estimate, the same kind as the Waiver Radar's candidate pool, because past waiver wires are not public.",
+      "formula": "the Waiver Radar's candidate-pool rule for K and D/ST: outside the pool cutoff both in the experts' preseason ranking (last season's points per game before 2020) and in points per game so far this season"
+    },
+    "surface_grass": {
+      "title": "Grass field",
+      "explanation": "Kicking footing differs a little between grass and turf.",
+      "formula": "1 for grass or dessograss, 0 for artificial turf; unknown -> NULL, filled with the training median"
+    },
+    "tag_threshold_x": {
+      "title": "Tag threshold X",
+      "explanation": "How far the projection must sit from his current PPG before we tag him.",
+      "formula": "per season, the X in 0, 0.5 .. 6 with the best Sell-high (Buy-low) precision on the earlier seasons among those tagging at least 3 players per week; never chosen on the season it is used in"
+    },
+    "target_share": {
+      "title": "Target share",
+      "explanation": "The share of his team's passes thrown to a player. Targets are the raw material of receiving points.",
+      "formula": "player targets / team targets in that game (nflverse player_stats)"
+    },
+    "target_share_avg3": {
+      "title": "Target share, last 3 games",
+      "explanation": "How much of the passing game goes to him lately.",
+      "formula": "mean nflverse target_share over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "target_share_last": {
+      "title": "Target share, last game",
+      "explanation": "The share of his team's passes thrown his way last game.",
+      "formula": "nflverse target_share in the team's last game, 0 without a stat line (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "target_share_rookie": {
+      "title": "Rookie target share",
+      "explanation": "An early role is the strongest sign of a coming breakout.",
+      "formula": "target share in his rookie season (entry year; S itself for a first-year player)"
+    },
+    "target_share_s": {
+      "title": "Target share",
+      "explanation": "His share of the passing game.",
+      "formula": "his targets / his team's targets in his games of S"
+    },
+    "targets": {
+      "title": "Targets",
+      "explanation": "The actual number in the game, counted by ffopportunity over the same plays as its expected value.",
+      "formula": "fact_opportunity_week.rec_attempt: passes thrown to him (two-point tries excluded), from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays"
+    },
+    "td_rate_over_expected": {
+      "title": "TD rate over expected",
+      "explanation": "Touchdowns beyond what his chances were worth, per pass, carry or target.",
+      "formula": "(passing_tds + rushing_tds + receiving_tds - the same three _exp) / (pass_attempts + carries + targets), over the games of one half of a player-season (summed, then divided)"
+    },
+    "team": {
+      "title": "Team code",
+      "explanation": "An identifier: used to join tables, never as a model feature (a model would memorize who, not learn why).",
+      "formula": "team abbreviation (today's code)"
+    },
+    "team_any_a": {
+      "title": "Team ANY/A (QB quality)",
+      "explanation": "How good his team's passing game was.",
+      "formula": "his S team's (passing yards + 20 x TD - 45 x INT - sack yards) / (attempts + sacks) in the regular season of S (Pro Football Reference's ANY/A; no model column)"
+    },
+    "team_change_s1": {
+      "title": "New team",
+      "explanation": "He moved in the offseason.",
+      "formula": "his week-1 chart team (the team where he has his best offense rank) differs from his S team (his last regular-season game's)"
+    },
+    "team_epa_per_play": {
+      "title": "Team EPA per play",
+      "explanation": "How efficient his offense is: good offenses create more points to go around.",
+      "formula": "mean epa over his team's run and pass plays (no two-point tries) in the season's visible games"
+    },
+    "team_epa_per_play_neutral": {
+      "title": "Team EPA per play (neutral)",
+      "explanation": "Offensive efficiency when the game is close, the fairest view of a team.",
+      "formula": "as team_epa_per_play, neutral situations only (fact_play.is_neutral)"
+    },
+    "team_games_remaining": {
+      "title": "Games remaining",
+      "explanation": "How much season is left to use him.",
+      "formula": "his team's regular-season fixtures after week N (fact_schedule, plus listed cancelled games)"
+    },
+    "team_games_to_date": {
+      "title": "Team games so far",
+      "explanation": "How many games the team numbers are based on.",
+      "formula": "the as-of team's regular-season games of the season with a final score visible at the as-of"
+    },
+    "team_pass_rate_neutral": {
+      "title": "Team neutral pass rate",
+      "explanation": "How pass-heavy his team is when the score does not force it.",
+      "formula": "share of his team's neutral-situation run and pass plays with pass = 1 (passes, sacks, scrambles)"
+    },
+    "team_plays_per_game": {
+      "title": "Team plays per game",
+      "explanation": "Pace: more plays mean more chances for everybody.",
+      "formula": "his team's run and pass plays (no two-point tries) / its visible games"
+    },
+    "team_points_per_game": {
+      "title": "Team points per game",
+      "explanation": "How much the team's offense scores: more scoring drives mean more kicks.",
+      "formula": "mean of the entity's as-of team's final scores, per game = mean over the team's regular-season games of the season visible at the as-of (NULL before its first game)"
+    },
+    "team_rz_stall_rate": {
+      "title": "Red-zone stall rate",
+      "explanation": "The share of red-zone trips that end without a touchdown.",
+      "formula": "stalls / trips of the as-of team this season (red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's 20 or closer (pass, run, field goal, kneel, spike or a penalty snap; two-point tries excluded); stall = a trip whose drive result is not 'Touchdown'); NULL without a trip"
+    },
+    "team_rz_stalls_per_game": {
+      "title": "Red-zone stalls per game",
+      "explanation": "Drives that reach the red zone but stall usually end in a short field goal: kicker points.",
+      "formula": "the as-of team's red-zone trips that did not end in a touchdown / its games with play-by-play (red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's 20 or closer (pass, run, field goal, kneel, spike or a penalty snap; two-point tries excluded); stall = a trip whose drive result is not 'Touchdown')"
+    },
+    "team_rz_trips_per_game": {
+      "title": "Red-zone trips per game",
+      "explanation": "How often the offense gets inside the opponent's 20-yard line.",
+      "formula": "the as-of team's red-zone trips / its games with play-by-play (red-zone trip = a drive (fact_play.fixed_drive) with a snap at the opponent's 20 or closer (pass, run, field goal, kneel, spike or a penalty snap; two-point tries excluded); stall = a trip whose drive result is not 'Touchdown')"
+    },
+    "teammate_same_pos_unavailable": {
+      "title": "Teammates out at his position",
+      "explanation": "How many players at his position are out.",
+      "formula": "number of unavailable teammates of his position group"
+    },
+    "teammate_unavailable": {
+      "title": "Unavailable teammate",
+      "explanation": "A teammate who is out now: his targets and carries are up for grabs. Each rule is recorded so the app can say why.",
+      "formula": "a teammate (same as-of team, QB/RB/WR/TE, who played for the team this season) is unavailable at the as-of if ANY of: roster_status = his row on the team's latest visible weekly roster has a status other than ACT, INA, DEV (RES, PUP, SUS, CUT ...), used only in seasons whose roster statuses change from week to week (2016 on: the 2002-2015 rosters repeat one, season-final status on every week); left_team = he was on the team's roster earlier this season but not on its latest visible roster (released or traded); injury_report = the team's latest visible injury report of the season lists him Out or Doubtful; missed_last_game = no offensive snap or stat line in the team's last game after averaging at least 50% snap share in the up to 3 team games before it"
+    },
+    "temp_f": {
+      "title": "Temperature",
+      "explanation": "Cold air and a hard ball make long kicks shorter.",
+      "formula": "fact_game.temp, else the 'Temp: N' in fact_play.weather; indoors = 70; still unknown outdoors -> NULL, filled with the median of the training rows' outdoor games"
+    },
+    "tenure_censored": {
+      "title": "Tenure starts before the data",
+      "explanation": "The coach was already in charge when our data begins; his tenure is a minimum.",
+      "formula": "the current stint reaches the warehouse's first season (1999), so the true tenure may be longer than tenure_seasons"
+    },
+    "tenure_seasons": {
+      "title": "Coach tenure",
+      "explanation": "How long the coach has been in charge of this team.",
+      "formula": "seasons of the coach's current stint with the team, this one included: consecutive seasons back from this one in which he coached it a game (coach_game, kickoff <= as-of)"
+    },
+    "third_season": {
+      "title": "Entering his third season",
+      "explanation": "Second-year (rookie season just ended) vs third-year player.",
+      "formula": "S - entry year = 1"
+    },
+    "timeout_seconds_wasted": {
+      "title": "Seconds wasted with timeouts in hand",
+      "explanation": "Clock the team let run when a timeout would have kept its last possession alive, while it kept timeouts it never used.",
+      "formula": "while down 1-8 in the final 2:00, after an opponent play that leaves K(d', t - 1) < clock <= K(d', -1) (decisive), no team timeout and a runoff (next snap's gap minus the play's measured seconds) >= 10 s; per opponent drive the first k such runoffs, k = the timeouts the team still held at the drive's end"
+    },
+    "timeouts_unused": {
+      "title": "Timeouts unused in a lost one-score game",
+      "explanation": "The team lost a close game while the opponent ran out the clock, with timeouts still in its pocket. A fact, not always a mistake: see timeout_seconds_wasted.",
+      "formula": "regulation loss by 1-8; the opponent's drive held the game's last snap and had a 4th-quarter snap with <= 120 s where K(d, t) < clock <= K(d, 0) (t >= 1 the team's timeouts); the team's timeouts at that drive's last snap; a case when >= 1"
+    },
+    "took_over_mid_season": {
+      "title": "Took over mid-season",
+      "explanation": "The coach replaced someone during this season (usually an interim coach).",
+      "formula": "the team's first played regular-season game this season had another coach"
+    },
+    "top_teammate_out": {
+      "title": "A player ahead of him is out",
+      "explanation": "Someone who played ahead of him is out: the classic waiver opportunity.",
+      "formula": "an unavailable same-position teammate averaged a higher snap share than he did over the same games (the teammate's last 3 team games up to his last appearance)"
+    },
+    "toss_up": {
+      "title": "Toss-up",
+      "explanation": "A decision whose best two options were within the toss-up margin of each other: the model cannot tell them apart with confidence, so it is counted but never graded, whatever the coach chose.",
+      "formula": "WP(best option) - WP(second best) <= decisions.toss_up_margin: counted, never graded"
+    },
+    "touches_per_game_s": {
+      "title": "Touches per game",
+      "explanation": "Workload per game.",
+      "formula": "touches_s / games_s"
+    },
+    "touches_s": {
+      "title": "Touches",
+      "explanation": "Workload; very heavy loads (350+ for a running back) often precede a decline.",
+      "formula": "carries + receptions in S"
+    },
+    "train_eligible": {
+      "title": "Usable for training",
+      "explanation": "Whether a model may learn from this row. A label detail: never a model feature.",
+      "formula": "window_games >= 2 (PROJECT_SPEC 8.1: weeks with fewer remaining games are left out of training)"
+    },
+    "two_point_rate": {
+      "title": "Two-point rate",
+      "explanation": "How often a two-point try succeeds.",
+      "formula": "successful two-point tries / tries in the last 5 seasons before S"
+    },
+    "undrafted": {
+      "title": "Undrafted",
+      "explanation": "Not drafted.",
+      "formula": "no draft round in dim_player"
+    },
+    "vacated_carries_share_s1": {
+      "title": "Vacated carries",
+      "explanation": "Carries left behind by departed teammates.",
+      "formula": "the same with carries"
+    },
+    "vacated_carry_share": {
+      "title": "Vacated carry share",
+      "explanation": "Carries freed up by teammates who are out.",
+      "formula": "as vacated_target_share, with carry_share"
+    },
+    "vacated_target_share": {
+      "title": "Vacated target share",
+      "explanation": "Targets that teammates who are now out used to get: somebody has to catch them.",
+      "formula": "sum over his unavailable teammates (see teammate_unavailable) of their target_share averaged over the team's last 3 games up to their last appearance (before they became unavailable; games they missed count as 0)"
+    },
+    "vacated_targets_share_s1": {
+      "title": "Vacated targets",
+      "explanation": "Targets left behind by departed teammates.",
+      "formula": "the team's S regular-season targets by players absent from its week-1 chart / the team's S targets"
+    },
+    "walk_forward": {
+      "title": "Walk-forward backtest",
+      "explanation": "Grading a model the honest way: every season is predicted by a model trained only on the seasons before it, using only data that was public at each Tuesday's as-of time.",
+      "formula": "for each test season S: fit only on seasons before S (settings chosen on the last season before S), score every as-of of S from the data public then, no refit during S; the harness refuses any training row of S or later"
+    },
+    "weather_missing": {
+      "title": "Weather unknown",
+      "explanation": "Flags the games whose weather was filled in, so the model can treat them apart.",
+      "formula": "1 for an outdoor game whose temperature or wind is unknown even after the weather text (then imputed)"
+    },
+    "weekly_ecr_listed": {
+      "title": "On the weekly expert list",
+      "explanation": "Experts list only the kickers and defenses worth starting.",
+      "formula": "a weekly K or DST page of the season is visible and lists the entity; NULL when no page is visible (before late 2020)"
+    },
+    "weekly_ecr_rank": {
+      "title": "Weekly expert rank",
+      "explanation": "Where experts ranked it last week.",
+      "formula": "the entity's pos_rank on FantasyPros' latest weekly K or DST ranking of the season visible at the as-of (the Friday before week N's games; late 2020 on); K by gsis_id, DST by team; NULL when not listed or no page"
+    },
+    "weekly_pos_rank": {
+      "title": "Weekly position rank",
+      "explanation": "Where a player's score ranked at his position that week: rank 5 at WR means four receivers scored more. Built from the finished week, so it is outcome data for labels; a feature must rank only the games public at its as-of.",
+      "formula": "1 + the number of players of the same position with more fantasy points that regular-season week, among every player with a stat line (rank 'min': ties share the better rank); position = his point-in-time roster position that week (fact_roster_week.position; without a row that week his latest earlier roster week of the season, else that game's fact_snaps.position); QB/RB/WR/TE only (fullbacks and others are not ranked). Column pos_rank of weekly_finishes"
+    },
+    "wind_mph": {
+      "title": "Wind",
+      "explanation": "Wind pushes long kicks off line.",
+      "formula": "fact_game.wind, else the 'Wind: ... N mph' in fact_play.weather ('calm' = 0); indoors = 0; still unknown outdoors -> NULL, filled with the training median"
+    },
+    "window_games": {
+      "title": "Games in the label window",
+      "explanation": "How many games the player's team has in the window. A label detail: never a model feature.",
+      "formula": "len(window_weeks): 3, fewer in the last weeks of a season"
+    },
+    "window_points": {
+      "title": "Weekly points in the window",
+      "explanation": "Week-by-week scores, for reports and eyeballing. A label detail: never a model feature.",
+      "formula": "fantasy points of each window week (0 for a week he played without a stat line, NULL for a week he did not play)"
+    },
+    "window_ranks": {
+      "title": "Weekly ranks in the window",
+      "explanation": "Week-by-week ranks, for reports and eyeballing. A label detail: never a model feature.",
+      "formula": "weekly_pos_rank of each window week (NULL where he had no stat line)"
+    },
+    "window_weeks": {
+      "title": "Label window weeks",
+      "explanation": "The weeks whose results decide the label. A label detail: never a model feature.",
+      "formula": "the first 3 regular-season weeks after the as-of week N in which the player's as-of team has a game (its bye weeks skipped), up to the last regular-season week (dim_week.is_last_reg_week)"
+    },
+    "wins_vs_expected": {
+      "title": "Wins vs market expectation",
+      "explanation": "Positive: the team has won more than the market expected; negative: fewer.",
+      "formula": "reg_wins - expected_wins"
+    },
+    "wopr": {
+      "title": "WOPR (weighted opportunity rating)",
+      "explanation": "One number that blends how often a player is targeted with how deep those targets are; a good summary of a receiver's opportunity.",
+      "formula": "1.5 x target_share + 0.7 x air_yards_share"
+    },
+    "wopr_avg3": {
+      "title": "WOPR, last 3 games",
+      "explanation": "One number for a receiver's recent opportunity.",
+      "formula": "mean nflverse wopr (1.5 x target share + 0.7 x air-yards share) over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "wp": {
+      "title": "Win probability",
+      "explanation": "The chance the offense wins from this moment, given score, time, field position and more. Garbage time and neutral situations are defined from it.",
+      "formula": "nflfastR's estimated probability that the team with the ball wins, before the snap"
+    },
+    "wp_fg": {
+      "title": "WP if kicking a field goal",
+      "explanation": "The offense's chance to win if it kicks.",
+      "formula": "P(make) x WP(3 points up, opponent receives the kickoff) + (1 - P(make)) x WP(the opponent's ball at the spot of the kick or its 20); only within the longest field goal made before S"
+    },
+    "wp_go": {
+      "title": "WP if going for it",
+      "explanation": "The offense's chance to win if it goes for it here.",
+      "formula": "P(convert) x expected WP after a conversion + (1 - P(convert)) x expected WP after a failure (G2 ball-spot tables, G1 WP; fold models of seasons < S)"
+    },
+    "wp_kick": {
+      "title": "WP if kicking the extra point",
+      "explanation": "The scoring team's chance to win if it kicks after a touchdown.",
+      "formula": "PAT rate x WP(+1) + (1 - PAT rate) x WP(+0), the opponent then receiving the kickoff"
+    },
+    "wp_lost": {
+      "title": "WP lost",
+      "explanation": "How much win probability a decision gave away by the model's numbers.",
+      "formula": "WP of the best option - WP of the chosen option (0 when the best was chosen); summed over clear decisions only"
+    },
+    "wp_lost_per_game": {
+      "title": "WP lost per game",
+      "explanation": "A coach's decision cost per game, for the leaderboard.",
+      "formula": "(fourth-down + two-point WP lost on clear decisions) / games coached"
+    },
+    "wp_points": {
+      "title": "WP points",
+      "explanation": "Win probability in percentage points: one WP point is one percentage point of the team's chance to win, by our win-probability model.",
+      "formula": "100 x a win probability (or a difference of two) on the 0-1 scale"
+    },
+    "wp_punt": {
+      "title": "WP if punting",
+      "explanation": "The offense's chance to win if it punts.",
+      "formula": "G2's punt_expected_wp with the measured kickoff spot after a return touchdown; only from yardlines punts come from"
+    },
+    "wp_two_point": {
+      "title": "WP if going for two",
+      "explanation": "The scoring team's chance to win if it goes for two.",
+      "formula": "two-point rate x WP(+2) + (1 - rate) x WP(+0), the opponent then receiving"
+    },
+    "wpa": {
+      "title": "WPA (win probability added)",
+      "explanation": "How much one play or decision changed a team's chance of winning.",
+      "formula": "win probability after the play minus before it, for the offense"
+    },
+    "wrong_call": {
+      "title": "Wrong call",
+      "explanation": "A clear call where the coach did not choose the option with the highest win probability.",
+      "formula": "a clear call whose chosen option is not the recommended one (the highest WP); it costs WP lost = WP(best) - WP(chosen)"
+    },
+    "xfp": {
+      "title": "xFP (expected fantasy points)",
+      "explanation": "What an average player would have scored from the same chances (where he was targeted, where he carried the ball). Opportunity is sticky week to week.",
+      "formula": "sum over stats of (expected stat x points per unit in config/scoring.yaml): the ffopportunity model's expected passing, rushing and receiving yards, touchdowns, two-point conversions, interceptions and receptions of a player-game (fact_opportunity_week *_exp columns); fumbles and return or fumble-recovery touchdowns have no expected value and add 0. Regression Watch's lists, stability study and backtest (since 2026-10-01, step H6-b2) and the player pages' weekly xFP (since 2026-10-02, step PXFP) score the same per-play expectations from the own walk-forward models instead (own_xfp); the Waiver Radar's features keep ffopportunity's"
+    },
+    "xfp_avg3": {
+      "title": "xFP, last 3 games",
+      "explanation": "What his recent chances were worth per game, whatever he did with them.",
+      "formula": "mean xfp over the team's last 3 games (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "xfp_garbage": {
+      "title": "xFP in garbage time",
+      "explanation": "What his chances after the game was decided were worth.",
+      "formula": "the expected points of his garbage-time plays (fact_play.is_garbage_time), counted play by play as in play_xfp (NULL without an ffopportunity row)"
+    },
+    "xfp_last": {
+      "title": "xFP, last game",
+      "explanation": "Expected fantasy points from his chances last game.",
+      "formula": "xfp in the team's last game, 0 without a row (team games = regular-season games of the player's as-of team visible at the as-of; last = the most recent, avg3 = mean over the last 3 (fewer early in the season), season = mean over all; a game he missed counts as 0; NULL only when the team has no visible game)"
+    },
+    "xfp_ng": {
+      "title": "xFP without garbage time",
+      "explanation": "What his chances were worth while the game was still in doubt.",
+      "formula": "xfp - xfp_garbage: the weekly xFP minus the expected points of his garbage-time targets, carries and passes (the own walk-forward xFP's in Regression Watch and on the player pages)"
+    },
+    "xfp_per_game_s": {
+      "title": "Expected points per game (own xFP)",
+      "explanation": "The points his opportunities were worth to an average player.",
+      "formula": "sum of his own walk-forward xFP (Regression Watch, each season from models trained on earlier seasons) over the regular season of S / games_s; NULL before 2009"
+    },
+    "y_breakout": {
+      "title": "Breakout",
+      "explanation": "A young player who becomes a fantasy starter.",
+      "formula": "top-24 WR / top-12 TE / top-24 RB in PPG with 8+ games in S+1 (Breakout population: WR/TE/RB with S - entry year 0 or 1, a game in S, not top-36 WR / top-12 TE / top-24 RB in S)"
+    },
+    "y_cliff": {
+      "title": "Cliff",
+      "explanation": "A veteran whose scoring falls by 30% or more.",
+      "formula": "PPG in S+1 <= 70% of PPG in S with 6+ games in S+1 (Cliff population: 3+ prior seasons, top-36 PPG at his position with 8+ games in S); NULL when y_missed"
+    },
+    "y_cliff_or_missed": {
+      "title": "Cliff or missed",
+      "explanation": "The sensitivity run: missing most of the next season counts as a cliff.",
+      "formula": "y_cliff OR y_missed"
+    },
+    "y_hit": {
+      "title": "Waiver hit",
+      "explanation": "What the Waiver Radar predicts: will this player be startable soon?",
+      "formula": "n_starter_finishes >= 1: at least one starter finish in the label window (the next 3 regular-season weeks after the as-of week N in which his as-of team plays; a bye is skipped and extends the window, the season's last regular-season week ends it), counting only stat lines public strictly after the as-of"
+    },
+    "y_missed": {
+      "title": "Missed next season",
+      "explanation": "Injury, benching, release or retirement: kept apart from the Cliff (owner, 2026-10-02).",
+      "formula": "fewer than 6 games in S+1 (Cliff population)"
+    },
+    "y_start": {
+      "title": "Streamer label: a starter next week",
+      "explanation": "Would the kicker or defense you pick up on Tuesday have been worth starting in the very next game? Streaming is a one-week decision.",
+      "formula": "the entity's week N+1 fantasy points (config/scoring.yaml kicking: / defense:) rank in the top (teams x lineup slots) at its position among everyone who played that week: top 12 K and top 12 DST in this league (ties at the cutoff all count); NULL on a bye, after the last regular-season week, or while week N+1 is not final; a kicker without a kick in week N+1 is False"
+    },
+    "y_sustained": {
+      "title": "Sustained hit",
+      "explanation": "A stricter target: a player who stays startable, not a one-week spike.",
+      "formula": "n_starter_finishes >= 2: as y_hit, but in at least two window weeks"
+    },
+    "yac": {
+      "title": "Yards after the catch",
+      "explanation": "Yards he gained with the ball after catching it.",
+      "formula": "receiving_yards - air_yards over his caught targets (two-point tries excluded), from fact_opportunity_pass"
+    },
+    "yac_exp": {
+      "title": "Expected yards after the catch",
+      "explanation": "Yards after the catch an average receiver would have gained on the same catches; yac - yac_exp is 'YAC over expected'.",
+      "formula": "yards_after_catch_exp over his caught targets (two-point tries excluded)"
+    },
+    "yac_over_expected": {
+      "title": "YAC over expected",
+      "explanation": "Yards after the catch beyond what an average receiver gains on the same catches.",
+      "formula": "(yac - yac_exp) / receptions, over the games of one half of a player-season (summed, then divided)"
+    },
+    "yardline_100": {
+      "title": "Yards to the end zone",
+      "explanation": "Field position: 1 = at the opponent's goal line, 99 = backed up at your own 1.",
+      "formula": "yards between the line of scrimmage and the opponent's goal line"
+    },
+    "yards_per_team_pass_att_s": {
+      "title": "Yards per team pass attempt",
+      "explanation": "Production per team dropback: rewards both role and efficiency.",
+      "formula": "his receiving yards / his team's pass attempts in his games of S"
+    },
+    "yards_per_touch_s": {
+      "title": "Yards per touch",
+      "explanation": "Efficiency with the ball.",
+      "formula": "(rushing + receiving yards) / touches in S; NULL under 20 touches"
+    },
+    "yards_per_touch_trend": {
+      "title": "Yards-per-touch trend",
+      "explanation": "Negative: he is getting less out of each touch than before.",
+      "formula": "yards_per_touch_s - the mean of the S-1 and S-2 values that exist"
+    },
+    "ydstogo": {
+      "title": "Yards to go",
+      "explanation": "The distance the offense still needs; 3rd and 1 is far better than 3rd and 12.",
+      "formula": "yards needed for a first down (or a touchdown)"
+    },
+    "years_exp": {
+      "title": "Years of experience",
+      "explanation": "Seasons in the league before this one.",
+      "formula": "his latest visible roster row's years_exp"
+    },
+    "z_margin": {
+      "title": "Lead in standard deviations of what is left",
+      "explanation": "A random-walk view of the game: how many 'typical swings of the remaining time' the offense is ahead by, counting the ball and the spread.",
+      "formula": "(score_differential + drive_value + posteam_spread x t) / (13.5 x sqrt(t) + 1), t = share of regulation left"
+    }
+  }
+}

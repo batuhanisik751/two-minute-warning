@@ -1,16 +1,18 @@
+import Term from "@/components/Term";
 import { fmtInt, pct } from "@/lib/format";
 import { MODEL_WORDS, top5Slices, trackCell, type TrackCell, type TrackCellRow } from "@/lib/hot-seat";
 import { TRACK_INTERVAL_LEVEL } from "@/lib/method";
 
-const COLUMNS = [
-  { slice: "all", metric: "roc_auc", label: "ROC-AUC, every row", digits: 3 },
-  { slice: "all", metric: "pr_auc", label: "PR-AUC, every row", digits: 3 },
-  { slice: "all", metric: "brier", label: "Brier, every row (lower is better)", digits: 4 },
-] as const;
+// `term`: the metric's name, a glossary term (the entry is named like the metric); `label` follows it
+const COLUMNS: { slice: string; metric: string; term?: string; label: string; digits: number }[] = [
+  { slice: "all", metric: "roc_auc", term: "ROC-AUC", label: ", every row", digits: 3 },
+  { slice: "all", metric: "pr_auc", term: "PR-AUC", label: ", every row", digits: 3 },
+  { slice: "all", metric: "brier", term: "Brier", label: ", every row (lower is better)", digits: 4 },
+];
 
 /** The table's columns: the every-row metrics, then the top-5 hit rate at each published point
  *  (week 12 beside the season's end, lib/hot-seat.ts top5Slices). */
-const columns = (rows: TrackCellRow[]) => [
+const columns = (rows: TrackCellRow[]): typeof COLUMNS => [
   ...COLUMNS,
   ...top5Slices(rows).map((t) => ({ slice: t.slice, metric: "top5_hit_rate", label: `Top-5 hit rate, ${t.when}`, digits: 3 })),
 ];
@@ -46,6 +48,7 @@ export default function HotSeatModels({ rows }: { rows: TrackCellRow[] }) {
               <th scope="col">Model</th>
               {cols.map((c) => (
                 <th key={`${c.slice}-${c.metric}`} scope="col" className="num">
+                  {c.term ? <Term name={c.metric}>{c.term}</Term> : null}
                   {c.label}
                 </th>
               ))}

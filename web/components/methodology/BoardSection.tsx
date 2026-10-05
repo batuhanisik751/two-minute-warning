@@ -54,7 +54,7 @@ export default async function BoardSection() {
           <H3 id="board-labels">Who is on it, and the two outcomes</H3>
           <p>
             A player is on the board of a season when he had {BOARD_MIN_PRIOR} or more seasons in the league before last season and finished
-            last season in the top {BOARD_TOP_PPG} at his position in points per game (ranked among players with {BOARD_RANK_MIN_GAMES} or
+            last season in the top {BOARD_TOP_PPG} at his position in <Term name="ppg">points per game</Term> (ranked among players with {BOARD_RANK_MIN_GAMES} or
             more games). The season after decides: <Term name="y_missed">missed time</Term> is fewer than {BOARD_MIN_GAMES} games (an injury,
             a benching, a release or retirement; no games counts); a <Term name="y_cliff">Cliff</Term> is {BOARD_MIN_GAMES} or more games and
             points per game down by {pct(BOARD_CLIFF_DROP)} or more. The Cliff model learns only from players with {BOARD_MIN_GAMES}+ games,
@@ -96,7 +96,7 @@ export default async function BoardSection() {
           <H3 id="board-backtest">The backtest</H3>
           <p>
             Every past board reconstructed by models that learned only from earlier boards
-            {graded.from !== null && graded.to !== null ? ` (${fmtInt(graded.boards)} boards, ${graded.from}–${graded.to})` : ""}. PR-AUC
+            {graded.from !== null && graded.to !== null ? ` (${fmtInt(graded.boards)} boards, ${graded.from}–${graded.to})` : ""}. <Term name="pr_auc">PR-AUC</Term>
             measures how well the order puts the players who really had the outcome near the top; differences are paired, with{" "}
             {pct(TRACK_INTERVAL_LEVEL)} intervals from redrawing whole seasons. The experts&apos; era is the boards from{" "}
             {BOARD_ECR_FIRST_SEASON} on.

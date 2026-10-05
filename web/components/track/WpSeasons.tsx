@@ -1,4 +1,5 @@
 import { FoldTable } from "@/components/Fold";
+import Term from "@/components/Term";
 import { fmtInt, pct } from "@/lib/format";
 import { TRACK_INTERVAL_LEVEL } from "@/lib/method";
 import type { WpSeason } from "@/lib/track-record";
@@ -45,14 +46,19 @@ export default function WpSeasons({ rows }: { rows: WpSeason[] }) {
         <div className="table-scroll">
           <table className="data-table" data-testid="wp-seasons">
             <caption className="text-left text-sm text-muted">
-              {label}, newest first (log loss: lower is better; {pct(TRACK_INTERVAL_LEVEL)} intervals under the differences)
+              {label}, newest first (<Term name="log_loss">log loss</Term>: lower is better; {pct(TRACK_INTERVAL_LEVEL)} intervals under the
+              differences)
             </caption>
             <thead>
               <tr>
                 <th scope="col">Season</th>
                 <th scope="col" className="num">Plays</th>
-                <th scope="col" className="num">Brier</th>
-                <th scope="col" className="num">Log loss</th>
+                <th scope="col" className="num">
+                  <Term name="brier">Brier</Term>
+                </th>
+                <th scope="col" className="num">
+                  <Term name="log_loss">Log loss</Term>
+                </th>
                 <th scope="col" className="num">Minus nflfastR wp</th>
                 <th scope="col" className="num">Minus nflfastR vegas_wp</th>
               </tr>

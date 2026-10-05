@@ -353,10 +353,14 @@ export function top5Slices(rows: TrackCellRow[]): { slice: string; when: string 
 
 /** The backtest's headline numbers as tiles (main run, the model's own probability), each with
  *  its interval and the rows behind it. */
-export function headlineStats(rows: TrackCellRow[], level: number = TRACK_INTERVAL_LEVEL): { label: string; value: string; interval: string | null; note: string }[] {
-  const tiles = [
-    { label: "ROC-AUC, every list", slice: "all", metric: "roc_auc", digits: 3 },
-    { label: "Brier score, every list (lower is better)", slice: "all", metric: "brier", digits: 4 },
+export function headlineStats(
+  rows: TrackCellRow[],
+  level: number = TRACK_INTERVAL_LEVEL,
+): { label: string; term?: { name: string; text: string }; value: string; interval: string | null; note: string }[] {
+  // `term`: the glossary entry the label names (components/track/parts.tsx makes it a Term)
+  const tiles: { label: string; term?: { name: string; text: string }; slice: string; metric: string; digits: number }[] = [
+    { label: "ROC-AUC, every list", term: { name: "roc_auc", text: "ROC-AUC" }, slice: "all", metric: "roc_auc", digits: 3 },
+    { label: "Brier score, every list (lower is better)", term: { name: "brier", text: "Brier score" }, slice: "all", metric: "brier", digits: 4 },
     ...top5Slices(rows).map((t) => ({ label: `Coaches let go who were in their season's top 5 at ${t.when}`, slice: t.slice, metric: "top5_hit_rate", digits: 3 })),
   ];
   const out = [];
@@ -366,6 +370,7 @@ export function headlineStats(rows: TrackCellRow[], level: number = TRACK_INTERV
     const f = (x: number) => x.toFixed(t.digits);
     out.push({
       label: t.label,
+      term: t.term,
       value: f(c.value),
       interval: c.lo !== null && c.hi !== null ? `${Math.round(level * 100)}% interval ${f(c.lo)} to ${f(c.hi)}` : null,
       note: `${c.nRows.toLocaleString("en-US")} rows, ${c.nSeasons} test seasons`,

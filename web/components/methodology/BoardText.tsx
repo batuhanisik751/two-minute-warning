@@ -1,3 +1,4 @@
+import Term from "@/components/Term";
 import { boardCell, diffWords, type BoardCell, type BoardTrackRow } from "@/lib/board";
 import { signedNum } from "@/lib/hot-seat";
 import { BOARD_DISAGREE_TOP, BOARD_ECR_FIRST_SEASON, BOARD_MIN_GAMES, TRACK_INTERVAL_LEVEL } from "@/lib/method";
@@ -32,7 +33,8 @@ export function BoardBreakout({ rows }: { rows: BoardTrackRow[] }) {
       <ul className="list-disc space-y-1 pl-5">
         {lines.map((l) => (
           <li key={l.v} data-variant={l.v}>
-            The Breakout model for {WHO[l.v]} {VERB[l.rankWords]} last season&apos;s PPG rank (PR-AUC difference {diffText(l.rank)}) and{" "}
+            The Breakout model for {WHO[l.v]} {VERB[l.rankWords]} last season&apos;s <Term name="ppg">PPG</Term> rank (<Term name="pr_auc">PR-AUC</Term> difference{" "}
+            {diffText(l.rank)}) and{" "}
             {VERB[l.ecrWords]} the experts in their era ({diffText(l.ecr)}).
           </li>
         ))}

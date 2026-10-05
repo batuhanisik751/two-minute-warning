@@ -6,9 +6,17 @@ import { TAGS, droppedRates, rwMethodName, signed, tagTitle, tagVerdict, testSea
 const pts = (x: number) => x.toFixed(2);
 const range = (lo: number | null, hi: number | null, f: (x: number) => string) => (lo !== null && hi !== null ? `${f(lo)} to ${f(hi)}` : null);
 
-const HIT_WORDS: Record<(typeof TAGS)[number], string> = {
-  sell_high: "his rest-of-season PPG was below his PPG at the list",
-  buy_low: "his rest-of-season PPG was above his PPG at the list",
+const HIT_WORDS: Record<(typeof TAGS)[number], React.ReactNode> = {
+  sell_high: (
+    <>
+      his rest-of-season PPG was below his <Term name="ppg">PPG</Term> at the list
+    </>
+  ),
+  buy_low: (
+    <>
+      his rest-of-season PPG was above his <Term name="ppg">PPG</Term> at the list
+    </>
+  ),
 };
 
 /** The honest track record: the projection's error against the two simple baselines, and each
@@ -27,7 +35,7 @@ export default function RegressionTrack({ rows, weeks, position = "all" }: { row
         <p>
           Graded on {fmtInt(model.n)} player-weeks of {when} (the <Term name="walk_forward">walk-forward backtest</Term>): the{" "}
           <Term name="ppg_ros">projection</Term> missed his real <Term name="rest_of_season_ppg">rest-of-season PPG</Term> by{" "}
-          <strong className="tnum">{pts(model.value)}</strong> points per game on average (mean absolute error; lower is better).
+          <strong className="tnum">{pts(model.value)}</strong> points per game on average (<Term name="mae">mean absolute error</Term>; lower is better).
         </p>
         <div className="table-scroll mt-3">
           <table className="data-table" data-testid="rw-mae-table">
@@ -36,7 +44,7 @@ export default function RegressionTrack({ rows, weeks, position = "all" }: { row
               <tr>
                 <th scope="col">Method</th>
                 <th scope="col" className="num">
-                  Error (MAE)
+                  Error (<Term name="mae">MAE</Term>)
                 </th>
                 <th scope="col">{pct(TRACK_INTERVAL_LEVEL)} interval</th>
                 <th scope="col">Projection minus it</th>

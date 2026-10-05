@@ -58,7 +58,7 @@ function GarbageToggle({ chosen, withGarbage }: { chosen: { season: number; week
         </Link>
       ))}
       <span className="text-sm text-muted">
-        <Term name="garbage_time_view">What this changes</Term>: PPG, xFP/game and FPOE/game only.
+        <Term name="garbage_time_view">What this changes</Term>: <Term name="ppg">PPG</Term>, xFP/game and FPOE/game only.
       </span>
     </nav>
   );
@@ -195,7 +195,7 @@ function WeekBody({ data, withGarbage, currentSeason }: { data: RegressionListDa
               </h3>
             </div>
             <p className="mt-1 mb-3 text-sm text-muted">
-              {TAG_INTRO[t]} PPG, xFP/game and FPOE/game {view}; projection = the <Term name="ppg_ros">rest-of-season projection</Term> (points per game)
+              {TAG_INTRO[t]} <Term name="games">G</Term> = games played; <Term name="ppg">PPG</Term>, xFP/game and FPOE/game {view}; projection = the <Term name="ppg_ros">rest-of-season projection</Term> (points per game)
               {ranged ? (
                 <>
                   , in brackets its <Term name="projection_range">80% range</Term>

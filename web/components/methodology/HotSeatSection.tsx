@@ -78,7 +78,7 @@ export default async function HotSeatSection() {
             . The penalty is chosen inside each fit on its own training seasons only. It was compared in a{" "}
             <Term name="walk_forward">walk-forward backtest</Term> with a discrete-time hazard model and LightGBM: LightGBM did not
             beat it, the hazard model was about as good, and a logistic regression&apos;s terms add up to its estimate, which is
-            what the drivers on each row show. Its own probabilities are used (Brier {metricWithInterval(own, 4)}; the isotonic
+            what the drivers on each row show. Its own probabilities are used (<Term name="brier">Brier</Term> {metricWithInterval(own, 4)}; the isotonic
             recalibration scored {metricWithInterval(iso, 4)}).
           </p>
           <HotSeatModels rows={track} />

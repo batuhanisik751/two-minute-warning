@@ -2,7 +2,8 @@
 to a model, with its formula, a beginner-friendly explanation and its unit.
 
 Uses:
-- UI tooltips and the glossary (`twm glossary`, docs/glossary.md, generated from this file);
+- UI tooltips and the glossary (`twm glossary`, docs/glossary.md and the site's tooltip
+  fallback web/lib/glossary-fallback.json, both generated from this file);
 - the Waiver Radar's plain-English reasons (step C6 fills each entry's ``reason_template``);
 - :func:`check_features`, the guard every model calls on its feature columns: each must be a
   registered, implemented feature and never an identifier (spec 6.2 rule 5: no player, coach or
@@ -16,6 +17,7 @@ builds them and cannot be used as features until their status is "available".
 from __future__ import annotations
 
 import difflib
+import json
 import re
 import string
 from collections.abc import Iterable, Sequence
@@ -1803,6 +1805,565 @@ def _questionable_entries() -> list[Entry]:
     ]
 
 
+def _site_entries() -> list[Entry]:
+    """Terms the site uses to present the modules (how to read a chance, live or reconstructed,
+    the intervals, the Report Card's calls, the board's markers), moved word for word from
+    web/lib/site-terms.ts (T1, 2026-10-04) so the published glossary is their single source, and
+    the metrics the pages show (ROC-AUC, PR-AUC, Brier score, log loss, MAE, PPG, games) for a
+    first-season fantasy player. No numbers that belong in the database."""
+    return [
+        Entry(
+            name="chance",
+            title="Chance",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="share (0-1), with a 90% range",
+            formula="the observed y_hit rate of the backtest predictions in the same "
+            "similar-players bin as his model probability: the walk-forward predictions of the "
+            "same model and label from the seasons before the list's season, sorted by "
+            "probability, cut into groups of at least 500 (a probability is never split) and "
+            "merged so the rate never falls as the probability rises; the range is the bin's 90% "
+            "Wilson interval",
+            explanation="How often players the Radar rated like him became a fantasy starter "
+            "soon, in earlier seasons' backtests. The range beside it is how sure that rate is. "
+            "It is the track record of similar players, not a promise, and not the model's own "
+            "probability (which ran too high for the top players in the backtest).",
+            source="twm.modules.waiver_radar.confidence (similar_bins, Confidence.band)",
+        ),
+        Entry(
+            name="model_probability",
+            title="Model probability",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="probability (0-1)",
+            formula="the production model's predicted probability of y_hit after an isotonic "
+            "calibration fit on the validation season (stored as score in the predictions store)",
+            explanation="The model's own calibrated probability. The site shows the chance "
+            "instead: in the backtest the model's probabilities ran too high for the most likely "
+            "players.",
+            source="twm.modules.waiver_radar.models",
+        ),
+        Entry(
+            name="priority",
+            title="Suggested priority",
+            kind="concept",
+            modules=("waiver_radar", "streamer"),
+            unit="must-add / speculative / watch",
+            formula="from the chance, for the top 25 of a list: must-add when it is at least "
+            "0.50, speculative from 0.25 up to that, watch below; ranks 26 and lower get none. "
+            "The bins only go up, so each priority is a cutoff on the model probability",
+            explanation="A suggestion from the chance: must-add, speculative or watch. The "
+            "cutoffs, and how often each priority hit in the backtest, are on the Methodology "
+            "page.",
+            source="twm.modules.waiver_radar.confidence (MUST_ADD, SPECULATIVE, tier_table)",
+        ),
+        Entry(
+            name="list_kind",
+            title="Live or reconstructed",
+            kind="concept",
+            modules=("shared",),
+            unit="live / backtest",
+            formula="live: scored on the real clock after its as-of and before the next kickoff, "
+            "stored once and never rescored (append-only); backtest (reconstructed): scored later "
+            "from the data public at the as-of, through the same point-in-time view",
+            explanation="A live list was made in real time on the Tuesday and is never changed "
+            "afterwards. A reconstructed (backtest) list was made later from the data as it stood "
+            "on that Tuesday: what the Radar would have said then, not a list anyone saw at the "
+            "time.",
+            source="kind column of the predictions store and of the published lists",
+        ),
+        Entry(
+            name="precision_at_10",
+            title="Precision@10",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="share (0-1)",
+            formula="per weekly list: players among its top 10 with y_hit / 10 (a list with fewer "
+            "than 10 players divides by its size); pooled = the mean over every list (weeks x "
+            "positions) of the seasons",
+            explanation="The share of a list's top 10 who became a fantasy starter soon (a hit). "
+            "If you had picked up the top 10 at a position that week, it is the share that would "
+            "have given you a starter week. The track record averages it over every weekly list.",
+            source="twm.backtest.metrics",
+        ),
+        Entry(
+            name="rank_bucket_hit_rate",
+            title="Hit rate by rank",
+            kind="metric",
+            modules=("waiver_radar",),
+            unit="share (0-1)",
+            formula="hits / picks at ranks 1-5, 6-10 or 11-25 of the reconstructed (backtest) "
+            "lists of the same position, over the seasons before the list's season",
+            explanation="How often players ranked this high hit, counted over earlier "
+            "reconstructed lists of the same position (seasons before this list's season, so the "
+            "badge never uses outcomes the list could not have known).",
+            source="twm.backtest.metrics.DEFAULT_BUCKETS; web/lib/buckets.ts",
+        ),
+        Entry(
+            name="interval",
+            title="Interval",
+            kind="concept",
+            modules=("shared",),
+            unit="range (low to high)",
+            formula="season-block bootstrap: draw as many test seasons as there are, with "
+            "replacement, recompute the number on the drawn seasons, 2,000 times with a fixed "
+            "seed, and keep the middle 95%; a difference between two methods is paired (both are "
+            "graded on the same drawn seasons)",
+            explanation="The range a number would plausibly move within if the same kind of "
+            "seasons were played again. It comes from a season-block bootstrap: whole seasons are "
+            "redrawn at random many times and the number is recomputed each time.",
+            source="twm.backtest.metrics (block_indices, N_BOOT, LEVEL)",
+        ),
+        Entry(
+            name="calibration",
+            title="Calibration",
+            kind="concept",
+            modules=("shared",),
+            unit="predicted against observed rate",
+            formula="the predictions sorted by probability and cut into equal-count groups (10 by "
+            "default); each group's mean probability is compared with the share of its rows whose "
+            "outcome happened (perfect calibration: equal)",
+            explanation="Whether probabilities mean what they say: among all players given a "
+            "similar probability, the share who really hit should be close to that probability.",
+            source="twm.backtest.metrics.calibration_bins",
+        ),
+        Entry(
+            name="walk_forward",
+            title="Walk-forward backtest",
+            kind="concept",
+            modules=("shared",),
+            unit="method",
+            formula="for each test season S: fit only on seasons before S (settings chosen on the "
+            "last season before S), score every as-of of S from the data public then, no refit "
+            "during S; the harness refuses any training row of S or later",
+            explanation="Grading a model the honest way: every season is predicted by a model "
+            "trained only on the seasons before it, using only data that was public at each "
+            "Tuesday's as-of time.",
+            source="twm.backtest (TestSeasonInTrainingError)",
+        ),
+        Entry(
+            name="flex",
+            title="FLEX",
+            kind="concept",
+            modules=("waiver_radar",),
+            unit="list",
+            formula="the week's RB, WR and TE picks of one kind merged: highest chance first, "
+            "then the higher model probability, the better rank in his own list, RB/WR/TE and the "
+            "id; each player once",
+            explanation="A week's running back, wide receiver and tight end lists merged into one "
+            "and ordered by chance. Each chance is the chance of a starter finish at the player's "
+            "own position, so FLEX compares three slightly different targets: it is a way to "
+            "browse the three lists together, not a separate model.",
+            source="web/lib/flex.ts (mergeFlex)",
+        ),
+        Entry(
+            name="listed_position",
+            title="Listed position",
+            kind="concept",
+            modules=("waiver_radar",),
+            unit="position",
+            formula="nflverse's current position of the player (today's snapshot, also shown on "
+            "his past rows); a Radar list ranks him at his team's roster position that week",
+            explanation="The position nflverse lists the player at today, also on his past weekly "
+            "rows. A Radar list ranks each player at the position of his team's roster that week, "
+            "which can differ for a player who changed position.",
+            source="dim_player.position",
+        ),
+        Entry(
+            name="stream_chance",
+            title="Chance (K and D/ST)",
+            kind="metric",
+            modules=("streamer",),
+            unit="share (0-1), with a 90% range",
+            formula="read off the frozen streamer backtest of the seasons before the list's "
+            "season: kickers: the y_start rate of the bin of backtest picks with a similar model "
+            "score (bins of at least 200 picks); D/STs: the y_start rate of the rule's picks at "
+            "that rank (rank bins of at least 100 picks); a better score or rank never shows a "
+            "lower chance; 90% interval",
+            explanation="How often picks the streamer rated alike scored like a starter the very "
+            "next week, in earlier seasons' backtests: for kickers, picks with a similar model "
+            "score; for team defenses, the rule's pick at the same rank. The range beside it is "
+            "how sure that rate is. A track record, not a promise.",
+            source="twm.modules.streamer.confidence",
+        ),
+        Entry(
+            name="stream_pool",
+            title="Streaming pool",
+            kind="concept",
+            modules=("streamer",),
+            unit="kickers and D/STs",
+            formula="the Waiver Radar's candidate-pool rule for K and D/ST: outside the pool "
+            "cutoff both in the experts' preseason ranking (last season's points per game before "
+            "2020) and in points per game so far this season",
+            explanation="The kickers and team defenses who are probably still on waivers: those "
+            "ranked low both by the experts before the season and by points per game so far. It "
+            "is an estimate, the same kind as the Waiver Radar's candidate pool, because past "
+            "waiver wires are not public.",
+            source="twm.modules.streamer.pool",
+        ),
+        Entry(
+            name="garbage_time_view",
+            title="With or without garbage time",
+            kind="concept",
+            modules=("regression_watch",),
+            unit="view",
+            formula="with garbage time: points, xFP and FPOE per game over every play; without: "
+            "points_ng, xfp_ng and fpoe_ng per game (plays with is_garbage_time false only); the "
+            "projection is computed once and shown in both",
+            explanation="Points, expected points and points over expected either over every play, "
+            "or only over the plays while the game was still in doubt. Stats piled up once a game "
+            "is decided say little about next week. The projection itself is the same in both "
+            "views.",
+            source="fact_play.is_garbage_time; twm.modules.regression_watch.player_week",
+        ),
+        Entry(
+            name="current_franchise",
+            title="Team",
+            kind="concept",
+            modules=("shared",),
+            unit="team code",
+            formula="every team column holds today's franchise code (OAK -> LV, SD -> LAC, STL -> "
+            "LA, LAR -> LA), with today's name",
+            explanation="Teams are shown by today's franchise code and name, also for past "
+            "seasons: a franchise that moved appears under its current name.",
+            source="dim_team.current_abbr",
+        ),
+        Entry(
+            name="player_season",
+            title="Player-season",
+            kind="concept",
+            modules=("regression_watch",),
+            unit="player x season",
+            formula="a QB, RB, WR or TE's regular season (2009 on) with at least 8 games with an "
+            "opportunity (a target, carry or pass), at the position of most of his games; his "
+            "games split odd/even and first/second half",
+            explanation="One player's regular season. The stability study counts each season he "
+            "played enough games in once, at the position of most of his games, and splits his "
+            "games into two halves.",
+            source="twm.modules.regression_watch.stability (MIN_GAMES, halves)",
+        ),
+        Entry(
+            name="stability_interval",
+            title="Interval (stability study)",
+            kind="concept",
+            modules=("regression_watch",),
+            unit="range (low to high)",
+            formula="bootstrap over player-seasons: redraw them with replacement 1,000 times, "
+            "recompute the split-half correlation each time and keep the middle 95%",
+            explanation="The range the number would plausibly move within with other players: the "
+            "player-seasons are redrawn at random many times and the number is recomputed each "
+            "time. The same player appears in several seasons, so the true range is a little "
+            "wider.",
+            source="twm.modules.regression_watch.stability (bootstrap_corr, N_BOOT)",
+        ),
+        Entry(
+            name="decisions_graded",
+            title="Decisions",
+            kind="metric",
+            modules=("decisions",),
+            unit="decisions",
+            formula="fourth downs (2006 on) and tries after a touchdown without an exclusion (not "
+            "a snap, a penalty with no play, a kneel or spike, an aborted snap, the half's last "
+            "seconds, the late game, a state the models cannot score): clear calls + toss-ups",
+            explanation="Every fourth down and every try after a touchdown the Report Card "
+            "priced: clear calls and toss-ups together. Kneels, the half's last seconds and snaps "
+            "wiped out by a penalty are left out.",
+            source="twm.modules.decisions.grade (docs/decision_metrics.md)",
+        ),
+        Entry(
+            name="clear_call",
+            title="Clear call",
+            kind="concept",
+            modules=("decisions",),
+            unit="decision",
+            formula="WP(best option) - WP(second best) > decisions.toss_up_margin "
+            "(config/settings.yaml), every option priced by our win-probability model of that "
+            "season",
+            explanation="A decision where one option's win probability beat the next best by more "
+            "than the toss-up margin (Methodology page). Only clear calls are graded: a wrong one "
+            "counts against the coach.",
+            source="twm.modules.decisions.grade",
+        ),
+        Entry(
+            name="toss_up",
+            title="Toss-up",
+            kind="concept",
+            modules=("decisions",),
+            unit="decision",
+            formula="WP(best option) - WP(second best) <= decisions.toss_up_margin: counted, "
+            "never graded",
+            explanation="A decision whose best two options were within the toss-up margin of each "
+            "other: the model cannot tell them apart with confidence, so it is counted but never "
+            "graded, whatever the coach chose.",
+            source="twm.modules.decisions.grade",
+        ),
+        Entry(
+            name="wrong_call",
+            title="Wrong call",
+            kind="concept",
+            modules=("decisions",),
+            unit="decision",
+            formula="a clear call whose chosen option is not the recommended one (the highest "
+            "WP); it costs WP lost = WP(best) - WP(chosen)",
+            explanation="A clear call where the coach did not choose the option with the highest "
+            "win probability.",
+            source="twm.modules.decisions.grade",
+        ),
+        Entry(
+            name="clock_case",
+            title="Clock case",
+            kind="concept",
+            modules=("decisions",),
+            unit="game",
+            formula="a game where timeouts_unused, half_passivity or timeout_seconds_wasted "
+            "applies, by its written definition (decisions.clock in config/settings.yaml)",
+            explanation="A game where one of the three clock-management metrics applies: timeouts "
+            "unused in a lost one-score game, a passive end of the first half, or seconds wasted "
+            "late while trailing with timeouts in hand. Each has an exact written definition; "
+            "situations outside them are never graded.",
+            source="twm.modules.decisions.clock",
+        ),
+        Entry(
+            name="against_convention",
+            title="Against convention",
+            kind="metric",
+            modules=("decisions",),
+            unit="WP points",
+            formula="a clear call with chosen = recommended = go (fourth down) or two-point "
+            "(try); the number = WP(go) - max(WP(field goal), WP(punt)), or WP(two) - WP(kick)",
+            explanation="A clear call where the aggressive option was best and the coach took it: "
+            "he went for it on fourth down, or went for two. The number is how much win "
+            "probability that gained over the best kicking option, by the model.",
+            source="web/lib/decisions.ts (againstConvention); web/lib/queries/decisions.ts",
+        ),
+        Entry(
+            name="hot_seat_estimate",
+            title="Estimated chance",
+            kind="metric",
+            modules=("hot_seat",),
+            unit="probability (0-1)",
+            formula="the live L2 logistic regression's own probability (no recalibration) that "
+            "the coach is let go (hot_seat_let_go) and it is announced from the row's day through "
+            "the window's end, a set number of days after his team's final game, playoffs included",
+            explanation="The model's estimate of the chance that the head coach is let go (fired "
+            "during or after the season, or a mutual parting) and that it is announced within a "
+            "set number of days after his team's final game. An estimate from past seasons' "
+            "patterns, not a prediction that it will happen.",
+            source="twm.modules.hot_seat (targets.py: the window; production.py: the pinned model)",
+        ),
+        Entry(
+            name="hot_seat_let_go",
+            title="Let go",
+            kind="concept",
+            modules=("hot_seat",),
+            unit="yes/no",
+            formula="departure type fired_in_season, fired_after_season or mutual_parting, "
+            "announced in the window (the owner-verified departures file); retired, resigned "
+            "(also under pressure) or left for another job: not let go",
+            explanation="Fired during the season, fired after it, or a mutual parting, announced "
+            "in the window. Other departures (retired, resigned, left for another job) are not "
+            "counted as let go.",
+            source="the owner-verified departures file (data/manual); twm.modules.hot_seat.targets",
+        ),
+        Entry(
+            name="hot_seat_driver",
+            title="Drivers",
+            kind="concept",
+            modules=("hot_seat",),
+            unit="log-odds term",
+            formula="the logistic regression's term of each input: coefficient x standardized "
+            "value (a value's term and its missing-indicator term summed); the 3 largest by "
+            "absolute size, signed. A row's terms sum to its log-odds minus the intercept",
+            explanation="The three inputs that move this coach's estimate the most, up or down, "
+            "compared with an average coach: the logistic regression's own terms (its weight "
+            "times how far the value is from average).",
+            source="twm.modules.hot_seat.production",
+        ),
+        Entry(
+            name="board_cliff_chance",
+            title="Chance of a Cliff",
+            kind="metric",
+            modules=("board",),
+            unit="probability (0-1)",
+            formula="the pinned Cliff model's own probability of y_cliff (an L2 logistic "
+            "regression on the preseason features at the kickoff-eve as-of)",
+            explanation="The model's estimated chance that the player plays enough games next "
+            "season to judge and loses a large share of his points per game. It is only "
+            "meaningful for a player who plays: the chance of missing time is a separate number, "
+            "and the two are never added together.",
+            source="twm.modules.board.production (ROLES: cliff)",
+        ),
+        Entry(
+            name="board_missed_chance",
+            title="Chance of missed time",
+            kind="metric",
+            modules=("board",),
+            unit="probability (0-1)",
+            formula="the pinned missed-time model's own probability of y_missed (a simpler "
+            "logistic regression on fewer inputs, the same as-of)",
+            explanation="The model's estimated chance that the player plays only a few games next "
+            "season or none (injury, a benching, a release or retirement), from a separate, "
+            "simpler model.",
+            source="twm.modules.board.production (ROLES: missed)",
+        ),
+        Entry(
+            name="board_ecr",
+            title="Experts' preseason rank (ECR)",
+            kind="metric",
+            modules=("board",),
+            unit="position rank",
+            formula="the expert consensus rank at his position on the preseason ranking page of "
+            "the last scrape before week 1 public by the board's as-of; none when he is not "
+            "ranked or before the ranking archive's first season",
+            explanation="FantasyPros' expert consensus ranking: many fantasy experts' preseason "
+            "ranks at the position, combined into one, from the last scrape before week 1. It is "
+            "the experts' consensus, not draft position (ADP), and it exists for recent seasons "
+            "only.",
+            source="fact_ranking.pos_rank (page_kind 'preseason')",
+        ),
+        Entry(
+            name="board_kind",
+            title="Live or reconstructed board",
+            kind="concept",
+            modules=("board",),
+            unit="live / backtest",
+            formula="live: scored on the real clock between the board's as-of (the eve of week 1) "
+            "and the first kickoff, stored once (append-only); backtest: scored later by the "
+            "pinned models from the input rows as they stood at the as-of",
+            explanation="A live board is made before the season's first kickoff from the data "
+            "public then, and never changed afterwards. A reconstructed board (backtest) was "
+            "scored later, from the data as it stood on the eve of week 1: what the model would "
+            "have said then, not a board anyone saw at the time.",
+            source="twm.modules.board.live; twm.publish.board_lists",
+        ),
+        Entry(
+            name="board_disagree",
+            title="Where we disagree",
+            kind="concept",
+            modules=("board",),
+            unit="marker",
+            formula="ours: the top N of the board by the Cliff chance; theirs: the N players with "
+            "the largest experts' rank minus last season's position rank by points per game (not "
+            "ranked first); marked when on one of the two only; nothing without the experts' ranks",
+            explanation="A player near the top of our list for a Cliff who is not among the same "
+            "number of players the experts' ranking drops furthest below last season's finish, or "
+            "the reverse. The record of past disagreements shows how both kinds turned out.",
+            source="web/lib/board.ts (disagreements, BOARD_DISAGREE_TOP)",
+        ),
+        Entry(
+            name="wp_points",
+            title="WP points",
+            kind="concept",
+            modules=("decisions",),
+            unit="percentage points (0-100)",
+            formula="100 x a win probability (or a difference of two) on the 0-1 scale",
+            explanation="Win probability in percentage points: one WP point is one percentage "
+            "point of the team's chance to win, by our win-probability model.",
+            source="twm.modules.decisions.wp",
+        ),
+        # ---- metrics the site shows (audit 2026-10-04: beginner tooltips) ----
+        Entry(
+            name="roc_auc",
+            title="ROC-AUC",
+            kind="metric",
+            modules=("hot_seat",),
+            unit="0-1 (0.5 = guessing)",
+            formula="the probability that a random row whose outcome happened gets a higher "
+            "probability than a random row whose outcome did not (ties count half): the area "
+            "under the ROC curve, over the pooled walk-forward test rows",
+            explanation="How well a model puts the cases that happened above the ones that did "
+            "not. 0.5 is no better than guessing and 1 is a perfect order, so higher is better. "
+            "Example: 0.80 means that in 8 of 10 pairs of one coach who was let go and one who "
+            "was not, the model gave the first a higher estimate.",
+            source="twm.modules.hot_seat.evaluation",
+        ),
+        Entry(
+            name="pr_auc",
+            title="PR-AUC",
+            kind="metric",
+            modules=("board", "hot_seat"),
+            unit="0-1 (guessing = the share of cases that happened)",
+            formula="average precision: the precision at each case that happened, going down the "
+            "list from the highest probability, averaged over those cases (the area under the "
+            "precision-recall curve)",
+            explanation="How cleanly the top of a model's list is filled with the cases that "
+            "really happened, for rare events. Higher is better, but guessing does not score 0.5: "
+            "a random order scores the share of cases that happened. Example: if 1 player in 4 "
+            "really fell off a cliff, a random order scores about 0.25, and a useful model "
+            "clearly more.",
+            source="twm.backtest.metrics.pr_auc (sklearn average_precision_score)",
+        ),
+        Entry(
+            name="brier",
+            title="Brier score",
+            kind="metric",
+            modules=("decisions", "hot_seat", "questionable"),
+            unit="0-1 (lower is better)",
+            formula="mean over the rows of (probability - outcome)^2, the outcome 1 when it "
+            "happened and 0 when not",
+            explanation="How close the probabilities came to what happened: the average squared "
+            "gap between each probability and the outcome (1 if it happened, 0 if not). Lower is "
+            "better and 0 is perfect. Example: saying 80% for something that happens adds 0.04; "
+            "saying 80% for something that does not happen adds 0.64.",
+            source="twm.backtest.metrics.brier",
+        ),
+        Entry(
+            name="log_loss",
+            title="Log loss",
+            kind="metric",
+            modules=("decisions", "questionable"),
+            unit="0 and up (lower is better)",
+            formula="mean over the rows of -[y ln(p) + (1 - y) ln(1 - p)], y = 1 when it "
+            "happened, the probability p kept a hair away from 0 and 1",
+            explanation="Like the Brier score, it grades probabilities against what happened, but "
+            "it punishes a confident miss much harder. Lower is better. Example: saying 99% for "
+            "something that does not happen costs far more than saying 60% for it.",
+            source="twm.modules.decisions.wp.log_loss; twm.modules.questionable.table.log_loss",
+        ),
+        Entry(
+            name="mae",
+            title="Mean absolute error (MAE)",
+            kind="metric",
+            modules=("regression_watch",),
+            unit="points per game (lower is better)",
+            formula="mean over the graded players of |actual rest-of-season points per game - the "
+            "projection|",
+            explanation="How far a projection missed on average, whether it was too high or too "
+            "low. Lower is better. Example: projections of 12 and 8 points per game for two "
+            "players who both then scored 10 per game miss by 2 each, so the MAE is 2.",
+            source="twm.modules.regression_watch.backtest (metric mae)",
+        ),
+        Entry(
+            name="ppg",
+            title="Points per game (PPG)",
+            kind="metric",
+            modules=("shared",),
+            unit="fantasy points per game",
+            formula="fantasy points (config/scoring.yaml) summed over the games counted / the "
+            "number of those games (each page says which games: e.g. this season so far, or last "
+            "season)",
+            explanation="A player's fantasy points divided by the games he played: what he scores "
+            "in a typical game. Higher is better for your team. Example: 45 points in 3 games is "
+            "15 PPG.",
+            source="fact_player_week (twm.scoring.score_sql)",
+        ),
+        Entry(
+            name="games",
+            title="Games (G)",
+            kind="metric",
+            modules=("shared",),
+            unit="games",
+            formula="the number of games behind the numbers beside it: regular-season games with "
+            "a stat line in the window shown (on Regression Watch: this season's games up to the "
+            "as-of, the games behind his PPG, xFP/game and FPOE/game)",
+            explanation="How many games a player's numbers are based on. More games make a "
+            "per-game number more trustworthy: a hot start over 2 games says less than a full "
+            "season. Example: G 3 with 15 PPG means 45 points over 3 games.",
+            source="fact_player_week; twm.modules.regression_watch.projection (player_state)",
+        ),
+    ]
+
+
 def _entries() -> list[Entry]:
     sit = SituationRules.from_config()
     pool = _pool_texts()
@@ -2248,6 +2809,7 @@ def _entries() -> list[Entry]:
         *_hot_seat_entries(),
         *_board_entries(),
         *_questionable_entries(),
+        *_site_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(
             name="weekly_pos_rank",
@@ -2595,3 +3157,23 @@ def glossary_markdown() -> str:
                 lines.append(f"- **{who} reason:** {said}")
             lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+FALLBACK_ABOUT = (
+    "Generated from src/twm/registry.py by `uv run twm glossary --write`; do not edit by hand "
+    "(tests/test_registry_site.py fails when it is out of date). The site's tooltips "
+    "(web/components/Term.tsx) read the published glossary table first and this file second, so "
+    "a term added to the registry has its tooltip as soon as the site deploys, before the next "
+    "publish. Name, title, explanation and formula only: no reason sentences."
+)
+
+
+def glossary_fallback_json() -> str:
+    """web/lib/glossary-fallback.json, generated: every entry's tooltip text (the same entries as
+    the published glossary table), keyed by name."""
+    terms = {
+        e.name: {"title": e.title, "explanation": e.explanation, "formula": e.formula}
+        for e in sorted(REGISTRY.values(), key=lambda e: e.name)
+    }
+    doc = {"about": FALLBACK_ABOUT, "terms": terms}
+    return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"

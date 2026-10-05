@@ -2861,7 +2861,9 @@ def migrate_local() -> None:
 @app.command()
 def glossary(
     name: str | None = typer.Argument(None, help="One term, e.g. `twm glossary wopr`."),
-    write: bool = typer.Option(False, "--write", help="Regenerate docs/glossary.md."),
+    write: bool = typer.Option(
+        False, "--write", help="Regenerate docs/glossary.md and web/lib/glossary-fallback.json."
+    ),
 ) -> None:
     """Explain a metric or feature in plain English (the feature/metric registry)."""
     from twm import registry
@@ -2871,6 +2873,11 @@ def glossary(
         out = ROOT / "docs" / "glossary.md"
         out.write_text(registry.glossary_markdown())
         typer.echo(f"wrote {out} ({len(registry.REGISTRY)} entries)")
+        # the site's tooltip fallback (web/components/Term.tsx), from the same registry
+        web = ROOT / "web" / "lib" / "glossary-fallback.json"
+        web.parent.mkdir(parents=True, exist_ok=True)
+        web.write_text(registry.glossary_fallback_json())
+        typer.echo(f"wrote {web}")
         return
     if name is None:
         for e in sorted(registry.REGISTRY.values(), key=lambda e: (e.kind, e.name)):

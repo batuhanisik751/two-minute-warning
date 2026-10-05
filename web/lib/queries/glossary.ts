@@ -3,7 +3,7 @@ import { asc } from "drizzle-orm";
 import { db } from "@/db/client";
 import { glossary } from "@/db/schema";
 import { cached } from "@/lib/cache";
-import { SITE_TERMS, type TermEntry } from "@/lib/site-terms";
+import { resolveTerm, type TermEntry } from "@/lib/glossary-fallback";
 import { DROPPED_TAGS } from "@/lib/regression";
 
 export type GlossaryRow = {
@@ -39,10 +39,9 @@ async function getGlossaryRaw(): Promise<GlossaryRow[]> {
 
 export const getGlossary = cached("glossary.getGlossary", getGlossaryRaw);
 
-/** A term for a tooltip: the glossary table's entry, else the site's own (lib/site-terms). */
+/** A term for a tooltip: the published glossary table's entry, else the fallback generated from
+ *  the same registry (lib/glossary-fallback.ts); null for an unknown name (Term then shows the
+ *  text alone). Every term, the site's own too, is an entry of src/twm/registry.py. */
 export async function lookupTerm(name: string): Promise<TermEntry | null> {
-  const rows = await getGlossary();
-  const row = rows.find((r) => r.name === name);
-  if (row) return { name: row.name, title: row.title, explanation: row.explanation, formula: row.formula };
-  return SITE_TERMS[name] ?? null;
+  return resolveTerm(await getGlossary(), name);
 }

@@ -116,8 +116,9 @@ describe("home: the Streamers and Regression flags cards", () => {
     const rc = m.querySelector("[data-testid=regression-card]")!;
     const rl = Array.from(rc.querySelectorAll("[data-testid=rw-list]"));
     assert.equal(rl.length, 2);
-    assert.match(text(rc), /Sell-high \(top 3 of 3\)/);
-    assert.match(text(rc), /Buy-low \(top 3 of 3\)/);
+    // prose: the tags are glossary terms (their hidden panels are not what the card reads)
+    assert.match(prose(rc), /Sell-high \(top 3 of 3\)/);
+    assert.match(prose(rc), /Buy-low \(top 3 of 3\)/);
     assert.match(text(rc), new RegExp(M.rwNote));
     assert.ok(!/Seed reason/.test(text(rc)), "the card shows no reasons");
   });
@@ -187,7 +188,7 @@ describe("/regression (seed)", () => {
     assert.equal(bl.querySelector("ol[data-testid=rw-list]:not([data-fold-rest])")!.children.length, 10);
     assert.equal(m.querySelector("[data-testid=tag-sell_high] details"), null, "Sell-high (3) does not fold");
     // the 80% range under every projection: seed-modules.ts rwRows (projection - 3 or - 0.5, + 3)
-    assert.match(text(m.querySelector("[data-testid=tag-sell_high]")!), /in brackets its 80% range\./);
+    assert.match(prose(m.querySelector("[data-testid=tag-sell_high]")!), /in brackets its 80% range\./);
     const ranged = rows(m, "rw-row");
     assert.equal(m.querySelectorAll("[data-testid=rw-range]").length, ranged.length);
     for (const r of ranged) {
@@ -217,7 +218,7 @@ describe("player page and methodology (seed)", () => {
     assert.match(text(hist), /No tag/);
     assert.match(text(hist), /PPG in 10 games/);
     // the 80% range beside each backtest projection, with its term in the header
-    assert.match(text(hist.querySelector("thead")!), /Projection \(80% range/);
+    assert.match(prose(hist.querySelector("thead")!), /Projection \(80% range/);
     const proj = Array.from(hist.querySelectorAll("[data-testid=rw-history-projection]")).map((c) => normalise(c.textContent ?? ""));
     assert.equal(proj.length, 2);
     assert.ok(proj.every((x) => /^\d+\.\d \(\d+\.\d–\d+\.\d\)$/.test(x)), proj.join(" | "));

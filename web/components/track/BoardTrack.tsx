@@ -22,6 +22,7 @@ function tiles(rows: BoardTrackRow[], note: string): Stat[] {
     const f = (x: number) => (d.metric === "p_at_10" ? pct(x, 1) : x.toFixed(3));
     out.push({
       label: d.label,
+      term: d.metric === "pr_auc" ? { name: "pr_auc", text: "PR-AUC" } : undefined,
       value: f(c.value),
       interval: c.lo !== null && c.hi !== null ? `${pct(TRACK_INTERVAL_LEVEL)} interval ${f(c.lo)} to ${f(c.hi)}` : null,
       note,

@@ -33,7 +33,7 @@ export default async function BoardCard() {
       </div>
       <p className="mt-2 text-sm text-muted">
         The {TOP} veterans with the highest <Term name="board_cliff_chance">estimated chance of a Cliff</Term> (a drop of{" "}
-        {Math.round(BOARD_CLIFF_DROP * 100)}% or more in points per game), with the separate chance of missed time: estimates, not verdicts.
+        {Math.round(BOARD_CLIFF_DROP * 100)}% or more in <Term name="ppg">points per game</Term>), with the separate chance of missed time: estimates, not verdicts.
         {live ? "" : " This board was reconstructed after the fact from the data public on the eve of week 1."}
       </p>
       <div className="@container mt-4">

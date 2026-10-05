@@ -265,8 +265,12 @@ CI (`.github/workflows/ci.yml`, job `web`) runs every tier, the smoke tier again
   flashes. Choosing the system's own theme forgets the choice.
 - **Tooltips** (`components/Term.tsx`): the term itself is a button (keyboard and touch; not
   hover-only, no `title` attributes) with the explanation from the glossary table (the
-  pipeline's registry, `src/twm/registry.py`). Terms the registry does not define (chance,
-  priority, precision@10, live or reconstructed ...) are in `lib/site-terms.ts`.
+  pipeline's registry, `src/twm/registry.py`): the site's own terms (chance, priority,
+  precision@10, live or reconstructed ...) and every metric a page shows (ROC-AUC, PR-AUC, Brier
+  score, log loss, MAE, PPG, G) are registry entries too, so the registry is their only source.
+  A name the published table lacks is read from `lib/glossary-fallback.json`, generated from the
+  same registry by `uv run twm glossary --write` (never edited by hand), so a new term has its
+  tooltip as soon as the site deploys.
 - **404s**: an unknown path renders the not-found page on the server with status 404. An
   unknown player id also answers 404, but Next 16 renders a page-level `notFound()` from an
   error shell whose body the browser fills in once the scripts run; the smoke test checks the

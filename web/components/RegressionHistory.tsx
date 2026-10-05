@@ -29,10 +29,10 @@ export default function RegressionHistory({ rows, season, name, withGarbage }: {
                 <th scope="col">List</th>
                 <th scope="col">Tag</th>
                 <th scope="col" className="num">
-                  Games
+                  <Term name="games">Games</Term>
                 </th>
                 <th scope="col" className="num">
-                  PPG
+                  <Term name="ppg">PPG</Term>
                 </th>
                 <th scope="col" className="num">
                   <Term name="xfp">xFP</Term>/game

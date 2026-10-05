@@ -16,7 +16,6 @@ import {
 import { getGlossary, type GlossaryRow } from "@/lib/queries/glossary";
 import { getRadarModel } from "@/lib/queries/radar";
 import { getTierStats, getTrackRows, type TrackRow } from "@/lib/queries/track";
-import { SITE_TERMS } from "@/lib/site-terms";
 import DecisionsSection from "@/components/methodology/DecisionsSection";
 import BoardSection from "@/components/methodology/BoardSection";
 import ModelCards from "@/components/methodology/ModelCards";
@@ -384,7 +383,6 @@ export default async function MethodologyPage() {
   const head = headline(rows, radar);
   const modelOutputs = gloss.filter((g) => g.modelOutput && g.kind === "feature");
   const myTiers = tiers.filter((t) => t.model === radar && t.label === "y_hit");
-  const siteTerms = Object.values(SITE_TERMS).filter((t) => !gloss.some((g) => g.name === t.name));
 
   return (
     <>
@@ -705,21 +703,6 @@ export default async function MethodologyPage() {
             <em>model output</em> come from another model (see the leakage safeguards above).
           </p>
           {gloss.length ? <GlossaryList rows={gloss} /> : <EmptyState title="The glossary has not been published" />}
-          {siteTerms.length ? (
-            <section aria-labelledby="gloss-site" className="mt-6">
-              <h3 id="gloss-site" className="display text-xl uppercase">
-                Terms this site uses
-              </h3>
-              <dl className="mt-2 divide-y divide-line rounded-lg border border-line bg-surface">
-                {siteTerms.map((t) => (
-                  <div key={t.name} id={`term-${t.name}`} className="scroll-mt-24 px-4 py-3">
-                    <dt className="font-semibold">{t.title}</dt>
-                    <dd className="mt-1 text-sm">{t.explanation}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-          ) : null}
         </section>
 
         <section aria-labelledby="disclaimers">

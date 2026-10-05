@@ -22,7 +22,14 @@ export function Submodels({ rows }: { rows: TrackRow[] }) {
     <ul className="mt-3 list-disc space-y-2 pl-5" data-testid="submodels">
       {lines.map((l) => {
         const w = WHAT[l.key];
-        const name = l.metric === "log_score" ? "mean log score (higher is better)" : "log loss (lower is better)";
+        const name =
+          l.metric === "log_score" ? (
+            "mean log score (higher is better)"
+          ) : (
+            <>
+              <Term name="log_loss">log loss</Term> (lower is better)
+            </>
+          );
         const d = verdict(l);
         return (
           <li key={l.key} data-submodel={l.key}>

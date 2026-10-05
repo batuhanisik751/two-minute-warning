@@ -1,11 +1,14 @@
 // Shared pieces of /track-record (server components). The backtest and the live results sit in
 // separate panels, framed like the site's lists: reconstructed = dashed, live = solid with a gold
 // top edge; the pill says which in words.
+import Term from "@/components/Term";
 import { KindBadge } from "@/components/ui";
 
 export type Stat = {
   /** what the number is ("Radar's top 10 that hit") */
   label: string;
+  /** a glossary term in the label: its first `text` becomes a <Term name={name}> */
+  term?: { name: string; text: string };
   /** the number, formatted */
   value: string;
   /** its interval, formatted ("95% interval 46.2–49.5%"), when published */
@@ -13,6 +16,20 @@ export type Stat = {
   /** a short line under it (lists, seasons) */
   note?: React.ReactNode;
 };
+
+/** A tile's label, its metric (when it names one) a glossary term. */
+function StatLabel({ s }: { s: Stat }) {
+  const i = s.term ? s.label.indexOf(s.term.text) : -1;
+  if (!s.term || i < 0) return <>{s.label}</>;
+  const end = i + s.term.text.length;
+  return (
+    <>
+      {s.label.slice(0, i)}
+      <Term name={s.term.name}>{s.term.text}</Term>
+      {s.label.slice(end)}
+    </>
+  );
+}
 
 /** Up to three headline numbers as tiles; one column on a narrow container. The tiles are
  *  measured by the layout check ([data-row], [data-cell]). */
@@ -23,7 +40,7 @@ export function StatTiles({ stats, testId }: { stats: Stat[]; testId: string }) 
         {stats.map((s) => (
           <li key={s.label} data-row="" className="min-w-0 rounded-md border border-line bg-bg px-3 py-2.5">
             <p data-cell="label" className="text-sm font-medium break-words text-muted">
-              {s.label}
+              <StatLabel s={s} />
             </p>
             <p data-cell="value" className="big-number text-3xl">
               {s.value}

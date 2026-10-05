@@ -31,8 +31,9 @@ export const DECISIONS_SEED = {
   /** the home card's week-3 calls */
   weekWorstCoach: "quinn-fairway",
   weekBestCoach: "avery-o-hollis",
-  /** decision glossary terms the pages ask for */
-  glossaryNames: ["wp_lost", "wp_lost_per_game", "aggressiveness", "decision_grade", "own_wp", "p_convert", "p_fg_make", "punt_expected_wp", "pat_rate", "two_point_rate", "timeouts_unused", "half_passivity", "timeout_seconds_wasted", "passivity_ep_left"],
+  /** decision glossary terms the pages ask for (the Report Card's own words, registry entries since
+   *  T1, too: /methodology lists them from the published table) */
+  glossaryNames: ["wp_lost", "wp_lost_per_game", "aggressiveness", "decision_grade", "own_wp", "p_convert", "p_fg_make", "punt_expected_wp", "pat_rate", "two_point_rate", "timeouts_unused", "half_passivity", "timeout_seconds_wasted", "passivity_ep_left", "clear_call", "toss_up", "against_convention", "clock_case", "wp_points"],
 };
 
 const OPP: Record<string, string> = { NHG: "SRO", SRO: "NHG", EVP: "WLF", WLF: "EVP" };

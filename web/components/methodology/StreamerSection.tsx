@@ -110,7 +110,7 @@ export default async function StreamerSection() {
         </li>
         <li>
           <strong>Tested the same honest way</strong> as the Radar: every season predicted by a method that learned only from
-          earlier seasons, and compared with simple rules (last game&apos;s points, points per game so far, and the next
+          earlier seasons, and compared with simple rules (last game&apos;s points, <Term name="ppg">points per game</Term> so far, and the next
           opponent). Where a simple rule did as well as the model, the site uses the rule.
         </li>
       </ul>

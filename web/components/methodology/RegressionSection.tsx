@@ -40,15 +40,21 @@ function PositionMae({ rows }: { rows: RegressionTrackRow[] }) {
   return (
     <div className="table-scroll mt-3">
       <table className="data-table" data-testid="rw-position-mae">
-        <caption className="text-left text-sm text-muted">Mean absolute error by position (points per game; lower is better)</caption>
+        <caption className="text-left text-sm text-muted">
+          <Term name="mae">Mean absolute error</Term> by position (points per game; lower is better)
+        </caption>
         <thead>
           <tr>
             <th scope="col">Position</th>
             <th scope="col" className="num">Graded</th>
             <th scope="col" className="num">Projection</th>
-            <th scope="col" className="num">Season PPG</th>
+            <th scope="col" className="num">
+              Season <Term name="ppg">PPG</Term>
+            </th>
             <th scope="col" className="num">Last 3</th>
-            <th scope="col">Projection minus season PPG</th>
+            <th scope="col">
+              Projection minus season <Term name="ppg">PPG</Term>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -203,7 +209,7 @@ function RegressionMethod({ variant, xs, xb, decile, choice }: { variant: Varian
           <strong>
             <Term name="sell_high">Sell-high</Term>
           </strong>
-          : FPOE/game in the {top} of his position and a projection well below his PPG
+          : FPOE/game in the {top} of his position and a projection well below his <Term name="ppg">PPG</Term>
           {xs !== null ? ` (by at least ${xs} points per game today)` : ""}.{" "}
           <strong>
             <Term name="buy_low">Buy-low</Term>
@@ -212,7 +218,7 @@ function RegressionMethod({ variant, xs, xb, decile, choice }: { variant: Varian
           cutoffs (<Term name="tag_threshold_x">X</Term>) are chosen each season on earlier seasons only.
         </li>
         <li>
-          <strong>Garbage time</strong> (<Term name="is_garbage_time">when the game is decided</Term>): the lists can show PPG,
+          <strong>Garbage time</strong> (<Term name="is_garbage_time">when the game is decided</Term>): the lists can show <Term name="ppg">PPG</Term>,
           xFP/game and FPOE/game without those plays; the projection is the one the parameters chose.
         </li>
       </ul>

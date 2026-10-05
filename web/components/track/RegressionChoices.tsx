@@ -1,4 +1,5 @@
 import { FoldTable } from "@/components/Fold";
+import Term from "@/components/Term";
 import { fmtInt } from "@/lib/format";
 import type { RegressionTrackRow } from "@/lib/regression";
 
@@ -40,7 +41,9 @@ export default function RegressionChoices({ rows }: { rows: RegressionTrackRow[]
               <tr>
                 <th scope="col">Season</th>
                 <th scope="col">Version</th>
-                <th scope="col" className="num">Error on earlier seasons</th>
+                <th scope="col" className="num">
+                  <Term name="mae">Error</Term> on earlier seasons
+                </th>
                 <th scope="col" className="num">Player-weeks</th>
                 <th scope="col" className="num">Sell-high cutoff</th>
                 <th scope="col" className="num">Buy-low cutoff</th>

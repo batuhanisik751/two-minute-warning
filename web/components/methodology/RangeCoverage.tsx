@@ -16,7 +16,7 @@ export default async function RangeCoverage() {
       </h3>
       <p className="mt-2">
         Each projection comes with an <Term name="projection_range">80% range</Term>: the projection plus the 10th and the
-        90th percentile of how far the projection missed (actual rest-of-season points per game minus the projection) for
+        90th percentile of how far the projection missed (actual <Term name="rest_of_season_ppg">rest-of-season points per game</Term> minus the projection) for
         players at his position with about as many weeks left, in the backtest&apos;s earlier seasons only. It covers how
         well he scores per game, not games he misses.
       </p>

@@ -32,6 +32,12 @@ How a publish treats each table (the reviewer's rules of 2026-09-28):
   pinned snapshot and is one hash unit (rewritten only when the snapshot changes); the
   **season in progress** (S) is regraded with the pinned models on every run and is another
   unit. The empty-replacement guard watches each part of each table.
+- **snapshots** (feature #1, the Questionable list: :data:`QUESTIONABLE`): questionable_list /
+  questionable_row hold the nightly snapshots keyed by (season, week, as_of). Append-only: a
+  snapshot is inserted only when its key is not in the target yet and is never deleted or
+  changed by a publish (a fresh runner with an empty store loses nothing). Its other tables
+  (questionable_history, questionable_backtest, questionable_calibration, questionable_live)
+  are replaced, each its own hash unit, guarded like the others.
 """
 
 from __future__ import annotations
@@ -39,7 +45,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-Mode = Literal["replace", "lists", "upsert", "append", "seasons"]
+Mode = Literal["replace", "lists", "upsert", "append", "seasons", "snapshots"]
 
 
 @dataclass(frozen=True)
@@ -354,6 +360,44 @@ TABLES: dict[str, Table] = {
             ("subset", "text"), ("method", "text"), ("metric", "text"), ("value", DP),
             ("lo", DP), ("hi", DP), ("n", "integer"), ("n_blocks", "integer"),
         ),
+        # feature #1 (migration 0007): the Questionable snapshots and their tables (QUESTIONABLE)
+        _t(
+            "questionable_list", ("season", "week", "as_of"), "snapshots",
+            ("season", "integer"), ("week", "integer"), ("as_of", TS),
+            ("model_version", "text"), ("generated_at", TS), ("n_players", "integer"),
+            ("source", "text"),
+        ),
+        _t(
+            "questionable_row", ("season", "week", "as_of", "gsis_id"), "snapshots",
+            ("season", "integer"), ("week", "integer"), ("as_of", TS), ("gsis_id", "text"),
+            ("position", "text"), ("team", "text"), ("opponent", "text"), ("game_id", "text"),
+            ("kickoff", TS), ("report_status", "text"), ("practice_status", "text"),
+            ("practice", "text"), ("missed_prev", "boolean"), ("body_part", "text"),
+            ("play_chance", DP), ("plays_n", "integer"), ("plays_median", DP),
+            ("plays_dud_rate", DP), ("healthy_median", DP), ("healthy_dud_rate", DP),
+            ("season_ppg", DP), ("season_games", "integer"),
+        ),
+        _t(
+            "questionable_history", ("report_status", "practice"), "replace",
+            ("report_status", "text"), ("practice", "text"), ("seasons", "text"),
+            ("n", "integer"), ("played", "integer"), ("played_rate", DP),
+        ),
+        _t(
+            "questionable_backtest", ("grouping", "season"), "replace",
+            ("grouping", "text"), ("title", "text"), ("chosen", "boolean"), ("season", "text"),
+            ("n", "integer"), ("log_loss", DP), ("brier", DP), ("mean_p", DP),
+            ("played_rate", DP),
+        ),
+        _t(
+            "questionable_calibration", ("line",), "replace",
+            ("line", "integer"), ("bucket", "text"), ("n", "integer"), ("predicted", DP),
+            ("actual", DP),
+        ),
+        _t(
+            "questionable_live", ("season", "report_status"), "replace",
+            ("season", "integer"), ("report_status", "text"), ("n", "integer"),
+            ("predicted", DP), ("actual", DP), ("pending", "integer"), ("weeks", "integer"),
+        ),
     )
 }  # fmt: skip
 
@@ -367,7 +411,9 @@ WRITE_ORDER = (
     "board_outcome", "board_track_record", "board_disagreement", "decision_fourth",
     "decision_two_point",
     "decision_clock", "coach_season", "coach_week", "decisions_track_record",
-    "tier_stats", "player_week_summary", "glossary", "site_meta", "pipeline_runs",
+    "questionable_list", "questionable_row", "questionable_history", "questionable_backtest",
+    "questionable_calibration", "questionable_live", "tier_stats", "player_week_summary",
+    "glossary", "site_meta", "pipeline_runs",
 )  # fmt: skip
 REPLACED = tuple(n for n in WRITE_ORDER if TABLES[n].mode == "replace")
 assert set(WRITE_ORDER) == set(TABLES), "WRITE_ORDER must name every table"
@@ -446,8 +492,36 @@ DECISIONS = SeasonSplit("decisions", ("decision_fourth", "decision_two_point", "
                                       "coach_season", "coach_week"),
                         "decisions_history", "decisions_season", ("decisions_track_record",),
                         ("dim_coach",), "decision report card")  # fmt: skip
+
+
+@dataclass(frozen=True)
+class Snapshots:
+    """The Questionable list's tables as a publish treats them (feature #1; mode 'snapshots'):
+    ``lists`` / ``rows`` append-only, keyed by ``key`` (rows: plus ``row_id``); ``replaced``:
+    its replaced tables, each its own hash unit; ``label``: how the summary names it."""
+
+    module: str
+    lists: str
+    rows: str
+    key: tuple[str, ...]
+    row_id: str
+    replaced: tuple[str, ...]
+    label: str
+
+
+QUESTIONABLE = Snapshots("questionable", "questionable_list", "questionable_row",
+                         ("season", "week", "as_of"), "gsis_id",
+                         ("questionable_history", "questionable_backtest",
+                          "questionable_calibration", "questionable_live"),
+                         "questionable")  # fmt: skip
 _owned = [n for f in FAMILIES.values() for n in (f.lists, f.rows, f.outcomes, *f.replaced)]
-assert set(_owned) | set(SHARED) | {"site_meta"} | set(DECISIONS.replaced) == {
-    n for n, t in TABLES.items() if t.mode in ("replace", "lists")
-}, "every replaced or list table belongs to one family, SHARED, DECISIONS or site_meta"
+assert set(_owned) | set(SHARED) | {"site_meta"} | set(DECISIONS.replaced) | set(
+    QUESTIONABLE.replaced
+) == {n for n, t in TABLES.items() if t.mode in ("replace", "lists")}, (
+    "every replaced or list table belongs to one family, SHARED, DECISIONS, QUESTIONABLE or "
+    "site_meta"
+)
 assert set(DECISIONS.tables) == {n for n, t in TABLES.items() if t.mode == "seasons"}
+assert {QUESTIONABLE.lists, QUESTIONABLE.rows} == {
+    n for n, t in TABLES.items() if t.mode == "snapshots"
+}

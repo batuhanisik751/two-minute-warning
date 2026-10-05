@@ -109,7 +109,7 @@ before(
     // Report Card's call and clock-case rows (/decisions, the coach pages, the home card),
     // /track-record's headline tiles and live rows, the Hot-Seat rows (/hot-seat, the home card) and
     // the Cliff board's rows (/board, the home card)
-    paths = set.routes.filter((r) => ["home", "waivers", "waivers-live", "waivers-flex", "waivers-backtest", "waivers-stream", "regression", "decisions", "coach", "track-record", "hot-seat", "board", "time-machine"].includes(r.kind)).map((r) => r.path);
+    paths = set.routes.filter((r) => ["home", "waivers", "waivers-live", "waivers-flex", "waivers-backtest", "waivers-stream", "regression", "decisions", "coach", "track-record", "hot-seat", "board", "time-machine", "questionable"].includes(r.kind)).map((r) => r.path);
   },
   // two Chrome start attempts of up to 60 s each, plus the connection
   { timeout: 200_000 },

@@ -6,11 +6,12 @@ import { BOARD_SEED } from "../seed-board";
 import { DECISIONS_SEED } from "../seed-decisions";
 import { HOT_SEAT_SEED } from "../seed-hot-seat";
 import { MODULES_SEED } from "../seed-modules";
+import { QUESTIONABLE_SEED } from "../seed-questionable";
 import { DATA, fetchPage } from "./dom";
 
 export type Route = {
   path: string;
-  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record" | "hot-seat" | "coach-hot-seat" | "board" | "time-machine";
+  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record" | "hot-seat" | "coach-hot-seat" | "board" | "time-machine" | "questionable";
 };
 
 export type RouteSet = {
@@ -91,6 +92,11 @@ function seedRoutes(): RouteSet {
       { path: `/time-machine?season=${HOT_SEAT_SEED.past}&week=${HOT_SEAT_SEED.lastWeek}`, kind: "time-machine" },
       { path: `/time-machine?season=${BOARD_SEED.past[0]}&week=0`, kind: "time-machine" },
       { path: "/time-machine?season=1999&week=1", kind: "time-machine" },
+      // the Questionable list: the default (the week whose games are next, its newest snapshot),
+      // an older week, a week without a snapshot (the empty state)
+      { path: "/questionable", kind: "questionable" },
+      { path: `/questionable?season=${QUESTIONABLE_SEED.pastWeek.season}&week=${QUESTIONABLE_SEED.pastWeek.week}`, kind: "questionable" },
+      { path: `/questionable?season=${QUESTIONABLE_SEED.emptyWeek.season}&week=${QUESTIONABLE_SEED.emptyWeek.week}`, kind: "questionable" },
     ],
     missing: MISSING,
     notes: [],
@@ -191,6 +197,8 @@ async function realRoutes(): Promise<RouteSet> {
   } else {
     notes.push("no week published: /time-machine was not checked");
   }
+  // the Questionable list: the default week (a list or its empty state)
+  routes.push({ path: "/questionable", kind: "questionable" });
   return { routes, missing: MISSING, notes };
 }
 

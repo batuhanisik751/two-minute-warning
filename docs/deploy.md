@@ -64,7 +64,16 @@ Radar (`radar_list`, `radar_pick`, `radar_outcome`), the K and D/ST streamer (`s
 same rules for all of them (the code is shared:
 `src/twm/publish/tables.py` `FAMILIES`), and (step P3) the Decision Report Card (`dim_coach`,
 `decision_fourth`, `decision_two_point`, `decision_clock`, `coach_season`, `coach_week`,
-`decisions_track_record`; `tables.py` `DECISIONS`).
+`decisions_track_record`; `tables.py` `DECISIONS`), and (feature #1, migration 0007) the
+Questionable list (`tables.py` `QUESTIONABLE`): its nightly snapshots `questionable_list` /
+`questionable_row`, keyed by (season, week, as_of) and **append-only** (a snapshot is inserted
+once, never deleted or changed; a fresh runner loses nothing), and its replaced tables
+`questionable_history` (how often tagged players played, by tag and practice status, from the
+warehouse's 2016-2025 rows, checked against the pinned table's counts),
+`questionable_backtest` and `questionable_calibration` (the pinned table's, as
+`reports/questionable/*.csv`) and `questionable_live` (the season's graded snapshots);
+`site_meta` gains `questionable_season` / `questionable_week` (the week whose games are next)
+and `questionable_latest_season` / `_week` / `_as_of` (the newest published snapshot).
 
 1. **Target check.** `--target local` uses `TWM_LOCAL_DATABASE_URL` (default: the container
    above) and refuses any host that is not this computer. `--target remote` uses

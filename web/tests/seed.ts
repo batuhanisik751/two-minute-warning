@@ -15,6 +15,7 @@ import * as s from "../db/schema";
 import { seedBoard } from "./seed-board";
 import { seedDecisions } from "./seed-decisions";
 import { seedHotSeat } from "./seed-hot-seat";
+import { seedQuestionable } from "./seed-questionable";
 import { MODULES_SEED, seedModules } from "./seed-modules";
 
 export type SeedVariant = "full" | "empty";
@@ -304,6 +305,8 @@ export async function seed(db: Db, variant: SeedVariant): Promise<void> {
   await seedHotSeat(db);
   // the Cliff board (tests/seed-board.ts; uses this seed's players and teams)
   await seedBoard(db);
+  // the Questionable list (tests/seed-questionable.ts; uses this seed's players and teams)
+  await seedQuestionable(db);
 }
 
 function rotateFeatured<T extends { gsisId: string }>(pool: T[], at: number): T[] {

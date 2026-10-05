@@ -755,19 +755,26 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                                                   "0002_regression_stability",
                                                   "0003_decisions", "0004_hot_seat",
                                                   "0005_board",
-                                                  "0006_regression_ranges"]  # fmt: skip
+                                                  "0006_regression_ranges",
+                                                  "0007_questionable"]  # fmt: skip
         job = tg.resolve("local", env={tg.LOCAL_ENV: make_conninfo(
             url, user="twm_job", password=roles["twm_job"])}, env_file=NO_ENV_FILE)  # fmt: skip
         syn = ps.build(tmp_path / "syn", live_weeks=(3,))
         res = publish_all(job, syn.inputs)
         assert res.counts["stream_pick"] == 45 and res.counts["regression_row"] == 18
+        from tests import publish_questionable_synthetic as pq  # feature #1 (migration 0007)
+
+        res = publish_questionable(job, syn.inputs, pq.write_store(tmp_path / "q.duckdb"))
+        assert res.counts["questionable_row"] == 3
         web = make_conninfo(url, user="twm_web", password=roles["twm_web"])
         with psycopg.connect(web, autocommit=True) as conn:
             for t in ("stream_list", "stream_pick", "regression_row", "regression_track_record",
                       "regression_stability", "hot_seat_list", "hot_seat_row",
                       "hot_seat_outcome", "hot_seat_track_record", "hot_seat_firings",
                       "board_list", "board_row", "board_outcome", "board_track_record",
-                      "board_disagreement"):  # fmt: skip
+                      "board_disagreement", "questionable_list", "questionable_row",
+                      "questionable_history", "questionable_backtest",
+                      "questionable_calibration", "questionable_live"):  # fmt: skip
                 assert conn.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] > 0
             for t in ("dim_coach", "decision_fourth", "coach_season", "decisions_track_record"):
                 conn.execute(f'SELECT count(*) FROM "{t}"')  # P3 tables: readable by the site
@@ -950,3 +957,62 @@ def test_the_board_lists_follow_the_families_rules(db: tg.Target, tmp_path: Path
     assert dump(db) == content
     res = publish_all(db, syn.inputs, {"board": {"shift": 0.2}}, replace_live=[(2026, 0)])
     assert {d.label: d.action for d in res.live}["board 2026-W00 preseason"] == "replace"
+
+
+# --------------------------------------------------------------------------------------
+# Feature #1: the Questionable snapshots (append-only) and their tables
+# --------------------------------------------------------------------------------------
+
+
+def publish_questionable(target: tg.Target, inputs, store: Path, **kwargs) -> wr.PublishResult:
+    from tests import publish_questionable_synthetic as pq
+
+    q_kw = {k: kwargs.pop(k) for k in ("n_out", "calibration") if k in kwargs}
+    data = pq.add_questionable(col.collect(inputs), store, **q_kw)
+    assert col.validate(data) == []
+    return wr.publish(target, data, **kwargs)
+
+
+def test_the_questionable_snapshots_are_append_only(db: tg.Target, tmp_path: Path) -> None:
+    from datetime import timedelta
+
+    from tests import publish_questionable_synthetic as pq
+
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    store = pq.write_store(tmp_path / "q1.duckdb")
+    first = publish_questionable(db, syn.inputs, store)
+    c = first.counts
+    assert (c["questionable_list"], c["questionable_row"]) == (1, 3)
+    assert (c["questionable_backtest"], c["questionable_calibration"]) == (126, 5)
+    assert (c["questionable_history"], c["questionable_live"]) == (9, 3)  # Q 5, D 2, Out 2
+    assert [d.label for d in first.live if d.module == "questionable"] == [
+        "questionable 2026-W05 as of 2026-10-09 20:00 UTC"]  # fmt: skip
+    meta = dict(rows(db, "SELECT key, value FROM site_meta"))
+    assert meta["questionable_latest_week"] == "5"
+    assert meta["questionable_latest_as_of"] == "2026-10-09T20:00:00+00:00"
+    assert rows(db, "SELECT n, predicted, actual, pending, weeks FROM questionable_live WHERE "
+                    "report_status = 'all'") == [(1, 0.65, 1.0, 2, 1)]  # fmt: skip
+    snap = "SELECT as_of, gsis_id, play_chance FROM questionable_row ORDER BY 1, 2"
+    before = rows(db, snap)
+    content = dump(db)
+    # a second run rewrites nothing: the snapshot is kept, the tables are unchanged
+    res = publish_questionable(db, syn.inputs, store)
+    assert {"questionable_history", "questionable_backtest", "questionable_calibration",
+            "questionable_live"} <= set(res.unchanged)  # fmt: skip
+    assert wr.table_notes(res)["questionable_backtest"] == "unchanged (not rewritten)"
+    assert not [d for d in res.live if d.module == "questionable"] and dump(db) == content
+    # a different local snapshot of the same as-of never replaces the published one; a fresh
+    # runner (empty store) keeps it; a new as-of is inserted next to it
+    other = pq.write_store(tmp_path / "q2.duckdb", shift=0.1)
+    publish_questionable(db, syn.inputs, other)
+    publish_questionable(db, syn.inputs, tmp_path / "empty.duckdb")
+    assert rows(db, snap) == before
+    later = pq.FRIDAY + timedelta(hours=16)
+    res = publish_questionable(db, syn.inputs, pq.write_store(tmp_path / "q2.duckdb", (later,)))
+    assert res.written["questionable_list"] == 1 and res.counts["questionable_row"] == 6
+    assert rows(db, snap)[:3] == before
+    # the replaced tables are guarded against shrinking
+    content = dump(db)
+    with pytest.raises(wr.PublishError, match="questionable_calibration would go from 5 to 2"):
+        publish_questionable(db, syn.inputs, store, calibration=2)
+    assert dump(db) == content

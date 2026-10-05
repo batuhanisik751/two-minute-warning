@@ -140,7 +140,7 @@ describe("accessibility in a real browser (headless Chrome)", () => {
           hrefs.push(f.href ?? "");
           if (!f.indicator || !f.onScreen) bad.push(`${path} @${width}: stop ${i + 1} (${f.tag} "${f.label}") ${f.indicator ? "" : "no focus indicator "}${f.onScreen ? "" : "off screen"}`);
         }
-        const nav = ["/", "/waivers", "/regression", "/decisions", "/hot-seat", "/board", "/time-machine", "/track-record", "/methodology"];
+        const nav = ["/", "/waivers", "/regression", "/questionable", "/decisions", "/hot-seat", "/board", "/time-machine", "/track-record", "/methodology"];
         const at = nav.map((h) => hrefs.indexOf(h, 2));
         if (at.some((x, i) => x < 0 || (i > 0 && x < at[i - 1]))) bad.push(`${path} @${width}: nav not reached in order: ${hrefs.slice(0, 14).join(" ")}`);
       }

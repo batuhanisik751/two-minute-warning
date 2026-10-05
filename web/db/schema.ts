@@ -1146,3 +1146,170 @@ export const boardDisagreement = pgTable(
     ),
   ],
 );
+
+// ---------------------------------------------------------------------------------------
+// Questionable outcomes (feature #1, docs/questionable.md; migration 0007)
+// ---------------------------------------------------------------------------------------
+
+/** One stored snapshot of the week's Questionable list per (season, week, as_of): every
+ * nightly run of `twm questionable weekly` with at least one tagged player (an empty list is
+ * not stored). Append-only: a snapshot is inserted once and never deleted or changed by a
+ * publish. model_version = the pinned lookup table's; generated_at = when the snapshot was
+ * made; source = which injury rows it read ('asof': the as-of view; 'observed': also the
+ * warehouse's rows of the week, built at or before the as-of). */
+export const questionableList = pgTable(
+  "questionable_list",
+  {
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    asOf: tstz("as_of").notNull(),
+    modelVersion: text("model_version")
+      .notNull()
+      .references(() => modelVersions.modelVersion),
+    generatedAt: tstz("generated_at").notNull(),
+    nPlayers: integer("n_players").notNull(),
+    source: text("source").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.week, t.asOf] }),
+    check("questionable_list_source_check", sql`${t.source} in ('asof', 'observed')`),
+    check("questionable_list_players_check", sql`${t.nPlayers} >= 1`),
+  ],
+);
+
+/** Every tagged QB/RB/WR/TE of a snapshot whose game had not kicked off at its as-of: his
+ * game (opponent, game_id, kickoff), the tag (report_status), the week's final practice status
+ * (practice_status as reported; practice = its bucket), whether he missed his team's previous
+ * game (missed_prev), the body part, the chance he plays (play_chance: the pinned table), his
+ * bucket's "if he plays" line (plays_n rows; plays_median = median of that week's points over
+ * his points per game so far; plays_dud_rate = share under 50%; healthy_* = healthy players
+ * with similar averages; NULL when the bucket is too small) and his points per game so far
+ * (season_ppg; NULL before his first game with a snap) over season_games games. */
+export const questionableRow = pgTable(
+  "questionable_row",
+  {
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    asOf: tstz("as_of").notNull(),
+    gsisId: text("gsis_id")
+      .notNull()
+      .references(() => dimPlayer.gsisId),
+    position: text("position").notNull(),
+    team: text("team")
+      .notNull()
+      .references(() => dimTeam.teamAbbr),
+    opponent: text("opponent").references(() => dimTeam.teamAbbr),
+    gameId: text("game_id"),
+    kickoff: tstz("kickoff").notNull(),
+    reportStatus: text("report_status").notNull(),
+    practiceStatus: text("practice_status"),
+    practice: text("practice").notNull(),
+    missedPrev: boolean("missed_prev"),
+    bodyPart: text("body_part"),
+    playChance: doublePrecision("play_chance").notNull(),
+    playsN: integer("plays_n"),
+    playsMedian: doublePrecision("plays_median"),
+    playsDudRate: doublePrecision("plays_dud_rate"),
+    healthyMedian: doublePrecision("healthy_median"),
+    healthyDudRate: doublePrecision("healthy_dud_rate"),
+    seasonPpg: doublePrecision("season_ppg"),
+    seasonGames: integer("season_games").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.week, t.asOf, t.gsisId] }),
+    foreignKey({
+      name: "questionable_row_list_fk",
+      columns: [t.season, t.week, t.asOf],
+      foreignColumns: [questionableList.season, questionableList.week, questionableList.asOf],
+    }),
+    index("questionable_row_gsis_id_idx").on(t.gsisId, t.season, t.week),
+    check("questionable_row_position_check", sql`${t.position} in ('QB', 'RB', 'WR', 'TE')`),
+    check("questionable_row_status_check", sql`${t.reportStatus} in ('Questionable', 'Doubtful')`),
+    check("questionable_row_practice_check", sql`${t.practice} in ('full', 'limited', 'dnp', 'none')`),
+    check("questionable_row_chance_check", sql`${t.playChance} between 0 and 1`),
+  ],
+);
+
+/** How often tagged players played, 2016 to the season before the pinned table's (the
+ * warehouse's history rows, docs/questionable.md "Data and definitions"): per tag
+ * (report_status, Out included) and practice bucket ('all' = the tag's total), the player-weeks
+ * (n) and how many took an offensive snap (played). Replaced on every publish. */
+export const questionableHistory = pgTable(
+  "questionable_history",
+  {
+    reportStatus: text("report_status").notNull(),
+    practice: text("practice").notNull(),
+    seasons: text("seasons").notNull(),
+    n: integer("n").notNull(),
+    played: integer("played").notNull(),
+    playedRate: doublePrecision("played_rate").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.reportStatus, t.practice] }),
+    check(
+      "questionable_history_status_check",
+      sql`${t.reportStatus} in ('Questionable', 'Doubtful', 'Out')`,
+    ),
+    check(
+      "questionable_history_practice_check",
+      sql`${t.practice} in ('all', 'full', 'limited', 'dnp', 'none')`,
+    ),
+    check("questionable_history_counts_check", sql`${t.played} between 0 and ${t.n}`),
+  ],
+);
+
+/** The pinned table's walk-forward backtest (reports/questionable/backtest.csv, row for row):
+ * per grouping (title; chosen = the pinned one; 'status' = the baseline) and test season
+ * ('2018' .. '2025', 'all' = pooled), the test rows (n), log loss, Brier score, the average
+ * chance (mean_p) and the share that played. Replaced on every publish. */
+export const questionableBacktest = pgTable(
+  "questionable_backtest",
+  {
+    grouping: text("grouping").notNull(),
+    title: text("title").notNull(),
+    chosen: boolean("chosen").notNull(),
+    season: text("season").notNull(),
+    n: integer("n").notNull(),
+    logLoss: doublePrecision("log_loss").notNull(),
+    brier: doublePrecision("brier").notNull(),
+    meanP: doublePrecision("mean_p").notNull(),
+    playedRate: doublePrecision("played_rate").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.grouping, t.season] })],
+);
+
+/** The pinned grouping's walk-forward calibration (reports/questionable/calibration.csv): per
+ * chance bucket (line = its order), the test rows, the average chance and the share that
+ * played. Replaced on every publish. */
+export const questionableCalibration = pgTable("questionable_calibration", {
+  line: integer("line").primaryKey(),
+  bucket: text("bucket").notNull(),
+  n: integer("n").notNull(),
+  predicted: doublePrecision("predicted"),
+  actual: doublePrecision("actual"),
+});
+
+/** The live record of the pinned season: each player-week's last snapshot before his kickoff,
+ * graded once his game's snap counts exist (src/twm/modules/questionable/weekly.py summary):
+ * per tag ('all' = both), the graded players (n), their average chance (predicted), the share
+ * that played (actual; NULL with n = 0), and on the 'all' row the players still waiting for
+ * their game (pending) and the weeks with a graded player (weeks). Replaced on every publish. */
+export const questionableLive = pgTable(
+  "questionable_live",
+  {
+    season: integer("season").notNull(),
+    reportStatus: text("report_status").notNull(),
+    n: integer("n").notNull(),
+    predicted: doublePrecision("predicted"),
+    actual: doublePrecision("actual"),
+    pending: integer("pending"),
+    weeks: integer("weeks"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.reportStatus] }),
+    check(
+      "questionable_live_status_check",
+      sql`${t.reportStatus} in ('all', 'Questionable', 'Doubtful')`,
+    ),
+  ],
+);

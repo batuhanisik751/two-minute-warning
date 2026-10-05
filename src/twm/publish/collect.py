@@ -41,7 +41,8 @@ from twm.config import FANTASY_POSITIONS
 
 MODULE = "waiver_radar"
 # tables.FAMILIES, and (step P3) the Decision Report Card (tables.DECISIONS)
-MODULES = ("waiver_radar", "streamer", "regression_watch", "decisions", "hot_seat", "board")
+MODULES = ("waiver_radar", "streamer", "regression_watch", "decisions", "hot_seat", "board",
+           "questionable")  # fmt: skip
 TOP_N = 25  # published picks per list (the weekly report's top 25: confidence.TOP_N)
 # nflverse gsis ids: "00-0034796" (most players) or "BAT138483" (older ids; checked: every
 # dim_player id in the 2026-09-28 warehouse matches one of the two)
@@ -161,6 +162,9 @@ class PublishData:
     warnings: list[str] = field(default_factory=list)
     # step P3: the Decision Report Card (twm.publish.decisions.DecisionData; None = not touched)
     decisions: Any = None
+    # feature #1: the Questionable list (twm.publish.questionable.QuestionableData; None = not
+    # touched)
+    questionable: Any = None
 
     # the Waiver Radar's lists by their E2 names
     @property
@@ -935,6 +939,13 @@ def collect(inputs: Inputs) -> PublishData:
         tables.update(got.tables)
         extra.append(got)
     pws = with_xfp(pws, own)
+    qd = None
+    if "questionable" in inputs.modules:  # feature #1: the snapshots (append-only) and tables
+        from twm.publish import questionable as qn
+
+        qd = qn.collect_questionable(inputs.store, inputs.warehouse, season, inputs.now)
+        tables.update(qd.tables)
+        meta.update(qn.week_meta(inputs.warehouse, inputs.now))
     dec = None
     if "decisions" in inputs.modules:  # step P3: the frozen history + the season in progress
         from twm.publish import decisions as dc
@@ -960,6 +971,9 @@ def collect(inputs: Inputs) -> PublishData:
         ids += families["regression_watch"].rows.get_column("gsis_id").to_list()
     if "board" in families:
         ids += families["board"].rows.get_column("gsis_id").to_list()
+    if qd is not None:
+        ids += qd.rows.get_column("gsis_id").to_list()
+        names = pl.concat([names, qd.names])
     names = pl.concat([names, pws.select("gsis_id", pl.col("player_display_name").alias("name"))])
     con = _duck(inputs.warehouse)
     try:
@@ -972,8 +986,12 @@ def collect(inputs: Inputs) -> PublishData:
               f.lists.get_column(FAMILIES[m].version).to_list()]  # fmt: skip
     if "board" in families:  # a board list names its missed-time model too
         wanted += families["board"].lists.get_column("missed_version").to_list()
+    if qd is not None:  # the pinned table's version (no store row: built from its JSON)
+        wanted.append(qd.version)
     versions = model_versions(inputs.store, wanted)
     more = [e.versions for e in extra if e.versions.height]
+    if qd is not None:
+        more.append(qd.versions)
     if more:
         versions = pl.concat([versions, *more], how="vertical_relaxed").unique(
             "model_version", keep="first", maintain_order=True
@@ -996,7 +1014,7 @@ def collect(inputs: Inputs) -> PublishData:
         "glossary": glossary(),
     })  # fmt: skip
     return PublishData(season=season, now=inputs.now, families=families, tables=tables,
-                       meta=meta, data_as_of=data_as_of, decisions=dec,
+                       meta=meta, data_as_of=data_as_of, decisions=dec, questionable=qd,
                        warnings=list(dec.warnings) if dec is not None else [])  # fmt: skip
 
 
@@ -1214,6 +1232,9 @@ def validate(data: PublishData) -> list[str]:
     # 1. no identifiers other than gsis_id, the D/ST ids and team codes, no league data, no NaN
     frames = {**{FAMILIES[m].lists: d.lists for m, d in fam.items()},
               **{FAMILIES[m].rows: d.rows for m, d in fam.items()}, **t}  # fmt: skip
+    if data.questionable is not None:
+        frames.update({"questionable_list": data.questionable.lists,
+                       "questionable_row": data.questionable.rows})  # fmt: skip
     for name, df in frames.items():
         bad = sorted(c for c in df.columns if c.lower() in FORBIDDEN_COLUMNS)
         if bad:
@@ -1229,6 +1250,8 @@ def validate(data: PublishData) -> list[str]:
     ]
     if "regression_watch" in fam:
         gsis.append(fam["regression_watch"].rows.select("gsis_id"))
+    if data.questionable is not None:
+        gsis.append(data.questionable.rows.select("gsis_id"))
     ids = pl.concat(gsis).unique()
     odd = ids.filter(~pl.col("gsis_id").str.contains(GSIS_PATTERN.pattern))
     if odd.height:
@@ -1259,6 +1282,11 @@ def validate(data: PublishData) -> list[str]:
     if "board" in fam:
         known_v = set(t["model_versions"].get_column("model_version").to_list())
         problems += _board_problems(fam["board"], teams, players, known_v)
+    if data.questionable is not None:  # feature #1
+        from twm.publish import questionable as qn
+
+        known_v = set(t["model_versions"].get_column("model_version").to_list())
+        problems += qn.problems(data.questionable, teams, players, known_v)
     # 3. every player named exists; the weekly summary is clean
     for name, df in (("picks", picks), ("player_week_summary", t["player_week_summary"])):
         missing = df.filter(~pl.col("gsis_id").is_in(players))

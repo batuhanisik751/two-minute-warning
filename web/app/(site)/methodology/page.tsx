@@ -21,6 +21,7 @@ import DecisionsSection from "@/components/methodology/DecisionsSection";
 import BoardSection from "@/components/methodology/BoardSection";
 import ModelCards from "@/components/methodology/ModelCards";
 import HotSeatSection from "@/components/methodology/HotSeatSection";
+import QuestionableSection from "@/components/methodology/QuestionableSection";
 import RegressionSection from "@/components/methodology/RegressionSection";
 import StreamerSection from "@/components/methodology/StreamerSection";
 import { headline, select, widestRange } from "@/lib/track";
@@ -419,6 +420,9 @@ export default async function MethodologyPage() {
             <a href="#regression">Regression Watch</a>
           </li>
           <li>
+            <a href="#questionable">Questionable outcomes</a>
+          </li>
+          <li>
             <a href="#decisions">The Decision Report Card</a>
           </li>
           <li>
@@ -681,6 +685,8 @@ export default async function MethodologyPage() {
         <StreamerSection />
 
         <RegressionSection />
+
+        <QuestionableSection />
 
         <DecisionsSection />
 

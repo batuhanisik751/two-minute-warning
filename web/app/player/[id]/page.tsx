@@ -12,6 +12,7 @@ import { getPlayer, getPlayerSeasons, getPlayerWeeks, type WeekRow } from "@/lib
 import { getPlayerHistory } from "@/lib/queries/radar";
 import { getPlayerRegressionHistory } from "@/lib/queries/regression";
 import RegressionHistory from "@/components/RegressionHistory";
+import QuestionableBadge from "@/components/questionable/PlayerBadge";
 import { parseGarbage } from "@/lib/regression";
 import { pageMetadata } from "@/lib/seo";
 
@@ -136,6 +137,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
           ) : null}
         </dl>
       </PageHeader>
+      <QuestionableBadge gsisId={id} />
 
       {seasons.length === 0 || season === null ? (
         <EmptyState title="No published weeks for this player">

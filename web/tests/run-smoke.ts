@@ -127,7 +127,7 @@ async function stopServer(child: ChildProcess): Promise<void> {
 
 // The private pass; the public pass (tests/smoke/public.test.ts) runs on its own server.
 // layout: the overlap check in headless Chrome (tests/smoke/layout.test.ts)
-const PRIVATE_FILES = ["pages", "modules", "decisions", "hot-seat", "board", "time-machine", "track", "a11y", "a11y-browser", "empty", "layout", "league"];
+const PRIVATE_FILES = ["pages", "modules", "decisions", "hot-seat", "board", "questionable", "time-machine", "track", "a11y", "a11y-browser", "empty", "layout", "league"];
 
 function runTests(env: Record<string, string>, names: string[] = PRIVATE_FILES): Promise<number> {
   return new Promise((resolve) => {

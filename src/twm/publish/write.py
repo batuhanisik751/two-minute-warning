@@ -20,6 +20,10 @@ Regression Watch) with the same code:
    history (seasons before the approved grading's season) and the season in progress, each
    replaced unless unchanged and each part watched by the guard; decisions_track_record like
    the other replaced tables;
+6b. feature #1, when the publish carries the Questionable list (``data.questionable``): insert
+   every local snapshot whose (season, week, as_of) is not in the target (append-only: never
+   deleted or changed; *insert* decisions are reported, the others kept silently); its tables
+   (:data:`twm.publish.tables.QUESTIONABLE`) are replaced like the others (hash, guard);
 7. append a 'success' pipeline_runs row, count the rows and measure the tables, commit.
 
 Any error rolls everything back; a 'failed' pipeline_runs row is then written in a new
@@ -44,6 +48,7 @@ from twm.publish.tables import (
     DECISIONS,
     FAMILIES,
     KEEP_ON_CONFLICT,
+    QUESTIONABLE,
     SHARED,
     TABLES,
     Family,
@@ -366,6 +371,37 @@ def plan_live(
     return decisions, keys
 
 
+def target_snapshots(conn) -> set[tuple[int, int, datetime]]:
+    """(season, week, as_of) of every Questionable snapshot in the target (feature #1)."""
+    rows = conn.execute(f'SELECT season, week, as_of FROM "{QUESTIONABLE.lists}"').fetchall()
+    return {(int(s), int(w), a.astimezone(UTC)) for s, w, a in rows}
+
+
+def plan_snapshots(q: Any, published: set[tuple[int, int, datetime]]) -> tuple[
+        list[LiveDecision], pl.DataFrame]:  # fmt: skip
+    """The local snapshots to insert (absent in the target; the rest are kept: append-only)
+    and an *insert* decision for each."""
+    key = list(QUESTIONABLE.key)
+    new = [r for r in q.lists.select(key).iter_rows()
+           if (int(r[0]), int(r[1]), r[2].astimezone(UTC)) not in published]  # fmt: skip
+    out = [LiveDecision(int(s), int(w), f"as of {a:%Y-%m-%d %H:%M} UTC", "insert",
+                        module=QUESTIONABLE.module) for s, w, a in new]  # fmt: skip
+    keys = pl.DataFrame(new, schema=q.lists.select(key).schema, orient="row")
+    return out, keys
+
+
+def _latest_snapshot(conn) -> dict[str, str]:
+    """site_meta's newest Questionable snapshot in the target (feature #1)."""
+    row = conn.execute(f'SELECT season, week, as_of FROM "{QUESTIONABLE.lists}" '
+                       "ORDER BY as_of DESC, season DESC, week DESC LIMIT 1"
+                       ).fetchone()  # fmt: skip
+    keys = tuple(f"questionable_latest_{k}" for k in ("season", "week", "as_of"))
+    if row is None:
+        return dict.fromkeys(keys, "")
+    return dict(zip(keys, (str(row[0]), str(row[1]), row[2].astimezone(UTC).isoformat()),
+                    strict=True))  # fmt: skip
+
+
 # --------------------------------------------------------------------------------------
 # The publish
 # --------------------------------------------------------------------------------------
@@ -658,12 +694,19 @@ def _publish(
                                       allow_incomplete=allow_incomplete, replace_live=weeks,
                                       module=m)  # fmt: skip
             decisions += dec
+        qd = data.questionable  # feature #1: append-only snapshots
+        q_keys = None
+        if qd is not None:
+            q_dec, q_keys = plan_snapshots(qd, target_snapshots(conn))
+            decisions += q_dec
         step("plan")
         # what the replaced tables will hold (computed before anything is written)
         frames, backs, replaced_weeks = _planned_frames(conn, data, mods, weeks)
         dec = data.decisions
         if dec is not None:
             frames.update({n: t[n] for n in DECISIONS.replaced})
+        if qd is not None:
+            frames.update({n: t[n] for n in QUESTIONABLE.replaced})
         new_counts = {n: f.height for n, f in frames.items()}
         for m, (back, back_rows) in backs.items():
             new_counts[FAMILIES[m].lists] = back.height
@@ -674,6 +717,8 @@ def _publish(
             current.update(target_counts(conn, DECISIONS.replaced))
             current.update(split_counts(conn, dec.season))
             new_counts.update(split_new_counts(dec))
+        if qd is not None:
+            current.update(target_counts(conn, QUESTIONABLE.replaced))
         problems = shrink_problems(current, new_counts, max_shrink_share)
         if problems and not allow_shrink:
             raise ShrinkError(
@@ -689,6 +734,8 @@ def _publish(
         plan_units = units(mods)
         if dec is not None:
             plan_units.update({n: (n,) for n in DECISIONS.replaced})
+        if qd is not None:
+            plan_units.update({n: (n,) for n in QUESTIONABLE.replaced})
         hashes = {}
         for unit, names in plan_units.items():
             if len(names) == 2:  # a module's backtest lists
@@ -740,6 +787,11 @@ def _publish(
             live_rows = d.rows.filter(pl.col("kind") == "live").join(plans[m], on=key)
             written[f.lists] += _copy(conn, TABLES[f.lists], rows_of(live, TABLES[f.lists]))
             written[f.rows] += _copy(conn, TABLES[f.rows], rows_of(live_rows, TABLES[f.rows]))
+        if qd is not None:  # feature #1: only snapshots absent in the target are written
+            key = list(QUESTIONABLE.key)
+            new_lists, new_rows = qd.lists.join(q_keys, on=key), qd.rows.join(q_keys, on=key)
+            for name, frame in ((QUESTIONABLE.lists, new_lists), (QUESTIONABLE.rows, new_rows)):
+                written[name] = _copy(conn, TABLES[name], rows_of(frame, TABLES[name]))
         step("live_lists")
         warnings += _missing_outcomes(conn, mods, frames)
         for unit, names in plan_units.items():
@@ -766,6 +818,8 @@ def _publish(
         step("decisions")
         meta = dict(data.meta)
         meta.update(_latest_lists(conn))
+        if qd is not None:
+            meta.update(_latest_snapshot(conn))
         meta.update({HASH_PREFIX + u: h for u, h in before.items() if u not in hashes})
         meta.update({HASH_PREFIX + u: h for u, h in hashes.items()})
         written["site_meta"] = _replace(conn, TABLES["site_meta"], sorted(meta.items()))

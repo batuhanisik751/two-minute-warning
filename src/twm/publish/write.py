@@ -25,7 +25,8 @@ Regression Watch) with the same code:
    deleted or changed; *insert* decisions are reported, the others kept silently); its tables
    (:data:`twm.publish.tables.QUESTIONABLE`) are replaced like the others (hash, guard), the
    live record graded from every snapshot of the season the target holds after the run (the
-   published ones included: :func:`twm.publish.questionable.live_record`);
+   published ones included: :func:`twm.publish.questionable.live_record`); feature #5,
+   Teammate out (``data.teammate_out``, :data:`twm.publish.tables.TEAMMATE_OUT`), the same;
 7. append a 'success' pipeline_runs row, count the rows and measure the tables, commit.
 
 Any error rolls everything back; a 'failed' pipeline_runs row is then written in a new
@@ -46,6 +47,7 @@ from typing import Any
 import polars as pl
 
 from twm.publish import questionable as qn
+from twm.publish import teammate_out as tn
 from twm.publish.collect import PublishData
 from twm.publish.tables import (
     DECISIONS,
@@ -54,7 +56,9 @@ from twm.publish.tables import (
     QUESTIONABLE,
     SHARED,
     TABLES,
+    TEAMMATE_OUT,
     Family,
+    Snapshots,
     Table,
 )
 from twm.publish.target import Target, redact
@@ -102,7 +106,7 @@ class LiveDecision:
     def label(self) -> str:
         """'2026-W03 QB' (the Radar), 'streamer 2026-W03 K', 'regression watch 2026-W03'."""
         fam = FAMILIES.get(self.module)
-        prefix = fam.label if fam is not None else self.module
+        prefix = fam.label if fam is not None else self.module.replace("_", " ")
         text = f"{self.season}-W{self.week:02d}" + (f" {self.position}" if self.position else "")
         return f"{prefix} {text}" if prefix else text
 
@@ -374,35 +378,45 @@ def plan_live(
     return decisions, keys
 
 
-def target_snapshots(conn) -> set[tuple[int, int, datetime]]:
-    """(season, week, as_of) of every Questionable snapshot in the target (feature #1)."""
-    rows = conn.execute(f'SELECT season, week, as_of FROM "{QUESTIONABLE.lists}"').fetchall()
+def target_snapshots(conn, snap: Snapshots = QUESTIONABLE) -> set[tuple[int, int, datetime]]:
+    """(season, week, as_of) of every snapshot of ``snap`` in the target (feature #1: the
+    Questionable list; feature #5: Teammate out)."""
+    rows = conn.execute(f'SELECT season, week, as_of FROM "{snap.lists}"').fetchall()
     return {(int(s), int(w), a.astimezone(UTC)) for s, w, a in rows}
 
 
-def plan_snapshots(q: Any, published: set[tuple[int, int, datetime]]) -> tuple[
+def plan_snapshots(q: Any, published: set[tuple[int, int, datetime]],
+                   snap: Snapshots = QUESTIONABLE) -> tuple[
         list[LiveDecision], pl.DataFrame]:  # fmt: skip
     """The local snapshots to insert (absent in the target; the rest are kept: append-only)
     and an *insert* decision for each."""
-    key = list(QUESTIONABLE.key)
+    key = list(snap.key)
     new = [r for r in q.lists.select(key).iter_rows()
            if (int(r[0]), int(r[1]), r[2].astimezone(UTC)) not in published]  # fmt: skip
     out = [LiveDecision(int(s), int(w), f"as of {a:%Y-%m-%d %H:%M} UTC", "insert",
-                        module=QUESTIONABLE.module) for s, w, a in new]  # fmt: skip
+                        module=snap.module) for s, w, a in new]  # fmt: skip
     keys = pl.DataFrame(new, schema=q.lists.select(key).schema, orient="row")
     return out, keys
 
 
-def _latest_snapshot(conn) -> dict[str, str]:
-    """site_meta's newest Questionable snapshot in the target (feature #1)."""
-    row = conn.execute(f'SELECT season, week, as_of FROM "{QUESTIONABLE.lists}" '
+def _latest_snapshot(conn, snap: Snapshots = QUESTIONABLE) -> dict[str, str]:
+    """site_meta's newest snapshot of ``snap`` in the target ('questionable_latest_season' ...,
+    'teammate_out_latest_season' ...)."""
+    row = conn.execute(f'SELECT season, week, as_of FROM "{snap.lists}" '
                        "ORDER BY as_of DESC, season DESC, week DESC LIMIT 1"
                        ).fetchone()  # fmt: skip
-    keys = tuple(f"questionable_latest_{k}" for k in ("season", "week", "as_of"))
+    keys = tuple(f"{snap.module}_latest_{k}" for k in ("season", "week", "as_of"))
     if row is None:
         return dict.fromkeys(keys, "")
     return dict(zip(keys, (str(row[0]), str(row[1]), row[2].astimezone(UTC).isoformat()),
                     strict=True))  # fmt: skip
+
+
+def snapshot_modules(data: PublishData) -> list[tuple[Snapshots, Any, Any]]:
+    """(its tables, its data, its publish module) of each snapshot module the publish carries:
+    the Questionable list (feature #1), Teammate out (feature #5)."""
+    got = ((QUESTIONABLE, data.questionable, qn), (TEAMMATE_OUT, data.teammate_out, tn))
+    return [(sn, d, mod) for sn, d, mod in got if d is not None]
 
 
 # --------------------------------------------------------------------------------------
@@ -697,22 +711,23 @@ def _publish(
                                       allow_incomplete=allow_incomplete, replace_live=weeks,
                                       module=m)  # fmt: skip
             decisions += dec
-        qd = data.questionable  # feature #1: append-only snapshots
-        q_keys = None
-        if qd is not None:
-            q_dec, q_keys = plan_snapshots(qd, target_snapshots(conn))
-            decisions += q_dec
+        # feature #1 / #5: append-only snapshots (the Questionable list, Teammate out)
+        snaps = snapshot_modules(data)
+        snap_keys: dict[str, pl.DataFrame] = {}
+        for sn, sd, _ in snaps:
+            s_dec, snap_keys[sn.module] = plan_snapshots(sd, target_snapshots(conn, sn), sn)
+            decisions += s_dec
         step("plan")
         # what the replaced tables will hold (computed before anything is written)
         frames, backs, replaced_weeks = _planned_frames(conn, data, mods, weeks)
         dec = data.decisions
         if dec is not None:
             frames.update({n: t[n] for n in DECISIONS.replaced})
-        if qd is not None:
-            frames.update({n: t[n] for n in QUESTIONABLE.replaced})
+        for sn, sd, mod in snaps:
+            frames.update({n: t[n] for n in sn.replaced})
             # the live record: every snapshot of the season the target holds after this run,
             # the published ones included (a fresh runner's store has only the night's)
-            frames["questionable_live"] = qn.live_record(qd, qn.published_rows(conn, qd.season))
+            frames[f"{sn.module}_live"] = mod.live_record(sd, mod.published_rows(conn, sd.season))
         new_counts = {n: f.height for n, f in frames.items()}
         for m, (back, back_rows) in backs.items():
             new_counts[FAMILIES[m].lists] = back.height
@@ -723,8 +738,8 @@ def _publish(
             current.update(target_counts(conn, DECISIONS.replaced))
             current.update(split_counts(conn, dec.season))
             new_counts.update(split_new_counts(dec))
-        if qd is not None:
-            current.update(target_counts(conn, QUESTIONABLE.replaced))
+        for sn, _, _ in snaps:
+            current.update(target_counts(conn, sn.replaced))
         problems = shrink_problems(current, new_counts, max_shrink_share)
         if problems and not allow_shrink:
             raise ShrinkError(
@@ -740,8 +755,8 @@ def _publish(
         plan_units = units(mods)
         if dec is not None:
             plan_units.update({n: (n,) for n in DECISIONS.replaced})
-        if qd is not None:
-            plan_units.update({n: (n,) for n in QUESTIONABLE.replaced})
+        for sn, _, _ in snaps:
+            plan_units.update({n: (n,) for n in sn.replaced})
         hashes = {}
         for unit, names in plan_units.items():
             if len(names) == 2:  # a module's backtest lists
@@ -793,10 +808,10 @@ def _publish(
             live_rows = d.rows.filter(pl.col("kind") == "live").join(plans[m], on=key)
             written[f.lists] += _copy(conn, TABLES[f.lists], rows_of(live, TABLES[f.lists]))
             written[f.rows] += _copy(conn, TABLES[f.rows], rows_of(live_rows, TABLES[f.rows]))
-        if qd is not None:  # feature #1: only snapshots absent in the target are written
-            key = list(QUESTIONABLE.key)
-            new_lists, new_rows = qd.lists.join(q_keys, on=key), qd.rows.join(q_keys, on=key)
-            for name, frame in ((QUESTIONABLE.lists, new_lists), (QUESTIONABLE.rows, new_rows)):
+        for sn, sd, _ in snaps:  # feature #1 / #5: only snapshots absent in the target
+            key, keys = list(sn.key), snap_keys[sn.module]
+            new_lists, new_rows = sd.lists.join(keys, on=key), sd.rows.join(keys, on=key)
+            for name, frame in ((sn.lists, new_lists), (sn.rows, new_rows)):
                 written[name] = _copy(conn, TABLES[name], rows_of(frame, TABLES[name]))
         step("live_lists")
         warnings += _missing_outcomes(conn, mods, frames)
@@ -824,8 +839,8 @@ def _publish(
         step("decisions")
         meta = dict(data.meta)
         meta.update(_latest_lists(conn))
-        if qd is not None:
-            meta.update(_latest_snapshot(conn))
+        for sn, _, _ in snaps:
+            meta.update(_latest_snapshot(conn, sn))
         meta.update({HASH_PREFIX + u: h for u, h in before.items() if u not in hashes})
         meta.update({HASH_PREFIX + u: h for u, h in hashes.items()})
         written["site_meta"] = _replace(conn, TABLES["site_meta"], sorted(meta.items()))

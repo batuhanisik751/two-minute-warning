@@ -42,7 +42,7 @@ from twm.config import FANTASY_POSITIONS
 MODULE = "waiver_radar"
 # tables.FAMILIES, and (step P3) the Decision Report Card (tables.DECISIONS)
 MODULES = ("waiver_radar", "streamer", "regression_watch", "decisions", "hot_seat", "board",
-           "questionable")  # fmt: skip
+           "questionable", "teammate_out")  # fmt: skip
 TOP_N = 25  # published picks per list (the weekly report's top 25: confidence.TOP_N)
 # nflverse gsis ids: "00-0034796" (most players) or "BAT138483" (older ids; checked: every
 # dim_player id in the 2026-09-28 warehouse matches one of the two)
@@ -165,6 +165,8 @@ class PublishData:
     # feature #1: the Questionable list (twm.publish.questionable.QuestionableData; None = not
     # touched)
     questionable: Any = None
+    # feature #5: Teammate out (twm.publish.teammate_out.TeammateOutData; None = not touched)
+    teammate_out: Any = None
 
     # the Waiver Radar's lists by their E2 names
     @property
@@ -946,6 +948,13 @@ def collect(inputs: Inputs) -> PublishData:
         qd = qn.collect_questionable(inputs.store, inputs.warehouse, season, inputs.now)
         tables.update(qd.tables)
         meta.update(qn.week_meta(inputs.warehouse, inputs.now))
+    td = None
+    if "teammate_out" in inputs.modules:  # feature #5: the snapshots (append-only) and tables
+        from twm.publish import teammate_out as tn
+
+        td = tn.collect_teammate_out(inputs.store, inputs.warehouse, season, inputs.now)
+        tables.update(td.tables)
+        meta.update(tn.week_meta(inputs.warehouse, inputs.now))
     dec = None
     if "decisions" in inputs.modules:  # step P3: the frozen history + the season in progress
         from twm.publish import decisions as dc
@@ -974,6 +983,9 @@ def collect(inputs: Inputs) -> PublishData:
     if qd is not None:
         ids += qd.rows.get_column("gsis_id").to_list()
         names = pl.concat([names, qd.names])
+    if td is not None:  # the teammates and the absent starters
+        ids += td.names.get_column("gsis_id").to_list()
+        names = pl.concat([names, td.names])
     names = pl.concat([names, pws.select("gsis_id", pl.col("player_display_name").alias("name"))])
     con = _duck(inputs.warehouse)
     try:
@@ -988,10 +1000,14 @@ def collect(inputs: Inputs) -> PublishData:
         wanted += families["board"].lists.get_column("missed_version").to_list()
     if qd is not None:  # the pinned table's version (no store row: built from its JSON)
         wanted.append(qd.version)
+    if td is not None:  # the same for Teammate out
+        wanted.append(td.version)
     versions = model_versions(inputs.store, wanted)
     more = [e.versions for e in extra if e.versions.height]
     if qd is not None:
         more.append(qd.versions)
+    if td is not None:
+        more.append(td.versions)
     if more:
         versions = pl.concat([versions, *more], how="vertical_relaxed").unique(
             "model_version", keep="first", maintain_order=True
@@ -1015,6 +1031,7 @@ def collect(inputs: Inputs) -> PublishData:
     })  # fmt: skip
     return PublishData(season=season, now=inputs.now, families=families, tables=tables,
                        meta=meta, data_as_of=data_as_of, decisions=dec, questionable=qd,
+                       teammate_out=td,
                        warnings=list(dec.warnings) if dec is not None else [])  # fmt: skip
 
 
@@ -1235,6 +1252,9 @@ def validate(data: PublishData) -> list[str]:
     if data.questionable is not None:
         frames.update({"questionable_list": data.questionable.lists,
                        "questionable_row": data.questionable.rows})  # fmt: skip
+    if data.teammate_out is not None:
+        frames.update({"teammate_out_list": data.teammate_out.lists,
+                       "teammate_out_row": data.teammate_out.rows})  # fmt: skip
     for name, df in frames.items():
         bad = sorted(c for c in df.columns if c.lower() in FORBIDDEN_COLUMNS)
         if bad:
@@ -1252,6 +1272,8 @@ def validate(data: PublishData) -> list[str]:
         gsis.append(fam["regression_watch"].rows.select("gsis_id"))
     if data.questionable is not None:
         gsis.append(data.questionable.rows.select("gsis_id"))
+    if data.teammate_out is not None:
+        gsis.append(data.teammate_out.rows.select("gsis_id"))
     ids = pl.concat(gsis).unique()
     odd = ids.filter(~pl.col("gsis_id").str.contains(GSIS_PATTERN.pattern))
     if odd.height:
@@ -1287,6 +1309,11 @@ def validate(data: PublishData) -> list[str]:
 
         known_v = set(t["model_versions"].get_column("model_version").to_list())
         problems += qn.problems(data.questionable, teams, players, known_v)
+    if data.teammate_out is not None:  # feature #5
+        from twm.publish import teammate_out as tn
+
+        known_v = set(t["model_versions"].get_column("model_version").to_list())
+        problems += tn.problems(data.teammate_out, teams, players, known_v)
     # 3. every player named exists; the weekly summary is clean
     for name, df in (("picks", picks), ("player_week_summary", t["player_week_summary"])):
         missing = df.filter(~pl.col("gsis_id").is_in(players))

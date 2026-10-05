@@ -7,11 +7,12 @@ import { DECISIONS_SEED } from "../seed-decisions";
 import { HOT_SEAT_SEED } from "../seed-hot-seat";
 import { MODULES_SEED } from "../seed-modules";
 import { QUESTIONABLE_SEED } from "../seed-questionable";
+import { TEAMMATE_OUT_SEED } from "../seed-teammate-out";
 import { DATA, fetchPage } from "./dom";
 
 export type Route = {
   path: string;
-  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record" | "hot-seat" | "coach-hot-seat" | "board" | "time-machine" | "questionable";
+  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record" | "hot-seat" | "coach-hot-seat" | "board" | "time-machine" | "questionable" | "teammate-out";
 };
 
 export type RouteSet = {
@@ -97,6 +98,10 @@ function seedRoutes(): RouteSet {
       { path: "/questionable", kind: "questionable" },
       { path: `/questionable?season=${QUESTIONABLE_SEED.pastWeek.season}&week=${QUESTIONABLE_SEED.pastWeek.week}`, kind: "questionable" },
       { path: `/questionable?season=${QUESTIONABLE_SEED.emptyWeek.season}&week=${QUESTIONABLE_SEED.emptyWeek.week}`, kind: "questionable" },
+      // Teammate out: the default week, an older week, a week without a snapshot (the empty state)
+      { path: "/teammate-out", kind: "teammate-out" },
+      { path: `/teammate-out?season=${TEAMMATE_OUT_SEED.pastWeek.season}&week=${TEAMMATE_OUT_SEED.pastWeek.week}`, kind: "teammate-out" },
+      { path: `/teammate-out?season=${TEAMMATE_OUT_SEED.emptyWeek.season}&week=${TEAMMATE_OUT_SEED.emptyWeek.week}`, kind: "teammate-out" },
     ],
     missing: MISSING,
     notes: [],
@@ -199,6 +204,8 @@ async function realRoutes(): Promise<RouteSet> {
   }
   // the Questionable list: the default week (a list or its empty state)
   routes.push({ path: "/questionable", kind: "questionable" });
+  // Teammate out: the default week (a list or its empty state)
+  routes.push({ path: "/teammate-out", kind: "teammate-out" });
   return { routes, missing: MISSING, notes };
 }
 

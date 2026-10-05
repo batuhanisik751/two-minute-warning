@@ -28,6 +28,7 @@ const HEADERS: [string, string, string[]][] = [
   ["/track-record", "[data-testid=decisions-headline]", ["log_loss", "brier"]],
   ["/track-record", "[data-testid=hot-seat-headline]", ["roc_auc", "brier"]],
   ["/track-record", "[data-testid=board-headline]", ["pr_auc"]],
+  ["/track-record", "[data-testid=track-teammate-out] [data-testid=to-candidates-table] thead", ["mae"]],
   ["/track-record", "[data-testid=q-backtest-table] thead", ["log_loss", "brier"]],
   ["/methodology", "[data-testid=hot-seat-models] thead", ["roc_auc", "pr_auc", "brier"]],
   ["/methodology", "[data-testid=wp-table] thead", ["brier", "log_loss"]],

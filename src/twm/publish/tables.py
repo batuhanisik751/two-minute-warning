@@ -37,7 +37,9 @@ How a publish treats each table (the reviewer's rules of 2026-09-28):
   snapshot is inserted only when its key is not in the target yet and is never deleted or
   changed by a publish (a fresh runner with an empty store loses nothing). Its other tables
   (questionable_history, questionable_backtest, questionable_calibration, questionable_live)
-  are replaced, each its own hash unit, guarded like the others.
+  are replaced, each its own hash unit, guarded like the others. Feature #5, Teammate out
+  (:data:`TEAMMATE_OUT`: teammate_out_list / teammate_out_row and its replaced tables), follows
+  the same rules (:data:`SNAPSHOTS`).
 """
 
 from __future__ import annotations
@@ -398,6 +400,60 @@ TABLES: dict[str, Table] = {
             ("season", "integer"), ("report_status", "text"), ("n", "integer"),
             ("predicted", DP), ("actual", DP), ("pending", "integer"), ("weeks", "integer"),
         ),
+        # feature #5 (migration 0008): the Teammate-out snapshots and their tables (TEAMMATE_OUT)
+        _t(
+            "teammate_out_list", ("season", "week", "as_of"), "snapshots",
+            ("season", "integer"), ("week", "integer"), ("as_of", TS),
+            ("model_version", "text"), ("generated_at", TS), ("n_teams", "integer"),
+            ("n_out", "integer"), ("n_players", "integer"), ("source", "text"),
+        ),
+        _t(
+            "teammate_out_row", ("season", "week", "as_of", "team", "gsis_id"), "snapshots",
+            ("season", "integer"), ("week", "integer"), ("as_of", TS), ("team", "text"),
+            ("gsis_id", "text"), ("opponent", "text"), ("game_id", "text"), ("kickoff", TS),
+            ("out_ids", "text"), ("out_players", "text"), ("out_positions", "text"),
+            ("out_reasons", "text"), ("n_out", "integer"), ("vac_carry_share", DP),
+            ("vac_target_share", DP), ("position", "text"), ("role", "text"),
+            ("base_games", "integer"), ("base_carry_share", DP), ("base_target_share", DP),
+            ("base_snap_share", DP), ("base_points", DP), ("base_team_carries", DP),
+            ("base_team_targets", DP), ("pred_carry_share", DP), ("pred_target_share", DP),
+            ("carry_share_change", DP), ("target_share_change", DP), ("pred_points", DP),
+            ("points_lo", DP), ("points_hi", DP), ("pred_gain", DP),
+            ("alloc_carry_share", DP), ("alloc_target_share", DP),
+        ),
+        _t(
+            "teammate_out_allocation", ("out_pos", "role"), "replace",
+            ("out_pos", "text"), ("role", "text"), ("position", "text"), ("n", "integer"),
+            ("carry", DP), ("target", DP), ("n_group", "integer"), ("carry_group", DP),
+            ("target_group", DP),
+        ),
+        _t(
+            "teammate_out_backtest", ("candidate", "season"), "replace",
+            ("candidate", "text"), ("title", "text"), ("chosen", "boolean"),
+            ("rule_pick", "boolean"), ("season", "text"), ("n", "integer"),
+            ("events", "integer"), ("mae_carry", DP), ("mae_target", DP), ("mae_points", DP),
+            ("top_hit", DP),
+        ),
+        _t(
+            "teammate_out_coverage", ("position",), "replace",
+            ("position", "text"), ("seasons", "text"), ("n", "integer"), ("below", "integer"),
+            ("above", "integer"), ("inside", "integer"), ("coverage", DP),
+        ),
+        _t(
+            "teammate_out_events", ("out_pos",), "replace",
+            ("out_pos", "text"), ("seasons", "text"), ("sat", "integer"), ("kept", "integer"),
+            ("no_roster_row", "integer"), ("gone_status", "integer"), ("events", "integer"),
+            ("single", "integer"), ("multi", "integer"), ("teammate_rows", "integer"),
+        ),
+        _t(
+            "teammate_out_live", ("season",), "replace",
+            ("season", "integer"), ("n", "integer"), ("pending", "integer"),
+            ("starter_played", "integer"), ("did_not_play", "integer"), ("weeks", "integer"),
+            ("team_weeks", "integer"), ("ranged", "integer"), ("mae_points", DP),
+            ("mae_points_base", DP), ("mae_carry_share", DP), ("mae_carry_share_base", DP),
+            ("mae_target_share", DP), ("mae_target_share_base", DP), ("coverage", DP),
+            ("top_hit", DP),
+        ),
     )
 }  # fmt: skip
 
@@ -412,7 +468,9 @@ WRITE_ORDER = (
     "decision_two_point",
     "decision_clock", "coach_season", "coach_week", "decisions_track_record",
     "questionable_list", "questionable_row", "questionable_history", "questionable_backtest",
-    "questionable_calibration", "questionable_live", "tier_stats", "player_week_summary",
+    "questionable_calibration", "questionable_live", "teammate_out_list", "teammate_out_row",
+    "teammate_out_allocation", "teammate_out_backtest", "teammate_out_coverage",
+    "teammate_out_events", "teammate_out_live", "tier_stats", "player_week_summary",
     "glossary", "site_meta", "pipeline_runs",
 )  # fmt: skip
 REPLACED = tuple(n for n in WRITE_ORDER if TABLES[n].mode == "replace")
@@ -514,14 +572,20 @@ QUESTIONABLE = Snapshots("questionable", "questionable_list", "questionable_row"
                          ("questionable_history", "questionable_backtest",
                           "questionable_calibration", "questionable_live"),
                          "questionable")  # fmt: skip
+# feature #5: the same rules; a row is one teammate of a team in a snapshot (row key: team too)
+TEAMMATE_OUT = Snapshots("teammate_out", "teammate_out_list", "teammate_out_row",
+                         ("season", "week", "as_of"), "gsis_id",
+                         ("teammate_out_allocation", "teammate_out_backtest",
+                          "teammate_out_coverage", "teammate_out_events", "teammate_out_live"),
+                         "teammate out")  # fmt: skip
+SNAPSHOTS = (QUESTIONABLE, TEAMMATE_OUT)
 _owned = [n for f in FAMILIES.values() for n in (f.lists, f.rows, f.outcomes, *f.replaced)]
-assert set(_owned) | set(SHARED) | {"site_meta"} | set(DECISIONS.replaced) | set(
-    QUESTIONABLE.replaced
-) == {n for n, t in TABLES.items() if t.mode in ("replace", "lists")}, (
-    "every replaced or list table belongs to one family, SHARED, DECISIONS, QUESTIONABLE or "
-    "site_meta"
+assert set(_owned) | set(SHARED) | {"site_meta"} | set(DECISIONS.replaced) | {
+    n for s in SNAPSHOTS for n in s.replaced
+} == {n for n, t in TABLES.items() if t.mode in ("replace", "lists")}, (
+    "every replaced or list table belongs to one family, SHARED, DECISIONS, SNAPSHOTS or site_meta"
 )
 assert set(DECISIONS.tables) == {n for n, t in TABLES.items() if t.mode == "seasons"}
-assert {QUESTIONABLE.lists, QUESTIONABLE.rows} == {
+assert {n for s in SNAPSHOTS for n in (s.lists, s.rows)} == {
     n for n, t in TABLES.items() if t.mode == "snapshots"
 }

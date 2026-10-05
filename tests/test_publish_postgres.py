@@ -756,7 +756,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                                                   "0003_decisions", "0004_hot_seat",
                                                   "0005_board",
                                                   "0006_regression_ranges",
-                                                  "0007_questionable"]  # fmt: skip
+                                                  "0007_questionable",
+                                                  "0008_teammate_out"]  # fmt: skip
         job = tg.resolve("local", env={tg.LOCAL_ENV: make_conninfo(
             url, user="twm_job", password=roles["twm_job"])}, env_file=NO_ENV_FILE)  # fmt: skip
         syn = ps.build(tmp_path / "syn", live_weeks=(3,))
@@ -766,6 +767,10 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
 
         res = publish_questionable(job, syn.inputs, pq.write_store(tmp_path / "q.duckdb"))
         assert res.counts["questionable_row"] == 3
+        from tests import publish_teammate_out_synthetic as pt  # feature #5 (migration 0008)
+
+        res = publish_teammate_out(job, syn.inputs, pt.write_store(tmp_path / "t.duckdb"))
+        assert res.counts["teammate_out_row"] == 5
         web = make_conninfo(url, user="twm_web", password=roles["twm_web"])
         with psycopg.connect(web, autocommit=True) as conn:
             for t in ("stream_list", "stream_pick", "regression_row", "regression_track_record",
@@ -774,7 +779,10 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                       "board_list", "board_row", "board_outcome", "board_track_record",
                       "board_disagreement", "questionable_list", "questionable_row",
                       "questionable_history", "questionable_backtest",
-                      "questionable_calibration", "questionable_live"):  # fmt: skip
+                      "questionable_calibration", "questionable_live", "teammate_out_list",
+                      "teammate_out_row", "teammate_out_allocation", "teammate_out_backtest",
+                      "teammate_out_coverage", "teammate_out_events",
+                      "teammate_out_live"):  # fmt: skip
                 assert conn.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] > 0
             for t in ("dim_coach", "decision_fourth", "coach_season", "decisions_track_record"):
                 conn.execute(f'SELECT count(*) FROM "{t}"')  # P3 tables: readable by the site
@@ -1049,3 +1057,96 @@ def test_the_questionable_live_record_counts_the_published_snapshots(
         res = publish_questionable(db, syn.inputs, store, played=played)
         assert "questionable_live" in res.unchanged and not res.written["questionable_list"]
         assert rows(db, live + "ORDER BY report_status") == record
+
+
+# --------------------------------------------------------------------------------------
+# Feature #5: the Teammate-out snapshots (append-only) and their tables
+# --------------------------------------------------------------------------------------
+
+
+def publish_teammate_out(target: tg.Target, inputs, store: Path, **kwargs) -> wr.PublishResult:
+    from tests import publish_teammate_out_synthetic as pt
+
+    t_kw = {k: kwargs.pop(k) for k in ("allocation", "played") if k in kwargs}
+    data = pt.add_teammate_out(col.collect(inputs), store, **t_kw)
+    assert col.validate(data) == []
+    return wr.publish(target, data, **kwargs)
+
+
+def test_the_teammate_out_snapshots_are_append_only(db: tg.Target, tmp_path: Path) -> None:
+    from datetime import timedelta
+
+    from tests import publish_teammate_out_synthetic as pt
+
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    store = pt.write_store(tmp_path / "t1.duckdb")
+    first = publish_teammate_out(db, syn.inputs, store)
+    c = first.counts
+    assert (c["teammate_out_list"], c["teammate_out_row"]) == (1, 5)
+    assert (c["teammate_out_allocation"], c["teammate_out_backtest"]) == (33, 44)
+    assert (c["teammate_out_coverage"], c["teammate_out_events"]) == (4, 4)
+    assert [d.label for d in first.live if d.module == "teammate_out"] == [
+        "teammate out 2026-W05 as of 2026-10-09 20:00 UTC"]  # fmt: skip
+    meta = dict(rows(db, "SELECT key, value FROM site_meta"))
+    assert meta["teammate_out_latest_week"] == "5"
+    assert meta["teammate_out_latest_as_of"] == "2026-10-09T20:00:00+00:00"
+    assert rows(db, "SELECT season, n, pending, weeks FROM teammate_out_live") == [(2026, 3, 2, 1)]
+    params = rows(db, "SELECT params FROM model_versions WHERE module = 'teammate_out'")[0][0]
+    assert (params["chosen"], params["rule_choice"]) == ("role", "nothing")
+    named = "SELECT display_name FROM dim_player WHERE gsis_id = %s"
+    assert rows(db, named, [pt.OUT_IDS[1]]) == [("Player 2-0",)]  # an absent starter
+    snap = "SELECT as_of, team, gsis_id, pred_points FROM teammate_out_row ORDER BY 1, 2, 3"
+    before = rows(db, snap)
+    content = dump(db)
+    # a second run rewrites nothing: the snapshot is kept, the tables are unchanged
+    res = publish_teammate_out(db, syn.inputs, store)
+    assert {"teammate_out_allocation", "teammate_out_backtest", "teammate_out_coverage",
+            "teammate_out_events", "teammate_out_live"} <= set(res.unchanged)  # fmt: skip
+    assert not [d for d in res.live if d.module == "teammate_out"] and dump(db) == content
+    # a different local snapshot of the same as-of never replaces the published one; a fresh
+    # runner (empty store) keeps it; a new as-of is inserted next to it
+    publish_teammate_out(db, syn.inputs, pt.write_store(tmp_path / "t2.duckdb", shift=0.5))
+    publish_teammate_out(db, syn.inputs, tmp_path / "empty.duckdb")
+    assert rows(db, snap) == before
+    later = pt.FRIDAY + timedelta(hours=16)
+    res = publish_teammate_out(db, syn.inputs, pt.write_store(tmp_path / "t3.duckdb", (later,)))
+    assert res.written["teammate_out_list"] == 1 and res.counts["teammate_out_row"] == 10
+    assert rows(db, snap)[:5] == before
+    # the replaced tables are guarded against shrinking
+    content = dump(db)
+    with pytest.raises(wr.PublishError, match="teammate_out_allocation would go from 33 to 3"):
+        publish_teammate_out(db, syn.inputs, store, allocation=3)
+    assert dump(db) == content
+
+
+def test_the_teammate_out_live_record_counts_the_published_snapshots(
+    db: tg.Target, tmp_path: Path
+) -> None:
+    from datetime import timedelta
+
+    from tests import publish_teammate_out_synthetic as pt
+
+    live = "SELECT n, pending, weeks, team_weeks, mae_points, coverage FROM teammate_out_live"
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    # night 1 publishes snapshot A (week 5): BUF's game is in, its three teammates played
+    publish_teammate_out(db, syn.inputs, pt.write_store(tmp_path / "a.duckdb"))
+    assert rows(db, live) == [(3, 2, 1, 1, pytest.approx(4 / 3), 1.0)]
+    # night 2, a fresh runner: its store holds only snapshot B (week 6); week 5 is all in
+    b = pt.write_store(tmp_path / "b.duckdb", (pt.FRIDAY + timedelta(days=7),), week=6)
+    played = pt.actuals({**dict.fromkeys(pt.MATE_IDS[:3], 8.0), pt.MATE_IDS[3]: 11.0,
+                         pt.MATE_IDS[4]: 5.0})  # fmt: skip
+    content = dump(db)
+    res = publish_teammate_out(db, syn.inputs, b, played=played, dry_run=True)
+    assert res.dry_run and dump(db) == content  # the dry run writes nothing
+    publish_teammate_out(db, syn.inputs, b, played=played)
+    [(n, pending, weeks, team_weeks, mae, _)] = rows(db, live)
+    assert (n, pending, weeks, team_weeks) == (5, 5, 1, 2)  # A's five graded, B's five pending
+    # |8-11| |8-4.5| |8-11.5| |11-11| |5-5| over 5
+    assert mae == pytest.approx((3 + 3.5 + 3.5 + 0 + 0) / 5)
+    record = rows(db, live)
+    # a night with no local snapshot keeps the full record (not refused, not rewritten); a
+    # store still holding the published snapshots counts them once
+    for store in (tmp_path / "empty.duckdb", pt.write_store(b, (pt.FRIDAY,))):
+        res = publish_teammate_out(db, syn.inputs, store, played=played)
+        assert "teammate_out_live" in res.unchanged and not res.written["teammate_out_list"]
+        assert rows(db, live) == record

@@ -121,6 +121,21 @@ play; then nobody gains.
 Snapshots: the predictions store's table `teammate_out_snapshots`, one append-only snapshot per
 as-of (a stored as-of is never rewritten; empty lists are not stored).
 
+## On the site
+
+`twm publish` (`src/twm/publish/teammate_out.py`, migration 0008) publishes every stored snapshot
+append-only (`teammate_out_list` / `teammate_out_row`), the pinned table's allocation, backtest,
+coverage and event counts, and the live record graded from every published snapshot of the
+season plus the night's (a fresh runner's store holds only the night's). The page
+`/teammate-out` shows, for the week whose games are next (or `?season=&week=`), each absent
+starter and why he is out, his teammates' usual and predicted carry and target shares, the
+predicted PPR points with the 80% range, grouped by kickoff; "Where the work goes" (the
+allocation table with its counts); the four candidates with the rule's pick, the one used and
+the owner's recorded reason (the version's `chosen_by`); the range's coverage; and the season
+so far. A player page shows a badge when the player is a predicted gainer (`pred_gain` > 0) or
+an absent starter on the week's newest list; `/methodology#teammate-out` and
+`/track-record#teammate-out` carry the method and the record.
+
 ## Grading
 
 After the games, each teammate's last row before his kickoff is graded against his game

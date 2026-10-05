@@ -1313,3 +1313,230 @@ export const questionableLive = pgTable(
     ),
   ],
 );
+
+// ---------------------------------------------------------------------------------------
+// Teammate out (feature #5, docs/teammate_out.md; migration 0008)
+// ---------------------------------------------------------------------------------------
+
+/** One stored snapshot of the week's Teammate-out list per (season, week, as_of): every nightly
+ * run of `twm teammate_out weekly` with at least one absent starter and a teammate to list (an
+ * empty list is not stored). Append-only: inserted once, never deleted or changed by a publish.
+ * model_version = the pinned allocation table's; generated_at = when the snapshot was made;
+ * n_teams / n_out / n_players = the teams, absent starters and listed teammates; source = which
+ * injury rows it read ('asof' | 'observed', the Questionable list's rule). */
+export const teammateOutList = pgTable(
+  "teammate_out_list",
+  {
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    asOf: tstz("as_of").notNull(),
+    modelVersion: text("model_version")
+      .notNull()
+      .references(() => modelVersions.modelVersion),
+    generatedAt: tstz("generated_at").notNull(),
+    nTeams: integer("n_teams").notNull(),
+    nOut: integer("n_out").notNull(),
+    nPlayers: integer("n_players").notNull(),
+    source: text("source").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.week, t.asOf] }),
+    check("teammate_out_list_source_check", sql`${t.source} in ('asof', 'observed')`),
+    check("teammate_out_list_counts_check", sql`${t.nTeams} >= 1 and ${t.nOut} >= ${t.nTeams} and ${t.nPlayers} >= ${t.nTeams}`),
+  ],
+);
+
+/** Every listed teammate of a snapshot (his team's game had not kicked off at its as-of): the
+ * game (opponent, game_id, kickoff), the team's absent starters (out_ids: gsis ids joined by
+ * ','; out_players / out_positions / out_reasons joined by ', ' in the same order; reasons
+ * 'Out' | 'Doubtful' | 'roster <status>'), n_out and their summed vacated shares, then the
+ * teammate: position, role (usage rank, e.g. WR2), baseline games and shares, baseline points
+ * per game (base_points: "nothing changes") and team volume, the predicted shares and their
+ * change, the predicted PPR points with the 80% range (points_lo / points_hi) and the gain over
+ * his baseline (pred_gain), and the allocation table's shares (alloc_*). */
+export const teammateOutRow = pgTable(
+  "teammate_out_row",
+  {
+    season: integer("season").notNull(),
+    week: integer("week").notNull(),
+    asOf: tstz("as_of").notNull(),
+    team: text("team")
+      .notNull()
+      .references(() => dimTeam.teamAbbr),
+    gsisId: text("gsis_id")
+      .notNull()
+      .references(() => dimPlayer.gsisId),
+    opponent: text("opponent").references(() => dimTeam.teamAbbr),
+    gameId: text("game_id"),
+    kickoff: tstz("kickoff").notNull(),
+    outIds: text("out_ids").notNull(),
+    outPlayers: text("out_players"),
+    outPositions: text("out_positions"),
+    outReasons: text("out_reasons"),
+    nOut: integer("n_out").notNull(),
+    vacCarryShare: doublePrecision("vac_carry_share"),
+    vacTargetShare: doublePrecision("vac_target_share"),
+    position: text("position").notNull(),
+    role: text("role").notNull(),
+    baseGames: integer("base_games"),
+    baseCarryShare: doublePrecision("base_carry_share"),
+    baseTargetShare: doublePrecision("base_target_share"),
+    baseSnapShare: doublePrecision("base_snap_share"),
+    basePoints: doublePrecision("base_points"),
+    baseTeamCarries: doublePrecision("base_team_carries"),
+    baseTeamTargets: doublePrecision("base_team_targets"),
+    predCarryShare: doublePrecision("pred_carry_share"),
+    predTargetShare: doublePrecision("pred_target_share"),
+    carryShareChange: doublePrecision("carry_share_change"),
+    targetShareChange: doublePrecision("target_share_change"),
+    predPoints: doublePrecision("pred_points").notNull(),
+    pointsLo: doublePrecision("points_lo"),
+    pointsHi: doublePrecision("points_hi"),
+    predGain: doublePrecision("pred_gain"),
+    allocCarryShare: doublePrecision("alloc_carry_share"),
+    allocTargetShare: doublePrecision("alloc_target_share"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.week, t.asOf, t.team, t.gsisId] }),
+    foreignKey({
+      name: "teammate_out_row_list_fk",
+      columns: [t.season, t.week, t.asOf],
+      foreignColumns: [teammateOutList.season, teammateOutList.week, teammateOutList.asOf],
+    }),
+    index("teammate_out_row_gsis_id_idx").on(t.gsisId, t.season, t.week),
+    check("teammate_out_row_position_check", sql`${t.position} in ('RB', 'WR', 'TE')`),
+    check("teammate_out_row_out_check", sql`${t.nOut} >= 1`),
+    check("teammate_out_row_range_check", sql`${t.pointsLo} >= 0 and ${t.pointsLo} <= ${t.predPoints} and ${t.predPoints} <= ${t.pointsHi}`),
+  ],
+);
+
+/** The pinned allocation table (reports/teammate_out/allocation.csv, fit on the pin's training
+ * seasons): per absent starter's position (out_pos) and teammate role, the teammate's position,
+ * the teammate-games it rests on (n) and the share of the vacated carries / targets the role
+ * takes on average (carry / target: a ratio of sums over single-starter games, shrunk toward
+ * its position group: n_group, carry_group, target_group). Replaced on every publish. */
+export const teammateOutAllocation = pgTable(
+  "teammate_out_allocation",
+  {
+    outPos: text("out_pos").notNull(),
+    role: text("role").notNull(),
+    position: text("position").notNull(),
+    n: integer("n").notNull(),
+    carry: doublePrecision("carry"),
+    target: doublePrecision("target"),
+    nGroup: integer("n_group").notNull(),
+    carryGroup: doublePrecision("carry_group"),
+    targetGroup: doublePrecision("target_group"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.outPos, t.role] }),
+    check("teammate_out_allocation_pos_check", sql`${t.outPos} in ('RB', 'WR', 'TE') and ${t.position} in ('RB', 'WR', 'TE')`),
+    check("teammate_out_allocation_n_check", sql`${t.n} >= 0 and ${t.nGroup} >= 0`),
+  ],
+);
+
+/** The four candidates' walk-forward backtest (reports/teammate_out/backtest.csv, row for row):
+ * per candidate (title; chosen = the one the site uses; rule_pick = the one the rule fixed
+ * before the backtest picked) and test season ('2016' .. '2025', 'all' = pooled), the teammate
+ * rows (n), the games (events), the carry-share, target-share and PPR-points MAE and the
+ * top-gainer hit rate. Replaced on every publish. */
+export const teammateOutBacktest = pgTable(
+  "teammate_out_backtest",
+  {
+    candidate: text("candidate").notNull(),
+    title: text("title").notNull(),
+    chosen: boolean("chosen").notNull(),
+    rulePick: boolean("rule_pick").notNull(),
+    season: text("season").notNull(),
+    n: integer("n").notNull(),
+    events: integer("events").notNull(),
+    maeCarry: doublePrecision("mae_carry"),
+    maeTarget: doublePrecision("mae_target"),
+    maePoints: doublePrecision("mae_points"),
+    topHit: doublePrecision("top_hit"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.candidate, t.season] }),
+    check("teammate_out_backtest_candidate_check", sql`${t.candidate} in ('nothing', 'pro_rata', 'group', 'role')`),
+    check("teammate_out_backtest_hit_check", sql`${t.topHit} between 0 and 1`),
+  ],
+);
+
+/** The 80% range's walk-forward coverage (reports/teammate_out/coverage.csv): per teammate
+ * position ('all' = every row) over the test seasons named in seasons, the graded rows (n) and
+ * how many landed below, above and inside their range. Replaced on every publish. */
+export const teammateOutCoverage = pgTable(
+  "teammate_out_coverage",
+  {
+    position: text("position").primaryKey(),
+    seasons: text("seasons").notNull(),
+    n: integer("n").notNull(),
+    below: integer("below").notNull(),
+    above: integer("above").notNull(),
+    inside: integer("inside").notNull(),
+    coverage: doublePrecision("coverage"),
+  },
+  (t) => [
+    check("teammate_out_coverage_position_check", sql`${t.position} in ('RB', 'WR', 'TE', 'all')`),
+    check("teammate_out_coverage_counts_check", sql`${t.below} + ${t.above} + ${t.inside} = ${t.n}`),
+  ],
+);
+
+/** The event study's counts (reports/teammate_out/events.csv, seasons = the training seasons):
+ * per absent starter's position ('all' = every one), the starters who sat, the ones kept (still
+ * with the team), dropped (no roster row on the team, a gone status), the team games with
+ * teammates to grade (events: single / multi starters out) and the teammate rows. Replaced on
+ * every publish. */
+export const teammateOutEvents = pgTable(
+  "teammate_out_events",
+  {
+    outPos: text("out_pos").primaryKey(),
+    seasons: text("seasons").notNull(),
+    sat: integer("sat").notNull(),
+    kept: integer("kept").notNull(),
+    noRosterRow: integer("no_roster_row").notNull(),
+    goneStatus: integer("gone_status").notNull(),
+    events: integer("events").notNull(),
+    single: integer("single").notNull(),
+    multi: integer("multi").notNull(),
+    teammateRows: integer("teammate_rows").notNull(),
+  },
+  (t) => [
+    check("teammate_out_events_pos_check", sql`${t.outPos} in ('RB', 'WR', 'TE', 'all')`),
+    check("teammate_out_events_counts_check", sql`${t.kept} <= ${t.sat} and ${t.single} + ${t.multi} = ${t.events}`),
+  ],
+);
+
+/** The live record of the pinned season: each teammate's last snapshot row before his kickoff,
+ * graded once the game is in the warehouse (src/twm/modules/teammate_out/weekly.py summary):
+ * the graded teammates who played (n), the ones still waiting (pending), the rows not graded
+ * because an absent starter played after all (starter_played) or the teammate did not play,
+ * the weeks with a graded row, the MAE of the predicted points and of "nothing changes"
+ * (mae_points_base), the share MAEs, the 80% range's coverage over the ranged rows and the
+ * top-gainer hit rate over team_weeks. NULL errors before the first graded row. Replaced on
+ * every publish. */
+export const teammateOutLive = pgTable(
+  "teammate_out_live",
+  {
+    season: integer("season").primaryKey(),
+    n: integer("n").notNull(),
+    pending: integer("pending").notNull(),
+    starterPlayed: integer("starter_played").notNull(),
+    didNotPlay: integer("did_not_play").notNull(),
+    weeks: integer("weeks").notNull(),
+    teamWeeks: integer("team_weeks").notNull(),
+    ranged: integer("ranged").notNull(),
+    maePoints: doublePrecision("mae_points"),
+    maePointsBase: doublePrecision("mae_points_base"),
+    maeCarryShare: doublePrecision("mae_carry_share"),
+    maeCarryShareBase: doublePrecision("mae_carry_share_base"),
+    maeTargetShare: doublePrecision("mae_target_share"),
+    maeTargetShareBase: doublePrecision("mae_target_share_base"),
+    coverage: doublePrecision("coverage"),
+    topHit: doublePrecision("top_hit"),
+  },
+  (t) => [
+    check("teammate_out_live_counts_check", sql`${t.n} >= 0 and ${t.pending} >= 0 and ${t.ranged} <= ${t.n}`),
+    check("teammate_out_live_rates_check", sql`${t.coverage} between 0 and 1 and ${t.topHit} between 0 and 1`),
+  ],
+);

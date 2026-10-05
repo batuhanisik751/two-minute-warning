@@ -16,6 +16,7 @@ import { seedBoard } from "./seed-board";
 import { seedDecisions } from "./seed-decisions";
 import { seedHotSeat } from "./seed-hot-seat";
 import { seedQuestionable } from "./seed-questionable";
+import { seedTeammateOut } from "./seed-teammate-out";
 import { MODULES_SEED, seedModules } from "./seed-modules";
 
 export type SeedVariant = "full" | "empty";
@@ -307,6 +308,8 @@ export async function seed(db: Db, variant: SeedVariant): Promise<void> {
   await seedBoard(db);
   // the Questionable list (tests/seed-questionable.ts; uses this seed's players and teams)
   await seedQuestionable(db);
+  // Teammate out (tests/seed-teammate-out.ts; uses this seed's players and teams)
+  await seedTeammateOut(db);
 }
 
 function rotateFeatured<T extends { gsisId: string }>(pool: T[], at: number): T[] {

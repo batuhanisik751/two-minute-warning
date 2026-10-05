@@ -57,6 +57,13 @@
       "when": 1791167172549,
       "tag": "0007_questionable",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791233955167,
+      "tag": "0008_teammate_out",
+      "breakpoints": true
     }
   ]
 }

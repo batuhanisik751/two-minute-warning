@@ -75,7 +75,18 @@ warehouse's 2016-2025 rows, checked against the pinned table's counts),
 snapshot of the season the target holds after the run, the published ones included, so a
 fresh runner's store, which holds only the night's, keeps the whole record);
 `site_meta` gains `questionable_season` / `questionable_week` (the week whose games are next)
-and `questionable_latest_season` / `_week` / `_as_of` (the newest published snapshot).
+and `questionable_latest_season` / `_week` / `_as_of` (the newest published snapshot). Feature #5
+(migration 0008), Teammate out (`tables.py` `TEAMMATE_OUT`), follows the same rules: its
+snapshots `teammate_out_list` / `teammate_out_row` (append-only, keyed by (season, week,
+as_of); a row is a listed teammate, the absent starters ride along in `out_*`), its replaced
+tables `teammate_out_allocation`, `teammate_out_backtest` (the four candidates; `chosen` = the
+one used, `rule_pick` = the pre-set rule's), `teammate_out_coverage`, `teammate_out_events` (the
+pinned table's, as `reports/teammate_out/*.csv`) and `teammate_out_live` (graded from every
+published snapshot of the season plus the night's); the pinned version's `model_versions.params`
+carry the choice and the owner's reason (`chosen`, `rule_choice`, `chosen_by`), and `site_meta`
+gains `teammate_out_season` / `_week` and `teammate_out_latest_season` / `_week` / `_as_of`.
+**Apply migration 0008 to Neon before the first publish that carries it** (a target without the
+tables is refused).
 
 1. **Target check.** `--target local` uses `TWM_LOCAL_DATABASE_URL` (default: the container
    above) and refuses any host that is not this computer. `--target remote` uses

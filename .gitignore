@@ -37,8 +37,12 @@ web/.vercel/
 web/*.tsbuildinfo
 web/next-env.d.ts
 web/.drizzle-check-*/
+# Next.js writes these agent-rule files on `next dev`: kept out of the repo (as in F1)
+web/AGENTS.md
+web/CLAUDE.md
 
-# os / editors
+# os / editors / local assistant settings
 .DS_Store
+.claude/
 .idea/
 .vscode/

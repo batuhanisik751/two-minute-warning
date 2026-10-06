@@ -12,7 +12,7 @@ import { DATA, fetchPage } from "./dom";
 
 export type Route = {
   path: string;
-  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record" | "hot-seat" | "coach-hot-seat" | "board" | "time-machine" | "questionable" | "teammate-out";
+  kind: "home" | "waivers-live" | "waivers-backtest" | "waivers-flex" | "waivers-stream" | "waivers" | "player" | "regression" | "methodology" | "decisions" | "coach" | "track-record" | "hot-seat" | "coach-hot-seat" | "board" | "time-machine" | "questionable" | "teammate-out" | "playoff-planner";
 };
 
 export type RouteSet = {
@@ -102,6 +102,10 @@ function seedRoutes(): RouteSet {
       { path: "/teammate-out", kind: "teammate-out" },
       { path: `/teammate-out?season=${TEAMMATE_OUT_SEED.pastWeek.season}&week=${TEAMMATE_OUT_SEED.pastWeek.week}`, kind: "teammate-out" },
       { path: `/teammate-out?season=${TEAMMATE_OUT_SEED.emptyWeek.season}&week=${TEAMMATE_OUT_SEED.emptyWeek.week}`, kind: "teammate-out" },
+      // the playoff planner: a rated position sorted by its total, an unrated one (the schedule only)
+      { path: "/playoff-planner", kind: "playoff-planner" },
+      { path: "/playoff-planner?pos=RB&sort=total", kind: "playoff-planner" },
+      { path: "/playoff-planner?pos=TE", kind: "playoff-planner" },
     ],
     missing: MISSING,
     notes: [],
@@ -206,6 +210,8 @@ async function realRoutes(): Promise<RouteSet> {
   routes.push({ path: "/questionable", kind: "questionable" });
   // Teammate out: the default week (a list or its empty state)
   routes.push({ path: "/teammate-out", kind: "teammate-out" });
+  // the playoff planner: the default position (a grid or its empty state) and an unrated one
+  routes.push({ path: "/playoff-planner", kind: "playoff-planner" }, { path: "/playoff-planner?pos=K", kind: "playoff-planner" });
   return { routes, missing: MISSING, notes };
 }
 

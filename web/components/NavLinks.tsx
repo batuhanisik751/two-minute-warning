@@ -9,6 +9,7 @@ export const NAV = [
   { href: "/regression", label: "Regression" },
   { href: "/questionable", label: "Questionable" },
   { href: "/teammate-out", label: "Teammate out" },
+  { href: "/playoff-planner", label: "Playoffs" },
   { href: "/decisions", label: "Decisions" },
   { href: "/hot-seat", label: "Hot seat" },
   { href: "/board", label: "Board" },

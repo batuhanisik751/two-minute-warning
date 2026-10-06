@@ -31,6 +31,8 @@ const ROUTES: Record<string, boolean> = {
   [PRESEASON]: true,
   "/time-machine": false,
   "/methodology": true,
+  "/playoff-planner": false,
+  "/playoff-planner?pos=RB&sort=total": false,
 };
 /** an experts' rank as the board and the home card write it ("preseason rank" then "RB12") */
 const RANK = /preseason rank.{0,160}?\b(?:QB|RB|WR|TE)\d+\b/is;

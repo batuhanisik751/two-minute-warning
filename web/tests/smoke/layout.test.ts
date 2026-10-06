@@ -109,7 +109,7 @@ before(
     // Report Card's call and clock-case rows (/decisions, the coach pages, the home card),
     // /track-record's headline tiles and live rows, the Hot-Seat rows (/hot-seat, the home card) and
     // the Cliff board's rows (/board, the home card)
-    paths = set.routes.filter((r) => ["home", "waivers", "waivers-live", "waivers-flex", "waivers-backtest", "waivers-stream", "regression", "decisions", "coach", "track-record", "hot-seat", "board", "time-machine", "questionable", "teammate-out"].includes(r.kind)).map((r) => r.path);
+    paths = set.routes.filter((r) => ["home", "waivers", "waivers-live", "waivers-flex", "waivers-backtest", "waivers-stream", "regression", "decisions", "coach", "track-record", "hot-seat", "board", "time-machine", "questionable", "teammate-out", "playoff-planner"].includes(r.kind)).map((r) => r.path);
   },
   // two Chrome start attempts of up to 60 s each, plus the connection
   { timeout: 200_000 },
@@ -145,7 +145,10 @@ describe("layout (headless Chrome)", () => {
         texts += r.texts;
         for (const p of r.problems) bad.push(`${path} @ ${w}px: ${p}`);
       }
-      assert.ok(seen > 0, `${path}: no rows measured`);
+      // real data: a weekly list may honestly be empty (e.g. Questionable before Friday's reports);
+      // the page then shows its empty state ("…-empty", not a live-record block) instead of rows
+      const empty = DATA === "real" && (await tab.evaluate<boolean>(`!!document.querySelector('[data-testid$="-empty"]:not([data-live])')`));
+      assert.ok(seen > 0 || empty, `${path}: no rows measured`);
       if (opened) assert.ok(folded > 0, `${path}: ${opened} folded lists opened, but none of their rows measured`);
       foldedRows += folded;
     }

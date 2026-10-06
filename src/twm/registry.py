@@ -1947,8 +1947,9 @@ def _playoff_planner_entries() -> list[Entry]:
             formula=f"walk-forward {bt.TEST_SEASONS[0]}-{bt.TEST_SEASONS[-1]}: players facing "
             "the easiest fifth of matchups (as-of raw rating) minus those facing the hardest "
             f"fifth, actual minus usual points per game in weeks {weeks}",
-            explanation="The honest size of the effect: about 1 to 2 points per game for a QB, "
-            "RB or WR, about 4 for a D/ST, next to nothing for a TE or kicker.",
+            explanation="The honest size of the effect: how many points per game really "
+            "separated players facing the easiest matchups from those facing the hardest, out of "
+            "sample. The playoff planner's table shows it per position; it is small for most.",
             source="reports/playoff_planner/effects.csv",
         ),
         Entry(

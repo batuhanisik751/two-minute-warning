@@ -86,7 +86,20 @@ published snapshot of the season plus the night's); the pinned version's `model_
 carry the choice and the owner's reason (`chosen`, `rule_choice`, `chosen_by`), and `site_meta`
 gains `teammate_out_season` / `_week` and `teammate_out_latest_season` / `_week` / `_as_of`.
 **Apply migration 0008 to Neon before the first publish that carries it** (a target without the
-tables is refused).
+tables is refused). Feature #6 (migration 0009), the playoff planner (`tables.py`
+`PLAYOFF_PLANNER`, `src/twm/publish/playoff_planner.py`), follows the same rules with snapshots
+keyed by (season, through_week), never by as_of: `playoff_planner_list` / `playoff_planner_row`
+(one grid per completed week; the nightly runner's empty store stores the same week every night
+until the next one completes, and the first published copy wins), its replaced tables
+`playoff_planner_choice` (the candidate per position, the rule's, `chosen_by`, the path, the
+pseudo-games), `playoff_planner_backtest` (the candidates' horizon-pooled MAE and the rule
+replayed: `vs`, `seasons_won`, `took_over`; refused when the replay differs from the pin),
+`playoff_planner_effects`, `_stability`, `_late_weeks` (the pinned spec's, as
+`reports/playoff_planner/*.csv`) and `playoff_planner_live` (graded from every published
+snapshot of the season plus the night's; empty until a game of the last playoff week is in);
+`site_meta` gains `playoff_planner_season` / `_weeks` and `playoff_planner_latest_season` /
+`_through_week` / `_as_of`. **Apply migration 0009 to Neon before the first publish that carries
+it.**
 
 1. **Target check.** `--target local` uses `TWM_LOCAL_DATABASE_URL` (default: the container
    above) and refuses any host that is not this computer. `--target remote` uses

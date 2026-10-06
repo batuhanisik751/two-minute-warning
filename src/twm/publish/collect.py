@@ -42,7 +42,7 @@ from twm.config import FANTASY_POSITIONS
 MODULE = "waiver_radar"
 # tables.FAMILIES, and (step P3) the Decision Report Card (tables.DECISIONS)
 MODULES = ("waiver_radar", "streamer", "regression_watch", "decisions", "hot_seat", "board",
-           "questionable", "teammate_out")  # fmt: skip
+           "questionable", "teammate_out", "playoff_planner")  # fmt: skip
 TOP_N = 25  # published picks per list (the weekly report's top 25: confidence.TOP_N)
 # nflverse gsis ids: "00-0034796" (most players) or "BAT138483" (older ids; checked: every
 # dim_player id in the 2026-09-28 warehouse matches one of the two)
@@ -167,6 +167,9 @@ class PublishData:
     questionable: Any = None
     # feature #5: Teammate out (twm.publish.teammate_out.TeammateOutData; None = not touched)
     teammate_out: Any = None
+    # feature #6: the playoff planner (twm.publish.playoff_planner.PlayoffPlannerData; None =
+    # not touched)
+    playoff_planner: Any = None
 
     # the Waiver Radar's lists by their E2 names
     @property
@@ -955,6 +958,13 @@ def collect(inputs: Inputs) -> PublishData:
         td = tn.collect_teammate_out(inputs.store, inputs.warehouse, season, inputs.now)
         tables.update(td.tables)
         meta.update(tn.week_meta(inputs.warehouse, inputs.now))
+    ppd = None
+    if "playoff_planner" in inputs.modules:  # feature #6: the snapshots (append-only), tables
+        from twm.publish import playoff_planner as pp
+
+        ppd = pp.collect_playoff_planner(inputs.store, inputs.warehouse, season, inputs.now)
+        tables.update(ppd.tables)
+        meta.update(pp.meta(ppd))
     dec = None
     if "decisions" in inputs.modules:  # step P3: the frozen history + the season in progress
         from twm.publish import decisions as dc
@@ -1002,12 +1012,16 @@ def collect(inputs: Inputs) -> PublishData:
         wanted.append(qd.version)
     if td is not None:  # the same for Teammate out
         wanted.append(td.version)
+    if ppd is not None:  # and the playoff planner's pinned spec
+        wanted.append(ppd.version)
     versions = model_versions(inputs.store, wanted)
     more = [e.versions for e in extra if e.versions.height]
     if qd is not None:
         more.append(qd.versions)
     if td is not None:
         more.append(td.versions)
+    if ppd is not None:
+        more.append(ppd.versions)
     if more:
         versions = pl.concat([versions, *more], how="vertical_relaxed").unique(
             "model_version", keep="first", maintain_order=True
@@ -1031,7 +1045,7 @@ def collect(inputs: Inputs) -> PublishData:
     })  # fmt: skip
     return PublishData(season=season, now=inputs.now, families=families, tables=tables,
                        meta=meta, data_as_of=data_as_of, decisions=dec, questionable=qd,
-                       teammate_out=td,
+                       teammate_out=td, playoff_planner=ppd,
                        warnings=list(dec.warnings) if dec is not None else [])  # fmt: skip
 
 
@@ -1255,6 +1269,9 @@ def validate(data: PublishData) -> list[str]:
     if data.teammate_out is not None:
         frames.update({"teammate_out_list": data.teammate_out.lists,
                        "teammate_out_row": data.teammate_out.rows})  # fmt: skip
+    if data.playoff_planner is not None:
+        frames.update({"playoff_planner_list": data.playoff_planner.lists,
+                       "playoff_planner_row": data.playoff_planner.rows})  # fmt: skip
     for name, df in frames.items():
         bad = sorted(c for c in df.columns if c.lower() in FORBIDDEN_COLUMNS)
         if bad:
@@ -1314,6 +1331,11 @@ def validate(data: PublishData) -> list[str]:
 
         known_v = set(t["model_versions"].get_column("model_version").to_list())
         problems += tn.problems(data.teammate_out, teams, players, known_v)
+    if data.playoff_planner is not None:  # feature #6
+        from twm.publish import playoff_planner as pp
+
+        known_v = set(t["model_versions"].get_column("model_version").to_list())
+        problems += pp.problems(data.playoff_planner, teams, known_v)
     # 3. every player named exists; the weekly summary is clean
     for name, df in (("picks", picks), ("player_week_summary", t["player_week_summary"])):
         missing = df.filter(~pl.col("gsis_id").is_in(players))

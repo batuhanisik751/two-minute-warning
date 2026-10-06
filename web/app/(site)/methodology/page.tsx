@@ -21,6 +21,7 @@ import BoardSection from "@/components/methodology/BoardSection";
 import ModelCards from "@/components/methodology/ModelCards";
 import HotSeatSection from "@/components/methodology/HotSeatSection";
 import QuestionableSection from "@/components/methodology/QuestionableSection";
+import PlayoffPlannerSection from "@/components/methodology/PlayoffPlannerSection";
 import TeammateOutSection from "@/components/methodology/TeammateOutSection";
 import RegressionSection from "@/components/methodology/RegressionSection";
 import StreamerSection from "@/components/methodology/StreamerSection";
@@ -425,6 +426,9 @@ export default async function MethodologyPage() {
             <a href="#teammate-out">Teammate out</a>
           </li>
           <li>
+            <a href="#playoff-planner">Playoff planner</a>
+          </li>
+          <li>
             <a href="#decisions">The Decision Report Card</a>
           </li>
           <li>
@@ -691,6 +695,8 @@ export default async function MethodologyPage() {
         <QuestionableSection />
 
         <TeammateOutSection />
+
+        <PlayoffPlannerSection />
 
         <DecisionsSection />
 

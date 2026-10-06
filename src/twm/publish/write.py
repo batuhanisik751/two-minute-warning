@@ -27,6 +27,9 @@ Regression Watch) with the same code:
    live record graded from every snapshot of the season the target holds after the run (the
    published ones included: :func:`twm.publish.questionable.live_record`); feature #5,
    Teammate out (``data.teammate_out``, :data:`twm.publish.tables.TEAMMATE_OUT`), the same;
+   feature #6, the playoff planner (``data.playoff_planner``,
+   :data:`twm.publish.tables.PLAYOFF_PLANNER`), the same with snapshots keyed by (season,
+   through_week);
 7. append a 'success' pipeline_runs row, count the rows and measure the tables, commit.
 
 Any error rolls everything back; a 'failed' pipeline_runs row is then written in a new
@@ -46,6 +49,7 @@ from typing import Any
 
 import polars as pl
 
+from twm.publish import playoff_planner as pp
 from twm.publish import questionable as qn
 from twm.publish import teammate_out as tn
 from twm.publish.collect import PublishData
@@ -53,6 +57,7 @@ from twm.publish.tables import (
     DECISIONS,
     FAMILIES,
     KEEP_ON_CONFLICT,
+    PLAYOFF_PLANNER,
     QUESTIONABLE,
     SHARED,
     TABLES,
@@ -378,34 +383,48 @@ def plan_live(
     return decisions, keys
 
 
-def target_snapshots(conn, snap: Snapshots = QUESTIONABLE) -> set[tuple[int, int, datetime]]:
-    """(season, week, as_of) of every snapshot of ``snap`` in the target (feature #1: the
-    Questionable list; feature #5: Teammate out)."""
-    rows = conn.execute(f'SELECT season, week, as_of FROM "{snap.lists}"').fetchall()
-    return {(int(s), int(w), a.astimezone(UTC)) for s, w, a in rows}
+def _key_value(v: Any) -> Any:
+    """A snapshot key's value as both sides compare it (aware UTC times, plain ints)."""
+    if isinstance(v, datetime):
+        return v.astimezone(UTC)
+    return int(v) if isinstance(v, int) else v
 
 
-def plan_snapshots(q: Any, published: set[tuple[int, int, datetime]],
+def target_snapshots(conn, snap: Snapshots = QUESTIONABLE) -> set[tuple]:
+    """The key of every snapshot of ``snap`` in the target: (season, week, as_of) (feature #1:
+    the Questionable list; feature #5: Teammate out) or (season, through_week) (feature #6,
+    the playoff planner)."""
+    cols = ", ".join(f'"{c}"' for c in snap.key)
+    rows = conn.execute(f'SELECT {cols} FROM "{snap.lists}"').fetchall()
+    return {tuple(_key_value(v) for v in r) for r in rows}
+
+
+def plan_snapshots(q: Any, published: set[tuple],
                    snap: Snapshots = QUESTIONABLE) -> tuple[
         list[LiveDecision], pl.DataFrame]:  # fmt: skip
     """The local snapshots to insert (absent in the target; the rest are kept: append-only)
-    and an *insert* decision for each."""
+    and an *insert* decision for each (labelled by season, its week and its as-of)."""
     key = list(snap.key)
-    new = [r for r in q.lists.select(key).iter_rows()
-           if (int(r[0]), int(r[1]), r[2].astimezone(UTC)) not in published]  # fmt: skip
-    out = [LiveDecision(int(s), int(w), f"as of {a:%Y-%m-%d %H:%M} UTC", "insert",
-                        module=snap.module) for s, w, a in new]  # fmt: skip
+    new, out = [], []
+    for r in q.lists.select(*key, pl.col("as_of").alias("_as_of")).iter_rows():
+        if tuple(_key_value(v) for v in r[:-1]) in published:
+            continue
+        new.append(r[:-1])
+        out.append(LiveDecision(int(r[0]), int(r[1]), f"as of {r[-1]:%Y-%m-%d %H:%M} UTC",
+                                "insert", module=snap.module))  # fmt: skip
     keys = pl.DataFrame(new, schema=q.lists.select(key).schema, orient="row")
     return out, keys
 
 
 def _latest_snapshot(conn, snap: Snapshots = QUESTIONABLE) -> dict[str, str]:
-    """site_meta's newest snapshot of ``snap`` in the target ('questionable_latest_season' ...,
-    'teammate_out_latest_season' ...)."""
-    row = conn.execute(f'SELECT season, week, as_of FROM "{snap.lists}" '
-                       "ORDER BY as_of DESC, season DESC, week DESC LIMIT 1"
+    """site_meta's newest snapshot of ``snap`` in the target ('questionable_latest_season' /
+    '_week' / '_as_of', 'teammate_out_latest_season' ..., 'playoff_planner_latest_season' /
+    '_through_week' / '_as_of')."""
+    week = snap.key[1]
+    row = conn.execute(f'SELECT season, "{week}", as_of FROM "{snap.lists}" '
+                       f'ORDER BY as_of DESC, season DESC, "{week}" DESC LIMIT 1'
                        ).fetchone()  # fmt: skip
-    keys = tuple(f"{snap.module}_latest_{k}" for k in ("season", "week", "as_of"))
+    keys = tuple(f"{snap.module}_latest_{k}" for k in ("season", week, "as_of"))
     if row is None:
         return dict.fromkeys(keys, "")
     return dict(zip(keys, (str(row[0]), str(row[1]), row[2].astimezone(UTC).isoformat()),
@@ -414,8 +433,10 @@ def _latest_snapshot(conn, snap: Snapshots = QUESTIONABLE) -> dict[str, str]:
 
 def snapshot_modules(data: PublishData) -> list[tuple[Snapshots, Any, Any]]:
     """(its tables, its data, its publish module) of each snapshot module the publish carries:
-    the Questionable list (feature #1), Teammate out (feature #5)."""
-    got = ((QUESTIONABLE, data.questionable, qn), (TEAMMATE_OUT, data.teammate_out, tn))
+    the Questionable list (feature #1), Teammate out (feature #5), the playoff planner
+    (feature #6)."""
+    got = ((QUESTIONABLE, data.questionable, qn), (TEAMMATE_OUT, data.teammate_out, tn),
+           (PLAYOFF_PLANNER, data.playoff_planner, pp))  # fmt: skip
     return [(sn, d, mod) for sn, d, mod in got if d is not None]
 
 

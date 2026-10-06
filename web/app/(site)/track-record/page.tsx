@@ -7,6 +7,7 @@ import QuestionableTrack from "@/components/track/QuestionableTrack";
 import RadarTrack from "@/components/track/RadarTrack";
 import RegressionTrackSection from "@/components/track/RegressionTrackSection";
 import StreamTrack from "@/components/track/StreamTrack";
+import PlayoffPlannerTrack from "@/components/track/PlayoffPlannerTrack";
 import TeammateOutTrack from "@/components/track/TeammateOutTrack";
 import { PageHeader } from "@/components/ui";
 import { pct } from "@/lib/format";
@@ -24,6 +25,7 @@ const SECTIONS = [
   { id: "board", title: "Cliff board" },
   { id: "questionable", title: "Questionable outcomes" },
   { id: "teammate-out", title: "Teammate out" },
+  { id: "playoff-planner", title: "Playoff planner" },
 ] as const;
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
@@ -100,6 +102,9 @@ export default function TrackRecordPage() {
         </Section>
         <Section id="teammate-out" title={SECTIONS[7].title}>
           <TeammateOutTrack />
+        </Section>
+        <Section id="playoff-planner" title={SECTIONS[8].title}>
+          <PlayoffPlannerTrack />
         </Section>
       </div>
     </>

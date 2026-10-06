@@ -137,6 +137,25 @@ league's playoff weeks (from its synced settings: the weeks after `reg_season_co
 per `playoff_matchup_period_length` weeks; 15-17 if the settings say nothing), the mean rating,
 and the "how much it matters" lines. Absent without a synced roster or a stored grid.
 
+## Published and on the site (P6b)
+
+`twm publish` carries the module (`src/twm/publish/playoff_planner.py`, migration 0009; see
+docs/deploy.md): the snapshots, append-only by (season, through_week); the pinned choice per
+position; the candidates' horizon-pooled backtest with the rule replayed from the per-season
+MAEs (the seasons each beat the choice it was compared with); the effect sizes, stability and
+late-weeks rows; and the live record, graded over the published snapshots plus the night's and
+**empty until a game of week 17 is in** (the record is read after the fantasy playoffs).
+
+`/playoff-planner` (nav "Playoffs"): (a) the newest snapshot's grid for weeks 15-17 (leagues
+differ; the site uses 15-17): per position, every team's opponent each week, the rating with a
+word (easy at 1.05 or more, hard at 0.95 or less, else neutral) and its rank, and the total over
+the games (a bye adds nothing), sortable by team, week or total and filtered by position with
+links; TE and K (rule: none) show the schedule only and say why; (b) "How much do matchups
+matter?": the rated vs realized gaps, the stability and the resting note (late weeks + `NOTE`);
+(c) the candidates per position with the rule's pick; (d) the season's live record. A player
+page shows a "Playoff weeks" line when his position is rated; `/methodology#playoff-planner`
+and `/track-record#playoff-planner` carry the method and the record.
+
 ## Limits
 
 - Injuries, weather and role changes move a player's points far more than his opponent.

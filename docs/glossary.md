@@ -443,7 +443,7 @@ How often players ranked this high hit, counted over earlier reconstructed lists
 
 ### How much a matchup matters
 
-The honest size of the effect: about 1 to 2 points per game for a QB, RB or WR, about 4 for a D/ST, next to nothing for a TE or kicker.
+The honest size of the effect: how many points per game really separated players facing the easiest matchups from those facing the hardest, out of sample. The playoff planner's table shows it per position; it is small for most.
 
 - **Name:** `matchup_gap`; **unit:** points per game; **used by:** playoff_planner
 - **Formula:** walk-forward 2013-2025: players facing the easiest fifth of matchups (as-of raw rating) minus those facing the hardest fifth, actual minus usual points per game in weeks 15-17

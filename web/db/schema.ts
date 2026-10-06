@@ -1540,3 +1540,213 @@ export const teammateOutLive = pgTable(
     check("teammate_out_live_rates_check", sql`${t.coverage} between 0 and 1 and ${t.topHit} between 0 and 1`),
   ],
 );
+
+// ---------------------------------------------------------------------------------------
+// Feature #6 (migration 0009): the playoff planner (src/twm/publish/playoff_planner.py)
+// ---------------------------------------------------------------------------------------
+
+/** One stored snapshot of the playoff grid per (season, through_week): `twm playoff_planner
+ * weekly` rates every team's opponents in the fantasy playoff weeks with the games of the
+ * completed weeks (through_week = the last one). Keyed by the completed week, not by as_of: the
+ * nightly runner's store starts empty and stores the same week every night until the next one
+ * completes; the first published copy wins. Append-only: inserted once, never deleted or
+ * changed by a publish. model_version = the pinned spec's; n_teams / n_rows = the grid's teams
+ * and rows (teams x playoff weeks x six positions). */
+export const playoffPlannerList = pgTable(
+  "playoff_planner_list",
+  {
+    season: integer("season").notNull(),
+    throughWeek: integer("through_week").notNull(),
+    asOf: tstz("as_of").notNull(),
+    modelVersion: text("model_version")
+      .notNull()
+      .references(() => modelVersions.modelVersion),
+    generatedAt: tstz("generated_at").notNull(),
+    nTeams: integer("n_teams").notNull(),
+    nRows: integer("n_rows").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.throughWeek] }),
+    check("playoff_planner_list_week_check", sql`${t.throughWeek} >= 1`),
+    check("playoff_planner_list_counts_check", sql`${t.nTeams} >= 1 and ${t.nRows} >= ${t.nTeams}`),
+  ],
+);
+
+/** One (fantasy playoff week, team, position) of a snapshot: the team's opponent that week
+ * (NULL: a bye; home, game_id, kickoff, often NULL months ahead), the position's chosen
+ * candidate ('none' | 'raw' | 'shrunk' | 'adjusted'), its multiplier (rating: 1.0 where the
+ * rule chose 'none', NULL on a bye) and its rank among the opponents (1 = the easiest; NULL for
+ * 'none' and byes), every candidate's multiplier (raw / shrunk / adjusted), the opponent's
+ * completed games and the league's points per team-game at the position (lg_ppg: a rating's
+ * 1.0). */
+export const playoffPlannerRow = pgTable(
+  "playoff_planner_row",
+  {
+    season: integer("season").notNull(),
+    throughWeek: integer("through_week").notNull(),
+    week: integer("week").notNull(),
+    team: text("team")
+      .notNull()
+      .references(() => dimTeam.teamAbbr),
+    position: text("position").notNull(),
+    opponent: text("opponent").references(() => dimTeam.teamAbbr),
+    home: boolean("home"),
+    gameId: text("game_id"),
+    kickoff: tstz("kickoff"),
+    candidate: text("candidate").notNull(),
+    rating: doublePrecision("rating"),
+    ratingRank: integer("rating_rank"),
+    raw: doublePrecision("raw"),
+    shrunk: doublePrecision("shrunk"),
+    adjusted: doublePrecision("adjusted"),
+    oppGames: integer("opp_games"),
+    lgPpg: doublePrecision("lg_ppg"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.throughWeek, t.week, t.team, t.position] }),
+    foreignKey({
+      name: "playoff_planner_row_list_fk",
+      columns: [t.season, t.throughWeek],
+      foreignColumns: [playoffPlannerList.season, playoffPlannerList.throughWeek],
+    }),
+    index("playoff_planner_row_team_idx").on(t.team, t.position, t.season),
+    check("playoff_planner_row_position_check", sql`${t.position} in ('QB', 'RB', 'WR', 'TE', 'K', 'DST')`),
+    check("playoff_planner_row_candidate_check", sql`${t.candidate} in ('none', 'raw', 'shrunk', 'adjusted')`),
+    check("playoff_planner_row_bye_check", sql`(${t.opponent} is null) = (${t.rating} is null)`),
+    check("playoff_planner_row_rating_check", sql`${t.rating} > 0 and (${t.candidate} <> 'none' or (${t.rating} = 1 and ${t.ratingRank} is null))`),
+    check("playoff_planner_row_rank_check", sql`${t.ratingRank} between 1 and 32`),
+  ],
+);
+
+/** The pinned spec's choice per position: the candidate used, the fixed rule's choice
+ * (rule_choice), who chose ('rule', or the owner's recorded reason for an override), the rule's
+ * path ('none > shrunk > adjusted') and the pseudo-games k of the shrinkage. Replaced on every
+ * publish. */
+export const playoffPlannerChoice = pgTable(
+  "playoff_planner_choice",
+  {
+    position: text("position").primaryKey(),
+    candidate: text("candidate").notNull(),
+    ruleChoice: text("rule_choice").notNull(),
+    chosenBy: text("chosen_by").notNull(),
+    path: text("path").notNull(),
+    pseudoGames: doublePrecision("pseudo_games").notNull(),
+  },
+  (t) => [
+    check("playoff_planner_choice_position_check", sql`${t.position} in ('QB', 'RB', 'WR', 'TE', 'K', 'DST')`),
+    check("playoff_planner_choice_candidate_check", sql`${t.candidate} in ('none', 'raw', 'shrunk', 'adjusted') and ${t.ruleChoice} in ('none', 'raw', 'shrunk', 'adjusted')`),
+  ],
+);
+
+/** The four candidates' walk-forward backtest per position (reports/playoff_planner/
+ * backtest.csv, pooled over the four horizons and the test seasons): n unit-games, the points
+ * MAE, and the fixed rule replayed: the choice each candidate was compared with (vs; NULL for
+ * 'none', the start), the test seasons it beat it in (seasons_won, of seasons), whether it took
+ * over (took_over); chosen = the candidate used, rule_pick = the rule's. Replaced on every
+ * publish. */
+export const playoffPlannerBacktest = pgTable(
+  "playoff_planner_backtest",
+  {
+    position: text("position").notNull(),
+    candidate: text("candidate").notNull(),
+    title: text("title").notNull(),
+    n: integer("n").notNull(),
+    mae: doublePrecision("mae").notNull(),
+    vs: text("vs"),
+    seasonsWon: integer("seasons_won"),
+    seasons: integer("seasons").notNull(),
+    tookOver: boolean("took_over").notNull(),
+    chosen: boolean("chosen").notNull(),
+    rulePick: boolean("rule_pick").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.position, t.candidate] }),
+    check("playoff_planner_backtest_candidate_check", sql`${t.candidate} in ('none', 'raw', 'shrunk', 'adjusted')`),
+    check("playoff_planner_backtest_won_check", sql`${t.seasonsWon} between 0 and ${t.seasons}`),
+  ],
+);
+
+/** How much a matchup matters (reports/playoff_planner/effects.csv): per position and horizon
+ * (the as-of week, or 'all'), units facing the easiest fifth of opponents by the as-of raw
+ * rating vs the hardest fifth (n_best / n_worst unit-games), points per game in weeks 15-17:
+ * the gap the raw ratings implied (rated_gap), the shrunk ratings' gap, the gap that really
+ * showed up relative to each unit's base (realized_gap) and realized / rated (survived).
+ * Replaced on every publish. */
+export const playoffPlannerEffects = pgTable(
+  "playoff_planner_effects",
+  {
+    position: text("position").notNull(),
+    horizon: text("horizon").notNull(),
+    nWorst: integer("n_worst").notNull(),
+    nBest: integer("n_best").notNull(),
+    ratedGap: doublePrecision("rated_gap"),
+    shrunkGap: doublePrecision("shrunk_gap"),
+    realizedGap: doublePrecision("realized_gap"),
+    survived: doublePrecision("survived"),
+  },
+  (t) => [primaryKey({ columns: [t.position, t.horizon] })],
+);
+
+/** Stability (reports/playoff_planner/stability.csv): per position and as-of week, the Spearman
+ * correlation of a team's as-of raw rating with its rating in weeks 15-17 alone, mean / min /
+ * max over the test seasons. Replaced on every publish. */
+export const playoffPlannerStability = pgTable(
+  "playoff_planner_stability",
+  {
+    position: text("position").notNull(),
+    horizon: integer("horizon").notNull(),
+    seasons: integer("seasons").notNull(),
+    rhoMean: doublePrecision("rho_mean"),
+    rhoMin: doublePrecision("rho_min"),
+    rhoMax: doublePrecision("rho_max"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.position, t.horizon] }),
+    check("playoff_planner_stability_rho_check", sql`${t.rhoMean} between -1 and 1`),
+  ],
+);
+
+/** Late weeks (reports/playoff_planner/late_weeks.csv): per era ('2013-2020 (17 weeks)' /
+ * '2021+ (18 weeks)'), position and playoff week, the players with a base as of week 14
+ * (based), the share who played that week and their points vs base. Replaced on every
+ * publish. */
+export const playoffPlannerLateWeeks = pgTable(
+  "playoff_planner_late_weeks",
+  {
+    era: text("era").notNull(),
+    position: text("position").notNull(),
+    week: integer("week").notNull(),
+    based: integer("based").notNull(),
+    playedShare: doublePrecision("played_share"),
+    vsBase: doublePrecision("vs_base"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.era, t.position, t.week] }),
+    check("playoff_planner_late_weeks_share_check", sql`${t.playedShare} between 0 and 1`),
+  ],
+);
+
+/** The live record of the pinned season, per position and 'all': each (week, team, position)'s
+ * last snapshot rated before that week, graded with the team's units' points in that game
+ * (src/twm/modules/playoff_planner/weekly.py grade / summary): the graded team-games (n), the
+ * ones still waiting (pending), the playoff weeks with a graded game, the MAE of the realized
+ * multiplier against the rating and against a flat 1.00 (mae_flat: "matchups don't matter").
+ * Empty until a game of the last playoff week (17) is in: read after the fantasy playoffs.
+ * Replaced on every publish. */
+export const playoffPlannerLive = pgTable(
+  "playoff_planner_live",
+  {
+    season: integer("season").notNull(),
+    position: text("position").notNull(),
+    n: integer("n").notNull(),
+    pending: integer("pending").notNull(),
+    weeks: integer("weeks").notNull(),
+    maeRating: doublePrecision("mae_rating"),
+    maeFlat: doublePrecision("mae_flat"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.season, t.position] }),
+    check("playoff_planner_live_position_check", sql`${t.position} in ('QB', 'RB', 'WR', 'TE', 'K', 'DST', 'all')`),
+    check("playoff_planner_live_counts_check", sql`${t.n} >= 0 and ${t.pending} >= 0 and ${t.weeks} >= 0`),
+  ],
+);

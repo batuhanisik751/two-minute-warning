@@ -13,6 +13,7 @@ import { getPlayerHistory } from "@/lib/queries/radar";
 import { getPlayerRegressionHistory } from "@/lib/queries/regression";
 import RegressionHistory from "@/components/RegressionHistory";
 import QuestionableBadge from "@/components/questionable/PlayerBadge";
+import PlayoffPlayerLine from "@/components/playoff-planner/PlayerLine";
 import TeammateOutBadge from "@/components/teammate-out/PlayerBadge";
 import { parseGarbage } from "@/lib/regression";
 import { pageMetadata } from "@/lib/seo";
@@ -140,6 +141,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
       </PageHeader>
       <QuestionableBadge gsisId={id} />
       <TeammateOutBadge gsisId={id} />
+      <PlayoffPlayerLine team={player.team} position={player.position} />
 
       {seasons.length === 0 || season === null ? (
         <EmptyState title="No published weeks for this player">

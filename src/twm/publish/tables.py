@@ -39,7 +39,9 @@ How a publish treats each table (the reviewer's rules of 2026-09-28):
   (questionable_history, questionable_backtest, questionable_calibration, questionable_live)
   are replaced, each its own hash unit, guarded like the others. Feature #5, Teammate out
   (:data:`TEAMMATE_OUT`: teammate_out_list / teammate_out_row and its replaced tables), follows
-  the same rules (:data:`SNAPSHOTS`).
+  the same rules (:data:`SNAPSHOTS`); so does feature #6, the playoff planner
+  (:data:`PLAYOFF_PLANNER`), whose snapshots are keyed by (season, through_week): one per
+  completed week.
 """
 
 from __future__ import annotations
@@ -454,6 +456,56 @@ TABLES: dict[str, Table] = {
             ("mae_target_share", DP), ("mae_target_share_base", DP), ("coverage", DP),
             ("top_hit", DP),
         ),
+        # feature #6 (migration 0009): the playoff planner's snapshots, one per (season,
+        # completed week), and its tables (PLAYOFF_PLANNER)
+        _t(
+            "playoff_planner_list", ("season", "through_week"), "snapshots",
+            ("season", "integer"), ("through_week", "integer"), ("as_of", TS),
+            ("model_version", "text"), ("generated_at", TS), ("n_teams", "integer"),
+            ("n_rows", "integer"),
+        ),
+        _t(
+            "playoff_planner_row", ("season", "through_week", "week", "team", "position"),
+            "snapshots",
+            ("season", "integer"), ("through_week", "integer"), ("week", "integer"),
+            ("team", "text"), ("position", "text"), ("opponent", "text"), ("home", "boolean"),
+            ("game_id", "text"), ("kickoff", TS), ("candidate", "text"), ("rating", DP),
+            ("rating_rank", "integer"), ("raw", DP), ("shrunk", DP), ("adjusted", DP),
+            ("opp_games", "integer"), ("lg_ppg", DP),
+        ),
+        _t(
+            "playoff_planner_choice", ("position",), "replace",
+            ("position", "text"), ("candidate", "text"), ("rule_choice", "text"),
+            ("chosen_by", "text"), ("path", "text"), ("pseudo_games", DP),
+        ),
+        _t(
+            "playoff_planner_backtest", ("position", "candidate"), "replace",
+            ("position", "text"), ("candidate", "text"), ("title", "text"), ("n", "integer"),
+            ("mae", DP), ("vs", "text"), ("seasons_won", "integer"), ("seasons", "integer"),
+            ("took_over", "boolean"), ("chosen", "boolean"), ("rule_pick", "boolean"),
+        ),
+        _t(
+            "playoff_planner_effects", ("position", "horizon"), "replace",
+            ("position", "text"), ("horizon", "text"), ("n_worst", "integer"),
+            ("n_best", "integer"), ("rated_gap", DP), ("shrunk_gap", DP),
+            ("realized_gap", DP), ("survived", DP),
+        ),
+        _t(
+            "playoff_planner_stability", ("position", "horizon"), "replace",
+            ("position", "text"), ("horizon", "integer"), ("seasons", "integer"),
+            ("rho_mean", DP), ("rho_min", DP), ("rho_max", DP),
+        ),
+        _t(
+            "playoff_planner_late_weeks", ("era", "position", "week"), "replace",
+            ("era", "text"), ("position", "text"), ("week", "integer"), ("based", "integer"),
+            ("played_share", DP), ("vs_base", DP),
+        ),
+        _t(
+            "playoff_planner_live", ("season", "position"), "replace",
+            ("season", "integer"), ("position", "text"), ("n", "integer"),
+            ("pending", "integer"), ("weeks", "integer"), ("mae_rating", DP),
+            ("mae_flat", DP),
+        ),
     )
 }  # fmt: skip
 
@@ -470,8 +522,10 @@ WRITE_ORDER = (
     "questionable_list", "questionable_row", "questionable_history", "questionable_backtest",
     "questionable_calibration", "questionable_live", "teammate_out_list", "teammate_out_row",
     "teammate_out_allocation", "teammate_out_backtest", "teammate_out_coverage",
-    "teammate_out_events", "teammate_out_live", "tier_stats", "player_week_summary",
-    "glossary", "site_meta", "pipeline_runs",
+    "teammate_out_events", "teammate_out_live", "playoff_planner_list", "playoff_planner_row",
+    "playoff_planner_choice", "playoff_planner_backtest", "playoff_planner_effects",
+    "playoff_planner_stability", "playoff_planner_late_weeks", "playoff_planner_live",
+    "tier_stats", "player_week_summary", "glossary", "site_meta", "pipeline_runs",
 )  # fmt: skip
 REPLACED = tuple(n for n in WRITE_ORDER if TABLES[n].mode == "replace")
 assert set(WRITE_ORDER) == set(TABLES), "WRITE_ORDER must name every table"
@@ -578,7 +632,16 @@ TEAMMATE_OUT = Snapshots("teammate_out", "teammate_out_list", "teammate_out_row"
                          ("teammate_out_allocation", "teammate_out_backtest",
                           "teammate_out_coverage", "teammate_out_events", "teammate_out_live"),
                          "teammate out")  # fmt: skip
-SNAPSHOTS = (QUESTIONABLE, TEAMMATE_OUT)
+# feature #6: one snapshot per (season, completed week) (the runner's store starts empty each
+# night and writes the same through_week until the next week completes: keyed by it, never by
+# as_of); a row is one (playoff week, team, position)
+PLAYOFF_PLANNER = Snapshots("playoff_planner", "playoff_planner_list", "playoff_planner_row",
+                            ("season", "through_week"), "position",
+                            ("playoff_planner_choice", "playoff_planner_backtest",
+                             "playoff_planner_effects", "playoff_planner_stability",
+                             "playoff_planner_late_weeks", "playoff_planner_live"),
+                            "playoff planner")  # fmt: skip
+SNAPSHOTS = (QUESTIONABLE, TEAMMATE_OUT, PLAYOFF_PLANNER)
 _owned = [n for f in FAMILIES.values() for n in (f.lists, f.rows, f.outcomes, *f.replaced)]
 assert set(_owned) | set(SHARED) | {"site_meta"} | set(DECISIONS.replaced) | {
     n for s in SNAPSHOTS for n in s.replaced

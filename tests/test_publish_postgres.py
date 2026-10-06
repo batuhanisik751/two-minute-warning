@@ -757,7 +757,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                                                   "0005_board",
                                                   "0006_regression_ranges",
                                                   "0007_questionable",
-                                                  "0008_teammate_out"]  # fmt: skip
+                                                  "0008_teammate_out",
+                                                  "0009_playoff_planner"]  # fmt: skip
         job = tg.resolve("local", env={tg.LOCAL_ENV: make_conninfo(
             url, user="twm_job", password=roles["twm_job"])}, env_file=NO_ENV_FILE)  # fmt: skip
         syn = ps.build(tmp_path / "syn", live_weeks=(3,))
@@ -771,6 +772,11 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
 
         res = publish_teammate_out(job, syn.inputs, pt.write_store(tmp_path / "t.duckdb"))
         assert res.counts["teammate_out_row"] == 5
+        from tests import publish_playoff_planner_synthetic as pps  # feature #6 (migration 0009)
+
+        res = publish_playoff_planner(job, syn.inputs, pps.write_store(tmp_path / "p.duckdb"),
+                                      played=pps.actuals((15, 16, 17)))  # fmt: skip
+        assert res.counts["playoff_planner_row"] == pps.N_ROWS
         web = make_conninfo(url, user="twm_web", password=roles["twm_web"])
         with psycopg.connect(web, autocommit=True) as conn:
             for t in ("stream_list", "stream_pick", "regression_row", "regression_track_record",
@@ -782,7 +788,10 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                       "questionable_calibration", "questionable_live", "teammate_out_list",
                       "teammate_out_row", "teammate_out_allocation", "teammate_out_backtest",
                       "teammate_out_coverage", "teammate_out_events",
-                      "teammate_out_live"):  # fmt: skip
+                      "teammate_out_live", "playoff_planner_list", "playoff_planner_row",
+                      "playoff_planner_choice", "playoff_planner_backtest",
+                      "playoff_planner_effects", "playoff_planner_stability",
+                      "playoff_planner_late_weeks", "playoff_planner_live"):  # fmt: skip
                 assert conn.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] > 0
             for t in ("dim_coach", "decision_fourth", "coach_season", "decisions_track_record"):
                 conn.execute(f'SELECT count(*) FROM "{t}"')  # P3 tables: readable by the site
@@ -1150,3 +1159,100 @@ def test_the_teammate_out_live_record_counts_the_published_snapshots(
         res = publish_teammate_out(db, syn.inputs, store, played=played)
         assert "teammate_out_live" in res.unchanged and not res.written["teammate_out_list"]
         assert rows(db, live) == record
+
+
+# --------------------------------------------------------------------------------------
+# Feature #6: the playoff planner's snapshots (append-only by (season, through_week))
+# --------------------------------------------------------------------------------------
+
+
+def publish_playoff_planner(target: tg.Target, inputs, store: Path,
+                            **kwargs) -> wr.PublishResult:  # fmt: skip
+    from tests import publish_playoff_planner_synthetic as pps
+
+    p_kw = {k: kwargs.pop(k) for k in ("effects", "played") if k in kwargs}
+    data = pps.add_playoff_planner(col.collect(inputs), store, **p_kw)
+    assert col.validate(data) == []
+    return wr.publish(target, data, **kwargs)
+
+
+def test_the_playoff_planner_snapshots_are_append_only(db: tg.Target, tmp_path: Path) -> None:
+    from datetime import timedelta
+
+    from tests import publish_playoff_planner_synthetic as pps
+    from twm.modules.playoff_planner import weekly as wk
+
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    store = pps.write_store(tmp_path / "p1.duckdb")
+    first = publish_playoff_planner(db, syn.inputs, store)
+    c = first.counts
+    assert (c["playoff_planner_list"], c["playoff_planner_row"]) == (1, 72)
+    assert (c["playoff_planner_choice"], c["playoff_planner_backtest"]) == (6, 24)
+    assert (c["playoff_planner_effects"], c["playoff_planner_stability"]) == (35, 24)
+    assert (c["playoff_planner_late_weeks"], c["playoff_planner_live"]) == (36, 0)
+    assert [d.label for d in first.live if d.module == "playoff_planner"] == [
+        "playoff planner 2026-W05 as of 2026-10-13 06:00 UTC"]  # fmt: skip
+    meta = dict(rows(db, "SELECT key, value FROM site_meta"))
+    assert meta["playoff_planner_latest_through_week"] == "5"
+    assert meta["playoff_planner_latest_as_of"] == "2026-10-13T06:00:00+00:00"
+    assert meta["playoff_planner_weeks"] == "15,16,17"
+    params = rows(db, "SELECT params FROM model_versions WHERE module = 'playoff_planner'")[0][0]
+    assert params["chosen"]["TE"] == "none" and params["chosen_by"] == "rule"
+    byes = "SELECT count(*) FROM playoff_planner_row WHERE opponent IS NULL AND rating IS NULL"
+    assert rows(db, byes) == [(12,)]
+    snap = ("SELECT through_week, week, team, position, rating FROM playoff_planner_row "
+            "ORDER BY 1, 2, 3, 4")  # fmt: skip
+    before = rows(db, snap)
+    content = dump(db)
+    # a second run rewrites nothing: the snapshot is kept, the tables are unchanged
+    res = publish_playoff_planner(db, syn.inputs, store)
+    assert {"playoff_planner_choice", "playoff_planner_backtest", "playoff_planner_effects",
+            "playoff_planner_live"} <= set(res.unchanged)  # fmt: skip
+    assert not [d for d in res.live if d.module == "playoff_planner"] and dump(db) == content
+    # the next night's copy of the same completed week (another as-of, other ratings) never
+    # replaces the published one; a fresh runner (empty store) keeps it; a new week is added
+    other = tmp_path / "p2.duckdb"
+    wk.store_snapshot(other, pps.grid_rows(5, shift=0.3), model_version="matchup-test",
+                      as_of=pps.TUESDAY + timedelta(days=1))  # fmt: skip
+    res = publish_playoff_planner(db, syn.inputs, other)
+    assert not res.written["playoff_planner_list"] and rows(db, snap) == before
+    publish_playoff_planner(db, syn.inputs, tmp_path / "empty.duckdb")
+    assert rows(db, snap) == before
+    res = publish_playoff_planner(db, syn.inputs, pps.write_store(tmp_path / "p3.duckdb", (6,)))
+    assert res.written["playoff_planner_list"] == 1 and res.counts["playoff_planner_row"] == 144
+    assert rows(db, snap)[:72] == before
+    # the replaced tables are guarded against shrinking
+    content = dump(db)
+    with pytest.raises(wr.PublishError, match="playoff_planner_effects would go from 35 to 3"):
+        publish_playoff_planner(db, syn.inputs, store, effects=3)
+    assert dump(db) == content
+
+
+def test_the_playoff_planner_live_record_counts_the_published_snapshots(
+    db: tg.Target, tmp_path: Path
+) -> None:
+    from tests import publish_playoff_planner_synthetic as pps
+    from twm.publish import playoff_planner as pp
+
+    live = "SELECT position, n, pending, weeks, mae_rating, mae_flat FROM playoff_planner_live"
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    # night A (before the playoffs) publishes the snapshot through week 14: no record yet
+    publish_playoff_planner(db, syn.inputs, pps.write_store(tmp_path / "a.duckdb", (14,)))
+    assert rows(db, live) == []
+    # night B, a fresh runner after week 17: its store holds only the snapshot through week 16;
+    # weeks 15 and 16 are graded with A's (published) ratings, week 17 with B's
+    played = pps.actuals((15, 16, 17), factor=1.05)
+    b = pps.write_store(tmp_path / "b.duckdb", (16,), shift=0.2)
+    publish_playoff_planner(db, syn.inputs, b, played=played)
+    both = pps.write_store(pps.write_store(tmp_path / "ab.duckdb", (14,)), (16,), shift=0.2)
+    d = pps.add_playoff_planner(col.collect(syn.inputs), both, played=played).playoff_planner
+    want = pp.live_record(d, pp.no_published())
+    assert rows(db, live + " WHERE position = 'all'")[0][1:4] == (60, 0, 3)
+    got = {r[0]: r[1:] for r in rows(db, live)}
+    for r in want.iter_rows():
+        assert got[r[1]] == (r[2], r[3], r[4], pytest.approx(r[5]), pytest.approx(r[6]))
+    # a night with no local snapshot keeps the full record (not refused, not rewritten)
+    record = rows(db, live)
+    res = publish_playoff_planner(db, syn.inputs, tmp_path / "empty.duckdb", played=played)
+    assert "playoff_planner_live" in res.unchanged and not res.written["playoff_planner_list"]
+    assert rows(db, live) == record

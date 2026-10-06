@@ -1,3 +1,4 @@
+import { FoldTable } from "@/components/Fold";
 import Term from "@/components/Term";
 import { NotPublished } from "@/components/track/parts";
 import { fmtInt, pct } from "@/lib/format";
@@ -30,33 +31,37 @@ export function AllocationTable({ rows, events }: { rows: TOAllocationRow[]; eve
               </p>
             ) : null}
             <div className="table-scroll">
-              <table className="data-table">
-                <caption className="sr-only">Where the work goes when {OUT_WORDS[g.outPos] ?? g.outPos} starter sits: the share of his carries and targets per teammate role</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">
-                      <Term name="teammate_role">Role</Term>
-                    </th>
-                    <th scope="col" className="num">
-                      Of his <Term name="carry_share">carries</Term>
-                    </th>
-                    <th scope="col" className="num">
-                      Of his <Term name="target_share">targets</Term>
-                    </th>
-                    <th scope="col" className="num">Teammate-games</th>
+              <FoldTable
+                label={`${g.outPos} roles`}
+                rows={g.rows.map((r) => (
+                  <tr key={r.role} data-role={r.role} data-row="">
+                    <th scope="row">{r.role}</th>
+                    <td className="num">{g.outPos === "RB" ? share(r.carry) : "–"}</td>
+                    <td className="num">{share(r.target)}</td>
+                    <td className="num">{fmtInt(r.n)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {g.rows.map((r) => (
-                    <tr key={r.role} data-role={r.role}>
-                      <th scope="row">{r.role}</th>
-                      <td className="num">{g.outPos === "RB" ? share(r.carry) : "–"}</td>
-                      <td className="num">{share(r.target)}</td>
-                      <td className="num">{fmtInt(r.n)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                ))}
+                table={(body) => (
+                  <table className="data-table">
+                    <caption className="sr-only">Where the work goes when {OUT_WORDS[g.outPos] ?? g.outPos} starter sits: the share of his carries and targets per teammate role</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">
+                          <Term name="teammate_role">Role</Term>
+                        </th>
+                        <th scope="col" className="num">
+                          Of his <Term name="carry_share">carries</Term>
+                        </th>
+                        <th scope="col" className="num">
+                          Of his <Term name="target_share">targets</Term>
+                        </th>
+                        <th scope="col" className="num">Teammate-games</th>
+                      </tr>
+                    </thead>
+                    {body}
+                  </table>
+                )}
+              />
             </div>
           </div>
         );

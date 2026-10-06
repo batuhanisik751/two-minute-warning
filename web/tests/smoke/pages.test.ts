@@ -53,7 +53,7 @@ describe("every page", () => {
       const firstFocusable = p.doc.querySelector("a[href], button, input, select, textarea");
       assert.equal(firstFocusable?.getAttribute("href"), "#main", `${path}: the skip link is not the first focusable element`);
       assert.equal(p.doc.querySelectorAll("h1").length, 1, `${path}: expected exactly one <h1>`);
-      assert.equal(p.doc.querySelectorAll("nav[aria-label=Main] a").length, 11, `${path}: main navigation (components/NavLinks.tsx NAV)`);
+      assert.equal(p.doc.querySelectorAll("nav[aria-label=Main] a").length, 12, `${path}: main navigation (components/NavLinks.tsx NAV)`);
       assert.ok(!/postgres(ql)?:\/\//i.test(p.html), `${path}: a connection string in the page`);
       // SEO basics (lib/seo.ts): a page title, a description, the canonical URL (the path
       // without its query, on the configured origin) and Open Graph

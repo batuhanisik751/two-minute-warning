@@ -1,9 +1,11 @@
 """Coach tendencies as ``twm publish`` writes them (feature #10; docs/coach_tendencies.md). Reads
 only.
 
-Source: the warehouse, opened read-only through :class:`twm.asof.AsOfView` at the publish
-clock, and :func:`twm.modules.coach_tendencies.build.build` (regular seasons 1999 to the newest
-with a play; the season in progress counts only the plays public at the clock). Its four
+Source: the frozen history of every completed season (C10c: the pin ``coach_tendencies``,
+:mod:`twm.modules.coach_tendencies.production`; the runner's warehouse starts in 2012) and the
+warehouse, opened read-only through :class:`twm.asof.AsOfView` at the publish clock, for the
+seasons after it (the season in progress counts only the plays public at the clock); career
+lines are recomputed from both (``production.frames_from_history``). Its four
 frames are replaced on every publish (:data:`twm.publish.tables.COACH_TENDENCIES`):
 ``coach_tendency_season`` / ``_career`` / ``_persistence`` / ``_fantasy_link``.
 
@@ -106,21 +108,28 @@ def latest(season_rows: pl.DataFrame) -> tuple[int, int | None]:
     return s, int(week)  # type: ignore[arg-type]
 
 
-def collect_coach_tendencies(warehouse: Path, season: int, now: datetime) -> CoachTendencyData:
-    """Everything the module publishes (module docstring): built through an AsOfView at
-    ``now``; ``season`` (the configured current season) is the season in progress, and
-    seasons after the newest with a regular-season play are left out (the offseason)."""
+def collect_coach_tendencies(warehouse: Path, season: int, now: datetime, *,
+                             pin_path: Path | None = None,
+                             root: Path | None = None) -> CoachTendencyData:  # fmt: skip
+    """Everything the module publishes (module docstring): the completed seasons from the
+    frozen history (C10c, :mod:`twm.modules.coach_tendencies.production`; refused when its
+    pin is missing or a file is not the approved bytes), the seasons after it built through
+    an AsOfView at ``now``; ``season`` (the configured current season) is the season in
+    progress, and seasons after the newest with a regular-season play are left out."""
     from twm.asof import AsOfView
-    from twm.modules.coach_tendencies import build as bd
+    from twm.modules.coach_tendencies import production as prod
+    from twm.pins import PinError
 
     try:
+        history, _ = prod.load_pinned(int(season), path=pin_path, root=root)
         with AsOfView(warehouse, now) as v:
-            newest = min(bd.latest_season(v), int(season))
-            frames = bd.build(v, range(bd.FIRST_SEASON, newest + 1), int(season))
+            frames = prod.frames_from_history(history, v, int(season))
             names = v.sql("SELECT coach_id, coach_name FROM dim_coach")
+    except PinError as e:
+        raise PublishInputError(f"coach tendencies: {e}") from e
     except FileNotFoundError as e:
         raise PublishInputError(str(e)) from e
-    tables, coaches = site_tables(frames, names)
+    tables, coaches = site_tables(frames, prod.coach_names(history, names))
     s, week = latest(tables[SEASON])
     return CoachTendencyData(season=s, through_week=week, tables=tables, coaches=coaches)
 

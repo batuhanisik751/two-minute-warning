@@ -42,6 +42,8 @@ MODULES: dict[str, tuple[str, str]] = {
                      "pin (keep --candidate/--reason only if the owner re-approves an override)"),
     "playoff_planner": ("Playoff planner", "uv run twm playoff_planner build; uv run twm "
                         "playoff_planner pin (an override needs --candidate POS=... --reason)"),
+    "coach_tendencies": ("Coach tendencies (frozen history)",
+                         "uv run twm coach tendencies-pin (the full 1999+ warehouse)"),
 }  # fmt: skip
 HISTORY_LAG = {"board": 1}  # the board's history is in snapshot seasons (the board of S + 1)
 LABELLED_KINDS = ("in_season", "offseason")  # schedule candidates that need a label row

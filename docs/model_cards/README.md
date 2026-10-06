@@ -29,6 +29,7 @@ Source: `config/production_models.yaml`
 | [Start/sit odds](startsit.md) (local only) | `startsit` | `rank_dist-61ea917e5a85b44a` | spec: rank -> points distributions (FantasyPros weekly ranks; never published) | 2026-10-05 |
 | [Teammate out](teammate_out.md) | `teammate_out` | `alloc-a9b857bb4f1b6a00` | allocation table: counted share changes, shrunk toward the position group (the owner overrode the pre-set rule's "nothing changes") | 2026-10-05 |
 | [Playoff planner](playoff_planner.md) | `playoff_planner` | `matchup-d2c2fa511bc3045d` | rating rule: points allowed per position over the league average, shrunk toward an average matchup (TE and K: no matchup, as the pre-set rule chose) | 2026-10-06 |
+| [Coach tendencies](coach_tendencies.md) | `coach_tendencies` | `history-3e0284a5594f3899` | frozen history: counted rates of the completed seasons, not a model (the runner builds only the season in progress) | 2026-10-06 |
 
 **Reproducing any card's model:** `uv run twm model check <module>` (the pin, every file's
 sha256 and the reports it must reproduce) and `uv run twm timemachine verify --module <module>`

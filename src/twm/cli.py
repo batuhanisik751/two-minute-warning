@@ -2229,7 +2229,8 @@ def model_check(
     module: str = typer.Argument(
         "all",
         help="Module: waiver_radar, streamer, regression_watch, decisions, hot_seat, board, "
-        "questionable, teammate_out, playoff_planner, or all (every pinned module).",
+        "questionable, teammate_out, playoff_planner, coach_tendencies, or all (every pinned "
+        "module).",
     ),
     season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
     evaluation_csv: Path = typer.Option(
@@ -2298,6 +2299,11 @@ def model_check(
 
         check_startsit_pin(chosen)
         return
+    if module.strip().lower().replace("-", "_") == "coach_tendencies":  # C10c: frozen history
+        from twm.modules.coach_tendencies.cli import check_pin as check_tendencies_pin
+
+        check_tendencies_pin(chosen)
+        return
     key = "waiver_radar" if module.strip().lower() == "all" else _module_or_exit(module)
     try:
         pm, pin = pins.load_pinned(key, chosen)
@@ -2353,6 +2359,10 @@ def model_check(
         from twm.modules.playoff_planner.cli import check_pin as check_playoff_planner_pin
 
         check_playoff_planner_pin(chosen)
+    if module.strip().lower() == "all" and "coach_tendencies" in pins.read_pins():
+        from twm.modules.coach_tendencies.cli import check_pin as check_tendencies_pin
+
+        check_tendencies_pin(chosen)
 
 
 @model_app.command("restore-backtest")

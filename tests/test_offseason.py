@@ -18,7 +18,8 @@ from twm import pins as pn
 HISTORY = {"waiver_radar": "2014-{e}", "streamer_k": "2013-{e}", "streamer_dst": "2013-{e}",
            "regression_watch": "2011-{e}", "decisions": "2006-{e}", "hot_seat": "2006-{e}",
            "board": "2007-{b}", "questionable": "2016-{e}", "startsit": "2020-{e}",
-           "teammate_out": "2016-{e}", "playoff_planner": "2013-{e}"}  # fmt: skip
+           "teammate_out": "2016-{e}", "playoff_planner": "2013-{e}",
+           "coach_tendencies": "1999-{e}"}  # fmt: skip
 
 
 def pin_file(tmp_path: Path, season: int, **override: int) -> dict[str, pn.Pin]:
@@ -59,7 +60,8 @@ def test_history_coverage_and_module_steps(tmp_path: Path) -> None:
     assert "uv run twm board pin" in after[list(off.MODULES).index("board")].step
     assert "uv run twm league startsit-pin" in after[list(off.MODULES).index("startsit")].step
     assert "uv run twm teammate_out pin" in after[list(off.MODULES).index("teammate_out")].step
-    assert "uv run twm playoff_planner pin" in after[-1].step
+    assert "uv run twm playoff_planner pin" in after[-2].step
+    assert "uv run twm coach tendencies-pin" in after[-1].step  # C10c: the frozen history
     missing = off.module_status("hot_seat", None, 2026)
     assert missing.pinned is None and missing.step.startswith("not pinned")
 

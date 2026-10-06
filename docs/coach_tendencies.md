@@ -154,8 +154,9 @@ Persistence and the fantasy link use completed seasons only (before `current_sea
 - **CLI**: `twm coach tendencies` prints the newest season's league table (`--season` another);
   `--coach andy-reid` (or `andy_reid`, or part of a name) prints his seasons and career line.
 - **Publish** (`twm publish`, migration 0010, `src/twm/publish/coach_tendencies.py`): the four
-  frames are rebuilt from the warehouse through an AsOfView at the publish clock and replaced on
-  every run (each its own hash unit, guarded against shrinking). The warehouse `coach_id`
+  frames are rebuilt (completed seasons from the frozen history, "Frozen history (C10c)" below;
+  the season in progress from the warehouse through an AsOfView at the publish clock) and
+  replaced on every run (each its own hash unit, guarded against shrinking). The warehouse `coach_id`
   (`andy_reid`) becomes the site's id, the slug of `dim_coach.coach_name` (`andy-reid`), and the
   coaches are upserted into `dim_coach`; NaN becomes NULL. site_meta: `coach_tendency_season`,
   `coach_tendency_through_week`.
@@ -166,3 +167,35 @@ Persistence and the fantasy link use completed seasons only (before `current_sea
   published tables (`web/lib/coach-tendencies.ts`); the only fixed number is the reading rule
   that calls a tendency "carried over" at r >= 0.40.
 
+
+## Frozen history (C10c)
+
+The scheduled job's warehouse is a partial 2012+ build: a direct build there would silently
+publish 2012-2025 career lines, persistence and fantasy link. So every COMPLETED regular season
+is frozen on the owner's Mac and pinned with sha256 in `config/production_models.yaml` (key
+`coach_tendencies`, `model: history`; `src/twm/modules/coach_tendencies/production.py`):
+
+- `uv run twm coach tendencies-pin [--season S]` builds the frames from the FULL warehouse (as
+  the direct build does) and freezes, for every season before S (default `current_season`):
+  each coach-team-season's wide row (`tendency_seasons`: per metric the numerator and sample,
+  the value, the league value and the percentile), the names of those coaches
+  (`tendency_coaches`: the runner's dim_coach only knows 2012+ coaches), and the published
+  persistence and fantasy-link frames. It writes zstd Parquet under
+  `artifacts/production_models/coach_tendencies/history-<16 hex>/`, a spec JSON (the season,
+  the seasons, the module's constants, each file's sha256 and rows; the version is its hash),
+  `reports/coach_tendencies/` (seasons, persistence, fantasy link; cited by the model card) and
+  the pin. Refused when the seasons do not run from 1999 without a gap (a partial warehouse).
+- `twm publish` takes the frozen seasons from the pin and builds only the seasons after them
+  from the warehouse (the season in progress), then derives the season rows and the career
+  lines from both (numerators and samples summed, so a career line is exact); persistence and
+  the fantasy link are the pinned frames. It refuses, in plain words, when the pin is missing,
+  a file is missing or not the approved bytes (sha256 checked before reading), the history
+  reaches the season in progress, or the code's definitions differ from the frozen ones.
+- Equivalence: on the Mac the pinned publish equals the direct build for all four frames and
+  the coaches (`tests/test_coach_tendencies_pin.py` on a synthetic warehouse, plus the real one
+  on 2026-10-06); a warehouse without the history seasons publishes the same rows.
+- `uv run twm model check coach_tendencies` (and `all`) checks the pin, every sha256 and row
+  count, the definitions and that the snapshot reproduces the reports.
+- Yearly, after the Super Bowl (docs/offseason.md): re-freeze for the new season. Until then a
+  season completed after the pin is built from the warehouse and joins the career lines, but
+  persistence and the fantasy link stay the pinned seasons'.

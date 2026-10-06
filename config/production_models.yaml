@@ -33,6 +33,31 @@ board:
       file: artifacts/production_models/board/backtest-board_spec-1581a6da7602c3f7/current_inputs.parquet
       sha256: f7f694582bca81b80a7530207afd85072ba6123f1b96f77a6110644a1e6f62a0
       rows: 94
+coach_tendencies:
+  season: 2026
+  model_version: history-3e0284a5594f3899
+  file: artifacts/production_models/coach_tendencies/history-3e0284a5594f3899.json
+  sha256: 86ca2804e09d4bd83c968200042d2bd3252695d7dba3f88920b62e9dbe29d8af
+  model: history
+  approved: '2026-10-06'
+  backtest:
+    seasons: 1999-2025
+    tendency_seasons:
+      file: artifacts/production_models/coach_tendencies/history-3e0284a5594f3899/tendency_seasons.parquet
+      sha256: c90d69ba3cb26df204053d069ecb05e4287cbf42dc67c7a07f24f18a601b12f5
+      rows: 913
+    tendency_coaches:
+      file: artifacts/production_models/coach_tendencies/history-3e0284a5594f3899/tendency_coaches.parquet
+      sha256: 42bd93d9014282ffc8d0e101479c24250ea0536fb87999dcecf1ec30071ca1fd
+      rows: 179
+    tendency_persistence:
+      file: artifacts/production_models/coach_tendencies/history-3e0284a5594f3899/tendency_persistence.parquet
+      sha256: b227fccca3a6654bb300b1cdf1d9eedc116ec2554c417afff49695e5dc44e3c0
+      rows: 24
+    tendency_fantasy_link:
+      file: artifacts/production_models/coach_tendencies/history-3e0284a5594f3899/tendency_fantasy_link.parquet
+      sha256: 71f3679e136b2f5717707ce17cbdbbdffbc13d7e41e1add13edcf27db1bed57a
+      rows: 32
 decisions:
   season: 2026
   model_version: grading-100604cddaabf068

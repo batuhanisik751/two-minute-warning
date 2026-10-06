@@ -33,6 +33,7 @@ CARD_OF_PIN = {
     "startsit": "startsit.md",  # feature #2: start/sit odds (local only)
     "teammate_out": "teammate_out.md",  # feature #5: who gains when a starter sits
     "playoff_planner": "playoff_planner.md",  # feature #6: matchups in fantasy weeks 15-17
+    "coach_tendencies": "coach_tendencies.md",  # C10c: the frozen completed seasons
 }
 HEADINGS = [
     "Purpose and intended use",

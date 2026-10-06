@@ -1,0 +1,54 @@
+{
+ "constants": {
+  "fantasy_seasons": [
+   2013,
+   2025
+  ],
+  "first_season": {
+   "no_huddle_rate": 2006,
+   "proe": 2006
+  },
+  "max_pair_seconds": 60,
+  "metrics": [
+   "neutral_pass_rate",
+   "early_down_pass_rate",
+   "proe",
+   "neutral_sec_per_play",
+   "no_huddle_rate",
+   "shotgun_rate",
+   "fourth_go_rate",
+   "fourth_short_go_rate"
+  ],
+  "min_plays_pair": 400,
+  "min_plays_ranked": 150,
+  "min_sample_ranked": {
+   "fourth_go_rate": 10,
+   "fourth_short_go_rate": 5
+  },
+  "n_boot": 2000,
+  "seed": 20261005
+ },
+ "format": 1,
+ "model_version": "history-3e0284a5594f3899",
+ "module": "coach_tendencies",
+ "season": 2026,
+ "seasons": "1999-2025",
+ "tables": {
+  "tendency_coaches": {
+   "rows": 179,
+   "sha256": "42bd93d9014282ffc8d0e101479c24250ea0536fb87999dcecf1ec30071ca1fd"
+  },
+  "tendency_fantasy_link": {
+   "rows": 32,
+   "sha256": "71f3679e136b2f5717707ce17cbdbbdffbc13d7e41e1add13edcf27db1bed57a"
+  },
+  "tendency_persistence": {
+   "rows": 24,
+   "sha256": "b227fccca3a6654bb300b1cdf1d9eedc116ec2554c417afff49695e5dc44e3c0"
+  },
+  "tendency_seasons": {
+   "rows": 913,
+   "sha256": "c90d69ba3cb26df204053d069ecb05e4287cbf42dc67c7a07f24f18a601b12f5"
+  }
+ }
+}

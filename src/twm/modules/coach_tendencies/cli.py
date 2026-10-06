@@ -129,3 +129,60 @@ def tendencies_cmd(season: int | None = _SEASON, coach: str | None = _COACH,
                  for m in METRICS if m in vs]  # fmt: skip
         typer.echo(f"career {r0['first_season']}-{r0['last_season']} ({r0['teams']}, completed "
                    f"seasons): " + "; ".join(parts))  # fmt: skip
+
+
+_PIN_SEASON = typer.Option(None, "--season", help="The season in progress the history is frozen "
+                           "for (default: settings current_season).")  # fmt: skip
+
+
+@coach_app.command("tendencies-pin")
+def tendencies_pin_cmd(season: int | None = _PIN_SEASON, db: Path | None = _DB,
+                       as_of: str | None = _AS_OF) -> None:  # fmt: skip
+    """Freeze every completed season's coach tendencies (1999 to the season before --season)
+    from the FULL warehouse, on the owner's Mac: write the snapshot, the spec and
+    reports/coach_tendencies/, and pin them as `coach_tendencies` in
+    config/production_models.yaml (C10c). Refused on a partial warehouse. Review and commit."""
+    from twm.asof import AsOfView
+    from twm.config import settings
+    from twm.modules.coach_tendencies import build as bd
+    from twm.modules.coach_tendencies import production as prod
+
+    current = int(season) if season is not None else int(settings().current_season)
+    with AsOfView(_warehouse(db), _when(as_of)) as v:
+        newest = min(bd.latest_season(v), current)
+        frames = bd.build(v, range(bd.FIRST_SEASON, newest + 1), current)
+        names = v.sql("SELECT coach_id, coach_name FROM dim_coach")
+    try:
+        pin = prod.approve(prod.freeze(frames, names, current), current)
+    except prod.CoachTendencyPinError as e:
+        typer.echo(f"not pinned: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    rows = ", ".join(f"{s.rows:,} {t}" for t, s in pin.backtest.items())
+    typer.echo(
+        f"pinned {prod.PIN_KEY} {pin.model_version} for {current}: seasons "
+        f"{pin.backtest_seasons} ({rows}); reports: {prod.REPORT_DIR.as_posix()}/"
+    )
+    typer.echo("review (the reports' diff), run `uv run twm model check coach_tendencies`, commit")
+
+
+def check_pin(season: int) -> None:
+    """`twm model check coach_tendencies` (and `all`): the pin, every file's sha256 and rows,
+    the definitions it was frozen with, and reports/coach_tendencies/ reproduced from the
+    snapshot (exit 1 on any problem)."""
+    from twm.config import ROOT
+    from twm.modules.coach_tendencies import production as prod
+    from twm.pins import PinError
+
+    try:
+        history, pin = prod.load_pinned(int(season))
+    except PinError as e:
+        typer.echo(f"not usable: {e}", err=True)
+        raise typer.Exit(code=1) from None
+    typer.echo(f"{prod.PIN_KEY} {season}: frozen history {pin.model_version} ({pin.file}, sha256 "
+               f"{pin.sha256[:12]}..., approved {pin.approved or '?'})")  # fmt: skip
+    typer.echo(f"  {history.describe()} (sha256 and rows checked)")
+    problems = prod.report_mismatches(history, ROOT / prod.REPORT_DIR)
+    if problems:
+        typer.echo("not usable: " + "; ".join(problems[:3]), err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"  matches {prod.REPORT_DIR.as_posix()}/ (seasons, persistence, fantasy link)")

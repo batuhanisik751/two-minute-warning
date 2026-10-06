@@ -31,6 +31,7 @@ export const MODEL_CARDS = [
   { file: "startsit.md", title: "Start/sit odds (the owner's local report only, not on this site)" },
   { file: "teammate_out.md", title: "Teammate out (who gains when a starter sits)" },
   { file: "playoff_planner.md", title: "Playoff planner (matchups in fantasy weeks 15-17)" },
+  { file: "coach_tendencies.md", title: "Coach tendencies (a frozen history of counted rates, not a model)" },
 ] as const;
 
 export const MODEL_CARDS_INDEX = "docs/model_cards/README.md";

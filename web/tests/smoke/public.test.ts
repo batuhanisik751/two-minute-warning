@@ -10,6 +10,7 @@ import { THIRD_PARTY_NOTE, templatePattern, thirdPartyReasonId } from "../../lib
 import manifest from "../../lib/third-party-reasons.json";
 import { BOARD_SEED as B } from "../seed-board";
 import { SEED } from "../seed";
+import { LEAD_TIME_SEED as LT } from "../seed-lead-time";
 import { MODULES_SEED as M } from "../seed-modules";
 import { BASE, DATA, fetchPage, normalise, serverUp, text, type Page } from "./dom";
 
@@ -35,6 +36,8 @@ const ROUTES: Record<string, boolean> = {
   "/playoff-planner?pos=RB&sort=total": false,
   // feature #10: the league table of coach tendencies (play-by-play only)
   "/decisions": false,
+  // feature #8: lead time vs the crowd, built on FantasyPros' scrape but aggregates only: shown
+  "/track-record": false,
 };
 /** an experts' rank as the board and the home card write it ("preseason rank" then "RB12") */
 const RANK = /preseason rank.{0,160}?\b(?:QB|RB|WR|TE)\d+\b/is;
@@ -109,6 +112,11 @@ describe("public site: FantasyPros' per-player values are hidden (license)", () 
     const k = pub.get(`/waivers?${LIVE}&pos=K&kind=live`)!.doc;
     assert.match(text(k.querySelector("main")!), new RegExp(`Seed streamer reason for ${M.kickers[0].name}`));
     assert.match(text(pub.get("/methodology")!.doc.querySelector("main")!), /against the experts/i);
+    // feature #8: the lead-time section is aggregate, so the public site shows it too, credited
+    const lt = pub.get("/track-record")!.doc.querySelector("[data-testid=track-lead-time]")!;
+    assert.deepEqual(Array.from(lt.querySelectorAll("[data-testid=lt-headline] [data-cell=value]")).map((v) => text(v)), LT.headline);
+    assert.equal(lt.querySelectorAll("[data-testid=lt-summary] tbody tr").length, 4);
+    assert.match(text(lt.querySelector("[data-testid=lt-source]")!), /FantasyPros/);
   });
 
   test("the private server shows what the public one hides (so the checks above look at the right thing)", (t) => {

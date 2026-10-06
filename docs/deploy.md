@@ -104,7 +104,15 @@ it.** Feature #10 (migration 0010), coach tendencies (`tables.py` `COACH_TENDENC
 `_fantasy_link`, rebuilt from the warehouse on every publish and replaced (each its own hash
 unit, guarded); their coaches (site slugs of the warehouse's names) are upserted into
 `dim_coach`; `site_meta` gains `coach_tendency_season` / `_through_week`. **Apply migration 0010
-to Neon before the first publish that carries it** (every default publish does).
+to Neon before the first publish that carries it** (every default publish does). Feature #8
+(migration 0011), lead time vs the crowd (`tables.py` `LEAD_TIME`, `src/twm/publish/lead_time.py`):
+`lead_time_coverage`, `_summary`, `_hist`, `_reverse`, `_conversion` and `_h2h`, the study's
+AGGREGATE frames only (`study.build_frames(study.run())`, checked by `assert_aggregate_only`
+before and after; no player id, name or roster % column exists in them: FantasyPros' license),
+rebuilt on every publish (the warehouse's `fact_ranking` 2020-2024 and the Radar pin's backtest:
+the runner's 2012+ warehouse gives the same frames) and replaced (each its own hash unit,
+guarded). **Apply migration 0011 to Neon before the first publish that carries it** (every
+default publish does).
 
 1. **Target check.** `--target local` uses `TWM_LOCAL_DATABASE_URL` (default: the container
    above) and refuses any host that is not this computer. `--target remote` uses
@@ -340,6 +348,11 @@ password out of chats, commit messages and command lines.
       consensus ranks are not shown on the public site (license)". Our own estimates and the
       aggregate model-vs-experts comparisons stay. One switch, `showThirdPartyRanks()` in
       `web/lib/third-party.ts`; nothing else to set.
+    - `/track-record`'s "Does the Radar beat the crowd?" (feature #8) is built on ESPN's roster
+      % as FantasyPros scraped it, but publishes aggregates only (counts and shares over the
+      2020-2023 crowd adds; no player is named and no player's % is shown), so it shows in both
+      modes, crediting FantasyPros as the source (`LEAD_TIME_SOURCE` in
+      `web/lib/third-party.ts`).
     - Checklist before going public: `SHOW_THIRD_PARTY_RANKS` must NOT be set in production (it is
       a testing override that can show the ranks on a public site: `vercel env ls` must not list
       it), and after the redeploy `/board` must show the license note and no "Experts' preseason

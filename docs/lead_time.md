@@ -156,3 +156,26 @@ flags keep their count only:
 
 Reproduce (reads only, about 2 s):
 `uv run python -c "from twm.modules.lead_time import study as st; print(st.build_frames(st.run())['summary'])"`.
+
+## Published, the CLI and the local report (L8b)
+
+- **CLI**: `uv run twm radar lead-time [--threshold 50|25] [--db WAREHOUSE]` prints the coverage,
+  the summary at both thresholds, the share flagged before by season, the lead histogram, the
+  head to head, the reverse view and the volume table (aggregates only; about 2 s, writes
+  nothing). The terms are in the glossary: `rostered_pct`, `crowd_add`, `lead_time`,
+  `momentum_baseline` (`twm glossary <name>`).
+- **Publish** (migration 0011, `src/twm/publish/lead_time.py`): every publish runs the study
+  and writes ONLY `build_frames`' output into six replaced tables, `lead_time_coverage`,
+  `_summary`, `_hist`, `_reverse`, `_conversion`, `_h2h` (checked aggregate-only before and
+  after; tests/test_publish_lead_time.py proves no per-player column or id reaches them). The
+  frames' nullable season / position become `scope_value` ('' = complete seasons pooled), the
+  threshold an integer, and the histogram's never-flagged bin is left out (it is the summary's
+  `n_never`). The runner can compute it: on a runner-built 2012+ warehouse the six frames are
+  equal to the Mac's (checked 2026-10-06), and the Radar pin is committed.
+- **Site**: `/track-record#lead-time`, "Does the Radar beat the crowd?" (linked from
+  `/waivers`): every number from the published rows, no player named, the same in public mode.
+- **Local report** (`twm league report` / `weekly`): "Lead time this season"
+  (`twm.modules.lead_time.league`, from `live`): the states' counts, the crowd's adds with the
+  Radar's leads, the Radar's must-adds still under 50% (names: local only) and the `left_pool`
+  count. Neither it nor `live` is ever imported by the publish or the pipeline
+  (tests/test_league.py, tests/test_startsit.py).

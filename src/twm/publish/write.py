@@ -33,6 +33,9 @@ Regression Watch) with the same code:
 6c. feature #10, when the publish carries coach tendencies (``data.coach_tendencies``): its
    four tables (:data:`twm.publish.tables.COACH_TENDENCIES`) are replaced like the others
    (hash, guard); its coaches are upserted into dim_coach;
+6d. feature #8, when the publish carries lead time vs the crowd (``data.lead_time``): its six
+   aggregate-only tables (:data:`twm.publish.tables.LEAD_TIME`) are replaced like the others
+   (hash, guard);
 7. append a 'success' pipeline_runs row, count the rows and measure the tables, commit.
 
 Any error rolls everything back; a 'failed' pipeline_runs row is then written in a new
@@ -61,6 +64,7 @@ from twm.publish.tables import (
     DECISIONS,
     FAMILIES,
     KEEP_ON_CONFLICT,
+    LEAD_TIME,
     PLAYOFF_PLANNER,
     QUESTIONABLE,
     SHARED,
@@ -756,6 +760,9 @@ def _publish(
         ct = data.coach_tendencies
         if ct is not None:  # feature #10: replaced tables rebuilt from the warehouse
             frames.update({n: t[n] for n in COACH_TENDENCIES})
+        lt = data.lead_time
+        if lt is not None:  # feature #8: replaced tables, aggregates only
+            frames.update({n: t[n] for n in LEAD_TIME})
         new_counts = {n: f.height for n, f in frames.items()}
         for m, (back, back_rows) in backs.items():
             new_counts[FAMILIES[m].lists] = back.height
@@ -770,6 +777,8 @@ def _publish(
             current.update(target_counts(conn, sn.replaced))
         if ct is not None:
             current.update(target_counts(conn, COACH_TENDENCIES))
+        if lt is not None:
+            current.update(target_counts(conn, LEAD_TIME))
         problems = shrink_problems(current, new_counts, max_shrink_share)
         if problems and not allow_shrink:
             raise ShrinkError(
@@ -789,6 +798,8 @@ def _publish(
             plan_units.update({n: (n,) for n in sn.replaced})
         if ct is not None:
             plan_units.update({n: (n,) for n in COACH_TENDENCIES})
+        if lt is not None:
+            plan_units.update({n: (n,) for n in LEAD_TIME})
         hashes = {}
         for unit, names in plan_units.items():
             if len(names) == 2:  # a module's backtest lists

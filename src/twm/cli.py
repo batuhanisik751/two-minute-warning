@@ -14,6 +14,7 @@ from twm.modules.decisions import production_cli as _decisions_pins  # noqa: F40
 from twm.modules.decisions.cli import decisions_app
 from twm.modules.hot_seat import production_cli as _hot_seat_pins  # noqa: F401 (H4a commands)
 from twm.modules.hot_seat.cli import hotseat_app
+from twm.modules.lead_time.cli import lead_time_cmd
 from twm.modules.playoff_planner.cli import playoff_planner_app
 from twm.modules.questionable.cli import questionable_app
 from twm.modules.streamer.cli import streamer_app
@@ -329,6 +330,8 @@ radar_app = typer.Typer(
     "(`twm radar score`, `twm radar week`)."
 )
 app.add_typer(radar_app, name="radar")
+# feature #8: lead time vs the crowd (src/twm/modules/lead_time/cli.py, docs/lead_time.md)
+radar_app.command("lead-time")(lead_time_cmd)
 app.add_typer(streamer_app, name="streamer")  # S1b: K and D/ST (src/twm/modules/streamer/cli.py)
 app.add_typer(decisions_app, name="decisions")  # G1: own WP (src/twm/modules/decisions/cli.py)
 app.add_typer(hotseat_app, name="hotseat")  # H1: candidates + label check (modules/hot_seat/cli.py)

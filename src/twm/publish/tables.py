@@ -44,6 +44,8 @@ How a publish treats each table (the reviewer's rules of 2026-09-28):
   completed week.
 - Feature #10, coach tendencies (:data:`COACH_TENDENCIES`): four **replace** tables rebuilt
   from the warehouse on every publish, each its own hash unit, guarded like the others.
+- Feature #8, lead time vs the crowd (:data:`LEAD_TIME`): six **replace** tables of
+  aggregates only (FantasyPros' license), rebuilt on every publish the same way.
 """
 
 from __future__ import annotations
@@ -534,6 +536,48 @@ TABLES: dict[str, Table] = {
             ("n_seasons", "integer"), ("r", DP), ("ci_low", DP), ("ci_high", DP), ("x_sd", DP),
             ("y_per_x_sd", DP),
         ),
+        # feature #8 (migration 0011): lead time vs the crowd, aggregates only, every table
+        # replaced (LEAD_TIME); scope_value: '' (complete seasons pooled), a season or a position
+        _t(
+            "lead_time_coverage", ("season",), "replace",
+            ("season", "integer"), ("baseline_date", "date"), ("baseline_period", "integer"),
+            ("last_period", "integer"), ("complete", "boolean"), ("in_season_days", "integer"),
+            ("first_in_season", "date"), ("last_in_season", "date"), ("n_players", "integer"),
+            ("last_list_week", "integer"), ("adds_50", "integer"), ("adds_25", "integer"),
+            ("in_study", "boolean"),
+        ),
+        _t(
+            "lead_time_summary", ("threshold", "signal", "scope", "scope_value"), "replace",
+            ("threshold", "integer"), ("signal", "text"), ("scope", "text"),
+            ("scope_value", "text"), ("n_adds", "integer"), ("n_before", "integer"),
+            ("n_same", "integer"), ("n_after", "integer"), ("n_never", "integer"),
+            ("n_never_out_of_pool", "integer"), ("share_before", DP), ("share_same", DP),
+            ("share_after", DP), ("share_never", DP), ("lead_median", DP), ("lead_q1", DP),
+            ("lead_q3", DP), ("nearest_median", DP), ("share_before_4", DP),
+        ),
+        _t(
+            "lead_time_hist", ("threshold", "signal", "lead"), "replace",
+            ("threshold", "integer"), ("signal", "text"), ("lead", "integer"), ("n", "integer"),
+        ),
+        _t(
+            "lead_time_reverse", ("threshold", "signal", "scope", "scope_value", "state"),
+            "replace",
+            ("threshold", "integer"), ("signal", "text"), ("scope", "text"),
+            ("scope_value", "text"), ("state", "text"), ("n", "integer"), ("hits", "integer"),
+            ("hit_rate", DP), ("lead_median", DP),
+        ),
+        _t(
+            "lead_time_conversion", ("threshold", "signal", "scope", "scope_value"), "replace",
+            ("threshold", "integer"), ("signal", "text"), ("scope", "text"),
+            ("scope_value", "text"), ("n_flags", "integer"), ("n_added", "integer"),
+            ("n_added_after", "integer"), ("weeks", "integer"), ("flags_per_week", DP),
+            ("share_added", DP), ("share_added_after", DP),
+        ),
+        _t(
+            "lead_time_h2h", ("threshold", "level", "h2h"), "replace",
+            ("threshold", "integer"), ("level", "text"), ("h2h", "text"), ("n", "integer"),
+            ("n_radar_earlier", "integer"), ("share", DP),
+        ),
     )
 }  # fmt: skip
 
@@ -554,8 +598,9 @@ WRITE_ORDER = (
     "playoff_planner_choice", "playoff_planner_backtest", "playoff_planner_effects",
     "playoff_planner_stability", "playoff_planner_late_weeks", "playoff_planner_live",
     "coach_tendency_season", "coach_tendency_career", "coach_tendency_persistence",
-    "coach_tendency_fantasy_link", "tier_stats", "player_week_summary", "glossary", "site_meta",
-    "pipeline_runs",
+    "coach_tendency_fantasy_link", "lead_time_coverage", "lead_time_summary", "lead_time_hist",
+    "lead_time_reverse", "lead_time_conversion", "lead_time_h2h", "tier_stats",
+    "player_week_summary", "glossary", "site_meta", "pipeline_runs",
 )  # fmt: skip
 REPLACED = tuple(n for n in WRITE_ORDER if TABLES[n].mode == "replace")
 assert set(WRITE_ORDER) == set(TABLES), "WRITE_ORDER must name every table"
@@ -676,12 +721,18 @@ SNAPSHOTS = (QUESTIONABLE, TEAMMATE_OUT, PLAYOFF_PLANNER)
 # tables (each its own hash unit, guarded like the others); their coaches join dim_coach
 COACH_TENDENCIES = ("coach_tendency_season", "coach_tendency_career",
                     "coach_tendency_persistence", "coach_tendency_fantasy_link")  # fmt: skip
+# feature #8: lead time vs the crowd, rebuilt on every publish from the study's aggregate-only
+# frames (twm.publish.lead_time): six replaced tables, each its own hash unit, guarded
+LEAD_TIME = ("lead_time_coverage", "lead_time_summary", "lead_time_hist", "lead_time_reverse",
+             "lead_time_conversion", "lead_time_h2h")  # fmt: skip
 _owned = [n for f in FAMILIES.values() for n in (f.lists, f.rows, f.outcomes, *f.replaced)]
 assert set(_owned) | set(SHARED) | {"site_meta"} | set(DECISIONS.replaced) | {
     n for s in SNAPSHOTS for n in s.replaced
-} | set(COACH_TENDENCIES) == {n for n, t in TABLES.items() if t.mode in ("replace", "lists")}, (
+} | set(COACH_TENDENCIES) | set(LEAD_TIME) == {
+    n for n, t in TABLES.items() if t.mode in ("replace", "lists")
+}, (
     "every replaced or list table belongs to one family, SHARED, DECISIONS, SNAPSHOTS, "
-    "COACH_TENDENCIES or site_meta"
+    "COACH_TENDENCIES, LEAD_TIME or site_meta"
 )
 assert set(DECISIONS.tables) == {n for n, t in TABLES.items() if t.mode == "seasons"}
 assert {n for s in SNAPSHOTS for n in (s.lists, s.rows)} == {

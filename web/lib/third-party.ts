@@ -21,6 +21,13 @@ export function showThirdPartyRanks(env: Env = process.env): boolean {
 /** Said once on every page that would otherwise show them. */
 export const THIRD_PARTY_NOTE = "The experts' consensus ranks are not shown on the public site (license).";
 
+/** Feature #8 (/track-record, "Does the Radar beat the crowd?"): the source credit and the license
+ *  note of an AGGREGATE built on FantasyPros' scrape of ESPN's rostered %. Shown in both modes:
+ *  no player and no player's percentage is published (src/twm/publish/lead_time.py). */
+export const LEAD_TIME_SOURCE = "Source: ESPN's rostered percentages as scraped by FantasyPros.";
+export const LEAD_TIME_LICENSE =
+  "FantasyPros' terms do not allow republishing per-player values, so this section shows only counts and shares over many players: no player and no player's percentage.";
+
 /** A registry reason template as a pattern for the sentence it writes: the number and position
  *  placeholders become their shapes, the player's name anything; anchored at the start (a clause
  *  appended to a sentence never hides it). */

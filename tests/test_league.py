@@ -220,7 +220,13 @@ def _imports(path: Path) -> list[str]:
             names += [a.name for a in node.names]
         elif isinstance(node, ast.ImportFrom):
             names.append(node.module or "")
+            # `from pkg import mod` imports pkg.mod too (feature #8: lead_time.live)
+            names += [f"{node.module}.{a.name}" for a in node.names if node.module]
     return names
+
+
+# feature #8: the 2026 lead-time tracker and its report section read league data (local only)
+LEAD_TIME_LOCAL = ("twm.modules.lead_time.live", "twm.modules.lead_time.league")
 
 
 # --------------------------------------------------------------------------------------
@@ -459,12 +465,15 @@ def test_publish_and_pipeline_never_import_the_league_or_espn_api():
     for pkg in ("publish", "pipeline"):
         for path in sorted((ROOT / "src" / "twm" / pkg).glob("*.py")):
             bad = [n for n in _imports(path) if n.split(".")[0] == "espn_api"
-                   or n == "twm.league" or n.startswith("twm.league.")]  # fmt: skip
+                   or n == "twm.league" or n.startswith("twm.league.")
+                   or n in LEAD_TIME_LOCAL]  # fmt: skip
             assert not bad, (path, bad)
     code = (
         "import sys; import twm.cli, twm.publish.collect, twm.publish.write, twm.pipeline.runner; "
+        "import twm.publish.lead_time, twm.modules.lead_time.study, twm.modules.lead_time.cli; "
         "from typer.testing import CliRunner; CliRunner().invoke(twm.cli.app, ['--help']); "
-        "bad = [m for m in sys.modules if m.startswith(('twm.league', 'espn_api'))]; "
+        "bad = [m for m in sys.modules if m.startswith(('twm.league', 'espn_api', "
+        f"*{LEAD_TIME_LOCAL!r}))]; "
         "print(bad); sys.exit(1 if bad else 0)"
     )
     res = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=ROOT)

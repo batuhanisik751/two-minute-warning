@@ -136,7 +136,8 @@ export default async function WaiversPage({ searchParams }: PageProps<"/waivers"
     <PageHeader title="Waiver Radar" kicker="The waiver wire">
       Each position&apos;s weekly list of players who are probably still on waivers (the{" "}
       <Term name="candidate_pool">candidate pool</Term>), ranked by their <Term name="chance">chance</Term> of becoming a
-      fantasy starter soon. Pick a season and week to see what the Radar said then and what happened next.
+      fantasy starter soon. Pick a season and week to see what the Radar said then and what happened next. How early does it spot the
+      players most leagues end up adding? <Link href="/track-record#lead-time">Does the Radar beat the crowd?</Link>
       {streamPresent.length ? (
         <>
           {" "}

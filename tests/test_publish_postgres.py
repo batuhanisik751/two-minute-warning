@@ -27,7 +27,7 @@ from twm.publish import collect as col
 from twm.publish import migrate as mg
 from twm.publish import target as tg
 from twm.publish import write as wr
-from twm.publish.tables import TABLES
+from twm.publish.tables import LEAD_TIME, TABLES
 
 pytestmark = pytest.mark.postgres
 psycopg = pytest.importorskip("psycopg")
@@ -759,7 +759,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                                                   "0007_questionable",
                                                   "0008_teammate_out",
                                                   "0009_playoff_planner",
-                                                  "0010_coach_tendencies"]  # fmt: skip
+                                                  "0010_coach_tendencies",
+                                                  "0011_lead_time"]  # fmt: skip
         job = tg.resolve("local", env={tg.LOCAL_ENV: make_conninfo(
             url, user="twm_job", password=roles["twm_job"])}, env_file=NO_ENV_FILE)  # fmt: skip
         syn = ps.build(tmp_path / "syn", live_weeks=(3,))
@@ -782,6 +783,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
 
         res = publish_coach_tendencies(job, syn.inputs)
         assert res.counts["coach_tendency_season"] == pcs.N_SEASON
+        res = publish_lead_time(job, syn.inputs)  # feature #8 (migration 0011)
+        assert res.counts["lead_time_summary"] > 0
         web = make_conninfo(url, user="twm_web", password=roles["twm_web"])
         with psycopg.connect(web, autocommit=True) as conn:
             for t in ("stream_list", "stream_pick", "regression_row", "regression_track_record",
@@ -798,7 +801,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                       "playoff_planner_effects", "playoff_planner_stability",
                       "playoff_planner_late_weeks", "playoff_planner_live",
                       "coach_tendency_season", "coach_tendency_career",
-                      "coach_tendency_persistence", "coach_tendency_fantasy_link"):  # fmt: skip
+                      "coach_tendency_persistence", "coach_tendency_fantasy_link",
+                      *LEAD_TIME):  # fmt: skip
                 assert conn.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] > 0
             for t in ("dim_coach", "decision_fourth", "coach_season", "decisions_track_record"):
                 conn.execute(f'SELECT count(*) FROM "{t}"')  # P3 tables: readable by the site
@@ -1314,3 +1318,47 @@ def test_coach_tendencies_are_replaced_with_site_coach_ids(db: tg.Target, tmp_pa
     res = publish_coach_tendencies(db, syn.inputs)
     assert res.written["coach_tendency_persistence"] == 24
     assert rows(db, "SELECT count(*) FROM coach_tendency_persistence WHERE r IS NULL") == [(0,)]
+
+
+# --------------------------------------------------------------------------------------
+# Feature #8: lead time vs the crowd (replaced tables, aggregates only)
+# --------------------------------------------------------------------------------------
+
+
+def publish_lead_time(target: tg.Target, inputs, *, keep: int | None = None,
+                      **kwargs) -> wr.PublishResult:  # fmt: skip
+    """Publish the synthetic data with the lead-time tables (``keep``: only that many summary
+    rows)."""
+    from tests import publish_lead_time_synthetic as pls
+
+    data = pls.add_lead_time(col.collect(inputs))
+    if keep is not None:
+        name = "lead_time_summary"
+        data.tables[name] = data.lead_time.tables[name] = data.tables[name].head(keep)
+    assert col.validate(data) == [] or keep is not None
+    return wr.publish(target, data, **kwargs)
+
+
+def test_lead_time_tables_are_replaced_and_aggregate_only(db: tg.Target, tmp_path: Path) -> None:
+    from tests import publish_lead_time_synthetic as pls
+
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    res = publish_lead_time(db, syn.inputs)
+    want = {n: f.height for n, f in pls.add_lead_time(col.collect(syn.inputs)).tables.items()
+            if n in LEAD_TIME}  # fmt: skip
+    assert {n: res.counts[n] for n in LEAD_TIME} == want
+    assert rows(db, "SELECT count(*) FROM lead_time_summary WHERE scope = 'complete' AND "
+                    "scope_value = ''") == [(8,)]  # fmt: skip
+    assert rows(db, "SELECT min(lead), max(lead) FROM lead_time_hist")[0][0] >= -6
+    cols = {c for (c,) in rows(db, "SELECT column_name FROM information_schema.columns WHERE "
+                                   "table_name LIKE %s", ["lead_time_%"])}  # fmt: skip
+    assert "scope_value" in cols
+    assert not cols & {"gsis_id", "player", "player_name", "pct", "percent_owned", "espn_id"}
+    # a second run rewrites nothing; fewer rows are refused by the shrink guard
+    content = dump(db)
+    res = publish_lead_time(db, syn.inputs)
+    assert set(LEAD_TIME) <= set(res.unchanged)
+    assert dump(db) == content
+    with pytest.raises(wr.PublishError, match="lead_time_summary would go from 56 to 8"):
+        publish_lead_time(db, syn.inputs, keep=8)
+    assert dump(db) == content

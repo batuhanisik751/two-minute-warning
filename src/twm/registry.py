@@ -42,6 +42,7 @@ MODULES = (
     "teammate_out",
     "playoff_planner",
     "coach_tendencies",
+    "lead_time",
 )
 _NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 # Placeholders a reason template may use (C6, twm.modules.waiver_radar.reasons, fills them
@@ -2116,6 +2117,79 @@ def _coach_tendencies_entries() -> list[Entry]:
     ]
 
 
+def _lead_time_entries() -> list[Entry]:
+    """Feature #8 (twm.modules.lead_time, docs/lead_time.md): how many weeks before most ESPN
+    leagues rostered a player the Waiver Radar flagged him. The fixed rules only: every
+    measured number lives in the published lead_time_* tables, never here."""
+    from twm.modules.lead_time import MOMENTUM_POINTS, PRIMARY, THRESHOLDS
+
+    mods = ("lead_time",)
+    src = "twm.modules.lead_time (fact_ranking.player_owned_espn, dim_week, the Radar's pin)"
+    t = f"{PRIMARY:.0f}%"
+    other = " or ".join(f"{x:.0f}%" for x in THRESHOLDS if x != PRIMARY)
+    period = ("waiver period k = from week k's official as-of (the Tuesday the Radar's list "
+              "of week k is made) to week k+1's")  # fmt: skip
+    return [
+        Entry(
+            name="rostered_pct",
+            title="Rostered % (ESPN)",
+            kind="metric",
+            modules=mods,
+            unit="percent (0-100)",
+            formula="ESPN's share of its leagues with the player on a roster, as FantasyPros "
+            "scraped it (fact_ranking.player_owned_espn; the largest value on that day's "
+            "pages), about once a week; a player missing from the pages counts as low",
+            explanation="How many ESPN leagues have the player on a roster: the crowd's verdict. "
+            "Only aggregates of it are published (FantasyPros' license): the site never shows "
+            "a player's own percentage.",
+            source="fact_ranking.player_owned_espn",
+        ),
+        Entry(
+            name="crowd_add",
+            title="Crowd add",
+            kind="concept",
+            modules=mods,
+            unit="player-season",
+            formula=f"a player under {t} rostered at the season's baseline scrape (the last "
+            f"before week 1's as-of) whose first later scrape at or above {t} comes by the "
+            f"season's last Radar list; add period = that scrape's waiver period ({period}); "
+            f"secondary threshold {other}",
+            explanation=f"The moment most ESPN leagues decided a player was worth a roster "
+            f"spot: he went from under {t} rostered to over it. It is the finish line the "
+            "Radar's flags race against.",
+            source=src,
+        ),
+        Entry(
+            name="lead_time",
+            title="Lead time vs the crowd",
+            kind="metric",
+            modules=mods,
+            unit="waiver periods (weeks)",
+            formula="add period - the period of the Radar's first flag of the player that "
+            "season at the level (must-add; must-add or speculative; listed in a top 25); "
+            "before = 1 or more, same = 0, after = negative, never = no flag all season",
+            explanation="How many weeks before the crowd the Radar flagged a player. Higher = "
+            "earlier. 'Same week' means the Tuesday list and the crowd's number after that "
+            "Wednesday's waivers; 'never' means the Radar missed him at that level.",
+            source=src,
+        ),
+        Entry(
+            name="momentum_baseline",
+            title="Momentum baseline",
+            kind="concept",
+            modules=mods,
+            unit="flag",
+            formula=f"flags a player in the first waiver period whose rostered % rose by at "
+            f"least {MOMENTUM_POINTS:.0f} points over the previous one while still under the "
+            "threshold; scored with the same lead code as the Radar",
+            explanation="The simple rival: just watch the roster trends. If the Radar cannot "
+            "beat it, its early flags add little. It reads a Friday number, three days after "
+            "the Radar's Tuesday list, which favours it.",
+            source=src,
+        ),
+    ]
+
+
 def _site_entries() -> list[Entry]:
     """Terms the site uses to present the modules (how to read a chance, live or reconstructed,
     the intervals, the Report Card's calls, the board's markers), moved word for word from
@@ -3169,6 +3243,7 @@ def _entries() -> list[Entry]:
         *_teammate_out_entries(),
         *_playoff_planner_entries(),
         *_coach_tendencies_entries(),
+        *_lead_time_entries(),
         *_site_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(

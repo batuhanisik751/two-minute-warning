@@ -236,6 +236,11 @@
       "explanation": "Whether a quarterback completes more passes than an average passer would have on the same throws.",
       "formula": "1 if the pass was complete else 0, minus nflfastR's expected completion probability, x 100"
     },
+    "crowd_add": {
+      "title": "Crowd add",
+      "explanation": "The moment most ESPN leagues decided a player was worth a roster spot: he went from under 50% rostered to over it. It is the finish line the Radar's flags race against.",
+      "formula": "a player under 50% rostered at the season's baseline scrape (the last before week 1's as-of) whose first later scrape at or above 50% comes by the season's last Radar list; add period = that scrape's waiver period (waiver period k = from week k's official as-of (the Tuesday the Radar's list of week k is made) to week k+1's); secondary threshold 25%"
+    },
     "current_franchise": {
       "title": "Team",
       "explanation": "Teams are shown by today's franchise code and name, also for past seasons: a franchise that moved appears under its current name.",
@@ -766,6 +771,11 @@
       "explanation": "A pending label (the current season) is unknown, never guessed. A label detail: never a model feature.",
       "formula": "'pending' until every game of every window week has a final score (fact_game.result) and stat lines in the cache, else 'final'"
     },
+    "lead_time": {
+      "title": "Lead time vs the crowd",
+      "explanation": "How many weeks before the crowd the Radar flagged a player. Higher = earlier. 'Same week' means the Tuesday list and the crowd's number after that Wednesday's waivers; 'never' means the Radar missed him at that level.",
+      "formula": "add period - the period of the Radar's first flag of the player that season at the level (must-add; must-add or speculative; listed in a top 25); before = 1 or more, same = 0, after = negative, never = no flag all season"
+    },
     "legit": {
       "title": "Legit (tested, not shown)",
       "explanation": "Tested, not shown: a starter whose production is carried by his opportunity, not by luck. It predicted nothing (in the backtest 59.0% of the players it tagged stayed starters, and so did 61.1% of every starter), so the lists do not carry it.",
@@ -810,6 +820,11 @@
       "title": "Model probability",
       "explanation": "The model's own calibrated probability. The site shows the chance instead: in the backtest the model's probabilities ran too high for the most likely players.",
       "formula": "the production model's predicted probability of y_hit after an isotonic calibration fit on the validation season (stored as score in the predictions store)"
+    },
+    "momentum_baseline": {
+      "title": "Momentum baseline",
+      "explanation": "The simple rival: just watch the roster trends. If the Radar cannot beat it, its early flags add little. It reads a Friday number, three days after the Radar's Tuesday list, which favours it.",
+      "formula": "flags a player in the first waiver period whose rostered % rose by at least 10 points over the previous one while still under the threshold; scored with the same lead code as the Radar"
     },
     "n_flex_finishes": {
       "title": "FLEX-worthy finishes in the window",
@@ -1345,6 +1360,11 @@
       "title": "Rookie first-round QB",
       "explanation": "The team drafted its quarterback of the future: owners tend to be patient.",
       "formula": "a QB (fact_roster_week.position) on the team's latest visible weekly roster of the season (status not CUT/RET/UFA/TRD) was a first-round pick of this year's draft (dim_player draft_round = 1, draft_year = season); NULL without a visible roster"
+    },
+    "rostered_pct": {
+      "title": "Rostered % (ESPN)",
+      "explanation": "How many ESPN leagues have the player on a roster: the crowd's verdict. Only aggregates of it are published (FantasyPros' license): the site never shows a player's own percentage.",
+      "formula": "ESPN's share of its leagues with the player on a roster, as FantasyPros scraped it (fact_ranking.player_owned_espn; the largest value on that day's pages), about once a week; a player missing from the pages counts as low"
     },
     "routes_proxy_avg3": {
       "title": "Routes proxy",

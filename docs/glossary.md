@@ -506,6 +506,14 @@ Where the other team starts after a score (the kickoff rules changed in 2024 and
 - **Formula:** mean receiving start of the same season's kickoffs in earlier weeks (at least decisions.kickoff_min_kicks), else the previous season's, rounded to the yard
 - **Source:** twm.modules.decisions.grade_inputs
 
+### Lead time vs the crowd
+
+How many weeks before the crowd the Radar flagged a player. Higher = earlier. 'Same week' means the Tuesday list and the crowd's number after that Wednesday's waivers; 'never' means the Radar missed him at that level.
+
+- **Name:** `lead_time`; **unit:** waiver periods (weeks); **used by:** lead_time
+- **Formula:** add period - the period of the Radar's first flag of the player that season at the level (must-add; must-add or speculative; listed in a top 25); before = 1 or more, same = 0, after = negative, never = no flag all season
+- **Source:** twm.modules.lead_time (fact_ranking.player_owned_espn, dim_week, the Radar's pin)
+
 ### Legit (tested, not shown) \*
 
 Tested, not shown: a starter whose production is carried by his opportunity, not by luck. It predicted nothing (in the backtest 59.0% of the players it tagged stayed starters, and so did 61.1% of every starter), so the lists do not carry it.
@@ -737,6 +745,14 @@ The points per game we expect for the rest of the season: his opportunity, plus 
 - **Name:** `ppg_ros`; **unit:** points per game; **used by:** regression_watch
 - **Formula:** recency-weighted xFP/game + r(g) x FPOE/game (spec: shrink toward 0) or m + r(g) x (FPOE/game - m) (toward the position's average m); r(g) = shrinkage_factor after his g games with an opportunity, estimated only on seasons before this one; the variant (target, half-life, garbage time) is chosen on earlier seasons (docs/regression_watch.md)
 - **Source:** twm.modules.regression_watch.projection
+
+### Rostered % (ESPN)
+
+How many ESPN leagues have the player on a roster: the crowd's verdict. Only aggregates of it are published (FantasyPros' license): the site never shows a player's own percentage.
+
+- **Name:** `rostered_pct`; **unit:** percent (0-100); **used by:** lead_time
+- **Formula:** ESPN's share of its leagues with the player on a roster, as FantasyPros scraped it (fact_ranking.player_owned_espn; the largest value on that day's pages), about once a week; a player missing from the pages counts as low
+- **Source:** fact_ranking.player_owned_espn
 
 ### Rostership (percent of leagues)
 
@@ -2868,6 +2884,14 @@ A game where one of the three clock-management metrics applies: timeouts unused 
 - **Formula:** a game where timeouts_unused, half_passivity or timeout_seconds_wasted applies, by its written definition (decisions.clock in config/settings.yaml)
 - **Source:** twm.modules.decisions.clock
 
+### Crowd add
+
+The moment most ESPN leagues decided a player was worth a roster spot: he went from under 50% rostered to over it. It is the finish line the Radar's flags race against.
+
+- **Name:** `crowd_add`; **unit:** player-season; **used by:** lead_time
+- **Formula:** a player under 50% rostered at the season's baseline scrape (the last before week 1's as-of) whose first later scrape at or above 50% comes by the season's last Radar list; add period = that scrape's waiver period (waiver period k = from week k's official as-of (the Tuesday the Radar's list of week k is made) to week k+1's); secondary threshold 25%
+- **Source:** twm.modules.lead_time (fact_ranking.player_owned_espn, dim_week, the Radar's pin)
+
 ### Does a coach's style carry over?
 
 How well this year's style predicts next year's: 1 = exactly, 0 = not at all. Comparing the coach who moves with the team he left shows whether a tendency belongs to the coach or to the team around him.
@@ -2971,6 +2995,14 @@ A live board is made before the season's first kickoff from the data public then
 - **Name:** `board_kind`; **unit:** live / backtest; **used by:** board
 - **Formula:** live: scored on the real clock between the board's as-of (the eve of week 1) and the first kickoff, stored once (append-only); backtest: scored later by the pinned models from the input rows as they stood at the as-of
 - **Source:** twm.modules.board.live; twm.publish.board_lists
+
+### Momentum baseline
+
+The simple rival: just watch the roster trends. If the Radar cannot beat it, its early flags add little. It reads a Friday number, three days after the Radar's Tuesday list, which favours it.
+
+- **Name:** `momentum_baseline`; **unit:** flag; **used by:** lead_time
+- **Formula:** flags a player in the first waiver period whose rostered % rose by at least 10 points over the previous one while still under the threshold; scored with the same lead code as the Radar
+- **Source:** twm.modules.lead_time (fact_ranking.player_owned_espn, dim_week, the Radar's pin)
 
 ### Own walk-forward xFP
 

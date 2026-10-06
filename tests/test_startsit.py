@@ -230,7 +230,8 @@ def test_the_publish_and_the_pipeline_never_import_it() -> None:
         "for pkg in (twm.publish, twm.pipeline):\n"
         "    for m in pkgutil.walk_packages(pkg.__path__, pkg.__name__ + '.'):\n"
         "        importlib.import_module(m.name)\n"
-        "bad = sorted(m for m in sys.modules if m.startswith('twm.modules.startsit'))\n"
+        "bad = sorted(m for m in sys.modules if m.startswith(('twm.modules.startsit',\n"
+        "    'twm.modules.lead_time.live', 'twm.modules.lead_time.league')))\n"  # feature #8
         "print(bad); sys.exit(1 if bad else 0)\n"
     )
     res = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,

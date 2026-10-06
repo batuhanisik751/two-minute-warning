@@ -42,7 +42,8 @@ from twm.config import FANTASY_POSITIONS
 MODULE = "waiver_radar"
 # tables.FAMILIES, and (step P3) the Decision Report Card (tables.DECISIONS)
 MODULES = ("waiver_radar", "streamer", "regression_watch", "decisions", "hot_seat", "board",
-           "questionable", "teammate_out", "playoff_planner", "coach_tendencies")  # fmt: skip
+           "questionable", "teammate_out", "playoff_planner", "coach_tendencies",
+           "lead_time")  # fmt: skip
 TOP_N = 25  # published picks per list (the weekly report's top 25: confidence.TOP_N)
 # nflverse gsis ids: "00-0034796" (most players) or "BAT138483" (older ids; checked: every
 # dim_player id in the 2026-09-28 warehouse matches one of the two)
@@ -173,6 +174,9 @@ class PublishData:
     # feature #10: coach tendencies (twm.publish.coach_tendencies.CoachTendencyData; None = not
     # touched)
     coach_tendencies: Any = None
+    # feature #8: lead time vs the crowd (twm.publish.lead_time.LeadTimeData, aggregates only;
+    # None = not touched)
+    lead_time: Any = None
 
     # the Waiver Radar's lists by their E2 names
     @property
@@ -975,6 +979,12 @@ def collect(inputs: Inputs) -> PublishData:
         ctd = ct.collect_coach_tendencies(inputs.warehouse, season, inputs.now)
         tables.update(ctd.tables)
         meta.update(ct.meta(ctd))
+    ltd = None
+    if "lead_time" in inputs.modules:  # feature #8: replaced tables, aggregates only
+        from twm.publish import lead_time as lt
+
+        ltd = lt.collect_lead_time(inputs.warehouse)
+        tables.update(ltd.tables)
     dec = None
     if "decisions" in inputs.modules:  # step P3: the frozen history + the season in progress
         from twm.publish import decisions as dc
@@ -1058,6 +1068,7 @@ def collect(inputs: Inputs) -> PublishData:
     return PublishData(season=season, now=inputs.now, families=families, tables=tables,
                        meta=meta, data_as_of=data_as_of, decisions=dec, questionable=qd,
                        teammate_out=td, playoff_planner=ppd, coach_tendencies=ctd,
+                       lead_time=ltd,
                        warnings=list(dec.warnings) if dec is not None else [])  # fmt: skip
 
 
@@ -1354,6 +1365,10 @@ def validate(data: PublishData) -> list[str]:
         dim = t.get("dim_coach")
         coaches = set(dim.get_column("coach_id").to_list()) if dim is not None else set()
         problems += ct.problems(data.coach_tendencies, teams, coaches)
+    if data.lead_time is not None:  # feature #8
+        from twm.publish import lead_time as lt
+
+        problems += lt.problems(data.lead_time)
     # 3. every player named exists; the weekly summary is clean
     for name, df in (("picks", picks), ("player_week_summary", t["player_week_summary"])):
         missing = df.filter(~pl.col("gsis_id").is_in(players))

@@ -86,6 +86,8 @@ class ReportData:
     playoff_planner: object | None = None
     # feature #9: twm.league.odds_view.OddsView (luck and playoff odds); None = no section
     odds: object | None = None
+    # feature #8: twm.modules.lead_time.league.Section (live lead time); None = no section
+    lead_time: object | None = None
 
 
 def owner_tags(radar: PersonalRadar) -> list[TagRow]:
@@ -170,6 +172,7 @@ def gather(
         teammate_out=teammate_out_section(con, predictions, radar),
         playoff_planner=playoff_planner_section(con, predictions, radar),
         odds=odds_section(con, warehouse, predictions, pins_path),
+        lead_time=lead_time_section(con, warehouse, predictions, radar),
     )  # fmt: skip
 
 
@@ -183,6 +186,20 @@ def odds_section(
 
     try:
         return for_report(con, warehouse, predictions, pins_path)
+    except Exception:  # noqa: BLE001 - informative only
+        return None
+
+
+def lead_time_section(
+    con: duckdb.DuckDBPyConnection, warehouse: Path | None, predictions: Path,
+    radar: PersonalRadar,
+) -> object | None:  # fmt: skip
+    """Feature #8: the live lead-time tracker of the season (None: no free-agent sync in a
+    waiver period; a broken input never breaks the report)."""
+    from twm.modules.lead_time.league import for_report
+
+    try:
+        return for_report(con, warehouse, predictions, radar.season)
     except Exception:  # noqa: BLE001 - informative only
         return None
 
@@ -697,6 +714,13 @@ def render(d: ReportData, generated: datetime, limit: int = 10) -> str:
 
         nav += f'<li><a href="#{O_ID}">{esc(O_TITLE)}</a></li>'
         body.append(o_section(d.odds))
+    if d.lead_time is not None:  # feature #8: lead time vs the crowd, live (local only)
+        from twm.modules.lead_time.league import SECTION_ID as L_ID
+        from twm.modules.lead_time.league import TITLE as L_TITLE
+        from twm.modules.lead_time.league import render_section as l_section
+
+        nav += f'<li><a href="#{L_ID}">{esc(L_TITLE)}</a></li>'
+        body.append(l_section(d.lead_time))
     foot = para("A local report: never published, never sent anywhere. Chances and projections "
                 "are estimates from past seasons, not promises. NFL data: nflverse. League "
                 "data: ESPN (your cookies are not in this file).", "muted small")  # fmt: skip

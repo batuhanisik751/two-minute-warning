@@ -1883,3 +1883,173 @@ export const coachTendencyFantasyLink = pgTable(
     check("coach_tendency_fantasy_link_counts_check", sql`${t.n} >= 0 and ${t.nSeasons} >= 0`),
   ],
 );
+
+// ---------------------------------------------------------------------------------------------
+// Feature #8 (migration 0011): lead time vs the crowd (src/twm/modules/lead_time,
+// docs/lead_time.md): how many weeks before most ESPN leagues rostered a player the Waiver Radar
+// flagged him, 2020-2023. AGGREGATES ONLY: the crowd's roster % is FantasyPros' scrape of ESPN,
+// whose per-player values may not be republished. Every table is replaced on each publish
+// (src/twm/publish/lead_time.py). threshold: the crowd "adds" a player when his roster % crosses
+// it (50 headline, 25 secondary). signal: the Radar's level (must_add, spec_plus = must-add or
+// speculative, listed = top 25 of a list) or the momentum baseline (+10 points in a week).
+// scope_value: '' for the complete seasons pooled (scope 'complete'), the season ('season') or
+// the crowd position ('position'). Cells with fewer than 5 adds or flags carry counts only.
+// ---------------------------------------------------------------------------------------------
+
+const LEAD_SIGNALS = sql.raw("('must_add', 'spec_plus', 'listed', 'momentum')");
+const leadScopeCheck = (scope: AnyPgColumn, value: AnyPgColumn, positions: boolean) =>
+  positions
+    ? sql`(${scope} = 'complete' and ${value} = '') or (${scope} = 'season' and ${value} ~ '^[0-9]{4}$') or (${scope} = 'position' and ${value} in ('QB', 'RB', 'WR', 'TE'))`
+    : sql`(${scope} = 'complete' and ${value} = '') or (${scope} = 'season' and ${value} ~ '^[0-9]{4}$')`;
+
+/** One row per season with ESPN roster % in the warehouse: the baseline scrape (the last before
+ * week 1's as-of; 2020: the first one) and its waiver period, the in-season scrape days, the last
+ * Radar list week, whether the season is complete and in the study, the players with a % and the
+ * crowd adds at 50% and 25% (NULL: not in the study). */
+export const leadTimeCoverage = pgTable(
+  "lead_time_coverage",
+  {
+    season: integer("season").primaryKey(),
+    baselineDate: date("baseline_date"),
+    baselinePeriod: integer("baseline_period").notNull(),
+    lastPeriod: integer("last_period").notNull(),
+    complete: boolean("complete").notNull(),
+    inSeasonDays: integer("in_season_days").notNull(),
+    firstInSeason: date("first_in_season"),
+    lastInSeason: date("last_in_season"),
+    nPlayers: integer("n_players").notNull(),
+    lastListWeek: integer("last_list_week"),
+    adds50: integer("adds_50"),
+    adds25: integer("adds_25"),
+    inStudy: boolean("in_study").notNull(),
+  },
+  (t) => [
+    check("lead_time_coverage_periods_check", sql`${t.season} >= 2015 and ${t.baselinePeriod} between 0 and 22 and ${t.lastPeriod} between 0 and 22 and ${t.lastListWeek} between 1 and 22`),
+    check("lead_time_coverage_counts_check", sql`${t.inSeasonDays} >= 0 and ${t.nPlayers} >= 0 and ${t.adds50} >= 0 and ${t.adds25} >= 0 and (not ${t.complete} or ${t.inSeasonDays} > 0)`),
+  ],
+);
+
+/** The crowd's adds (players who started under the threshold and crossed it by the season's last
+ * list week) by when the signal first flagged them: before (lead >= 1 waiver period), same
+ * period, after, never (n_never_out_of_pool: never even in the Radar's pool). lead = add period -
+ * first flag period; its median and quartiles over the flagged adds; nearest_median: from the
+ * latest flag at or before the add; share_before_4: flagged 1-4 periods before. */
+export const leadTimeSummary = pgTable(
+  "lead_time_summary",
+  {
+    threshold: integer("threshold").notNull(),
+    signal: text("signal").notNull(),
+    scope: text("scope").notNull(),
+    scopeValue: text("scope_value").notNull(),
+    nAdds: integer("n_adds").notNull(),
+    nBefore: integer("n_before"),
+    nSame: integer("n_same"),
+    nAfter: integer("n_after"),
+    nNever: integer("n_never"),
+    nNeverOutOfPool: integer("n_never_out_of_pool"),
+    shareBefore: doublePrecision("share_before"),
+    shareSame: doublePrecision("share_same"),
+    shareAfter: doublePrecision("share_after"),
+    shareNever: doublePrecision("share_never"),
+    leadMedian: doublePrecision("lead_median"),
+    leadQ1: doublePrecision("lead_q1"),
+    leadQ3: doublePrecision("lead_q3"),
+    nearestMedian: doublePrecision("nearest_median"),
+    shareBefore4: doublePrecision("share_before_4"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.threshold, t.signal, t.scope, t.scopeValue] }),
+    check("lead_time_summary_key_check", sql`${t.threshold} in (25, 50) and ${t.signal} in ${LEAD_SIGNALS}`),
+    check("lead_time_summary_scope_check", leadScopeCheck(t.scope, t.scopeValue, true)),
+    check("lead_time_summary_counts_check", sql`${t.nAdds} >= 0 and (${t.nBefore} is null or ${t.nBefore} + ${t.nSame} + ${t.nAfter} + ${t.nNever} = ${t.nAdds}) and ${t.nNeverOutOfPool} <= ${t.nNever}`),
+    check("lead_time_summary_share_check", sql`${t.shareBefore} between 0 and 1 and ${t.shareSame} between 0 and 1 and ${t.shareAfter} between 0 and 1 and ${t.shareNever} between 0 and 1 and ${t.shareBefore4} between 0 and 1`),
+  ],
+);
+
+/** The lead's distribution over the complete seasons: per threshold and signal, the flagged adds
+ * per lead in waiver periods (clipped: -6 = six or more after, 10 = ten or more before). The
+ * never-flagged adds are the summary's n_never. */
+export const leadTimeHist = pgTable(
+  "lead_time_hist",
+  {
+    threshold: integer("threshold").notNull(),
+    signal: text("signal").notNull(),
+    lead: integer("lead").notNull(),
+    n: integer("n").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.threshold, t.signal, t.lead] }),
+    check("lead_time_hist_check", sql`${t.threshold} in (25, 50) and ${t.signal} in ${LEAD_SIGNALS} and ${t.lead} between -6 and 10 and ${t.n} >= 1`),
+  ],
+);
+
+/** The reverse view: each signal's first flags of a player (with crowd data before the list) by
+ * what the crowd did: already over the threshold, added later (crossed it in the flag's period or
+ * later; lead_median = periods from flag to crossing) or never; hits and hit_rate = the Radar's
+ * own outcome label (NULL for momentum). scope 'complete' or 'season' only. */
+export const leadTimeReverse = pgTable(
+  "lead_time_reverse",
+  {
+    threshold: integer("threshold").notNull(),
+    signal: text("signal").notNull(),
+    scope: text("scope").notNull(),
+    scopeValue: text("scope_value").notNull(),
+    state: text("state").notNull(),
+    n: integer("n").notNull(),
+    hits: integer("hits"),
+    hitRate: doublePrecision("hit_rate"),
+    leadMedian: doublePrecision("lead_median"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.threshold, t.signal, t.scope, t.scopeValue, t.state] }),
+    check("lead_time_reverse_key_check", sql`${t.threshold} in (25, 50) and ${t.signal} in ${LEAD_SIGNALS} and ${t.state} in ('already', 'added_later', 'never')`),
+    check("lead_time_reverse_scope_check", leadScopeCheck(t.scope, t.scopeValue, false)),
+    check("lead_time_reverse_counts_check", sql`${t.n} >= 1 and ${t.hits} between 0 and ${t.n} and ${t.hitRate} between 0 and 1`),
+  ],
+);
+
+/** Volume and conversion: flags of players under the threshold at the flag, flags per list week
+ * (weeks = the list weeks after the baseline), and the share the crowd added in the flag's period
+ * or later (share_added) or strictly later (share_added_after). */
+export const leadTimeConversion = pgTable(
+  "lead_time_conversion",
+  {
+    threshold: integer("threshold").notNull(),
+    signal: text("signal").notNull(),
+    scope: text("scope").notNull(),
+    scopeValue: text("scope_value").notNull(),
+    nFlags: integer("n_flags").notNull(),
+    nAdded: integer("n_added").notNull(),
+    nAddedAfter: integer("n_added_after").notNull(),
+    weeks: integer("weeks").notNull(),
+    flagsPerWeek: doublePrecision("flags_per_week").notNull(),
+    shareAdded: doublePrecision("share_added"),
+    shareAddedAfter: doublePrecision("share_added_after"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.threshold, t.signal, t.scope, t.scopeValue] }),
+    check("lead_time_conversion_key_check", sql`${t.threshold} in (25, 50) and ${t.signal} in ${LEAD_SIGNALS}`),
+    check("lead_time_conversion_scope_check", leadScopeCheck(t.scope, t.scopeValue, false)),
+    check("lead_time_conversion_counts_check", sql`${t.nFlags} >= 0 and ${t.nAdded} between 0 and ${t.nFlags} and ${t.nAddedAfter} between 0 and ${t.nAdded} and ${t.weeks} >= 1 and ${t.flagsPerWeek} >= 0 and ${t.shareAdded} between 0 and 1 and ${t.shareAddedAfter} between 0 and 1`),
+  ],
+);
+
+/** Head to head on the same crowd adds (complete seasons): per threshold and Radar level, how many
+ * the Radar flagged before the crowd and the momentum baseline did not (radar_only), the reverse,
+ * both, or neither; of 'both', how often the Radar's flag came earlier. */
+export const leadTimeH2h = pgTable(
+  "lead_time_h2h",
+  {
+    threshold: integer("threshold").notNull(),
+    level: text("level").notNull(),
+    h2h: text("h2h").notNull(),
+    n: integer("n").notNull(),
+    nRadarEarlier: integer("n_radar_earlier").notNull(),
+    share: doublePrecision("share").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.threshold, t.level, t.h2h] }),
+    check("lead_time_h2h_key_check", sql`${t.threshold} in (25, 50) and ${t.level} in ('must_add', 'spec_plus', 'listed') and ${t.h2h} in ('radar_only', 'momentum_only', 'both', 'neither')`),
+    check("lead_time_h2h_counts_check", sql`${t.n} >= 0 and ${t.nRadarEarlier} between 0 and ${t.n} and ${t.share} between 0 and 1`),
+  ],
+);

@@ -4,11 +4,12 @@
 import assert from "node:assert/strict";
 import { before, describe, test } from "node:test";
 import { SEED } from "../seed";
+import { LEAD_TIME_SEED as LT } from "../seed-lead-time";
 import { BASE, DATA, EMPTY_BASE, fetchPage, prose, serverUp, type Page } from "./dom";
 import { foldCheck } from "./fold";
 
 const PATH = "/track-record";
-const MODULES = ["radar", "streamer", "regression", "decisions", "hot-seat", "board", "questionable", "teammate-out", "playoff-planner"];
+const MODULES = ["radar", "streamer", "regression", "decisions", "hot-seat", "board", "questionable", "teammate-out", "playoff-planner", "lead-time"];
 let up = false;
 let emptyUp = false;
 let page: Page;
@@ -80,6 +81,17 @@ describe("/track-record (any data)", () => {
   });
 });
 
+describe("/waivers links the lead-time study", () => {
+  test("the Radar's page asks 'Does the Radar beat the crowd?' and links the section", async (t) => {
+    if (!up) return t.skip(`no server at ${BASE}`);
+    const w = await fetchPage("/waivers");
+    const a = w.doc.querySelector("main a[href='/track-record#lead-time']");
+    assert.ok(a, "no link to /track-record#lead-time on /waivers");
+    assert.equal(prose(a), "Does the Radar beat the crowd?");
+    assert.ok(page.doc.querySelector("#lead-time"), "the anchor is missing on /track-record");
+  });
+});
+
 describe("/track-record (seed)", () => {
   test("Radar: the headline from the seeded pooled rows, twelve seasons folded after ten, the calibration plot", (t) => {
     if (!up || !seedOnly) return t.skip("seed only");
@@ -129,6 +141,31 @@ describe("/track-record (seed)", () => {
     for (const id of ["radar-live", "stream-live-K", "stream-live-DST", "rw-live-sell_high", "rw-live-buy_low"]) {
       assert.equal(main().querySelector(`[data-testid=${id}]`)?.getAttribute("data-live"), "pending", id);
     }
+  });
+
+  test("Does the Radar beat the crowd?: the seeded aggregates, the histogram, the 25% result, the reverse view, the source", (t) => {
+    if (!up || !seedOnly) return t.skip("seed only");
+    const s = sec("lead-time");
+    assert.equal(prose(s.querySelector("h2")!), "Does the Radar beat the crowd?");
+    assert.deepEqual(q(s, "[data-testid=lt-headline] [data-cell=value]").map(prose), LT.headline);
+    assert.match(prose(s.querySelector("[data-testid=lt-headline]")!), new RegExp(`median 3 weeks ahead; ${LT.adds[50]} adds, ${LT.span}`));
+    assert.match(prose(s.querySelector("[data-testid=lt-summary] caption")!), new RegExp(`complete seasons ${LT.span} pooled \\(${LT.adds[50]} crowd adds\\)`));
+    assert.deepEqual(q(s, "[data-testid=lt-summary] tbody tr").map(prose), [
+      "Listed (top 25) 60.0% 5.0% 15.0% 20.0% 3 (1 to 6)",
+      "Must-add or speculative 55.0% 5.0% 15.0% 25.0% 3 (0 to 6)",
+      "Must-add 20.0% 10.0% 20.0% 50.0% 0 (-2 to 2)",
+      "Momentum (+10 points in a week) 70.0% 25.0% 0.0% 5.0% 1 (0 to 2)",
+    ]);
+    assert.equal(q(s, "[data-testid=lt-hist-table] tbody tr").length, 18);
+    assert.match(prose(s.querySelector("[data-testid=lt-hist-table] tbody tr:last-child")!), /^never flagged 20 5$/);
+    assert.match(prose(s.querySelector("[data-testid=lt-t25]")!), new RegExp(`${LT.adds[25]} crowd adds.*flagged ${LT.t25[0]} before the crowd and the momentum baseline ${LT.t25[1]}`));
+    const [both, earlier, radar, mom, neither] = LT.h2hListed;
+    assert.equal(prose(s.querySelector("[data-testid=lt-h2h] tbody tr[data-level=listed]")!), `Listed (top 25) ${both} Radar earlier in ${earlier} ${radar} ${mom} ${neither}`);
+    assert.match(prose(s.querySelector("[data-testid=lt-ignored]")!), new RegExp(`never added ${LT.ignored.n}: they were hits only ${LT.ignored.hit} .* against ${LT.ignored.laterHit}`));
+    assert.match(prose(s.querySelector("[data-testid=lt-coverage]")!), /complete seasons 2021–2023\. 2020 is partial: .* after week 5.* 2024 is left out: the warehouse has no in-season/);
+    assert.match(prose(s.querySelector("[data-testid=lt-source]")!), /^Source: ESPN's rostered percentages as scraped by FantasyPros\. .*no player and no player's percentage\.$/);
+    assert.equal(s.querySelector("[data-testid=lt-live]")?.getAttribute("data-live"), "none");
+    assert.ok(!/\b00-\d{7}\b/.test(s.innerHTML), "a player id in the lead-time section");
   });
 
   test("empty database: every section says not published yet, and no live results yet", (t) => {

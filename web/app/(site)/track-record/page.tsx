@@ -3,6 +3,7 @@ import Term from "@/components/Term";
 import BoardTrack from "@/components/track/BoardTrack";
 import DecisionsTrack from "@/components/track/DecisionsTrack";
 import HotSeatTrack from "@/components/track/HotSeatTrack";
+import LeadTimeTrack from "@/components/track/LeadTimeTrack";
 import QuestionableTrack from "@/components/track/QuestionableTrack";
 import RadarTrack from "@/components/track/RadarTrack";
 import RegressionTrackSection from "@/components/track/RegressionTrackSection";
@@ -26,6 +27,7 @@ const SECTIONS = [
   { id: "questionable", title: "Questionable outcomes" },
   { id: "teammate-out", title: "Teammate out" },
   { id: "playoff-planner", title: "Playoff planner" },
+  { id: "lead-time", title: "Does the Radar beat the crowd?" },
 ] as const;
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
@@ -105,6 +107,9 @@ export default function TrackRecordPage() {
         </Section>
         <Section id="playoff-planner" title={SECTIONS[8].title}>
           <PlayoffPlannerTrack />
+        </Section>
+        <Section id="lead-time" title={SECTIONS[9].title}>
+          <LeadTimeTrack />
         </Section>
       </div>
     </>

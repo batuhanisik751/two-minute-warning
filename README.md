@@ -6,7 +6,7 @@ Every flag comes with a **track record**. Each model is tested the honest way: t
 
 Built on the open-source [nflverse](https://nflverse.nflverse.com/) data ecosystem. Unofficial, educational, not affiliated with the NFL or ESPN, and not betting advice.
 
-**Live site:** the website is deployed on Vercel but is still **private** (behind Vercel Authentication) until the owner decides to make it public, which waits at least until the scheduled job has published two live Tuesdays in a row (`docs/progress.md`, "E5"). Its public address will be added here then; `docs/deploy.md` step 10 lists what changes when it goes public. The code is public: <https://github.com/batuhanisik751/two-minute-warning>.
+**Live site:** <https://two-minute-warning-one.vercel.app>. It is deployed on Vercel but still **private** (behind Vercel Authentication, so visitors see a login page) until the owner decides to make it public, which waits at least until the scheduled job has published two live Tuesdays in a row (`docs/progress.md`, "E5"); `docs/deploy.md` step 10 lists what changes when it goes public. The code is public: <https://github.com/batuhanisik751/two-minute-warning>.
 
 ## What it does, in plain English
 

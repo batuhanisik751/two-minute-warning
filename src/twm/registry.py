@@ -40,6 +40,7 @@ MODULES = (
     "board",
     "questionable",
     "teammate_out",
+    "playoff_planner",
 )
 _NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 # Placeholders a reason template may use (C6, twm.modules.waiver_radar.reasons, fills them
@@ -1886,6 +1887,86 @@ def _teammate_out_entries() -> list[Entry]:
     ]
 
 
+def _playoff_planner_entries() -> list[Entry]:
+    """Feature #6 (twm.modules.playoff_planner, docs/playoff_planner.md): the matchup ratings
+    of the fantasy playoff weeks and how much they matter."""
+    from twm.modules.playoff_planner import backtest as bt
+    from twm.modules.playoff_planner import ratings as rt
+
+    mods = ("playoff_planner",)
+    src = "twm.modules.playoff_planner (frozen rule, docs/playoff_planner.md)"
+    k = ", ".join(f"{p} {v:g}" for p, v in rt.PSEUDO_GAMES.items())
+    weeks = "-".join(str(w) for w in (bt.PLAYOFF_WEEKS[0], bt.PLAYOFF_WEEKS[-1]))
+    return [
+        Entry(
+            name="fantasy_playoffs",
+            title="Fantasy playoffs",
+            kind="concept",
+            modules=mods,
+            unit="weeks",
+            formula=f"NFL weeks {weeks} by default (most leagues); My League reads the owner's "
+            "league settings: the weeks after the regular season, one round per playoff "
+            "matchup period",
+            explanation="The last weeks of the fantasy season, where a loss ends your year: "
+            "the weeks a manager plans the roster for.",
+            source="twm.modules.playoff_planner.league, config of the synced league",
+        ),
+        Entry(
+            name="matchup_rating",
+            title="Matchup rating",
+            kind="metric",
+            modules=mods,
+            unit="multiplier (1.00 = average)",
+            formula="points the opponent allowed to the position per game this season over the "
+            "league's average per team-game, shrunk toward 1.00 with k pseudo-games (k by "
+            f"position: {k}); for a D/ST, the D/ST points the opposing offense gives up; "
+            "'adjusted' also divides by what the units it faced usually score",
+            explanation="How friendly an opponent is: 1.10 means players at that position "
+            "scored 10% more than average against it. It moves points a little; for tight "
+            "ends and kickers the backtest found no gain, so they count as 1.00.",
+            source=src,
+        ),
+        Entry(
+            name="strength_of_schedule",
+            title="Strength of schedule",
+            kind="concept",
+            modules=mods,
+            unit="mean matchup rating",
+            formula=f"the mean matchup rating of a player's opponents in weeks {weeks} (byes "
+            "left out)",
+            explanation="How easy or hard a player's coming games look as a whole: above 1.00 "
+            "is an easier run than average.",
+            source=src,
+        ),
+        Entry(
+            name="matchup_gap",
+            title="How much a matchup matters",
+            kind="metric",
+            modules=mods,
+            unit="points per game",
+            formula=f"walk-forward {bt.TEST_SEASONS[0]}-{bt.TEST_SEASONS[-1]}: players facing "
+            "the easiest fifth of matchups (as-of raw rating) minus those facing the hardest "
+            f"fifth, actual minus usual points per game in weeks {weeks}",
+            explanation="The honest size of the effect: about 1 to 2 points per game for a QB, "
+            "RB or WR, about 4 for a D/ST, next to nothing for a TE or kicker.",
+            source="reports/playoff_planner/effects.csv",
+        ),
+        Entry(
+            name="pseudo_games",
+            title="Pseudo-games (shrinkage)",
+            kind="concept",
+            modules=mods,
+            unit="games",
+            formula="k imaginary games at exactly average added to a team's record: rating = "
+            "(allowed + k x average) / ((games + k) x average); k = within-team over "
+            "between-team variance, estimated on 2006-2012",
+            explanation="A few games say little about a defense, so its rating starts at "
+            "average and moves away only as real games pile up.",
+            source=src,
+        ),
+    ]
+
+
 def _site_entries() -> list[Entry]:
     """Terms the site uses to present the modules (how to read a chance, live or reconstructed,
     the intervals, the Report Card's calls, the board's markers), moved word for word from
@@ -2937,6 +3018,7 @@ def _entries() -> list[Entry]:
         *_board_entries(),
         *_questionable_entries(),
         *_teammate_out_entries(),
+        *_playoff_planner_entries(),
         *_site_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(

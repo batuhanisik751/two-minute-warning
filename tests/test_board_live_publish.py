@@ -162,7 +162,8 @@ def test_the_job_skips_the_board_outside_its_window(tmp_path) -> None:
 
 def test_the_job_scores_the_live_board_once_in_its_window(tmp_path) -> None:
     fake, res = _job(tmp_path, lambda s, now: (True, "the 2026 live board: open: ..."))
-    assert fake.stages()[-4:] == ["board_score", "questionable", "teammate_out", "publish"]
+    assert fake.stages()[-5:] == ["board_score", "questionable", "teammate_out",
+                                  "playoff_planner", "publish"]  # fmt: skip
     assert res.exit_code == 0
     args = fake.args("board_score")[0]
     assert args[:5] == ["board", "score", "--season", "2026", "--live-publish"]

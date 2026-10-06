@@ -32,6 +32,7 @@ CARD_OF_PIN = {
     "questionable": "questionable.md",  # feature #1: Questionable outcomes
     "startsit": "startsit.md",  # feature #2: start/sit odds (local only)
     "teammate_out": "teammate_out.md",  # feature #5: who gains when a starter sits
+    "playoff_planner": "playoff_planner.md",  # feature #6: matchups in fantasy weeks 15-17
 }
 HEADINGS = [
     "Purpose and intended use",

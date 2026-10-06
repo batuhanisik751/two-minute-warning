@@ -441,6 +441,14 @@ How often players ranked this high hit, counted over earlier reconstructed lists
 - **Formula:** hits / picks at ranks 1-5, 6-10 or 11-25 of the reconstructed (backtest) lists of the same position, over the seasons before the list's season
 - **Source:** twm.backtest.metrics.DEFAULT_BUCKETS; web/lib/buckets.ts
 
+### How much a matchup matters
+
+The honest size of the effect: about 1 to 2 points per game for a QB, RB or WR, about 4 for a D/ST, next to nothing for a TE or kicker.
+
+- **Name:** `matchup_gap`; **unit:** points per game; **used by:** playoff_planner
+- **Formula:** walk-forward 2013-2025: players facing the easiest fifth of matchups (as-of raw rating) minus those facing the hardest fifth, actual minus usual points per game in weeks 15-17
+- **Source:** reports/playoff_planner/effects.csv
+
 ### Implied team total
 
 How many points the betting market expected a team to score, from the spread and the over/under. Only known right before kickoff, so P1 uses it for games already played.
@@ -489,6 +497,14 @@ How many more games you won than your scores deserved. +1.5 means the schedule h
 - **Name:** `luck`; **unit:** wins; **used by:** my_league
 - **Formula:** wins (a tie half) - expected wins; expected wins = the sum over the final regular-season weeks of the share of the other teams the team outscored that week (a tie half)
 - **Source:** twm.league.luck (twm league odds; the local weekly report)
+
+### Matchup rating
+
+How friendly an opponent is: 1.10 means players at that position scored 10% more than average against it. It moves points a little; for tight ends and kickers the backtest found no gain, so they count as 1.00.
+
+- **Name:** `matchup_rating`; **unit:** multiplier (1.00 = average); **used by:** playoff_planner
+- **Formula:** points the opponent allowed to the position per game this season over the league's average per team-game, shrunk toward 1.00 with k pseudo-games (k by position: QB 33, RB 12, WR 52, TE 100, K 27, DST 8); for a D/ST, the D/ST points the opposing offense gives up; 'adjusted' also divides by what the units it faced usually score
+- **Source:** twm.modules.playoff_planner (frozen rule, docs/playoff_planner.md)
 
 ### Mean absolute error (MAE)
 
@@ -2804,6 +2820,14 @@ A week's running back, wide receiver and tight end lists merged into one and ord
 - **Formula:** the week's RB, WR and TE picks of one kind merged: highest chance first, then the higher model probability, the better rank in his own list, RB/WR/TE and the id; each player once
 - **Source:** web/lib/flex.ts (mergeFlex)
 
+### Fantasy playoffs
+
+The last weeks of the fantasy season, where a loss ends your year: the weeks a manager plans the roster for.
+
+- **Name:** `fantasy_playoffs`; **unit:** weeks; **used by:** playoff_planner
+- **Formula:** NFL weeks 15-17 by default (most leagues); My League reads the owner's league settings: the weeks after the regular season, one round per playoff matchup period
+- **Source:** twm.modules.playoff_planner.league, config of the synced league
+
 ### Interim coach (row flag)
 
 Interim coaches are left out of training (spec 8.5). Uses the owner's hindsight file, so it selects rows and is never a model feature.
@@ -2907,6 +2931,14 @@ Last season's playoff exit, spelled out.
 - **Formula:** prev_playoff_round as text: none, lost_wc, lost_div, lost_conf, lost_sb, won_sb
 - **Source:** twm.modules.hot_seat.features
 
+### Pseudo-games (shrinkage)
+
+A few games say little about a defense, so its rating starts at average and moves away only as real games pile up.
+
+- **Name:** `pseudo_games`; **unit:** games; **used by:** playoff_planner
+- **Formula:** k imaginary games at exactly average added to a team's record: rating = (allowed + k x average) / ((games + k) x average); k = within-team over between-team variance, estimated on 2006-2012
+- **Source:** twm.modules.playoff_planner (frozen rule, docs/playoff_planner.md)
+
 ### Questionable
 
 The team says the player is uncertain to play. Since 2016 about 6 in 10 Questionable QBs, RBs, WRs and TEs played; the list shows the chance for players like him.
@@ -2945,6 +2977,14 @@ The kickers and team defenses who are probably still on waivers: those ranked lo
 - **Name:** `stream_pool`; **unit:** kickers and D/STs; **used by:** streamer
 - **Formula:** the Waiver Radar's candidate-pool rule for K and D/ST: outside the pool cutoff both in the experts' preseason ranking (last season's points per game before 2020) and in points per game so far this season
 - **Source:** twm.modules.streamer.pool
+
+### Strength of schedule
+
+How easy or hard a player's coming games look as a whole: above 1.00 is an easier run than average.
+
+- **Name:** `strength_of_schedule`; **unit:** mean matchup rating; **used by:** playoff_planner
+- **Formula:** the mean matchup rating of a player's opponents in weeks 15-17 (byes left out)
+- **Source:** twm.modules.playoff_planner (frozen rule, docs/playoff_planner.md)
 
 ### Suggested priority
 

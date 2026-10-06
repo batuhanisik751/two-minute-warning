@@ -83,6 +83,15 @@ hot_seat:
       file: artifacts/production_models/hot_seat/backtest-logit-0ede038915531ea3/model_versions.parquet
       sha256: d3770a0961413a65ba445e389c229f312eae1829954eae3ca6cbe6e1e6174848
       rows: 20
+playoff_planner:
+  season: 2026
+  model_version: matchup-d2c2fa511bc3045d
+  file: artifacts/production_models/playoff_planner/matchup-d2c2fa511bc3045d.json
+  sha256: 879911eb9fb5c1304bd23e2b33d6b70e31db33dc90e3fdfa1998509e19f5479b
+  model: matchup
+  approved: '2026-10-06'
+  backtest:
+    seasons: 2013-2025
 questionable:
   season: 2026
   model_version: lookup-5f0566085a6b1f24

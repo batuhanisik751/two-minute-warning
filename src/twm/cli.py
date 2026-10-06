@@ -13,6 +13,7 @@ from twm.modules.decisions import production_cli as _decisions_pins  # noqa: F40
 from twm.modules.decisions.cli import decisions_app
 from twm.modules.hot_seat import production_cli as _hot_seat_pins  # noqa: F401 (H4a commands)
 from twm.modules.hot_seat.cli import hotseat_app
+from twm.modules.playoff_planner.cli import playoff_planner_app
 from twm.modules.questionable.cli import questionable_app
 from twm.modules.streamer.cli import streamer_app
 from twm.modules.teammate_out.cli import teammate_out_app
@@ -335,6 +336,7 @@ app.add_typer(timemachine_app, name="timemachine")  # I3a: reproducibility check
 app.add_typer(offseason_app, name="offseason")  # I6b: the yearly routine (docs/offseason.md)
 app.add_typer(questionable_app, name="questionable")  # feature #1 (docs/questionable.md)
 app.add_typer(teammate_out_app, name="teammate_out")  # feature #5 (docs/teammate_out.md)
+app.add_typer(playoff_planner_app, name="playoff_planner")  # feature #6 (docs/playoff_planner.md)
 
 
 def _warehouse_or_exit(db: Path | None) -> Path:
@@ -2225,7 +2227,7 @@ def model_check(
     module: str = typer.Argument(
         "all",
         help="Module: waiver_radar, streamer, regression_watch, decisions, hot_seat, board, "
-        "questionable, teammate_out, or all (every pinned module).",
+        "questionable, teammate_out, playoff_planner, or all (every pinned module).",
     ),
     season: int | None = typer.Option(None, "--season", help="Season (default: current)."),
     evaluation_csv: Path = typer.Option(
@@ -2278,6 +2280,11 @@ def model_check(
         from twm.modules.teammate_out.cli import check_pin as check_teammate_out_pin
 
         check_teammate_out_pin(chosen)
+        return
+    if module.strip().lower().replace("-", "_") == "playoff_planner":  # feature #6
+        from twm.modules.playoff_planner.cli import check_pin as check_playoff_planner_pin
+
+        check_playoff_planner_pin(chosen)
         return
     if module.strip().lower() == "board":  # I2c-a: the board's models + frozen backtest
         from twm.modules.board.production_cli import check_pin as check_board_pin
@@ -2340,6 +2347,10 @@ def model_check(
         from twm.modules.teammate_out.cli import check_pin as check_teammate_out_pin
 
         check_teammate_out_pin(chosen)
+    if module.strip().lower() == "all" and "playoff_planner" in pins.read_pins():
+        from twm.modules.playoff_planner.cli import check_pin as check_playoff_planner_pin
+
+        check_playoff_planner_pin(chosen)
 
 
 @model_app.command("restore-backtest")

@@ -441,6 +441,11 @@
       "explanation": "How many games the betting market expected the team to have won by now.",
       "formula": "sum over the games to date of the team's pregame win probability: de-vigged closing moneylines p = (1/o_team) / (1/o_team + 1/o_opp) on decimal odds (American +150 -> 2.5, -200 -> 1.5); a game without both moneylines uses 1 / (1 + exp(-k x spread_line)) (home side; k fit by maximum likelihood on every played game of the seasons before, ties out); NULL if a game has neither"
     },
+    "fantasy_playoffs": {
+      "title": "Fantasy playoffs",
+      "explanation": "The last weeks of the fantasy season, where a loss ends your year: the weeks a manager plans the roster for.",
+      "formula": "NFL weeks 15-17 by default (most leagues); My League reads the owner's league settings: the weeks after the regular season, one round per playoff matchup period"
+    },
     "fantasy_points": {
       "title": "Fantasy points",
       "explanation": "The score a player earns for your fantasy team in one game, computed from his yards, touchdowns, catches and mistakes with your league's settings.",
@@ -775,6 +780,16 @@
       "title": "Mean absolute error (MAE)",
       "explanation": "How far a projection missed on average, whether it was too high or too low. Lower is better. Example: projections of 12 and 8 points per game for two players who both then scored 10 per game miss by 2 each, so the MAE is 2.",
       "formula": "mean over the graded players of |actual rest-of-season points per game - the projection|"
+    },
+    "matchup_gap": {
+      "title": "How much a matchup matters",
+      "explanation": "The honest size of the effect: about 1 to 2 points per game for a QB, RB or WR, about 4 for a D/ST, next to nothing for a TE or kicker.",
+      "formula": "walk-forward 2013-2025: players facing the easiest fifth of matchups (as-of raw rating) minus those facing the hardest fifth, actual minus usual points per game in weeks 15-17"
+    },
+    "matchup_rating": {
+      "title": "Matchup rating",
+      "explanation": "How friendly an opponent is: 1.10 means players at that position scored 10% more than average against it. It moves points a little; for tight ends and kickers the backtest found no gain, so they count as 1.00.",
+      "formula": "points the opponent allowed to the position per game this season over the league's average per team-game, shrunk toward 1.00 with k pseudo-games (k by position: QB 33, RB 12, WR 52, TE 100, K 27, DST 8); for a D/ST, the D/ST points the opposing offense gives up; 'adjusted' also divides by what the units it faced usually score"
     },
     "model_probability": {
       "title": "Model probability",
@@ -1176,6 +1191,11 @@
       "explanation": "Where his rest-of-season points per game should land 8 times in 10: the projection plus how far off it was for similar players in earlier seasons. In the backtest the real result fell inside about 80% of the time at every position (the Methodology page shows each share); it says nothing about games he misses.",
       "formula": "ppg_ros + the 10th and 90th percentiles of the frozen backtest's per-game misses (rest_of_season_ppg - ppg_ros) at his position, from lists with weeks left within 2 of his list's (else the nearest weeks left), of seasons before the list's only (walk-forward); none with fewer than 30 misses"
     },
+    "pseudo_games": {
+      "title": "Pseudo-games (shrinkage)",
+      "explanation": "A few games say little about a defense, so its rating starts at average and moves away only as real games pile up.",
+      "formula": "k imaginary games at exactly average added to a team's record: rating = (allowed + k x average) / ((games + k) x average); k = within-team over between-team variance, estimated on 2006-2012"
+    },
     "punt_expected_wp": {
       "title": "Expected WP after a punt",
       "explanation": "How good punting is, as a win chance, averaged over where punts from this spot really end up.",
@@ -1435,6 +1455,11 @@
       "title": "Streaming pool",
       "explanation": "The kickers and team defenses who are probably still on waivers: those ranked low both by the experts before the season and by points per game so far. It is an estimate, the same kind as the Waiver Radar's candidate pool, because past waiver wires are not public.",
       "formula": "the Waiver Radar's candidate-pool rule for K and D/ST: outside the pool cutoff both in the experts' preseason ranking (last season's points per game before 2020) and in points per game so far this season"
+    },
+    "strength_of_schedule": {
+      "title": "Strength of schedule",
+      "explanation": "How easy or hard a player's coming games look as a whole: above 1.00 is an easier run than average.",
+      "formula": "the mean matchup rating of a player's opponents in weeks 15-17 (byes left out)"
     },
     "surface_grass": {
       "title": "Grass field",

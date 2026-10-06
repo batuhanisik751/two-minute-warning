@@ -82,6 +82,8 @@ class ReportData:
     startsit: object | None = None
     # feature #5: twm.modules.teammate_out.league.Section; None = no section
     teammate_out: object | None = None
+    # feature #6: twm.modules.playoff_planner.league.Section; None = no section
+    playoff_planner: object | None = None
     # feature #9: twm.league.odds_view.OddsView (luck and playoff odds); None = no section
     odds: object | None = None
 
@@ -166,6 +168,7 @@ def gather(
         journal=journal, journal_error=journal_error,
         questionable=questionable_section(predictions, radar),
         teammate_out=teammate_out_section(con, predictions, radar),
+        playoff_planner=playoff_planner_section(con, predictions, radar),
         odds=odds_section(con, warehouse, predictions, pins_path),
     )  # fmt: skip
 
@@ -204,6 +207,20 @@ def teammate_out_section(
 
     try:
         return for_report(con, predictions, radar.roster, radar.season)
+    except Exception:  # noqa: BLE001 - informative only
+        return None
+
+
+def playoff_planner_section(
+    con: duckdb.DuckDBPyConnection, predictions: Path, radar: PersonalRadar
+) -> object | None:
+    """Feature #6: the owner's players and the Radar's best free agents in the league's
+    playoff weeks from the stored matchup grid (None: no roster or no grid; a broken store
+    never breaks the report)."""
+    from twm.modules.playoff_planner.league import for_report
+
+    try:
+        return for_report(con, predictions, radar, radar.season)
     except Exception:  # noqa: BLE001 - informative only
         return None
 
@@ -666,6 +683,13 @@ def render(d: ReportData, generated: datetime, limit: int = 10) -> str:
 
         nav += f'<li><a href="#{T_ID}">{esc(T_TITLE)}</a></li>'
         body.append(t_section(d.teammate_out))
+    if d.playoff_planner is not None:  # feature #6: matchups in the fantasy playoff weeks
+        from twm.modules.playoff_planner.league import SECTION_ID as P_ID
+        from twm.modules.playoff_planner.league import TITLE as P_TITLE
+        from twm.modules.playoff_planner.league import render_section as p_section
+
+        nav += f'<li><a href="#{P_ID}">{esc(P_TITLE)}</a></li>'
+        body.append(p_section(d.playoff_planner))
     if d.odds is not None:  # feature #9: luck and playoff odds (twm.league.odds_view)
         from twm.league.odds_view import SECTION_ID as O_ID
         from twm.league.odds_view import TITLE as O_TITLE

@@ -143,6 +143,14 @@ Only decisions with a clear answer count against a coach.
 - **Formula:** 'clear' when the best option's WP beats the second best by more than decisions.toss_up_margin (1.5 WP points), else 'toss_up' (not graded); the 4th quarter's last 2:00 and overtime are not graded at all (decisions.late_game)
 - **Source:** twm.modules.decisions.grade
 
+### Coach tendency and fantasy targets
+
+Whether an offense's style shows up in fantasy numbers: a team that passes more than expected throws more targets to its receivers the same season, and a little of that carries into the next. Measured, not assumed.
+
+- **Name:** `tendency_fantasy_link`; **unit:** correlation (-1 to 1); **used by:** coach_tendencies
+- **Formula:** Pearson r over completed team-seasons (both sides relative to their season) of a tendency with the team's pass-catchers' targets per game (or full-PPR receiving points per game) the same season and the next season; y_per_x_sd = r x the target's SD: the change per standard deviation of the tendency; 95% season-block bootstrap interval
+- **Source:** twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)
+
 ### Completion rate over expected (CPOE) \*
 
 How many more of his passes were completed than an average passer's would have been.
@@ -198,6 +206,14 @@ How much a single play helped or hurt the offense's scoring chances. A 30-yard c
 - **Name:** `epa`; **unit:** points per play; **used by:** shared, decisions, hot_seat
 - **Formula:** nflfastR's expected points after the play minus before it, for the offense
 - **Source:** fact_play.epa
+
+### Early-down pass rate
+
+The neutral pass rate on first and second down only, where the play-caller has the most choice. Higher = passes more on early downs.
+
+- **Name:** `early_down_pass_rate`; **unit:** share (0-1); **used by:** coach_tendencies
+- **Formula:** share of neutral 1st-2nd-down snaps that were dropbacks; neutral snap: an offensive snap (pass or run with a down) on downs 1-3 in quarters 1-3 with fact_play.is_neutral
+- **Source:** twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)
 
 ### End-of-half passivity
 
@@ -409,6 +425,22 @@ The chance the kick is good from here, in these conditions.
 - **Formula:** LightGBM on distance, roof, wind, temperature, surface and era, walk-forward
 - **Source:** twm.modules.decisions.fieldgoal
 
+### Fourth-and-short go rate
+
+The fourth-down go rate on 4th-and-1 or 4th-and-2, where going is most often right. Higher = more aggressive.
+
+- **Name:** `fourth_short_go_rate`; **unit:** share (0-1); **used by:** coach_tendencies
+- **Formula:** the same on 4th-and-1 or 4th-and-2; fourth-down choice: play_type pass, run, punt, field_goal with fact_play.is_neutral, any quarter; fakes count as going; ydstogo <= 2
+- **Source:** twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)
+
+### Fourth-down go rate
+
+How often the offense runs a play on fourth down instead of punting or kicking a field goal, in close games. Higher = more aggressive.
+
+- **Name:** `fourth_go_rate`; **unit:** share (0-1); **used by:** coach_tendencies
+- **Formula:** share of neutral fourth-down choices where the offense ran a play; fourth-down choice: play_type pass, run, punt, field_goal with fact_play.is_neutral, any quarter; fakes count as going
+- **Source:** twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)
+
 ### Games (G)
 
 How many games a player's numbers are based on. More games make a per-game number more trustworthy: a hot start over 2 games says less than a full season. Example: G 3 with 15 PPG means 45 points over 3 games.
@@ -522,6 +554,22 @@ The model's own calibrated probability. The site shows the chance instead: in th
 - **Formula:** the production model's predicted probability of y_hit after an isotonic calibration fit on the validation season (stored as score in the predictions store)
 - **Source:** twm.modules.waiver_radar.models
 
+### Neutral pace
+
+Game-clock seconds between snaps in close games. Lower = faster: more plays, more chances for your players. The site shows it as faster than N% of offenses.
+
+- **Name:** `neutral_sec_per_play`; **unit:** seconds per play; **used by:** coach_tendencies
+- **Formula:** game-clock seconds between consecutive snaps of a drive, neutral; pace pair: a neutral snap and the same offense's next snap of the drive and quarter with nothing between and no timeout charged; gaps over 60 seconds are clock glitches and dropped
+- **Source:** twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)
+
+### Neutral pass rate
+
+How often the offense drops back to pass when the game is close and nobody is in a hurry. Higher = passes more; it removes the trailing team throwing and the leading team running out the clock.
+
+- **Name:** `neutral_pass_rate`; **unit:** share (0-1); **used by:** coach_tendencies
+- **Formula:** share of neutral 1st-3rd-down snaps that were dropbacks; neutral snap: an offensive snap (pass or run with a down) on downs 1-3 in quarters 1-3 with fact_play.is_neutral
+- **Source:** twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)
+
 ### Neutral situation \*
 
 Plays where the game is still in the balance and neither team is forced to pass or run; the fairest view of how a team really plays.
@@ -529,6 +577,14 @@ Plays where the game is still in the balance and neither team is forced to pass 
 - **Name:** `is_neutral`; **unit:** boolean; **used by:** shared
 - **Formula:** win probability from 0.2 to 0.8 and more than 120 seconds left in the half
 - **Source:** fact_play.is_neutral (twm.situations)
+
+### No-huddle rate
+
+How often the offense snaps the ball without huddling first, in close games. Higher = more hurry-up: the cleanest sign of a deliberately fast offense.
+
+- **Name:** `no_huddle_rate`; **unit:** share (0-1); **used by:** coach_tendencies
+- **Formula:** share of neutral snaps run no-huddle (from 2006: earlier seasons are not charted); neutral snap: an offensive snap (pass or run with a down) on downs 1-3 in quarters 1-3 with fact_play.is_neutral
+- **Source:** twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)
 
 ### Noise variance per game \*
 
@@ -569,6 +625,14 @@ The actual number in the game, counted by ffopportunity over the same plays as i
 - **Name:** `pass_attempts`; **unit:** passes; **used by:** regression_watch
 - **Formula:** fact_opportunity_week.pass_attempt (sacks and two-point tries excluded), from the same ffopportunity row (fact_opportunity_week), i.e. over the same plays
 - **Source:** twm.modules.regression_watch.player_week (fact_opportunity_week)
+
+### Pass rate over expected (PROE) \*
+
+How much more often the offense passes than an average team would in the same down, distance, field position, score and clock. Higher = passes more than expected; 0 = league-typical; negative = runs more than expected.
+
+- **Name:** `proe`; **unit:** percentage points; **used by:** coach_tendencies
+- **Formula:** pass rate over expected: mean nflfastR pass_oe (percentage points) over offensive snaps where it is defined, all situations (from 2006: earlier seasons are not charted); every situation: nflfastR's expected pass rate already models down, distance, field position, score, clock and win probability
+- **Source:** twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)
 
 ### Passing touchdowns
 
@@ -713,6 +777,14 @@ He has scored well above what his chances were worth, and the projection says it
 - **Name:** `sell_high`; **unit:** yes/no; **used by:** regression_watch
 - **Formula:** FPOE/game in the top ceil(n / 10) FPOE/game of his position's universe at that as-of AND ppg_ros at least X (tag_threshold_x) below his PPG
 - **Source:** twm.modules.regression_watch.tags
+
+### Shotgun rate
+
+How often the quarterback lines up a few yards behind the center (shotgun) in close games. Higher = more spread-out, pass-ready formations.
+
+- **Name:** `shotgun_rate`; **unit:** share (0-1); **used by:** coach_tendencies
+- **Formula:** share of neutral snaps from shotgun; neutral snap: an offensive snap (pass or run with a down) on downs 1-3 in quarters 1-3 with fact_play.is_neutral
+- **Source:** twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)
 
 ### Shrinkage factor \*
 
@@ -2796,6 +2868,14 @@ A game where one of the three clock-management metrics applies: timeouts unused 
 - **Formula:** a game where timeouts_unused, half_passivity or timeout_seconds_wasted applies, by its written definition (decisions.clock in config/settings.yaml)
 - **Source:** twm.modules.decisions.clock
 
+### Does a coach's style carry over?
+
+How well this year's style predicts next year's: 1 = exactly, 0 = not at all. Comparing the coach who moves with the team he left shows whether a tendency belongs to the coach or to the team around him.
+
+- **Name:** `tendency_persistence`; **unit:** correlation (-1 to 1); **used by:** coach_tendencies
+- **Formula:** Pearson r of a team-season's main-coach value (most snaps, at least 400; minus the league that season) with the next one, for three kinds of pairs: same coach and team, same coach at a new team, new coach at the same team; 95% interval from a season-block bootstrap (2,000 draws, fixed seed); completed seasons only
+- **Source:** twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)
+
 ### Doubtful
 
 The team says the player is unlikely to play. Since 2016 almost none of the Doubtful QBs, RBs, WRs and TEs took an offensive snap (about 1 in 100).
@@ -3017,6 +3097,14 @@ Where the teammate stands in line: with the WR1 out, the next receiver is 'WR2'.
 - **Name:** `teammate_role`; **unit:** label (RB2, WR3, TE1 ...); **used by:** teammate_out
 - **Formula:** position + usage rank (baseline carry share + target share, then snap share) among the teammates who play; the absent starters of his position count first; deeper than RB3 / WR4 / TE2 is '<pos>+'
 - **Source:** twm.modules.teammate_out.history
+
+### Tendency percentile
+
+Where the offense ranks that season: 80 means it passes (or goes for it, or runs no-huddle) more than 80% of the offenses. Early in a season, and for a coach with few games, there is no rank: the sample is too small.
+
+- **Name:** `tendency_percentile`; **unit:** percentile (0-100); **used by:** coach_tendencies
+- **Formula:** 100 x (average rank - 0.5) / rows ranked, among the season's coach-team rows with at least 150 offensive snaps (fourth-down rates: at least 10 choices / 5 short choices); a higher value ranks higher, so for pace a high percentile is a slow offense and the site shows 100 - percentile as 'faster than'
+- **Source:** twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)
 
 ### Toss-up
 

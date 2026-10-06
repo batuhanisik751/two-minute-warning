@@ -148,3 +148,21 @@ equal frames):
 Rates are fractions (0-1), `proe` is in percentage points, `neutral_sec_per_play` in seconds.
 `percentile` is NULL for unranked rows; a metric without data that season has no row.
 Persistence and the fantasy link use completed seasons only (before `current_season`).
+
+## On the site (C10b)
+
+- **CLI**: `twm coach tendencies` prints the newest season's league table (`--season` another);
+  `--coach andy-reid` (or `andy_reid`, or part of a name) prints his seasons and career line.
+- **Publish** (`twm publish`, migration 0010, `src/twm/publish/coach_tendencies.py`): the four
+  frames are rebuilt from the warehouse through an AsOfView at the publish clock and replaced on
+  every run (each its own hash unit, guarded against shrinking). The warehouse `coach_id`
+  (`andy_reid`) becomes the site's id, the slug of `dim_coach.coach_name` (`andy-reid`), and the
+  coaches are upserted into `dim_coach`; NaN becomes NULL. site_meta: `coach_tendency_season`,
+  `coach_tendency_through_week`.
+- **Pages**: `/coach/[id]` "How his offense plays" (every season with value and percentile, pace
+  as "faster than N%", the career line, the persistence note); `/decisions#tendencies` (each
+  team's current head coach, the coach of its latest game, sortable, with the fantasy link);
+  `/methodology#coach-tendencies`. The persistence note and the fantasy link are written from the
+  published tables (`web/lib/coach-tendencies.ts`); the only fixed number is the reading rule
+  that calls a tendency "carried over" at r >= 0.40.
+

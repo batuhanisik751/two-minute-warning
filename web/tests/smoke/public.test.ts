@@ -33,6 +33,8 @@ const ROUTES: Record<string, boolean> = {
   "/methodology": true,
   "/playoff-planner": false,
   "/playoff-planner?pos=RB&sort=total": false,
+  // feature #10: the league table of coach tendencies (play-by-play only)
+  "/decisions": false,
 };
 /** an experts' rank as the board and the home card write it ("preseason rank" then "RB12") */
 const RANK = /preseason rank.{0,160}?\b(?:QB|RB|WR|TE)\d+\b/is;

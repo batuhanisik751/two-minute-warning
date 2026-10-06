@@ -99,7 +99,12 @@ replayed: `vs`, `seasons_won`, `took_over`; refused when the replay differs from
 snapshot of the season plus the night's; empty until a game of the last playoff week is in);
 `site_meta` gains `playoff_planner_season` / `_weeks` and `playoff_planner_latest_season` /
 `_through_week` / `_as_of`. **Apply migration 0009 to Neon before the first publish that carries
-it.**
+it.** Feature #10 (migration 0010), coach tendencies (`tables.py` `COACH_TENDENCIES`,
+`src/twm/publish/coach_tendencies.py`): `coach_tendency_season`, `_career`, `_persistence` and
+`_fantasy_link`, rebuilt from the warehouse on every publish and replaced (each its own hash
+unit, guarded); their coaches (site slugs of the warehouse's names) are upserted into
+`dim_coach`; `site_meta` gains `coach_tendency_season` / `_through_week`. **Apply migration 0010
+to Neon before the first publish that carries it** (every default publish does).
 
 1. **Target check.** `--target local` uses `TWM_LOCAL_DATABASE_URL` (default: the container
    above) and refuses any host that is not this computer. `--target remote` uses

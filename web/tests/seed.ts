@@ -13,6 +13,7 @@
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as s from "../db/schema";
 import { seedBoard } from "./seed-board";
+import { seedCoachTendencies } from "./seed-coach-tendencies";
 import { seedDecisions } from "./seed-decisions";
 import { seedHotSeat } from "./seed-hot-seat";
 import { seedQuestionable } from "./seed-questionable";
@@ -313,6 +314,8 @@ export async function seed(db: Db, variant: SeedVariant): Promise<void> {
   await seedTeammateOut(db);
   // the playoff planner (tests/seed-playoff-planner.ts; uses this seed's teams)
   await seedPlayoffPlanner(db);
+  // coach tendencies (tests/seed-coach-tendencies.ts; on the decisions seed's coaches and teams)
+  await seedCoachTendencies(db);
 }
 
 function rotateFeatured<T extends { gsisId: string }>(pool: T[], at: number): T[] {

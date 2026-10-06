@@ -22,6 +22,7 @@ import ModelCards from "@/components/methodology/ModelCards";
 import HotSeatSection from "@/components/methodology/HotSeatSection";
 import QuestionableSection from "@/components/methodology/QuestionableSection";
 import PlayoffPlannerSection from "@/components/methodology/PlayoffPlannerSection";
+import CoachTendenciesSection from "@/components/methodology/CoachTendenciesSection";
 import TeammateOutSection from "@/components/methodology/TeammateOutSection";
 import RegressionSection from "@/components/methodology/RegressionSection";
 import StreamerSection from "@/components/methodology/StreamerSection";
@@ -432,6 +433,9 @@ export default async function MethodologyPage() {
             <a href="#decisions">The Decision Report Card</a>
           </li>
           <li>
+            <a href="#coach-tendencies">Coach tendencies</a>
+          </li>
+          <li>
             <a href="#hot-seat">The Hot-Seat Meter</a>
           </li>
           <li>
@@ -699,6 +703,8 @@ export default async function MethodologyPage() {
         <PlayoffPlannerSection />
 
         <DecisionsSection />
+
+        <CoachTendenciesSection />
 
         <HotSeatSection />
 

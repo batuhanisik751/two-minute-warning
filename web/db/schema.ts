@@ -23,6 +23,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 const tstz = (name: string) => timestamp(name, { withTimezone: true });
@@ -1748,5 +1749,137 @@ export const playoffPlannerLive = pgTable(
     primaryKey({ columns: [t.season, t.position] }),
     check("playoff_planner_live_position_check", sql`${t.position} in ('QB', 'RB', 'WR', 'TE', 'K', 'DST', 'all')`),
     check("playoff_planner_live_counts_check", sql`${t.n} >= 0 and ${t.pending} >= 0 and ${t.weeks} >= 0`),
+  ],
+);
+
+// ---------------------------------------------------------------------------------------------
+// Feature #10 (migration 0010): coach tendencies (src/twm/modules/coach_tendencies,
+// docs/coach_tendencies.md): how each head coach's offense plays, per season and career, how much
+// of it carries over, and how it relates to fantasy targets. Play-by-play only. Every table is
+// replaced on each publish (src/twm/publish/coach_tendencies.py). coach_id = the site's slug.
+// ---------------------------------------------------------------------------------------------
+
+const TENDENCY_METRICS = sql.raw(
+  "('neutral_pass_rate', 'early_down_pass_rate', 'proe', 'neutral_sec_per_play', 'no_huddle_rate', 'shotgun_rate', 'fourth_go_rate', 'fourth_short_go_rate')",
+);
+/** A rate (every metric but proe, in percentage points, and the pace, in seconds) is a 0-1 share. */
+const tendencyValueCheck = (metric: AnyPgColumn, value: AnyPgColumn) =>
+  sql`(${metric} in ('proe', 'neutral_sec_per_play') or ${value} between 0 and 1) and (${metric} <> 'neutral_sec_per_play' or ${value} >= 0)`;
+
+/** One row per head coach, team, regular season and metric (1999 to the season in progress;
+ * proe and no_huddle_rate from 2006): his value, its sample (neutral snaps, pace pairs or
+ * fourth-down choices), the league's value that season and his percentile among that season's
+ * coach-team rows with enough snaps (NULL: not ranked). is_current marks the season in progress
+ * (through_week, games, plays: how much of it). A coach who changed teams mid-season has a row
+ * per team. For neutral_sec_per_play a high percentile means a slow offense. */
+export const coachTendencySeason = pgTable(
+  "coach_tendency_season",
+  {
+    coachId: text("coach_id")
+      .notNull()
+      .references(() => dimCoach.coachId),
+    team: text("team")
+      .notNull()
+      .references(() => dimTeam.teamAbbr),
+    season: integer("season").notNull(),
+    metric: text("metric").notNull(),
+    isCurrent: boolean("is_current").notNull(),
+    throughWeek: integer("through_week").notNull(),
+    games: integer("games").notNull(),
+    plays: integer("plays").notNull(),
+    value: doublePrecision("value").notNull(),
+    sample: integer("sample").notNull(),
+    leagueAvg: doublePrecision("league_avg").notNull(),
+    percentile: doublePrecision("percentile"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.coachId, t.team, t.season, t.metric] }),
+    index("coach_tendency_season_season_idx").on(t.season, t.metric),
+    check("coach_tendency_season_metric_check", sql`${t.metric} in ${TENDENCY_METRICS}`),
+    check("coach_tendency_season_value_check", tendencyValueCheck(t.metric, t.value)),
+    check("coach_tendency_season_percentile_check", sql`${t.percentile} between 0 and 100`),
+    check("coach_tendency_season_counts_check", sql`${t.season} >= 1999 and ${t.throughWeek} between 1 and 22 and ${t.games} >= 1 and ${t.plays} >= 0 and ${t.sample} >= 1`),
+  ],
+);
+
+/** One row per head coach and metric: his completed regular seasons pooled (all his plays, not a
+ * mean of season means), the league's value weighted by his sample each season, and vs_league =
+ * value - league_avg. teams: his teams, alphabetical ("KC/PHI"). The season in progress is not in it. */
+export const coachTendencyCareer = pgTable(
+  "coach_tendency_career",
+  {
+    coachId: text("coach_id")
+      .notNull()
+      .references(() => dimCoach.coachId),
+    metric: text("metric").notNull(),
+    seasons: integer("seasons").notNull(),
+    firstSeason: integer("first_season").notNull(),
+    lastSeason: integer("last_season").notNull(),
+    teams: text("teams").notNull(),
+    value: doublePrecision("value").notNull(),
+    sample: integer("sample").notNull(),
+    leagueAvg: doublePrecision("league_avg").notNull(),
+    vsLeague: doublePrecision("vs_league").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.coachId, t.metric] }),
+    check("coach_tendency_career_metric_check", sql`${t.metric} in ${TENDENCY_METRICS}`),
+    check("coach_tendency_career_value_check", tendencyValueCheck(t.metric, t.value)),
+    check("coach_tendency_career_seasons_check", sql`${t.seasons} >= 1 and ${t.firstSeason} <= ${t.lastSeason} and ${t.sample} >= 1`),
+  ],
+);
+
+/** Is it the coach or the team? Per metric and comparison (same coach and team / same coach at a
+ * new team / new coach at the same team), the Pearson r of a team-season's main-coach value
+ * (relative to the league that season) with the next one, over n_pairs pairs, with a 95%
+ * season-block bootstrap interval (NULL when it cannot be computed). Completed seasons only. */
+export const coachTendencyPersistence = pgTable(
+  "coach_tendency_persistence",
+  {
+    metric: text("metric").notNull(),
+    comparison: text("comparison").notNull(),
+    nPairs: integer("n_pairs").notNull(),
+    nSeasons: integer("n_seasons").notNull(),
+    firstSeason: integer("first_season"),
+    lastSeason: integer("last_season"),
+    r: doublePrecision("r"),
+    ciLow: doublePrecision("ci_low"),
+    ciHigh: doublePrecision("ci_high"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.metric, t.comparison] }),
+    check("coach_tendency_persistence_metric_check", sql`${t.metric} in ${TENDENCY_METRICS}`),
+    check("coach_tendency_persistence_comparison_check", sql`${t.comparison} in ('same_coach_same_team', 'same_coach_new_team', 'new_coach_same_team')`),
+    check("coach_tendency_persistence_r_check", sql`${t.r} between -1 and 1 and ${t.ciLow} <= ${t.ciHigh}`),
+    check("coach_tendency_persistence_counts_check", sql`${t.nPairs} >= 0 and ${t.nSeasons} >= 0`),
+  ],
+);
+
+/** The fantasy link, measured on completed team-seasons (both sides relative to their season):
+ * per metric, target (the team's pass-catchers' targets per game, or their full-PPR receiving
+ * points per game) and horizon (the same season, or the same team's next season), the Pearson r
+ * over n team-seasons with a 95% season-block bootstrap interval, the metric's standard deviation
+ * (x_sd) and the target's change per x_sd (y_per_x_sd = r x the target's SD). NULL when it cannot
+ * be computed. */
+export const coachTendencyFantasyLink = pgTable(
+  "coach_tendency_fantasy_link",
+  {
+    metric: text("metric").notNull(),
+    target: text("target").notNull(),
+    horizon: text("horizon").notNull(),
+    n: integer("n").notNull(),
+    nSeasons: integer("n_seasons").notNull(),
+    r: doublePrecision("r"),
+    ciLow: doublePrecision("ci_low"),
+    ciHigh: doublePrecision("ci_high"),
+    xSd: doublePrecision("x_sd"),
+    yPerXSd: doublePrecision("y_per_x_sd"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.metric, t.target, t.horizon] }),
+    check("coach_tendency_fantasy_link_metric_check", sql`${t.metric} in ${TENDENCY_METRICS}`),
+    check("coach_tendency_fantasy_link_target_check", sql`${t.target} in ('targets_per_game', 'recv_ppr_per_game') and ${t.horizon} in ('same_season', 'next_season')`),
+    check("coach_tendency_fantasy_link_r_check", sql`${t.r} between -1 and 1 and ${t.ciLow} <= ${t.ciHigh} and ${t.xSd} >= 0`),
+    check("coach_tendency_fantasy_link_counts_check", sql`${t.n} >= 0 and ${t.nSeasons} >= 0`),
   ],
 );

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import LeagueTendencies from "@/components/coach-tendencies/LeagueTendencies";
 import ClockCaseList from "@/components/decisions/ClockCaseList";
 import DecisionList from "@/components/decisions/DecisionList";
 import HowItWorks from "@/components/decisions/HowItWorks";
@@ -7,13 +8,15 @@ import SeasonPicker from "@/components/decisions/SeasonPicker";
 import { SeasonSummary, TossUps } from "@/components/decisions/SeasonSummary";
 import Term from "@/components/Term";
 import { EmptyState, Note, PageHeader } from "@/components/ui";
+import { parseTendencySort } from "@/lib/coach-tendencies";
 import { leagueTotals, rankCoaches } from "@/lib/decisions";
 import { fmtInt } from "@/lib/format";
 import { parseInt4 } from "@/lib/params";
+import { getSeasonTendencies, getTendencyMeta, getTendencyStudies } from "@/lib/queries/coach-tendencies";
 import { getBestCalls, getClockCases, getDecisionSeasons, getDecisionsMeta, getSeasonCoaches, getWorstCalls, type DecisionsMeta } from "@/lib/queries/decisions";
 import { pageMetadata } from "@/lib/seo";
 
-export const metadata = pageMetadata("/decisions", "Decision Report Card", "The Decision Report Card: NFL head coaches' fourth-down, two-point and clock decisions graded by win probability, the season's best and worst calls, and the leaderboard.");
+export const metadata = pageMetadata("/decisions", "Decision Report Card", "The Decision Report Card: NFL head coaches' fourth-down, two-point and clock decisions graded by win probability, the season's best and worst calls, the leaderboard, and how each offense plays.");
 
 /** How many worst and best calls a season shows (the lists fold after 10). */
 const WORST = 20;
@@ -49,12 +52,16 @@ export default async function DecisionsPage({ searchParams }: PageProps<"/decisi
   }
   const asked = parseInt4(sp.season);
   const season = asked !== null && seasons.includes(asked) ? asked : seasons[0];
-  const [coaches, worst, best, clock] = await Promise.all([
+  const [coaches, worst, best, clock, tMeta, studies] = await Promise.all([
     getSeasonCoaches(season),
     getWorstCalls(season, null, null, WORST),
     getBestCalls(season, null, null, BEST),
     getClockCases(season, null),
+    getTendencyMeta(),
+    getTendencyStudies(),
   ]);
+  const tSeason = tMeta.season;
+  const tRows = tSeason !== null ? await getSeasonTendencies(tSeason) : [];
   const { ranked, fewer, minGames } = rankCoaches(coaches);
   const league = leagueTotals(coaches);
   const name = seasonName(season, meta);
@@ -96,6 +103,9 @@ export default async function DecisionsPage({ searchParams }: PageProps<"/decisi
         ) : null}
       </section>
       <TossUps name={name} league={league} />
+      {tSeason !== null && tRows.length ? (
+        <LeagueTendencies season={tSeason} rows={tRows} link={studies.link} sort={parseTendencySort(sp.tsort)} query={asked !== null ? { season: String(asked) } : {}} />
+      ) : null}
       <section aria-labelledby="worst-heading" className="mt-10">
         <h2 id="worst-heading" className="section-title mb-2 scroll-mt-24">
           Worst calls, {name}

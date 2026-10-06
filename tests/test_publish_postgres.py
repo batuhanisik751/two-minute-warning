@@ -758,7 +758,8 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                                                   "0006_regression_ranges",
                                                   "0007_questionable",
                                                   "0008_teammate_out",
-                                                  "0009_playoff_planner"]  # fmt: skip
+                                                  "0009_playoff_planner",
+                                                  "0010_coach_tendencies"]  # fmt: skip
         job = tg.resolve("local", env={tg.LOCAL_ENV: make_conninfo(
             url, user="twm_job", password=roles["twm_job"])}, env_file=NO_ENV_FILE)  # fmt: skip
         syn = ps.build(tmp_path / "syn", live_weeks=(3,))
@@ -777,6 +778,10 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
         res = publish_playoff_planner(job, syn.inputs, pps.write_store(tmp_path / "p.duckdb"),
                                       played=pps.actuals((15, 16, 17)))  # fmt: skip
         assert res.counts["playoff_planner_row"] == pps.N_ROWS
+        from tests import publish_coach_tendencies_synthetic as pcs  # feature #10 (0010)
+
+        res = publish_coach_tendencies(job, syn.inputs)
+        assert res.counts["coach_tendency_season"] == pcs.N_SEASON
         web = make_conninfo(url, user="twm_web", password=roles["twm_web"])
         with psycopg.connect(web, autocommit=True) as conn:
             for t in ("stream_list", "stream_pick", "regression_row", "regression_track_record",
@@ -791,7 +796,9 @@ def test_the_p2_tables_are_covered_by_roles_made_before_them(
                       "teammate_out_live", "playoff_planner_list", "playoff_planner_row",
                       "playoff_planner_choice", "playoff_planner_backtest",
                       "playoff_planner_effects", "playoff_planner_stability",
-                      "playoff_planner_late_weeks", "playoff_planner_live"):  # fmt: skip
+                      "playoff_planner_late_weeks", "playoff_planner_live",
+                      "coach_tendency_season", "coach_tendency_career",
+                      "coach_tendency_persistence", "coach_tendency_fantasy_link"):  # fmt: skip
                 assert conn.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] > 0
             for t in ("dim_coach", "decision_fourth", "coach_season", "decisions_track_record"):
                 conn.execute(f'SELECT count(*) FROM "{t}"')  # P3 tables: readable by the site
@@ -1256,3 +1263,54 @@ def test_the_playoff_planner_live_record_counts_the_published_snapshots(
     res = publish_playoff_planner(db, syn.inputs, tmp_path / "empty.duckdb", played=played)
     assert "playoff_planner_live" in res.unchanged and not res.written["playoff_planner_list"]
     assert rows(db, live) == record
+
+
+# --------------------------------------------------------------------------------------
+# Feature #10: coach tendencies (replaced tables; their coaches join dim_coach)
+# --------------------------------------------------------------------------------------
+
+
+def publish_coach_tendencies(target: tg.Target, inputs, *, nan: bool = False,
+                             keep: int | None = None, **kwargs) -> wr.PublishResult:  # fmt: skip
+    """Publish the synthetic data with coach tendencies (``keep``: only that many season rows)."""
+    from tests import publish_coach_tendencies_synthetic as pcs
+
+    data = pcs.add_coach_tendencies(col.collect(inputs), nan=nan)
+    if keep is not None:
+        name = "coach_tendency_season"
+        data.tables[name] = data.coach_tendencies.tables[name] = data.tables[name].head(keep)
+    assert col.validate(data) == []
+    return wr.publish(target, data, **kwargs)
+
+
+def test_coach_tendencies_are_replaced_with_site_coach_ids(db: tg.Target, tmp_path: Path) -> None:
+    from tests import publish_coach_tendencies_synthetic as pcs
+
+    syn = ps.build(tmp_path, live_weeks=(3,))
+    res = publish_coach_tendencies(db, syn.inputs, nan=True)
+    c = res.counts
+    assert (c["coach_tendency_season"], c["coach_tendency_career"]) == (pcs.N_SEASON,
+                                                                          pcs.N_CAREER)  # fmt: skip
+    assert (c["coach_tendency_persistence"], c["coach_tendency_fantasy_link"]) == (24, 32)
+    # NaN arrives as NULL; the coaches are the site's slugs, in dim_coach with their names
+    assert rows(db, "SELECT count(*) FROM coach_tendency_persistence WHERE r IS NULL") == [(1,)]
+    assert rows(db, "SELECT count(*) FROM coach_tendency_fantasy_link WHERE r IS NULL") == [(1,)]
+    assert rows(db, "SELECT name FROM dim_coach WHERE coach_id = 'renee-d-arcy'") == [
+        ("Renée D'Arcy",)]  # fmt: skip
+    ids = rows(db, "SELECT DISTINCT coach_id FROM coach_tendency_season ORDER BY 1")
+    assert [i for (i,) in ids] == sorted(pcs.SLUGS.values())
+    meta = dict(rows(db, "SELECT key, value FROM site_meta"))
+    assert (meta["coach_tendency_season"], meta["coach_tendency_through_week"]) == ("2026", "3")
+    # a second run rewrites nothing; fewer rows are refused by the shrink guard
+    content = dump(db)
+    res = publish_coach_tendencies(db, syn.inputs, nan=True)
+    assert {"coach_tendency_season", "coach_tendency_career", "coach_tendency_persistence",
+            "coach_tendency_fantasy_link"} <= set(res.unchanged)  # fmt: skip
+    assert dump(db) == content
+    with pytest.raises(wr.PublishError, match="coach_tendency_season would go from 40 to 8"):
+        publish_coach_tendencies(db, syn.inputs, nan=True, keep=8)
+    assert dump(db) == content
+    # changed content (no NaN now) is replaced
+    res = publish_coach_tendencies(db, syn.inputs)
+    assert res.written["coach_tendency_persistence"] == 24
+    assert rows(db, "SELECT count(*) FROM coach_tendency_persistence WHERE r IS NULL") == [(0,)]

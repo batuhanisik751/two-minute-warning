@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import ClockCaseList from "@/components/decisions/ClockCaseList";
+import CoachTendencies from "@/components/coach-tendencies/CoachTendencies";
 import CoachChart from "@/components/decisions/CoachChart";
 import DecisionList from "@/components/decisions/DecisionList";
 import { CountCells, CountHeaders } from "@/components/decisions/Leaderboard";
@@ -29,7 +30,7 @@ export async function generateMetadata({ params }: PageProps<"/coach/[id]">): Pr
   return pageMetadata(
     `/coach/${id}`,
     c.name,
-    `${c.name}: graded fourth-down, two-point and clock decisions by season, the worst and best calls, record vs expectation and the Hot-Seat Meter's history.`,
+    `${c.name}: graded fourth-down, two-point and clock decisions, the worst and best calls, how his offense plays, record vs expectation and the Hot-Seat Meter's history.`,
   );
 }
 
@@ -114,6 +115,7 @@ export default async function CoachPage({ params }: PageProps<"/coach/[id]">) {
           <p className="text-muted">No season row published for this coach.</p>
         )}
       </section>
+      <CoachTendencies coachId={id} name={coach.name} />
       <CoachRecord rows={hotSeat} name={coach.name} />
       <CoachHotSeat rows={hotSeat} name={coach.name} season={hotSeatMeta.latest?.season ?? null} />
       <section aria-labelledby="coach-worst-heading" className="mt-10">

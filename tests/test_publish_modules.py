@@ -28,9 +28,11 @@ def data(tmp_path: Path) -> col.PublishData:
 
 
 def test_every_list_table_belongs_to_one_module() -> None:
-    # P3 (decisions), features #1 / #5 / #6 (append-only snapshots) are not list families
+    # P3 (decisions), features #1 / #5 / #6 (append-only snapshots) and #10 (coach tendencies,
+    # replaced tables only) are not list families
     snapshots = ("questionable", "teammate_out", "playoff_planner")
-    assert list(FAMILIES) == [m for m in col.MODULES if m not in ("decisions", *snapshots)]
+    others = ("decisions", *snapshots, "coach_tendencies")
+    assert list(FAMILIES) == [m for m in col.MODULES if m not in others]
     for f in FAMILIES.values():
         for name in (f.lists, f.rows):
             assert TABLES[name].mode == "lists" and "kind" in TABLES[name].names

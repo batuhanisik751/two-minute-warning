@@ -396,6 +396,11 @@
       "explanation": "How often a tagged player who did play scored less than half his usual. Healthy players do that too (about 1 in 4), so compare the two numbers.",
       "formula": "among tagged players who played, with 2+ earlier games and 5+ points per game so far: share whose points that week were below 50% of their points per game so far; compared with healthy players matched on season, week, position and points-per-game band"
     },
+    "early_down_pass_rate": {
+      "title": "Early-down pass rate",
+      "explanation": "The neutral pass rate on first and second down only, where the play-caller has the most choice. Higher = passes more on early downs.",
+      "formula": "share of neutral 1st-2nd-down snaps that were dropbacks; neutral snap: an offensive snap (pass or run with a down) on downs 1-3 in quarters 1-3 with fact_play.is_neutral"
+    },
     "ecr_available": {
       "title": "Expert ranks available",
       "explanation": "Whether the experts' ranking existed at that moment; the expert baseline is only graded where it did.",
@@ -480,6 +485,16 @@
       "title": "Fourth-down WP lost per game",
       "explanation": "How much win probability the coach's fourth-down calls have cost per game.",
       "formula": "sum of wp_lost on the team's clear (graded) fourth downs in its games to date / games to date, from the stored Decision Report Card grades (never regraded); NULL before 2006 or when one of the games has no grades"
+    },
+    "fourth_go_rate": {
+      "title": "Fourth-down go rate",
+      "explanation": "How often the offense runs a play on fourth down instead of punting or kicking a field goal, in close games. Higher = more aggressive.",
+      "formula": "share of neutral fourth-down choices where the offense ran a play; fourth-down choice: play_type pass, run, punt, field_goal with fact_play.is_neutral, any quarter; fakes count as going"
+    },
+    "fourth_short_go_rate": {
+      "title": "Fourth-and-short go rate",
+      "explanation": "The fourth-down go rate on 4th-and-1 or 4th-and-2, where going is most often right. Higher = more aggressive.",
+      "formula": "the same on 4th-and-1 or 4th-and-2; fourth-down choice: play_type pass, run, punt, field_goal with fact_play.is_neutral, any quarter; fakes count as going; ydstogo <= 2"
     },
     "fpoe": {
       "title": "FPOE (fantasy points over expected)",
@@ -826,6 +841,16 @@
       "explanation": "How many window weeks the player actually took the field on offense. A label detail: never a model feature.",
       "formula": "window weeks with fact_snaps.offense_snaps > 0 or a stat line, for any team"
     },
+    "neutral_pass_rate": {
+      "title": "Neutral pass rate",
+      "explanation": "How often the offense drops back to pass when the game is close and nobody is in a hurry. Higher = passes more; it removes the trailing team throwing and the leading team running out the clock.",
+      "formula": "share of neutral 1st-3rd-down snaps that were dropbacks; neutral snap: an offensive snap (pass or run with a down) on downs 1-3 in quarters 1-3 with fact_play.is_neutral"
+    },
+    "neutral_sec_per_play": {
+      "title": "Neutral pace",
+      "explanation": "Game-clock seconds between snaps in close games. Lower = faster: more plays, more chances for your players. The site shows it as faster than N% of offenses.",
+      "formula": "game-clock seconds between consecutive snaps of a drive, neutral; pace pair: a neutral snap and the same offense's next snap of the drive and quarter with nothing between and no timeout charged; gaps over 60 seconds are clock glitches and dropped"
+    },
     "new_competitor_s1": {
       "title": "New competition",
       "explanation": "A rookie or an arrival shares his role.",
@@ -900,6 +925,11 @@
       "title": "Separation trend",
       "explanation": "Negative: he is getting less open than a year before.",
       "formula": "ngs_separation_s - the S-1 value"
+    },
+    "no_huddle_rate": {
+      "title": "No-huddle rate",
+      "explanation": "How often the offense snaps the ball without huddling first, in close games. Higher = more hurry-up: the cleanest sign of a deliberately fast offense.",
+      "formula": "share of neutral snaps run no-huddle (from 2006: earlier seasons are not charted); neutral snap: an offensive snap (pass or run with a down) on downs 1-3 in quarters 1-3 with fact_play.is_neutral"
     },
     "noise_variance": {
       "title": "Noise variance per game",
@@ -1186,6 +1216,11 @@
       "explanation": "A suggestion from the chance: must-add, speculative or watch. The cutoffs, and how often each priority hit in the backtest, are on the Methodology page.",
       "formula": "from the chance, for the top 25 of a list: must-add when it is at least 0.50, speculative from 0.25 up to that, watch below; ranks 26 and lower get none. The bins only go up, so each priority is a cutoff on the model probability"
     },
+    "proe": {
+      "title": "Pass rate over expected (PROE)",
+      "explanation": "How much more often the offense passes than an average team would in the same down, distance, field position, score and clock. Higher = passes more than expected; 0 = league-typical; negative = runs more than expected.",
+      "formula": "pass rate over expected: mean nflfastR pass_oe (percentage points) over offensive snaps where it is defined, all situations (from 2006: earlier seasons are not charted); every situation: nflfastR's expected pass rate already models down, distance, field position, score, clock and win probability"
+    },
     "projection_range": {
       "title": "80% range",
       "explanation": "Where his rest-of-season points per game should land 8 times in 10: the projection plus how far off it was for similar players in earlier seasons. In the backtest the real result fell inside about 80% of the time at every position (the Methodology page shows each share); it says nothing about games he misses.",
@@ -1370,6 +1405,11 @@
       "title": "Sell-high",
       "explanation": "He has scored well above what his chances were worth, and the projection says it will fade: a good time to trade him away.",
       "formula": "FPOE/game in the top ceil(n / 10) FPOE/game of his position's universe at that as-of AND ppg_ros at least X (tag_threshold_x) below his PPG"
+    },
+    "shotgun_rate": {
+      "title": "Shotgun rate",
+      "explanation": "How often the quarterback lines up a few yards behind the center (shotgun) in close games. Higher = more spread-out, pass-ready formations.",
+      "formula": "share of neutral snaps from shotgun; neutral snap: an offensive snap (pass or run with a down) on downs 1-3 in quarters 1-3 with fact_play.is_neutral"
     },
     "shrinkage_factor": {
       "title": "Shrinkage factor",
@@ -1590,6 +1630,21 @@
       "title": "Temperature",
       "explanation": "Cold air and a hard ball make long kicks shorter.",
       "formula": "fact_game.temp, else the 'Temp: N' in fact_play.weather; indoors = 70; still unknown outdoors -> NULL, filled with the median of the training rows' outdoor games"
+    },
+    "tendency_fantasy_link": {
+      "title": "Coach tendency and fantasy targets",
+      "explanation": "Whether an offense's style shows up in fantasy numbers: a team that passes more than expected throws more targets to its receivers the same season, and a little of that carries into the next. Measured, not assumed.",
+      "formula": "Pearson r over completed team-seasons (both sides relative to their season) of a tendency with the team's pass-catchers' targets per game (or full-PPR receiving points per game) the same season and the next season; y_per_x_sd = r x the target's SD: the change per standard deviation of the tendency; 95% season-block bootstrap interval"
+    },
+    "tendency_percentile": {
+      "title": "Tendency percentile",
+      "explanation": "Where the offense ranks that season: 80 means it passes (or goes for it, or runs no-huddle) more than 80% of the offenses. Early in a season, and for a coach with few games, there is no rank: the sample is too small.",
+      "formula": "100 x (average rank - 0.5) / rows ranked, among the season's coach-team rows with at least 150 offensive snaps (fourth-down rates: at least 10 choices / 5 short choices); a higher value ranks higher, so for pace a high percentile is a slow offense and the site shows 100 - percentile as 'faster than'"
+    },
+    "tendency_persistence": {
+      "title": "Does a coach's style carry over?",
+      "explanation": "How well this year's style predicts next year's: 1 = exactly, 0 = not at all. Comparing the coach who moves with the team he left shows whether a tendency belongs to the coach or to the team around him.",
+      "formula": "Pearson r of a team-season's main-coach value (most snaps, at least 400; minus the league that season) with the next one, for three kinds of pairs: same coach and team, same coach at a new team, new coach at the same team; 95% interval from a season-block bootstrap (2,000 draws, fixed seed); completed seasons only"
     },
     "tenure_censored": {
       "title": "Tenure starts before the data",

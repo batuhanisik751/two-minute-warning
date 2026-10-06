@@ -41,6 +41,7 @@ MODULES = (
     "questionable",
     "teammate_out",
     "playoff_planner",
+    "coach_tendencies",
 )
 _NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 # Placeholders a reason template may use (C6, twm.modules.waiver_radar.reasons, fills them
@@ -1968,6 +1969,153 @@ def _playoff_planner_entries() -> list[Entry]:
     ]
 
 
+def _coach_tendencies_entries() -> list[Entry]:
+    """Feature #10 (twm.modules.coach_tendencies, docs/coach_tendencies.md): how each head
+    coach's offense plays, per season and career against the league, how much of it carries
+    over and how it relates to fantasy targets. Numbers measured on the data live in the
+    published tables, never here."""
+    from twm.modules.coach_tendencies import persistence as ps
+    from twm.modules.coach_tendencies import plays as cp
+    from twm.modules.coach_tendencies import season as se
+
+    mods = ("coach_tendencies",)
+    src = "twm.modules.coach_tendencies (fact_play joined to coach_game; see the docs folder)"
+    neutral = (f"neutral snap: an offensive snap (pass or run with a down) on downs 1-"
+               f"{cp.NEUTRAL_MAX_DOWN} in quarters 1-{cp.NEUTRAL_MAX_QTR} with "
+               "fact_play.is_neutral")  # fmt: skip
+    scope = {
+        "proe": "every situation: nflfastR's expected pass rate already models down, distance, "
+        "field position, score, clock and win probability",
+        "neutral_sec_per_play": f"pace pair: a neutral snap and the same offense's next snap "
+        f"of the drive and quarter with nothing between and no timeout charged; gaps over "
+        f"{cp.MAX_PAIR_SECONDS} seconds are clock glitches and dropped",
+        "fourth_go_rate": f"fourth-down choice: play_type {', '.join(cp.FOURTH_CHOICES)} with "
+        "fact_play.is_neutral, any quarter; fakes count as going",
+    }
+    scope["fourth_short_go_rate"] = f"{scope['fourth_go_rate']}; ydstogo <= {cp.SHORT_YARDS}"
+    first = {m: f" (from {y}: earlier seasons are not charted)" for m, y in se.FIRST_SEASON.items()}
+    rate = "share (0-1)"
+
+    def tendency(name: str, title: str, unit: str, explanation: str, **kw: bool) -> Entry:
+        formula = f"{se.METRICS[name]}{first.get(name, '')}; {scope.get(name, neutral)}"
+        return Entry(name=name, title=title, kind="metric", modules=mods, unit=unit,
+                     formula=formula, explanation=explanation, source=src, **kw)  # fmt: skip
+
+    return [
+        tendency(
+            "neutral_pass_rate",
+            "Neutral pass rate",
+            rate,
+            "How often the offense drops back to pass when the game is close and nobody "
+            "is in a hurry. Higher = passes more; it removes the trailing team throwing "
+            "and the leading team running out the clock.",
+        ),
+        tendency(
+            "early_down_pass_rate",
+            "Early-down pass rate",
+            rate,
+            "The neutral pass rate on first and second down only, where the play-caller "
+            "has the most choice. Higher = passes more on early downs.",
+        ),
+        tendency(
+            "proe",
+            "Pass rate over expected (PROE)",
+            "percentage points",
+            "How much more often the offense passes than an average team would in the "
+            "same down, distance, field position, score and clock. Higher = passes more "
+            "than expected; 0 = league-typical; negative = runs more than expected.",
+            model_output=True,
+        ),
+        tendency(
+            "neutral_sec_per_play",
+            "Neutral pace",
+            "seconds per play",
+            "Game-clock seconds between snaps in close games. Lower = faster: more plays, "
+            "more chances for your players. The site shows it as faster than N% of "
+            "offenses.",
+        ),
+        tendency(
+            "no_huddle_rate",
+            "No-huddle rate",
+            rate,
+            "How often the offense snaps the ball without huddling first, in close games. "
+            "Higher = more hurry-up: the cleanest sign of a deliberately fast offense.",
+        ),
+        tendency(
+            "shotgun_rate",
+            "Shotgun rate",
+            rate,
+            "How often the quarterback lines up a few yards behind the center (shotgun) "
+            "in close games. Higher = more spread-out, pass-ready formations.",
+        ),
+        tendency(
+            "fourth_go_rate",
+            "Fourth-down go rate",
+            rate,
+            "How often the offense runs a play on fourth down instead of punting or "
+            "kicking a field goal, in close games. Higher = more aggressive.",
+        ),
+        tendency(
+            "fourth_short_go_rate",
+            "Fourth-and-short go rate",
+            rate,
+            "The fourth-down go rate on 4th-and-1 or 4th-and-2, where going is most often "
+            "right. Higher = more aggressive.",
+        ),
+        Entry(
+            name="tendency_percentile",
+            title="Tendency percentile",
+            kind="concept",
+            modules=mods,
+            unit="percentile (0-100)",
+            formula="100 x (average rank - 0.5) / rows ranked, among the season's coach-team rows "
+            f"with at least {se.MIN_PLAYS_RANKED} offensive snaps (fourth-down rates: at least "
+            + " / ".join(
+                f"{n} {'choices' if m == 'fourth_go_rate' else 'short choices'}"
+                for m, n in se.MIN_SAMPLE_RANKED.items()
+            )
+            + "); a higher value ranks higher, so for pace a high percentile is a slow offense "
+            "and the site shows 100 - percentile as 'faster than'",
+            explanation="Where the offense ranks that season: 80 means it passes (or goes for "
+            "it, or runs no-huddle) more than 80% of the offenses. Early in a season, and for a "
+            "coach with few games, there is no rank: the sample is too small.",
+            source=src,
+        ),
+        Entry(
+            name="tendency_persistence",
+            title="Does a coach's style carry over?",
+            kind="concept",
+            modules=mods,
+            unit="correlation (-1 to 1)",
+            formula="Pearson r of a team-season's main-coach value (most snaps, at least "
+            f"{ps.MIN_PLAYS_PAIR}; minus the league that season) with the next one, for "
+            "three kinds of pairs: same coach and team, same coach at a new team, new coach "
+            f"at the same team; 95% interval from a season-block bootstrap ({ps.N_BOOT:,} "
+            "draws, fixed seed); completed seasons only",
+            explanation="How well this year's style predicts next year's: 1 = exactly, 0 = not "
+            "at all. Comparing the coach who moves with the team he left shows whether a "
+            "tendency belongs to the coach or to the team around him.",
+            source=src,
+        ),
+        Entry(
+            name="tendency_fantasy_link",
+            title="Coach tendency and fantasy targets",
+            kind="metric",
+            modules=mods,
+            unit="correlation (-1 to 1)",
+            formula="Pearson r over completed team-seasons (both sides relative to their "
+            "season) of a tendency with the team's pass-catchers' targets per game (or "
+            "full-PPR receiving points per game) the same season and the next season; "
+            "y_per_x_sd = r x the target's SD: the change per standard deviation of the "
+            "tendency; 95% season-block bootstrap interval",
+            explanation="Whether an offense's style shows up in fantasy numbers: a team that "
+            "passes more than expected throws more targets to its receivers the same season, "
+            "and a little of that carries into the next. Measured, not assumed.",
+            source=src,
+        ),
+    ]
+
+
 def _site_entries() -> list[Entry]:
     """Terms the site uses to present the modules (how to read a chance, live or reconstructed,
     the intervals, the Report Card's calls, the board's markers), moved word for word from
@@ -3020,6 +3168,7 @@ def _entries() -> list[Entry]:
         *_questionable_entries(),
         *_teammate_out_entries(),
         *_playoff_planner_entries(),
+        *_coach_tendencies_entries(),
         *_site_entries(),
         # ---- labels (C2) ---------------------------------------------------------------
         Entry(

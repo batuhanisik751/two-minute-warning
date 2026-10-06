@@ -42,6 +42,8 @@ How a publish treats each table (the reviewer's rules of 2026-09-28):
   the same rules (:data:`SNAPSHOTS`); so does feature #6, the playoff planner
   (:data:`PLAYOFF_PLANNER`), whose snapshots are keyed by (season, through_week): one per
   completed week.
+- Feature #10, coach tendencies (:data:`COACH_TENDENCIES`): four **replace** tables rebuilt
+  from the warehouse on every publish, each its own hash unit, guarded like the others.
 """
 
 from __future__ import annotations
@@ -506,6 +508,32 @@ TABLES: dict[str, Table] = {
             ("pending", "integer"), ("weeks", "integer"), ("mae_rating", DP),
             ("mae_flat", DP),
         ),
+        # feature #10 (migration 0010): coach tendencies, every table replaced (COACH_TENDENCIES)
+        _t(
+            "coach_tendency_season", ("coach_id", "team", "season", "metric"), "replace",
+            ("coach_id", "text"), ("team", "text"), ("season", "integer"), ("metric", "text"),
+            ("is_current", "boolean"), ("through_week", "integer"), ("games", "integer"),
+            ("plays", "integer"), ("value", DP), ("sample", "integer"), ("league_avg", DP),
+            ("percentile", DP),
+        ),
+        _t(
+            "coach_tendency_career", ("coach_id", "metric"), "replace",
+            ("coach_id", "text"), ("metric", "text"), ("seasons", "integer"),
+            ("first_season", "integer"), ("last_season", "integer"), ("teams", "text"),
+            ("value", DP), ("sample", "integer"), ("league_avg", DP), ("vs_league", DP),
+        ),
+        _t(
+            "coach_tendency_persistence", ("metric", "comparison"), "replace",
+            ("metric", "text"), ("comparison", "text"), ("n_pairs", "integer"),
+            ("n_seasons", "integer"), ("first_season", "integer"), ("last_season", "integer"),
+            ("r", DP), ("ci_low", DP), ("ci_high", DP),
+        ),
+        _t(
+            "coach_tendency_fantasy_link", ("metric", "target", "horizon"), "replace",
+            ("metric", "text"), ("target", "text"), ("horizon", "text"), ("n", "integer"),
+            ("n_seasons", "integer"), ("r", DP), ("ci_low", DP), ("ci_high", DP), ("x_sd", DP),
+            ("y_per_x_sd", DP),
+        ),
     )
 }  # fmt: skip
 
@@ -525,7 +553,9 @@ WRITE_ORDER = (
     "teammate_out_events", "teammate_out_live", "playoff_planner_list", "playoff_planner_row",
     "playoff_planner_choice", "playoff_planner_backtest", "playoff_planner_effects",
     "playoff_planner_stability", "playoff_planner_late_weeks", "playoff_planner_live",
-    "tier_stats", "player_week_summary", "glossary", "site_meta", "pipeline_runs",
+    "coach_tendency_season", "coach_tendency_career", "coach_tendency_persistence",
+    "coach_tendency_fantasy_link", "tier_stats", "player_week_summary", "glossary", "site_meta",
+    "pipeline_runs",
 )  # fmt: skip
 REPLACED = tuple(n for n in WRITE_ORDER if TABLES[n].mode == "replace")
 assert set(WRITE_ORDER) == set(TABLES), "WRITE_ORDER must name every table"
@@ -642,11 +672,16 @@ PLAYOFF_PLANNER = Snapshots("playoff_planner", "playoff_planner_list", "playoff_
                              "playoff_planner_late_weeks", "playoff_planner_live"),
                             "playoff planner")  # fmt: skip
 SNAPSHOTS = (QUESTIONABLE, TEAMMATE_OUT, PLAYOFF_PLANNER)
+# feature #10: coach tendencies, rebuilt from the warehouse on every publish: four replaced
+# tables (each its own hash unit, guarded like the others); their coaches join dim_coach
+COACH_TENDENCIES = ("coach_tendency_season", "coach_tendency_career",
+                    "coach_tendency_persistence", "coach_tendency_fantasy_link")  # fmt: skip
 _owned = [n for f in FAMILIES.values() for n in (f.lists, f.rows, f.outcomes, *f.replaced)]
 assert set(_owned) | set(SHARED) | {"site_meta"} | set(DECISIONS.replaced) | {
     n for s in SNAPSHOTS for n in s.replaced
-} == {n for n, t in TABLES.items() if t.mode in ("replace", "lists")}, (
-    "every replaced or list table belongs to one family, SHARED, DECISIONS, SNAPSHOTS or site_meta"
+} | set(COACH_TENDENCIES) == {n for n, t in TABLES.items() if t.mode in ("replace", "lists")}, (
+    "every replaced or list table belongs to one family, SHARED, DECISIONS, SNAPSHOTS, "
+    "COACH_TENDENCIES or site_meta"
 )
 assert set(DECISIONS.tables) == {n for n, t in TABLES.items() if t.mode == "seasons"}
 assert {n for s in SNAPSHOTS for n in (s.lists, s.rows)} == {

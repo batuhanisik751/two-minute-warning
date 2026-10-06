@@ -71,6 +71,13 @@
       "when": 1791252202607,
       "tag": "0009_playoff_planner",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791257165958,
+      "tag": "0010_coach_tendencies",
+      "breakpoints": true
     }
   ]
 }

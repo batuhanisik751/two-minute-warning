@@ -9,6 +9,7 @@ import typer
 from twm import __version__
 from twm.modules.board import production_cli as _board_pins  # noqa: F401 (I2c-a commands)
 from twm.modules.board.cli import board_app
+from twm.modules.coach_tendencies.cli import coach_app
 from twm.modules.decisions import production_cli as _decisions_pins  # noqa: F401 (P3 commands)
 from twm.modules.decisions.cli import decisions_app
 from twm.modules.hot_seat import production_cli as _hot_seat_pins  # noqa: F401 (H4a commands)
@@ -337,6 +338,7 @@ app.add_typer(offseason_app, name="offseason")  # I6b: the yearly routine (docs/
 app.add_typer(questionable_app, name="questionable")  # feature #1 (docs/questionable.md)
 app.add_typer(teammate_out_app, name="teammate_out")  # feature #5 (docs/teammate_out.md)
 app.add_typer(playoff_planner_app, name="playoff_planner")  # feature #6 (docs/playoff_planner.md)
+app.add_typer(coach_app, name="coach")  # feature #10: coach tendencies (docs/coach_tendencies.md)
 
 
 def _warehouse_or_exit(db: Path | None) -> Path:

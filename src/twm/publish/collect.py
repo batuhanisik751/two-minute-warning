@@ -42,7 +42,7 @@ from twm.config import FANTASY_POSITIONS
 MODULE = "waiver_radar"
 # tables.FAMILIES, and (step P3) the Decision Report Card (tables.DECISIONS)
 MODULES = ("waiver_radar", "streamer", "regression_watch", "decisions", "hot_seat", "board",
-           "questionable", "teammate_out", "playoff_planner")  # fmt: skip
+           "questionable", "teammate_out", "playoff_planner", "coach_tendencies")  # fmt: skip
 TOP_N = 25  # published picks per list (the weekly report's top 25: confidence.TOP_N)
 # nflverse gsis ids: "00-0034796" (most players) or "BAT138483" (older ids; checked: every
 # dim_player id in the 2026-09-28 warehouse matches one of the two)
@@ -170,6 +170,9 @@ class PublishData:
     # feature #6: the playoff planner (twm.publish.playoff_planner.PlayoffPlannerData; None =
     # not touched)
     playoff_planner: Any = None
+    # feature #10: coach tendencies (twm.publish.coach_tendencies.CoachTendencyData; None = not
+    # touched)
+    coach_tendencies: Any = None
 
     # the Waiver Radar's lists by their E2 names
     @property
@@ -965,6 +968,13 @@ def collect(inputs: Inputs) -> PublishData:
         ppd = pp.collect_playoff_planner(inputs.store, inputs.warehouse, season, inputs.now)
         tables.update(ppd.tables)
         meta.update(pp.meta(ppd))
+    ctd = None
+    if "coach_tendencies" in inputs.modules:  # feature #10: replaced tables (the warehouse)
+        from twm.publish import coach_tendencies as ct
+
+        ctd = ct.collect_coach_tendencies(inputs.warehouse, season, inputs.now)
+        tables.update(ctd.tables)
+        meta.update(ct.meta(ctd))
     dec = None
     if "decisions" in inputs.modules:  # step P3: the frozen history + the season in progress
         from twm.publish import decisions as dc
@@ -984,6 +994,8 @@ def collect(inputs: Inputs) -> PublishData:
         })  # fmt: skip
     if hot_coaches is not None:  # the Hot-Seat coaches join the decisions' (same slugs)
         tables["dim_coach"] = merge_coaches(tables.get("dim_coach"), hot_coaches)
+    if ctd is not None:  # feature #10: the coach-tendency coaches too (same slugs)
+        tables["dim_coach"] = merge_coaches(tables.get("dim_coach"), ctd.coaches)
     ids = families[MODULE].outcome_keys.get_column("gsis_id").to_list()
     ids += pws.get_column("gsis_id").to_list()
     if "regression_watch" in families:
@@ -1045,7 +1057,7 @@ def collect(inputs: Inputs) -> PublishData:
     })  # fmt: skip
     return PublishData(season=season, now=inputs.now, families=families, tables=tables,
                        meta=meta, data_as_of=data_as_of, decisions=dec, questionable=qd,
-                       teammate_out=td, playoff_planner=ppd,
+                       teammate_out=td, playoff_planner=ppd, coach_tendencies=ctd,
                        warnings=list(dec.warnings) if dec is not None else [])  # fmt: skip
 
 
@@ -1336,6 +1348,12 @@ def validate(data: PublishData) -> list[str]:
 
         known_v = set(t["model_versions"].get_column("model_version").to_list())
         problems += pp.problems(data.playoff_planner, teams, known_v)
+    if data.coach_tendencies is not None:  # feature #10
+        from twm.publish import coach_tendencies as ct
+
+        dim = t.get("dim_coach")
+        coaches = set(dim.get_column("coach_id").to_list()) if dim is not None else set()
+        problems += ct.problems(data.coach_tendencies, teams, coaches)
     # 3. every player named exists; the weekly summary is clean
     for name, df in (("picks", picks), ("player_week_summary", t["player_week_summary"])):
         missing = df.filter(~pl.col("gsis_id").is_in(players))

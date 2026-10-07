@@ -128,7 +128,7 @@ describe("/track-record (seed)", () => {
   test("Decision Report Card: our WP model against nflfastR, ten seasons, the reliability plot; no live table", (t) => {
     if (!up || !seedOnly) return t.skip("seed only");
     const s = sec("decisions");
-    assert.deepEqual(q(s, "[data-testid=decisions-headline] [data-cell=value]").map(prose), ["0.4520", "-0.0290", "+0.0050"]);
+    assert.deepEqual(q(s, "[data-testid=decisions-headline] [data-cell=value]").map(prose), ["0.4520", "−0.0290", "+0.0050"]);
     assert.equal(q(s, "[data-testid=wp-seasons] tbody tr").length, 10);
     assert.equal(q(s, "[data-testid=calibration-table] tbody tr").length, 3);
     assert.match(prose(s.querySelector("[data-testid=decisions-live]")!), /^No live results yet\. .*not published yet\. This season's grades \(2026, through week \d+\) are on the Report Card\.$/);
@@ -153,12 +153,17 @@ describe("/track-record (seed)", () => {
     assert.deepEqual(q(s, "[data-testid=lt-summary] tbody tr").map(prose), [
       "Listed (top 25) 60.0% 5.0% 15.0% 20.0% 3 (1 to 6)",
       "Must-add or speculative 55.0% 5.0% 15.0% 25.0% 3 (0 to 6)",
-      "Must-add 20.0% 10.0% 20.0% 50.0% 0 (-2 to 2)",
+      "Must-add 20.0% 10.0% 20.0% 50.0% 0 (−2 to 2)",
       "Momentum (+10 points in a week) 70.0% 25.0% 0.0% 5.0% 1 (0 to 2)",
     ]);
     assert.equal(q(s, "[data-testid=lt-hist-table] tbody tr").length, 18);
     assert.match(prose(s.querySelector("[data-testid=lt-hist-table] tbody tr:last-child")!), /^never flagged 20 5$/);
     assert.match(prose(s.querySelector("[data-testid=lt-t25]")!), new RegExp(`${LT.adds[25]} crowd adds.*flagged ${LT.t25[0]} before the crowd and the momentum baseline ${LT.t25[1]}`));
+    // G4.11: the verdict at both thresholds, from the same published numbers
+    assert.equal(
+      prose(s.querySelector("[data-testid=lt-verdict]")!),
+      `In short: at the 50% mark the momentum baseline flagged more crowd adds before the crowd (${LT.headline[2]} vs ${LT.headline[0]}); at the 25% mark the Radar's lists flagged more crowd adds before the crowd (${LT.t25[0]} vs ${LT.t25[1]}).`,
+    );
     const [both, earlier, radar, mom, neither] = LT.h2hListed;
     assert.equal(prose(s.querySelector("[data-testid=lt-h2h] tbody tr[data-level=listed]")!), `Listed (top 25) ${both} Radar earlier in ${earlier} ${radar} ${mom} ${neither}`);
     assert.match(prose(s.querySelector("[data-testid=lt-ignored]")!), new RegExp(`never added ${LT.ignored.n}: they were hits only ${LT.ignored.hit} .* against ${LT.ignored.laterHit}`));

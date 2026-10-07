@@ -5,6 +5,7 @@ import { glossary } from "@/db/schema";
 import { cached } from "@/lib/cache";
 import { resolveTerm, type TermEntry } from "@/lib/glossary-fallback";
 import { DROPPED_TAGS } from "@/lib/regression";
+import { siteGlossary } from "@/lib/site";
 
 export type GlossaryRow = {
   name: string;
@@ -33,8 +34,9 @@ async function getGlossaryRaw(): Promise<GlossaryRow[]> {
     })
     .from(glossary)
     .orderBy(asc(glossary.kind), asc(glossary.name))
-    // tags the owner removed from the product (2026-09-30) are not shown, not even as terms
-    .then((rows) => rows.filter((r) => !Object.hasOwn(DROPPED_TAGS, r.name)));
+    // tags the owner removed from the product (2026-09-30) are not shown, not even as terms; nor
+    // the terms of local-only modules (My League: lib/site.ts siteGlossary)
+    .then((rows) => siteGlossary(rows.filter((r) => !Object.hasOwn(DROPPED_TAGS, r.name))));
 }
 
 export const getGlossary = cached("glossary.getGlossary", getGlossaryRaw);

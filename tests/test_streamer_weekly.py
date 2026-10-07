@@ -68,8 +68,11 @@ def approved(tmp_path_factory) -> dict:
     )  # fmt: skip
     frames = sp.load_k_snapshot(made["K"], tmp)
     hit_rates = sp.load_hit_rates(made["DST"], tmp)
+    dataset = tmp / "dataset.parquet"  # the toy dataset: the flags of the not-kicking chance
+    data.write_parquet(dataset)
     return {"k_model": pm, "rule": rule, "k_conf": sc.k_confidence(frames, SEASON),
-            "d_conf": sc.dst_confidence(hit_rates, SEASON), "pin_path": pin_path}  # fmt: skip
+            "d_conf": sc.dst_confidence(hit_rates, SEASON), "pin_path": pin_path,
+            "frames": frames, "dataset": dataset}  # fmt: skip
 
 
 def _run(world: Path, approved: dict, week: int, now: datetime, **kw) -> sw.WeeklyRun:
@@ -158,6 +161,30 @@ def test_store_round_trip_without_outcomes_and_live_kept(world, approved, tmp_pa
     assert set(vers["model"]) == {"logit_k", "baseline_opponent_dst"}
 
 
+def test_a_kicker_who_did_not_kick_shows_the_history_of_such_picks(world, approved) -> None:
+    """Audit 2026-10-06 (G1.1): with the dataset's flags, every pool kicker who did not kick in
+    his team's latest game shows the backtest's start rate of such kickers (no probability
+    bin), whatever his score; the kickers who kicked keep their bin."""
+    flags = sc.kicker_flags(approved["dataset"])
+    conf = sc.k_confidence(approved["frames"], SEASON, min_rows=5, flags=flags)
+    assert conf.idle is not None
+    n, hits = conf.idle
+    run = _run(world, {**approved, "k_conf": conf}, 2, LATER)
+    with AsOfView(world, run.as_of) as view:
+        pool = sw.candidate_pool(view, SEASON, 2, rules=RULES).filter(pl.col("in_pool"))
+        feats = sw.features_for(view, SEASON, 2, pool, rules=RULES)
+    kicked = feats.filter(pl.col("position") == "K").select("entity_id", "is_team_kicker")
+    k = run.scored.filter(pl.col("position") == "K").join(kicked, on="entity_id")
+    assert k.height == run.scored.filter(pl.col("position") == "K").height
+    idle, kicking = k.filter(~pl.col("is_team_kicker")), k.filter(pl.col("is_team_kicker"))
+    assert idle.height and kicking.height
+    assert idle["band_from"].null_count() == idle.height and set(idle["band_n"]) == {n}
+    assert set(idle["chance"]) == {hits / n}
+    assert kicking["band_from"].null_count() == 0
+    stored = [json.loads(b) for b in sw.store_frames(run)[0]["band"]]
+    assert sum(b.get("basis") == "not_kicking" for b in stored) == idle.height
+
+
 @pytest.mark.parametrize("week", [1, 2, 3])
 def test_the_list_ignores_everything_after_the_as_of(world, approved, week) -> None:
     models = {k: approved[k] for k in ("k_model", "rule", "k_conf", "d_conf")}
@@ -202,7 +229,8 @@ def test_cli_scores_with_the_pins_and_twm_score_includes_the_streamer(
     monkeypatch.setattr(StreamerRules, "from_config", classmethod(lambda cls, *a, **k: RULES))
     store, out = tmp_path / "store.duckdb", tmp_path / "w.md"
     args = ["--db", str(world), "--season", "2025", "--week", "2", "--store", str(store),
-            "--allow-incomplete", "--now", "2025-10-01T00:00", "--out", str(out)]  # fmt: skip
+            "--allow-incomplete", "--now", "2025-10-01T00:00", "--out", str(out),
+            "--dataset", str(approved["dataset"])]  # fmt: skip
     res = CliRunner().invoke(app, ["streamer", "score", *args])
     assert res.exit_code == 0, res.output
     assert "stored as 'backtest' (INCOMPLETE DATA)" in res.output and "DST:" in res.output

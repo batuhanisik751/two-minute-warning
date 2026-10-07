@@ -15,7 +15,7 @@ let set: RouteSet;
 const pages = new Map<string, Page>();
 const empty = new Map<string, Page>();
 const seedOnly = DATA === "seed";
-const EXTRA = ["/", "/hot-seat", "/methodology", "/track-record"];
+const EXTRA = ["/", "/hot-seat", "/methodology", "/track-record", ...(seedOnly ? [`/hot-seat?season=${H.past}&week=3`] : [])];
 
 before(
   async () => {
@@ -117,7 +117,8 @@ describe("/hot-seat", () => {
       assert.ok(rec, "the record vs expectation table");
       for (const tr of all(rec, "tbody tr")) {
         const [record, expected, vs] = all(tr, "td").map(text);
-        assert.match(record, /^(\d+–\d+|\d+\.5 wins in \d+ games \(a tie counts half\))$/);
+        // an interim coach's season is the team's record, labelled so (G2.2)
+        assert.match(record, /^(\d+–\d+|\d+\.5 wins in \d+ games \(a tie counts half\))( the team's)?$/);
         assert.match(expected, /^(\d+\.\d|not known)$/);
         assert.match(vs, /^([+−]?\d+\.\d|–)$/);
       }
@@ -164,6 +165,10 @@ describe("seed: the Hot-Seat Meter", () => {
     const row = (id: string) => m.querySelector(`[data-testid=hot-seat-row][data-coach=${id}]`)!;
     assert.match(text(row(H.firedAfter).querySelector("[data-testid=outcome]")!), /Let go fired after the season, announced 2026-01-05/);
     assert.match(text(row(H.retired).querySelector("[data-testid=outcome]")!), /Left another way retired, announced 2026-01-08: not counted as let go/);
+    // G2.4: a departure whose day no source gives (NULL announced) claims no announcement date
+    const wk3 = main(`/hot-seat?season=${H.past}&week=3`).querySelector(`[data-testid=hot-seat-row][data-coach=${H.firedDuring}] [data-testid=outcome]`)!;
+    assert.match(text(wk3), /Let go fired during the season, announcement date not reported/);
+    assert.doesNotMatch(text(wk3), /announced \d/);
     assert.ok(row(H.interim).querySelector("[data-testid=interim-flag]"), "interim flag");
     assert.match(text(row(H.interim)), /the model was not trained on interim coaches/);
     const opts = all(m, "form[action='/hot-seat'] select[name=week] option").map((o) => text(o));
@@ -208,6 +213,15 @@ describe("seed: the Hot-Seat Meter elsewhere", () => {
     const interim = main(`/coach/${H.interim}`).querySelector("[data-testid=coach-hot-seat-table] tbody tr")!;
     assert.match(prose(interim), /interim/);
     assert.match(prose(interim), /interim coach not retained, announced 2026-01-06: not counted as let go/);
+    // G2.2: an interim coach's record is the team's season, and says so
+    const irec = main(`/coach/${H.interim}`).querySelector("[data-testid=coach-record-table] tbody tr")!;
+    assert.match(prose(irec.querySelector("th")!), /interim coach: the team's season/);
+    assert.match(prose(irec.querySelectorAll("td")[0]), /^(\d+–\d+|\d+\.5 wins in \d+ games \(a tie counts half\)) the team's$/);
+    assert.equal(all(main(`/coach/${H.featured}`), "[data-testid=coach-record-interim]").length, 0, "a head coach's own seasons carry no label");
+    // G2.5: a coach without a graded season says when grading starts instead of reading as a clean record
+    const ungraded = main(`/coach/${H.firedAfter}`);
+    assert.equal(prose(ungraded.querySelector("[data-testid=coach-ungraded]")!), "Nothing graded: the Decision Report Card grades the seasons from 2024 on.");
+    assert.ok(!/No clearly wrong call|No clock case|No graded season yet/.test(prose(ungraded)), "no clean-record wording");
   });
 
   test("methodology and track record: the models, the firings, the research numbers, live kept apart", (t) => {
@@ -223,6 +237,11 @@ describe("seed: the Hot-Seat Meter elsewhere", () => {
     // the top-5 hit rate at week 12 beside the season-end one (tiles and the models table)
     assert.equal(all(tr, "[data-testid=hot-seat-headline] > li").length, 4);
     assert.match(prose(tr.querySelector("[data-testid=hot-seat-headline]")!), /top 5 at week 12 .*top 5 at season end/);
+    // G4.9: the top-5 hit rates are percentages of the coaches let go (the slice's positives), not of its rows
+    const t5 = all(tr, "[data-testid=hot-seat-headline] > li").slice(2);
+    assert.ok(t5.every((li) => /^\d{1,3}%$/.test(text(li.querySelector("[data-cell=value]")!))), "top-5 tiles in percent");
+    assert.deepEqual(t5.map((li) => text(li.querySelector("[data-cell=note]")!)), ["4 coaches let go, 2 test seasons", "3 coaches let go, 2 test seasons"]);
+    assert.ok(all(m, "[data-testid=hot-seat-models] tbody td:nth-last-child(-n+2) .font-semibold").every((c) => /^\d{1,3}%$/.test(text(c))), "top-5 columns in percent");
     const heads = all(m, "[data-testid=hot-seat-models] thead th").map(text);
     assert.deepEqual(heads.slice(-2), ["Top-5 hit rate, week 12", "Top-5 hit rate, season end"]);
     assert.equal(tr.querySelector("[data-testid=hot-seat-live]")!.getAttribute("data-live"), "pending");

@@ -124,7 +124,7 @@ export default async function TimeMachinePage({ searchParams }: PageProps<"/time
         </div>
       ) : null}
       <p className="mt-6 text-sm text-muted" data-testid="tm-coverage">
-        {whenName(at)}: {chosen.modules.length} of the {MODULES.length} modules have something stored for this week
+        {whenName(at)}: {chosen.modules.length} of the {MODULES.length} modules {chosen.modules.length === 1 ? "has" : "have"} something stored for this week
         {missing.length ? "; the others are listed at the bottom" : ""}.
       </p>
       {MODULES.map((m) => (sections[m] ? <div key={m}>{sections[m]}</div> : null))}

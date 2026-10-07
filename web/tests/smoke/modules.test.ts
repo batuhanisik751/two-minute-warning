@@ -69,7 +69,7 @@ describe("/waivers?pos=K and ?pos=DST", () => {
     assert.match(text(m), new RegExp(`Published with this list: ${M.kNote}`));
     assert.equal(
       prose(m.querySelector("[data-testid=stream-verdict]")!),
-      "In the 2014–2025 backtest the model's top 5 kickers had a top-10 week 40.0% of the time, against 37.0% for the best simple rule (last game's points): +3.0 points (95% interval -1.0 to +7.0), ahead, but not clearly (the interval includes zero). A random pick from the pool had one 25.0% of the time.",
+      "In the 2014–2025 backtest the model's top 5 kickers had a top-10 week 40.0% of the time, against 37.0% for the best simple rule (last game's points): +3.0 points (95% interval \u22121.0 to +7.0), ahead, but not clearly (the interval includes zero). A random pick from the pool had one 25.0% of the time.",
     );
     assert.match(text(m), /Ranked from 5 kickers in the pool; all are shown\. The model learned from 2012 ?–2025 only\./);
   });
@@ -81,7 +81,7 @@ describe("/waivers?pos=K and ?pos=DST", () => {
     assert.match(text(m.querySelector("#list-heading")!), /Defense and special teams \(D\/ST\), 2026 week 3/);
     assert.match(
       prose(m.querySelector("[data-testid=stream-verdict]")!),
-      /^The D\/ST list uses a simple rule, not a model: it ranks by the next opponent's points scored per game, fewer first\. In the 2014–2025 backtest the rule's top 5 had a top-10 week 41\.0% of the time, against 39\.0% for the best model \(our model, a logistic regression\): \+2\.0 points \(95% interval -1\.0 to \+5\.0\), ahead, but not clearly/,
+      /^The D\/ST list uses a simple rule, not a model: it ranks by the next opponent's points scored per game, fewer first\. In the 2014–2025 backtest the rule's top 5 had a top-10 week 41\.0% of the time, against 39\.0% for the best model \(our model, a logistic regression\): \+2\.0 points \(95% interval \u22121\.0 to \+5\.0\), ahead, but not clearly/,
     );
     assert.match(text(m), /Ranked by a simple rule, not a model\./);
   });
@@ -149,6 +149,7 @@ describe("/regression (seed)", () => {
     const first = rows(m.querySelector("[data-testid=tag-sell_high]")!, "rw-row")[0];
     assert.match(text(first), /Games 3 PPG 20\.0 xFP\/game 13\.0 FPOE\/game \+7\.0 Projection 14\.0/);
     assert.match(text(first), /Sell-high: seed reason for 00-9000001\./);
+    assert.doesNotMatch(text(first), /include garbage time/);
     // the live week-3 list has no 80% range (published before feature #4): no brackets, no term
     assert.equal(m.querySelectorAll("[data-testid=rw-range]").length, 0);
     assert.doesNotMatch(text(m), /80% range/);
@@ -160,6 +161,8 @@ describe("/regression (seed)", () => {
     const m = main("/regression?gt=off");
     const first = rows(m.querySelector("[data-testid=tag-sell_high]")!, "rw-row")[0];
     assert.match(text(first), /PPG 19\.0 xFP\/game 12\.5 FPOE\/game \+6\.5 Projection 14\.0/);
+    // the reason sentence quotes the numbers with garbage time (the tag's): it says so
+    assert.match(text(first), /Sell-high: seed reason for 00-9000001\. \(These numbers include garbage time: the tag is made from them\.\)/);
     assert.equal(m.querySelector("[data-testid=gt-toggle] a[aria-current=page]")?.textContent, "Without garbage time");
     assert.equal(m.querySelector("form[action='/regression'] input[name=gt]")?.getAttribute("value"), "off");
     assert.match(text(m.querySelector("figure[data-testid=scatter] figcaption")!), /without garbage time/);
@@ -240,17 +243,17 @@ describe("player page and methodology (seed)", () => {
     assert.equal(split.querySelectorAll("tbody tr").length, 4);
     assert.equal(text(split.querySelector("tbody tr")!), "QB 100 0.70 0.65 to 0.75 0.05 0.00 to 0.10 0.60 0.55 to 0.65");
     assert.match(text(split.querySelector("caption")!), /odd against even games, every play \(2012–2025\)/);
-    assert.equal(text(st.querySelector("[data-testid=split-half-ng] tbody tr")!), "QB 100 0.67 0.62 to 0.72 0.03 -0.02 to 0.08 0.57 0.52 to 0.62");
+    assert.equal(text(st.querySelector("[data-testid=split-half-ng] tbody tr")!), "QB 100 0.67 0.62 to 0.72 0.03 −0.02 to 0.08 0.57 0.52 to 0.62");
     const parts = Array.from(st.querySelectorAll("[data-testid=split-half-parts] tbody tr")).map((r) => text(r));
-    assert.equal(parts[0], "QB 0.01 -0.04 to 0.06 n 95 0.30 0.25 to 0.35 n 92 –", "QB: completion rate, no YAC");
-    assert.equal(parts[1], "RB 0.01 -0.04 to 0.06 n 235 0.14 0.09 to 0.19 n 200 0.17 0.12 to 0.22 n 180");
+    assert.equal(parts[0], "QB 0.01 −0.04 to 0.06 n 95 0.30 0.25 to 0.35 n 92 –", "QB: completion rate, no YAC");
+    assert.equal(parts[1], "RB 0.01 −0.04 to 0.06 n 235 0.14 0.09 to 0.19 n 200 0.17 0.12 to 0.22 n 180");
     assert.equal(
       prose(st.querySelector("[data-testid=stability-meaning]")!),
       "Opportunity repeats; efficiency mostly does not. A player's xFP/game in one half of a season correlates 0.70 (QB) to 0.80 (RB) with the other half, his FPOE/game only 0.05 (QB) to 0.12 (RB). The harder test, the first half of his games against the second (roles change in between), gives xFP/game 0.60 to 0.70 and FPOE/game 0.05 to 0.12. So the projection takes his chances at face value and keeps only a share r(g) of his FPOE/game: after 17 games 0.25 to 0.36 of it, by position; the rest is expected to fade.",
     );
     const sh = st.querySelector("[data-testid=stability-shrink-fpoe]")!;
     assert.deepEqual(Array.from(sh.querySelectorAll("thead th")).slice(-3).map((th) => normalise(th.textContent ?? "").replace(/ \(explain\).*/, "")), ["r(4)", "r(6)", "r(17)"]);
-    assert.equal(text(sh.querySelector("tbody tr")!), "QB 100 0.50 20.0 -0.50 40 0.09 0.05 to 0.13 0.13 0.09 to 0.17 0.30");
+    assert.equal(text(sh.querySelector("tbody tr")!), "QB 100 0.50 20.0 −0.50 40 0.09 0.05 to 0.13 0.13 0.09 to 0.17 0.30");
     assert.ok(st.querySelector("[data-testid=stability-shrink-fpoe_ng] tbody tr"));
     assert.equal(m.querySelectorAll("[data-testid=rw-position-mae] tbody tr").length, 2);
     // the 80% range's coverage check, computed from the published rows (seed: M.rwCoverage)

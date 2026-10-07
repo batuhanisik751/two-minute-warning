@@ -1,7 +1,8 @@
 // The Cliff board's pure helpers (no database, no React): the "where we disagree" rule, drivers
 // and outcomes in plain words, the calibration grid and the disagreement record. Unit-tested in
 // tests/unit/board.test.ts. Every number they show comes from the published rows or lib/method.ts.
-import { signedNum, type Driver } from "./hot-seat";
+import { fmtNum, fmtShare, signedNum } from "./format";
+import type { Driver } from "./hot-seat";
 import { BOARD_BANDS, BOARD_CLIFF_DROP, BOARD_DISAGREE_TOP, BOARD_ECR_FIRST_SEASON, BOARD_MIN_GAMES } from "./method";
 import { showThirdPartyRanks } from "./third-party";
 
@@ -90,8 +91,8 @@ const ordinal = (n: number): string => {
   return `${n}${t >= 11 && t <= 13 ? "th" : (({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th")}`;
 };
 const yes = (v: number, on: string, off: string) => (v ? on : off);
-const n1 = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
-const share = (v: number) => `${Math.round(v * 100)}%`;
+const n1 = (v: number) => (Number.isInteger(v) ? fmtNum(v, 0) : fmtNum(v));
+const share = (v: number) => fmtShare(v);
 const POS_WORDS: Record<string, [string, string]> = {
   pos_rb: ["a running back", "not a running back"],
   pos_wr: ["a wide receiver", "not a wide receiver"],
@@ -108,20 +109,20 @@ export function boardDriverValue(d: Driver): string {
     case "ppg_change":
       return `${signedNum(v)} points per game against the season before`;
     case "ppg_s":
-      return `${v.toFixed(1)} points per game last season`;
+      return `${fmtNum(v)} points per game last season`;
     case "pos_rank_s":
       return `${ordinal(Math.round(v))} by points per game at his position last season`;
     case "games_s":
       return `${n1(v)} games last season`;
     case "touches_per_game_s":
-      return `${v.toFixed(1)} touches per game last season`;
+      return `${fmtNum(v)} touches per game last season`;
     case "touches_s":
       return `${Math.round(v)} touches last season`;
     case "career_touches":
     case "career_targets":
       return `${Math.round(v).toLocaleString("en-US")} career ${d.feature === "career_touches" ? "touches" : "targets"}`;
     case "age":
-      return `${v.toFixed(1)} years old`;
+      return `${fmtNum(v)} years old`;
     case "age_curve_ratio":
       return `at his age, players at his position kept ${share(v)} of their points per game on average`;
     case "prior_seasons":
@@ -150,11 +151,11 @@ export function boardDriverValue(d: Driver): string {
     case "snap_pct_trend":
       return `snap share ${signedNum(v * 100, 0)} points against the season before`;
     case "yards_per_touch_s":
-      return `${v.toFixed(1)} yards per touch`;
+      return `${fmtNum(v)} yards per touch`;
     case "yards_per_touch_trend":
       return `${signedNum(v)} yards per touch against the two seasons before`;
     case "ngs_separation_s":
-      return `${v.toFixed(1)} yards of separation (Next Gen Stats)`;
+      return `${fmtNum(v)} yards of separation`;
     case "ngs_separation_trend":
       return `${signedNum(v)} yards of separation against the season before`;
     case "ngs_ryoe_per_att_s":
@@ -162,11 +163,11 @@ export function boardDriverValue(d: Driver): string {
     case "ngs_ryoe_trend":
       return `${signedNum(v, 2)} rush yards over expected per carry against the season before`;
     case "xfp_per_game_s":
-      return `${v.toFixed(1)} expected fantasy points per game`;
+      return `${fmtNum(v)} expected fantasy points per game`;
     case "fpoe_per_game_s":
       return `${signedNum(v)} fantasy points per game over expected`;
     default:
-      return Number.isInteger(v) ? String(v) : v.toFixed(2);
+      return Number.isInteger(v) ? fmtNum(v, 0) : fmtNum(v, 2);
   }
 }
 
@@ -199,7 +200,9 @@ export function boardOutcomeWords(o: BoardOutcome | null, ppgS: number): { tone:
   if (o.yMissed) return { tone: "missed", short: "Missed time", long: `${games} (fewer than ${BOARD_MIN_GAMES})` };
   const ppg = o.ppgS1 ?? 0;
   const change = ppgS > 0 ? (ppg - ppgS) / ppgS : 0;
-  const delta = `${ppg.toFixed(1)} points per game in ${games} (${signedNum(change * 100, 0)}% from ${ppgS.toFixed(1)})`;
+  // a change in percent needs a positive base: from 0.0 (or below) it says only where he started
+  const from = ppgS > 0 ? `${signedNum(change * 100, 0)}% from ${fmtNum(ppgS)}` : `from ${fmtNum(ppgS)}`;
+  const delta = `${fmtNum(ppg)} points per game in ${games} (${from})`;
   return o.yCliff
     ? { tone: "cliff", short: "Cliff", long: `${delta}: a drop of ${Math.round(BOARD_CLIFF_DROP * 100)}% or more` }
     : { tone: "held", short: "No Cliff", long: delta };
@@ -288,7 +291,7 @@ export function diffWords(c: BoardCell | null): "ahead" | "behind" | "no clear d
 /** "0.405 (0.354 to 0.463)"; a difference gets its sign. */
 export function cellWords(c: BoardCell | null, diff = false, digits = 3): string {
   if (!c) return "not published";
-  const f = (x: number) => (diff ? signedNum(x, digits) : x.toFixed(digits));
+  const f = (x: number) => (diff ? signedNum(x, digits) : fmtNum(x, digits));
   return c.lo !== null && c.hi !== null ? `${f(c.value)} (${f(c.lo)} to ${f(c.hi)})` : f(c.value);
 }
 

@@ -70,8 +70,10 @@ test("records and outcomes are worded carefully", () => {
   assert.equal(outcomeWords({ ...base, departed: null, labelStatus: "pending" }).long, "pending until the season's departures are labelled");
   const fired = outcomeWords({ ...base, departed: true, departureType: "fired_after_season", announced: "2025-01-06" });
   assert.deepEqual([fired.tone, fired.short, fired.long], ["let-go", "Let go", "fired after the season, announced 2025-01-06"]);
+  // G2.4: a date the labels imputed from the team's last game is published as NULL: no day is claimed
+  assert.equal(outcomeWords({ ...base, departed: true, departureType: "fired_after_season", announced: null }).long, "fired after the season, announcement date not reported");
   const other = outcomeWords({ ...base, departed: false, censored: true, departureType: "retired" });
-  assert.equal(other.long, "retired: not counted as let go");
+  assert.equal(other.long, "retired, announcement date not reported: not counted as let go", "no day in the labels: none claimed (G2.4)");
   assert.match(outcomeWords({ ...base, departed: false }).long, new RegExp(`by ${HOT_SEAT_WINDOW_DAYS} days after`));
   for (const o of [fired, other]) assert.doesNotMatch(o.long, /will be|hot seat/i);
 });
@@ -154,9 +156,10 @@ test("the headline tiles carry their interval and rows, and skip what is not pub
     { ...base, slice: "week_12", metric: "top5_hit_rate", value: 0.490385, lo: 0.424501, hi: 0.558573 },
   ];
   const t5 = headlineStats([...rows, ...top5], 0.95).slice(2);
-  assert.deepEqual(t5.map((x) => [x.label, x.value]), [
-    ["Coaches let go who were in their season's top 5 at week 12", "0.490"],
-    ["Coaches let go who were in their season's top 5 at season end", "0.523"],
+  // G4.9: a share of the coaches let go, as a percentage, over the coaches let go (nPos), not the rows
+  assert.deepEqual(t5.map((x) => [x.label, x.value, x.interval, x.note]), [
+    ["Coaches let go who were in their season's top 5 at week 12", "49%", "95% interval 42% to 56%", "1,744 coaches let go, 20 test seasons"],
+    ["Coaches let go who were in their season's top 5 at season end", "52%", "95% interval 44% to 62%", "1,744 coaches let go, 20 test seasons"],
   ]);
 });
 
@@ -186,14 +189,18 @@ test("this season's weekly lists not started: when the first is due, from the we
   // the newest list is this season's: nothing to say
   assert.equal(seasonNotStarted(2026, meta(3, "2026-09-29T14:00:00Z")), null);
   assert.equal(seasonNotStarted(2025, { currentSeason: null, asOf: null, generatedAt: null }), null);
-  // week 3's as-of known (past the first weekly week): the next list is due one week later
+  // G2.6: week 3's as-of (past the first weekly week) is itself a list's as-of: that list was due
+  // then, and a publish after it without the list makes it overdue
   const late = seasonNotStarted(2025, meta(3, "2026-09-29T14:00:00Z"))!;
   assert.equal(late.firstWeek, HOT_SEAT_FIRST_WEEK);
-  assert.equal(late.dueAt, new Date(Date.parse("2026-09-29T14:00:00Z") + 7 * 864e5).toISOString());
-  assert.equal(late.overdue, false);
-  // published after that next as-of without a list: it is overdue
-  const missed = seasonNotStarted(2025, meta(3, "2026-09-29T14:00:00Z", "2026-10-07T03:00:00Z"))!;
-  assert.equal(missed.overdue, true);
+  assert.equal(late.dueAt, new Date(Date.parse("2026-09-29T14:00:00Z")).toISOString());
+  assert.equal(late.overdue, true);
+  // the audit's case: the week-4 as-of, published the same evening, no list of the season
+  assert.equal(seasonNotStarted(2025, meta(4, "2026-10-06T14:00:00Z", "2026-10-06T22:03:47Z"))!.overdue, true);
+  // published before that as-of: still to come
+  const ahead = seasonNotStarted(2025, meta(3, "2026-09-29T14:00:00Z", "2026-09-29T10:00:00Z"))!;
+  assert.equal(ahead.dueAt, new Date(Date.parse("2026-09-29T14:00:00Z")).toISOString());
+  assert.equal(ahead.overdue, false);
   // week 1's as-of known, published that day: the first list is still to come
   const early = seasonNotStarted(2025, meta(1, "2026-09-15T14:00:00Z", "2026-09-15T15:00:00Z"))!;
   assert.equal(early.dueAt, new Date(Date.parse("2026-09-15T14:00:00Z") + (HOT_SEAT_FIRST_WEEK - 1) * 7 * 864e5).toISOString());

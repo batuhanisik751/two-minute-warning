@@ -58,6 +58,10 @@ describe("/playoff-planner", () => {
     const g = m.querySelector("[data-testid=pp-grid]")!;
     assert.deepEqual([g.getAttribute("data-pos"), g.getAttribute("data-rated")], ["QB", "yes"]);
     assert.match(prose(m.querySelector("[data-testid=pp-asof]")!), new RegExp(`through week ${P.throughWeeks[1]} `));
+    // G4.3 / G4.2: no glued "1.05means" (textContent joins text nodes as a browser shows them); the total is a sum
+    const asof = (m.querySelector("[data-testid=pp-asof]")!.textContent ?? "").replace(/\s+/g, " ");
+    assert.match(asof, /\d\.\d{2} means players/);
+    assert.match(asof, /The 3-week total adds a team's week ratings \(3\.00 = an average matchup every week\); a bye week counts nothing toward it\./);
     assert.deepEqual(all(g, "tbody tr").map((r) => r.getAttribute("data-team")), ["EVP", "NHG", "SRO", "WLF"]);
     const nhg = g.querySelector("tr[data-team=NHG]")!;
     assert.deepEqual(all(nhg, "td[data-week]").map((c) => c.getAttribute("data-band")), ["easy", "neutral", "easy"]);
@@ -101,9 +105,15 @@ describe("/playoff-planner: unrated positions, how much it matters, the candidat
     if (!seedOnly) return;
     const rows = all(m, "[data-testid=pp-effects] tbody tr");
     assert.deepEqual(rows.map((r) => r.getAttribute("data-pos")), ["QB", "RB", "WR", "TE", "K", "DST"]);
-    assert.equal(prose(m.querySelector("[data-testid=pp-effects] tr[data-pos=DST]")!), "D/ST 8.8 4.3 49% rated");
-    assert.equal(prose(m.querySelector("[data-testid=pp-effects] tr[data-pos=TE]")!), "TE 6.6 0.5 7% not rated: every matchup 1.00");
+    // G4.1: the raw ratings' gap, the shrunk ratings' gap (the seed's is realized + 0.3), then what happened
+    const heads = all(m, "[data-testid=pp-effects] thead th").map(prose);
+    assert.deepEqual(heads.slice(1, 4), ["Raw ratings said", "Shrunk ratings said", "Really happened (gap)"]);
+    assert.ok(m.querySelector("[data-testid=pp-effects] thead th:nth-child(4) a[href='/methodology#term-matchup_gap']"), "the gap term sits on what happened");
+    assert.equal(prose(m.querySelector("[data-testid=pp-effects] tr[data-pos=DST]")!), "D/ST 8.8 4.6 4.3 49% rated");
+    assert.equal(prose(m.querySelector("[data-testid=pp-effects] tr[data-pos=TE]")!), "TE 6.6 0.8 0.5 7% not rated: every matchup 1.00");
     assert.equal(all(m, "[data-testid=pp-stability] tbody tr").length, 6);
+    // G4.8: the stability table is explained in visible text
+    assert.match(prose(m.querySelector("[data-testid=pp-stability-note]")!), /^Stability: .* as of week 4, and as of week 14, .* averaged over 13 seasons \(1 = the same order/);
     assert.match(prose(m.querySelector("[data-testid=pp-late] li")!), /^2013-2020 \(17 weeks\): .* week 16, then week 17: QB 68% to 62%/);
   });
 

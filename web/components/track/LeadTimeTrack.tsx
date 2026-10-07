@@ -3,7 +3,7 @@ import Term from "@/components/Term";
 import { AtSecondary, CoverageNote, H2hTable, IgnoredLine, ReverseTable, SourceNote } from "@/components/lead-time/Compare";
 import Histogram from "@/components/lead-time/Histogram";
 import { Headline, SummaryTable } from "@/components/lead-time/Summary";
-import { PRIMARY, hasStudy, pooledRow, seasonsOf } from "@/lib/lead-time";
+import { PRIMARY, hasStudy, pooledRow, seasonsOf, verdict } from "@/lib/lead-time";
 import { fmtInt } from "@/lib/format";
 import { getLeadTimeTables } from "@/lib/queries/lead-time";
 import { H4, NotPublished, Panel } from "./parts";
@@ -29,6 +29,11 @@ export default async function LeadTimeTrack() {
             <SummaryTable summary={t.summary} caption={`Crowd at ${PRIMARY}%${span ? `, complete seasons ${span} pooled` : ""}${n !== null ? ` (${fmtInt(n)} crowd adds)` : ""}`} />
             <Histogram hist={t.hist} summary={t.summary} caption={`How early: the Radar's lists vs the momentum baseline (crowd at ${PRIMARY}%)`} />
             <AtSecondary summary={t.summary} />
+            {verdict(t.summary) ? (
+              <p className="font-semibold" data-testid="lt-verdict">
+                {verdict(t.summary)}
+              </p>
+            ) : null}
             <H4>Head to head</H4>
             <H2hTable h2h={t.h2h} />
             <H4>What became of the Radar&apos;s flags</H4>

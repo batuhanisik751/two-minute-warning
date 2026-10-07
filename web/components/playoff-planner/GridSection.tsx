@@ -21,9 +21,10 @@ export default function GridSection(props: { snap: { header: PPSnapshot; rows: P
         <>
           <p className="mt-3 text-sm text-muted" data-testid="pp-asof">
             Ratings from the games through week {snap.header.throughWeek} (as of <time dateTime={snap.header.asOf}>{fmtUtc(snap.header.asOf)}</time>), with the rule
-            frozen before the season (<span className="font-mono text-xs">{snap.header.modelVersion}</span>). A <Term name="matchup_rating">matchup rating</Term> of {(1 + BAND).toFixed(2)}
+            frozen before the season (<span className="font-mono text-xs">{snap.header.modelVersion}</span>). A <Term name="matchup_rating">matchup rating</Term> of {(1 + BAND).toFixed(2)}{" "}
             means players at the position scored {Math.round(BAND * 100)}% more than average against that opponent: easy from there up, hard at {(1 - BAND).toFixed(2)} or
-            less; rank 1 is the easiest of the opponents. A bye week counts nothing toward the total.
+            less; rank 1 is the easiest of the opponents. The {weeks.length}-week total adds a team&apos;s week ratings ({weeks.length.toFixed(2)} = an average matchup every
+            week); a bye week counts nothing toward it.
           </p>
           <div className="mt-4">
             <Grid rows={snap.rows} weeks={weeks} pos={pos} sort={sort} unrated={unratedReason(pos, props.effect, props.seasons)} />

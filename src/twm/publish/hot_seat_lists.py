@@ -14,10 +14,11 @@ Sources (opened read-only), with the other modules' rules (:mod:`twm.publish.col
   from the stored rows (the frozen snapshot's and the live rows' reasons), never the warehouse,
   and are upserted into ``dim_coach`` with the decisions' coaches;
 - **outcomes**: the frozen snapshot's labels (``departed`` = a positive departure in the window,
-  ``censored``, the departure and its announced day, 'final'); live rows are 'pending' (the
-  labels come from the owner's departure file after the season), for every coach of the
-  warehouse's ``dim_coach`` and every week of the live seasons, so a frozen live list no longer
-  in the local store (a fresh runner) still gets its outcome row;
+  ``censored``, the departure and its announced day -- NULL when no source gives the day and
+  the labels fell back to the team's last game date (``date_imputed``) -- 'final'); live rows
+  are 'pending' (the labels come from the owner's departure file after the season), for every
+  coach of the warehouse's ``dim_coach`` and every week of the live seasons, so a frozen live
+  list no longer in the local store (a fresh runner) still gets its outcome row;
 - **track record**: ``reports/hot_seat/backtest_metrics.csv`` (every variant, model and slice,
   with its interval) and ``firings_per_season.csv``, row for row.
 
@@ -164,13 +165,17 @@ def hot_seat_lists(rows: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, pl.D
 
 
 def frozen_outcomes(snap: dict[str, pl.DataFrame], coaches: pl.DataFrame) -> pl.DataFrame:
-    """The frozen backtest's labels as hot_seat_outcome publishes them ('final')."""
+    """The frozen backtest's labels as hot_seat_outcome publishes them ('final'). ``announced``
+    is the announcement day only: NULL when the labels imputed it from the team's last game
+    (no source gives the day), so the site never calls that date an announcement."""
     o = snap["outcomes"].join(coaches.select("entity_id", "coach_id").unique("entity_id"),
                               left_on="coach_id", right_on="entity_id", how="left",
                               suffix="_site")  # fmt: skip
     return o.select(
         "season", "week", pl.col("coach_id_site").alias("coach_id"),
-        (pl.col("y") == 1).alias("departed"), "censored", "departure_type", "announced",
+        (pl.col("y") == 1).alias("departed"), "censored", "departure_type",
+        pl.when(pl.col("date_imputed")).then(None).otherwise(pl.col("announced"))
+        .alias("announced"),
         pl.lit("final").alias("label_status"),
     ).cast(OUTCOME_SCHEMA)  # type: ignore[arg-type]  # fmt: skip
 

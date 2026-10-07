@@ -2,7 +2,7 @@ import Link from "next/link";
 import { FoldList } from "@/components/Fold";
 import { MiniLabel } from "@/components/ui";
 import { optionName, outcomeWords, situationWords, weekWords, wpPct, wpPoints, type DecisionRow } from "@/lib/decisions";
-import { pct } from "@/lib/format";
+import { wholePct } from "@/lib/format";
 
 type Props = {
   rows: (DecisionRow & { gain?: number })[];
@@ -71,8 +71,8 @@ function Row({ d, rank, value, showCoach }: { d: DecisionRow & { gain?: number }
           {d.options.map((o) => (
             <li key={o.option} className={o.option === d.chosen ? "text-fg" : undefined}>
               {optionName(o.option)} <span className="tnum font-semibold">{wpPct(o.wp)}</span>
-              {o.option === "go" && d.pConvert !== null ? ` (converts ${pct(d.pConvert)})` : ""}
-              {o.option === "field_goal" && d.pMake !== null ? ` (good ${pct(d.pMake)})` : ""}
+              {o.option === "go" && d.pConvert !== null ? ` (converts ${wholePct(d.pConvert)})` : ""}
+              {o.option === "field_goal" && d.pMake !== null ? ` (good ${wholePct(d.pMake)})` : ""}
               {o.option === d.chosen ? " · chosen" : ""}
             </li>
           ))}

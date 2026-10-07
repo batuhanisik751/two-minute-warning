@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, count, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db/client";
-import { dimCoach, dimTeam, hotSeatFirings, hotSeatList, hotSeatOutcome, hotSeatRow, hotSeatTrackRecord, modelVersions, siteMeta } from "@/db/schema";
+import { coachWeek, dimCoach, dimTeam, hotSeatFirings, hotSeatList, hotSeatOutcome, hotSeatRow, hotSeatTrackRecord, modelVersions, siteMeta } from "@/db/schema";
 import { cached } from "@/lib/cache";
 import { parseDrivers, type CalCell, type Driver, type OutcomeRow, type TimelineRow } from "@/lib/hot-seat";
 import { HOT_SEAT_BANDS, HOT_SEAT_PHASES } from "@/lib/method";
@@ -154,6 +154,17 @@ async function getCoachHotSeatRaw(coachId: string): Promise<CoachHotSeatRow[]> {
   }));
 }
 export const getCoachHotSeat = cached("hotSeat.getCoachHotSeat", getCoachHotSeatRaw);
+
+/** Per season and team, the regular-season games he was the head coach of (coach_week, graded
+ *  seasons): what an interim coach's share of the team's record is. */
+async function getCoachRegGamesRaw(coachId: string): Promise<{ season: number; team: string; games: number }[]> {
+  return db()
+    .select({ season: coachWeek.season, team: coachWeek.team, games: count() })
+    .from(coachWeek)
+    .where(and(eq(coachWeek.coachId, coachId), eq(coachWeek.seasonType, "REG")))
+    .groupBy(coachWeek.season, coachWeek.team);
+}
+export const getCoachRegGames = cached("hotSeat.getCoachRegGames", getCoachRegGamesRaw);
 
 /** The early-season check: every reconstructed row with a final outcome (interim coaches left
  *  out, as in the backtest's metrics), grouped by season phase and probability band

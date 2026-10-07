@@ -69,6 +69,7 @@ Every *event* table (all `fact_*` and `coach_*` tables and `dim_coach`) also has
 **Coach columns are corrected (H1b).** nflverse's `home_coach` / `away_coach` are not exact:
 from 2024 they list one coach per team all season (in-season firings missing), and before 2024
 they also miss a few firings (2015 MIA/TEN, 2016 LA, 2019 CAR), move one a game early (2007 ATL)
+or weeks early or late (2000 ARI/DET/WAS: added 2026-10-06 from the season pages)
 and misspell names; the 2026 schedule lists three coaches fired in January. The build therefore
 applies `data/manual/coach_corrections.csv` (committed; every row cites a public page with a
 quote; kinds `season`, `from_date`, `rename`; module `twm.warehouse.coach_corrections`) to

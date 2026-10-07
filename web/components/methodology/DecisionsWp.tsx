@@ -1,5 +1,5 @@
 import Term from "@/components/Term";
-import { fmtInt, pct } from "@/lib/format";
+import { fmtInt, pct, signedNum } from "@/lib/format";
 import { TRACK_INTERVAL_LEVEL } from "@/lib/method";
 import { smoothness, wpComparison, type Cell, type TrackRow } from "@/lib/decisions-track";
 
@@ -15,7 +15,7 @@ const SMOOTH: Record<string, string> = {
 const f4 = (c: Cell | null) => (c ? c.value.toFixed(4) : "–");
 const range4 = (c: Cell | null, signed = false) => {
   if (!c || c.lo === null || c.hi === null) return null;
-  const s = (x: number) => `${signed && x > 0 ? "+" : ""}${x.toFixed(4)}`;
+  const s = (x: number) => (signed ? signedNum(x, 4) : x.toFixed(4));
   return `${s(c.lo)} to ${s(c.hi)}`;
 };
 const one = (x: number | null) => (x === null ? "–" : x.toFixed(1));
@@ -63,8 +63,8 @@ export default function DecisionsWp({ rows }: { rows: TrackRow[] }) {
             {c.diffs.map((d) => (
               <tr key={d.method}>
                 <th scope="row">Ours minus {NAMES[d.method]}</th>
-                <td className="num">{d.brier ? `${d.brier.value > 0 ? "+" : ""}${f4(d.brier)}` : "–"}<span className="block text-xs text-muted">{range4(d.brier, true)}</span></td>
-                <td className="num">{d.logLoss ? `${d.logLoss.value > 0 ? "+" : ""}${f4(d.logLoss)}` : "–"}<span className="block text-xs text-muted">{range4(d.logLoss, true)}</span></td>
+                <td className="num">{d.brier ? signedNum(d.brier.value, 4) : "–"}<span className="block text-xs text-muted">{range4(d.brier, true)}</span></td>
+                <td className="num">{d.logLoss ? signedNum(d.logLoss.value, 4) : "–"}<span className="block text-xs text-muted">{range4(d.logLoss, true)}</span></td>
                 <td className="num">–</td>
               </tr>
             ))}

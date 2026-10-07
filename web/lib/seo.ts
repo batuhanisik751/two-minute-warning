@@ -13,8 +13,10 @@ import type { Metadata } from "next";
 type Env = Record<string, string | undefined>;
 
 export const SITE_NAME = "Two-Minute Warning";
+/** The default meta description: at most 200 characters (search engines cut longer ones), naming
+ *  every module on the site (tests/unit/seo.test.ts). */
 export const SITE_DESCRIPTION =
-  "An open, point-in-time NFL early-warning site: the Waiver Radar, K and D/ST streamers, Regression Watch, the Decision Report Card, the Hot-Seat Meter and the Cliff board, each with its public track record.";
+  "An open, point-in-time NFL site: Waiver Radar, K/DST streamers, Regression Watch, Questionable, Teammate out, Playoff planner, Decision Report Card, Hot-Seat Meter, Cliff board and coach tendencies.";
 
 function origin(raw: string | undefined): string | null {
   const v = raw?.trim();
@@ -58,4 +60,17 @@ export function pageMetadata(path: string, title: string, description: string): 
     openGraph: { type: "website", siteName: SITE_NAME, locale: "en_US", url: path, title: `${title} · ${SITE_NAME}`, description },
     twitter: { card: "summary", title: `${title} · ${SITE_NAME}`, description },
   };
+}
+
+/** A player page's name for its title and description, with what tells namesakes apart (three
+ *  Mike Williams): "Mike Williams (WR, 2017–2024)" = his position and his years, from his rookie
+ *  season (else the first season with published rows) to the last season with published rows; a
+ *  player without any published row: "rookie season 2005". */
+export function playerLabel(p: { name: string; position: string | null; rookieSeason: number | null; seasons: readonly number[] }): string {
+  const last = p.seasons.length ? Math.max(...p.seasons) : null;
+  const first = p.rookieSeason ?? (p.seasons.length ? Math.min(...p.seasons) : null);
+  const years =
+    first !== null && last !== null ? (first >= last ? String(last) : `${first}–${last}`) : first !== null ? `rookie season ${first}` : null;
+  const parts = [p.position, years].filter((x): x is string => !!x);
+  return parts.length ? `${p.name} (${parts.join(", ")})` : p.name;
 }

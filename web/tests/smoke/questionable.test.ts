@@ -16,7 +16,9 @@ const empty = new Map<string, Page>();
 const seedOnly = DATA === "seed";
 const PAST = `/questionable?season=${Q.pastWeek.season}&week=${Q.pastWeek.week}`;
 const NONE = `/questionable?season=${Q.emptyWeek.season}&week=${Q.emptyWeek.week}`;
-const PATHS = ["/questionable", "/methodology", "/track-record", ...(seedOnly ? [PAST, NONE, `/player/${Q.featured}`, "/player/00-9000001"] : [])];
+// G4.10: an impossible week and a past week with no list never get one: no "yet"
+const NEVER = [`/questionable?season=${Q.week.season}&week=99`, `/questionable?season=${Q.week.season}&week=1`];
+const PATHS = ["/questionable", "/methodology", "/track-record", ...(seedOnly ? [PAST, NONE, ...NEVER, `/player/${Q.featured}`, "/player/00-9000001"] : [])];
 
 before(
   async () => {
@@ -68,6 +70,30 @@ describe("/questionable (any data)", () => {
     assert.equal(all(s, "[data-testid=panel-backtest]").length, 1);
     assert.equal(all(s, "[data-testid=panel-live]").length, 1);
   });
+
+  test("/methodology wording (final audit): every module named, no glued words, nothing local-only", (t) => {
+    if (!up) return t.skip(`no server at ${BASE}`);
+    const m = main("/methodology");
+    // what a reader sees, text nodes joined as the browser does (prose() joins them with spaces)
+    const seen = (el: Element) => {
+      const c = el.cloneNode(true) as Element;
+      for (const x of Array.from(c.querySelectorAll("[hidden],.sr-only,script,style,template"))) x.remove();
+      return (c.textContent ?? "").replace(/\s+/g, " ");
+    };
+    // G4.7: the intro names every module of the site
+    const intro = prose(m.querySelector("h1")!.parentElement!);
+    for (const name of ["Waiver Radar", "streamer", "Regression Watch", "Questionable outcomes", "Teammate out", "Playoff planner", "Decision Report Card", "Coach tendencies", "Hot-Seat Meter", "Cliff board"]) {
+      assert.ok(intro.includes(name), `the intro names ${name}`);
+    }
+    // G4.4 / G4.5: no glued or doubled words
+    const body = seen(m);
+    assert.doesNotMatch(body, /PR-AUCmeasures|the same the tag/);
+    const q = m.querySelector("[data-testid=questionable-method]");
+    if (q && !q.querySelector("[data-testid=empty-state]")) assert.match(seen(q), /of the past players with the same tag(, | and )/);
+    // G5.1: no local-only feature (the owner's start/sit report, My League's glossary rows)
+    for (const n of ["start_sit_odds", "all_play_record", "luck", "playoff_odds"]) assert.equal(m.querySelector(`#term-${n}`), null, `glossary row ${n}`);
+    assert.doesNotMatch(prose(m.querySelector("[data-testid=model-cards]")!), /Start\/sit/);
+  });
 });
 
 describe("/questionable (seed)", () => {
@@ -109,7 +135,8 @@ describe("/questionable (seed)", () => {
     assert.deepEqual(all(m, "[data-testid=q-backtest-table] tbody tr").map((r) => r.getAttribute("data-grouping")), ["missed_prev+position", "status"]);
     assert.match(prose(m.querySelector("[data-testid=q-backtest]")!), /beats the baseline on both scores/);
     assert.equal(all(m, "[data-testid=q-calibration-table] tbody tr").length, 5);
-    assert.match(prose(m.querySelector("[data-testid=q-calibration]")!), /No player fell in 85%\+/);
+    assert.equal(prose(m.querySelector("[data-testid=q-calibration-table] tbody tr th")!), "0–30%", "the figure's label style");
+    assert.match(prose(m.querySelector("[data-testid=q-calibration]")!), /No player fell in 85–100%/);
     const live = m.querySelector("[data-testid=q-live]")!;
     assert.equal(live.getAttribute("data-live"), "graded");
     assert.match(prose(live), /^4 of the 5 graded players played \(80\.0%\), from 1 live week of lists; the chance they were given averaged 60\.0%\./);
@@ -128,6 +155,15 @@ describe("/questionable (seed)", () => {
     assert.match(prose(e), new RegExp(`No tagged player listed for ${Q.emptyWeek.season} week ${Q.emptyWeek.week} yet`));
     assert.ok(prose(e).includes(WHEN_LISTS_FILL) && prose(e).includes(INACTIVES_NOTE), "when lists fill in, and the inactives note");
     assert.equal(all(none, "[data-testid=q-weeks] a").length, 2, "links to the two weeks with a list");
+  });
+
+  test("an impossible or past week without a list says there is none, not \"yet\"", (t) => {
+    if (!up || !seedOnly) return t.skip("seed only");
+    for (const [path, week] of [[NEVER[0], 99], [NEVER[1], 1]] as const) {
+      const e = main(path).querySelector("[data-testid=q-empty]");
+      assert.ok(e, `${path}: the empty state`);
+      assert.match(prose(e), new RegExp(`^No list for ${Q.week.season} week ${week} A list is made only for the week whose games are next; the weeks that have one are linked above\\.$`), path);
+    }
   });
 
   test("the player badge: on this week's newest list only", (t) => {

@@ -245,3 +245,10 @@ export function chooseWeek(asked: { season: number | null; week: number | null }
   if (asked.season !== null && asked.week !== null) return { season: asked.season, week: asked.week };
   return current ?? index[0] ?? null;
 }
+
+/** Whether a week with no list may still get one: the week whose games are next or a later
+ *  regular-season week (18 at most) of the same season. A past or impossible week (week 99)
+ *  never will, so its empty state must not say "yet". */
+export function listMayCome(w: TOWeek, current: TOWeek | null): boolean {
+  return current !== null && w.season === current.season && w.week >= current.week && w.week <= 18;
+}

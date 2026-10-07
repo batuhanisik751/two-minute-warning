@@ -101,6 +101,29 @@ def test_pace_pairs_ignore_row_order_and_skip_fourth_quarter():
     assert plays.pace_pairs(q4).height == 0
 
 
+def test_pace_is_not_charted_for_a_team_game_with_a_coarse_clock():
+    """Audit 2026-10-06 (G2.1): 1999-2000 play-by-play repeats the clock for many snaps (1999's
+    league pace came out 0.007 s); a team-game whose offensive snaps carry distinct clock
+    values for fewer than CLOCK_MIN_SHARE of them gives no pace pairs, the other team's game
+    keeps its pairs, and a team-season without a charted game has no pace."""
+    coarse = [{"game_seconds_remaining": t} for t in (3000, 3000, 3000, 2940, 2940, 2940)]
+    fine = [{"game_seconds_remaining": t, "posteam": "BBB", "fixed_drive": 2}
+            for t in (2900, 2870, 2840, 2810)]  # fmt: skip
+    g = run(*coarse, *fine)
+    assert plays.charted_games(g).rows() == [("2025_01_AAA_BBB", "BBB")]
+    p = plays.pace_pairs(g)
+    assert set(p["posteam"]) == {"BBB"} and p["seconds"].to_list() == [30, 30, 30]
+    a = season.aggregate(g, p, season.COACH_KEYS).sort("team")
+    assert a["neutral_sec_per_play_n"].to_list() == [0, 3]
+    assert a["neutral_sec_per_play"].to_list() == [None, 30.0]
+    assert a["plays"].to_list() == [6, 4]  # the other tendencies keep every snap
+    # three distinct values in four snaps (0.75) is charted; two in four is not
+    three = run(*[{"game_seconds_remaining": t} for t in (3000, 2970, 2970, 2940)])
+    two = run(*[{"game_seconds_remaining": t} for t in (3000, 3000, 2940, 2940)])
+    assert plays.CLOCK_MIN_SHARE == 0.75
+    assert plays.charted_games(three).height == 1 and plays.charted_games(two).height == 0
+
+
 def test_aggregate_rates_proe_and_pace():
     g = pace_game().with_columns(
         pl.Series("pass_oe", [10.0, -20.0, None, 30.0, None, 0.0, 5, 5, 5, 5, 5, 5])

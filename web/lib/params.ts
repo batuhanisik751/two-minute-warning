@@ -34,11 +34,20 @@ export function isGsisId(id: string): boolean {
   return GSIS_PATTERN.test(id);
 }
 
+/** The first season /player has week-by-week rows for (player_week_summary): snap counts begin
+ *  then (config/settings.yaml seasons.snaps_start; tests/unit/params.test.ts reads it). Regression
+ *  Watch's backtest lists start earlier (2011), so a player page can show a season without weeks. */
+export const WEEKLY_FIRST_SEASON = 2013;
+
 export type ListKey = { season: number; week: number; kind: "live" | "backtest" };
 
 /** Which list /waivers shows: the requested (season, week[, kind]) when it exists; else the
- *  requested season's latest week; else the newest list. Live beats reconstructed for the
- *  same week unless kind=backtest is asked for. `available` is newest first. */
+ *  published week nearest to it (in the requested season the nearest week, a tie going to the
+ *  earlier one; the season's newest week when no week is asked for; a season without lists: the
+ *  nearest season's closest end, a tie going to the earlier season); else the newest list. Live
+ *  beats reconstructed for the same week unless kind=backtest is asked for. `exact` is false when
+ *  the list shown is not the one asked for (a kind asked for and found counts as found). `available`
+ *  is newest first. */
 export function chooseList(
   available: ListKey[],
   season: number | null,
@@ -50,24 +59,36 @@ export function chooseList(
     (kind ? rows.find((r) => r.kind === kind) : undefined) ??
     rows.find((r) => r.kind === "live") ??
     rows[0];
+  const kindOk = (c: ListKey) => kind === null || c.kind === kind;
   if (season !== null && week !== null) {
     const same = available.filter((r) => r.season === season && r.week === week);
     if (same.length) {
       const c = pick(same);
-      return { chosen: c, exact: kind === null || c.kind === kind };
+      return { chosen: c, exact: kindOk(c) };
     }
   }
   if (season !== null) {
-    const inSeason = available.filter((r) => r.season === season);
-    if (inSeason.length) {
-      const top = inSeason[0];
-      const c = pick(inSeason.filter((r) => r.week === top.week));
-      return { chosen: c, exact: week === null && kind === null };
-    }
+    const seasons = [...new Set(available.map((r) => r.season))];
+    const near = seasons.reduce((b, x) => {
+      const d = Math.abs(x - season);
+      const db = Math.abs(b - season);
+      return d < db || (d === db && x < b) ? x : b;
+    });
+    const inSeason = available.filter((r) => r.season === near);
+    const weeks = inSeason.map((r) => r.week);
+    // the asked week (the newest when none is asked); in another season, its end facing the asked one
+    const target = near !== season ? (near > season ? Math.min(...weeks) : Math.max(...weeks)) : (week ?? Math.max(...weeks));
+    const best = weeks.reduce((b, w) => {
+      const d = Math.abs(w - target);
+      const db = Math.abs(b - target);
+      return d < db || (d === db && w < b) ? w : b;
+    });
+    const c = pick(inSeason.filter((r) => r.week === best));
+    return { chosen: c, exact: near === season && week === null && kindOk(c) };
   }
   const top = available[0];
   const c = pick(available.filter((r) => r.season === top.season && r.week === top.week));
-  return { chosen: c, exact: season === null && week === null && kind === null };
+  return { chosen: c, exact: season === null && week === null && kindOk(c) };
 }
 
 export type WeekRef = { season: number; week: number };

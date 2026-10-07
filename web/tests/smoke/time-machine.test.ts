@@ -51,7 +51,7 @@ describe("/time-machine", () => {
       assert.deepEqual(secs.map((s) => s.getAttribute("data-module")).sort(), [...MODULES].sort(), `${path}: one section per module`);
       const covered = secs.filter((s) => s.getAttribute("data-covered") === "yes");
       const cov = text(m.querySelector("[data-testid=tm-coverage]")!);
-      assert.match(cov, new RegExp(`^\\d{4} (preseason|week \\d+): ${covered.length} of the ${MODULES.length} modules have something stored`), path);
+      assert.match(cov, new RegExp(`^\\d{4} (preseason|week \\d+): ${covered.length} of the ${MODULES.length} modules ${covered.length === 1 ? "has" : "have"} something stored`), path);
       for (const s of covered) {
         const kind = s.getAttribute("data-kind");
         const mod = s.getAttribute("data-module");
@@ -120,7 +120,7 @@ describe("/time-machine (seed)", () => {
     assert.equal(hs.querySelector("a")?.getAttribute("href"), `/time-machine?season=${HOT_SEAT_SEED.past}&week=${HOT_SEAT_SEED.lastWeek}`);
   });
 
-  test("final outcomes are overlaid; an unknown week falls back with a note", (t) => {
+  test("final outcomes are overlaid; an unknown week falls back with a note", async (t) => {
     if (!up || !seedOnly) return t.skip("seed only");
     const eos = section(main(`/time-machine?season=${HOT_SEAT_SEED.past}&week=${HOT_SEAT_SEED.lastWeek}`), "hot_seat")!;
     assert.match(text(eos), /\(the end-of-season snapshot\)/);
@@ -129,6 +129,11 @@ describe("/time-machine (seed)", () => {
     const board = section(main(`/time-machine?season=${BOARD_SEED.past[0]}&week=0`), "board")!;
     assert.match(text(board.querySelector("[data-testid=outcomes-final]")!), /^What happened: \d+ of the \d+ players who played/);
     assert.equal(all(board, "[data-testid=drivers]").length, 0, "compact: no drivers");
-    assert.match(text(main("/time-machine?season=1999&week=1")), /Nothing was published for that week; showing 2026 week 3 instead\./);
+    // an unpublished week falls back to the nearest published one: before everything, the oldest
+    // (the 2019 board's preseason, the seed's first week); after everything, the newest
+    assert.match(text(main("/time-machine?season=1999&week=1")), new RegExp(`Nothing was published for that week; showing ${BOARD_SEED.noEcr} preseason instead\\.`));
+    const later = await fetchPage("/time-machine?season=2030&week=1");
+    assert.equal(later.status, 200);
+    assert.match(text(later.doc.querySelector("main#main")!), /Nothing was published for that week; showing 2026 week 3 instead\./);
   });
 });

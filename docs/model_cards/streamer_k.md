@@ -56,7 +56,9 @@ Source: `docs/streamer.md`, "The weekly list (S2a)"
 - **The chance shown on the site** is not the model probability: it is how often kickers the
   model scored alike (bins of at least 200 backtest picks) started in the seasons BEFORE the
   list's season, with a 90% interval. In the 2013-2025 backtest no kicker bin reached 50%, so kickers have no
-  must-add.
+  must-add. A kicker who did not kick in his team's latest game shows how often such pool
+  kickers of those seasons started instead (each season's model has its own probability scale;
+  audit 2026-10-06).
 
 ## Evaluation
 

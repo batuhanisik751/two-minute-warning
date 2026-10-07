@@ -16,7 +16,9 @@ const empty = new Map<string, Page>();
 const seedOnly = DATA === "seed";
 const PAST = `/teammate-out?season=${T.pastWeek.season}&week=${T.pastWeek.week}`;
 const NONE = `/teammate-out?season=${T.emptyWeek.season}&week=${T.emptyWeek.week}`;
-const PATHS = ["/teammate-out", "/methodology", "/track-record", ...(seedOnly ? [PAST, NONE, `/player/${T.featured}`, `/player/${T.absent}`, "/player/00-9000001"] : [])];
+// G4.10: an impossible week and a past week with no list never get one: no "yet"
+const NEVER = [`/teammate-out?season=${T.week.season}&week=99`, `/teammate-out?season=${T.week.season}&week=1`];
+const PATHS = ["/teammate-out", "/methodology", "/track-record", ...(seedOnly ? [PAST, NONE, ...NEVER, `/player/${T.featured}`, `/player/${T.absent}`, "/player/00-9000001"] : [])];
 
 before(
   async () => {
@@ -94,7 +96,7 @@ describe("/teammate-out (seed)", () => {
     assert.ok(featured.querySelector(`a[href='/player/${T.featured}']`));
     assert.match(prose(featured), /Role RB2/);
     assert.match(prose(featured), /Carry share 25% → 38% \(\+13\)/);
-    assert.match(prose(featured), /PPR points: 14\.2 \(6\.1–22\.0\) 80% range · usually 9\.0 a game; the share change is worth \+5\.2/);
+    assert.match(prose(featured), /PPR points: 14\.2 \(6\.1–22\.0\) 80% range · usually 9\.0 a game; the share change is worth \+4\.5; his points per carry or target pulled toward the position average: \+0\.7/);
     for (const term of ["starter_out", "vacated_share", "teammate_role", "carry_share", "target_share", "allocation", "mae"]) {
       assert.ok(m.querySelector(`a[href='/methodology#term-${term}']`), `term ${term}`);
     }
@@ -141,12 +143,21 @@ describe("/teammate-out (seed)", () => {
     assert.equal(all(none, "[data-testid=to-weeks] a").length, 2, "links to the two weeks with a list");
   });
 
+  test("an impossible or past week without a list says there is none, not \"yet\"", (t) => {
+    if (!up || !seedOnly) return t.skip("seed only");
+    for (const [path, week] of [[NEVER[0], 99], [NEVER[1], 1]] as const) {
+      const e = main(path).querySelector("[data-testid=to-empty]");
+      assert.ok(e, `${path}: the empty state`);
+      assert.match(prose(e), new RegExp(`^No list for ${T.week.season} week ${week} A list is made only for the week whose games are next; the weeks that have one are linked above\\.$`), path);
+    }
+  });
+
   test("the player badge: a predicted gainer or an absent starter on this week's newest list", (t) => {
     if (!up || !seedOnly) return t.skip("seed only");
     const g = main(`/player/${T.featured}`).querySelector("[data-testid=to-badge]");
     assert.ok(g, "gainer badge");
     assert.equal(g.getAttribute("data-kind"), "gainer");
-    assert.match(prose(g), /^Teammate out \(.+\): predicted 14\.2 \(6\.1–22\.0\) PPR points as the RB2; his bigger share is worth \+5\.2 \(2026 week 4 list\)$/);
+    assert.match(prose(g), /^Teammate out \(.+\): predicted 14\.2 \(6\.1–22\.0\) PPR points as the RB2; his bigger share is worth \+4\.5; his points per carry or target pulled toward the position average: \+0\.7 \(2026 week 4 list\)$/);
     assert.equal(g.querySelector("a")?.getAttribute("href"), `/teammate-out?season=${T.week.season}&week=${T.week.week}`);
     assert.equal(T.featured, SEED.featured, "the badge's player is the main seed's featured one");
     const a = main(`/player/${T.absent}`).querySelector("[data-testid=to-badge]");

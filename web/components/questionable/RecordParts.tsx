@@ -2,7 +2,7 @@ import Term from "@/components/Term";
 import CalibrationFigure from "@/components/track/CalibrationFigure";
 import { NotPublished, StatTiles } from "@/components/track/parts";
 import { fmtInt, pct } from "@/lib/format";
-import { backtestScore, calibrationPoints, liveRecord, type QBacktestRow, type QCalibrationRow, type QLiveRow } from "@/lib/questionable";
+import { backtestScore, bucketLabel, calibrationPoints, liveRecord, type QBacktestRow, type QCalibrationRow, type QLiveRow } from "@/lib/questionable";
 
 // The Questionable record's pieces, shared by /questionable and /track-record: the walk-forward
 // score against the baseline, the calibration (plot and table) and the live record. Every number
@@ -53,7 +53,7 @@ export function BacktestScore({ rows }: { rows: QBacktestRow[] }) {
 export function QCalibration({ rows, id }: { rows: QCalibrationRow[]; id: string }) {
   const points = calibrationPoints(rows);
   if (!points.length) return <NotPublished what="The calibration">It appears with the first publish of the Questionable table.</NotPublished>;
-  const empty = rows.filter((r) => r.n === 0).map((r) => r.bucket);
+  const empty = rows.filter((r) => r.n === 0).map((r) => bucketLabel(r.bucket));
   return (
     <div className="space-y-3" data-testid="q-calibration">
       <div className="table-scroll">
@@ -70,7 +70,9 @@ export function QCalibration({ rows, id }: { rows: QCalibrationRow[]; id: string
           <tbody>
             {[...rows].sort((a, b) => a.line - b.line).map((r) => (
               <tr key={r.line} data-bucket={r.bucket}>
-                <th scope="row">{r.bucket}</th>
+                <th scope="row" className="tnum">
+                  {bucketLabel(r.bucket)}
+                </th>
                 <td className="num">{fmtInt(r.n)}</td>
                 <td className="num">{r.predicted === null ? "–" : pct(r.predicted, 1)}</td>
                 <td className="num">{r.actual === null ? "–" : pct(r.actual, 1)}</td>

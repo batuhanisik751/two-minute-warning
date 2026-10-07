@@ -5,6 +5,7 @@ snapshots reproduce the backtest report; the Radar's pin is kept byte for byte."
 from __future__ import annotations
 
 import dataclasses
+import json
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -268,3 +269,42 @@ def test_the_committed_streamer_pins_check_out() -> None:
     assert res.exit_code == 0, res.output
     assert "streamer_dst" in res.output and "matches reports/streamer/backtest.csv" in res.output
     assert "waiver_radar" not in res.output
+
+
+def test_a_kicker_who_did_not_kick_gets_the_history_of_such_picks(approved, data, tmp_path) -> None:
+    """Audit 2026-10-06 (G1.1): a kicker with no kick in his team's latest game reads the start
+    rate of such pool kickers in the backtest, not the probability bin of his score (each fold
+    has its own scale: the 2026 fold scored them inside a kicking kicker's bin)."""
+    root, pin_path, _ = approved
+    _, kpin = sp.load_pinned_k(SEASON, path=pin_path, root=root)
+    frames = sp.load_k_snapshot(kpin, root)
+    path = tmp_path / "dataset.parquet"
+    data.write_parquet(path)
+    flags = sc.kicker_flags(path)
+    assert set(flags.columns) == {"season", "week", "entity_id", "is_team_kicker"}
+    back = frames["predictions"].join(frames["outcomes"], on=["season", "week", "entity_id"])
+    idle = back.join(flags, on=["season", "week", "entity_id"]).filter(~pl.col("is_team_kicker"))
+    assert idle.height > 0
+    k = sc.k_confidence(frames, SEASON, min_rows=5, flags=flags)
+    assert k.idle == (idle.height, int(idle["y_start"].sum()))
+    assert sc.k_confidence(frames, SEASON, flags=flags).idle is None  # fewer than 200 rows
+    assert sc.k_confidence(frames, SEASON).idle is None  # no flags: the bins only
+    # a synthetic non-kicker with the top score, beside a kicker with the same score
+    top = float(frames["predictions"]["score"].max())
+    band = sc.k_band(k, np.array([top, top, top]), [True, False, None])
+    n, hits = k.idle
+    assert band.row(0) == k.band(np.array([top])).row(0)  # a kicker: the probability bin
+    assert band.row(2) == band.row(0)  # no flag: the bin too
+    lo, hi = sc.cf.wilson(hits, n)
+    assert band.row(1, named=True) == {"chance": hits / n, "band_lo": lo, "band_hi": hi,
+                                       "band_n": n, "band_hits": hits, "band_from": None,
+                                       "band_to": None}  # fmt: skip
+    stored = json.loads(sc.k_band_json(band.row(1, named=True)))
+    assert stored["basis"] == "not_kicking" and stored["n"] == n
+    assert json.loads(sc.k_band_json(band.row(0, named=True)))["p_from"] is not None
+    assert "had not kicked" in sc.band_text(hits / n, lo, hi, "K", idle=True)
+    # a dataset that does not cover the backtest is refused, a missing one too
+    with pytest.raises(ValueError, match="no is_team_kicker"):
+        sc.k_confidence(frames, SEASON, flags=flags.filter(pl.col("season") != 2013))
+    with pytest.raises(ValueError, match="twm streamer dataset"):
+        sc.kicker_flags(tmp_path / "missing.parquet")

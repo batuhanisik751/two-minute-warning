@@ -144,7 +144,8 @@ def score_week(
         raw, prob = k_model.predict(k)
         k = sm.rank_scores(k.with_columns(pl.Series("raw_score", raw, dtype=pl.Float64),
                                           pl.Series("score", prob, dtype=pl.Float64)))  # fmt: skip
-        band = k_conf.band(k.get_column("score").to_numpy())
+        band = sc.k_band(k_conf, k.get_column("score").to_numpy(),
+                         k.get_column("is_team_kicker").to_list())  # fmt: skip
         parts.append(_finish(k, band, sr.k_reasons(k_model, k), k_model.model_version)
                      .with_columns(pl.lit(None, dtype=pl.Float64).alias("rule_value")))  # fmt: skip
     d = data.filter(pl.col("position") == "DST")
@@ -242,7 +243,7 @@ def store_frames(run: WeeklyRun, *, created_at: datetime | None = None):
 
     created = created_at if created_at is not None else pr.now_utc()
     s = run.scored
-    bands = [cf.band_json(r) if r["position"] == "K" else sc.dst_band_json(r)
+    bands = [sc.k_band_json(r) if r["position"] == "K" else sc.dst_band_json(r)
              for r in s.iter_rows(named=True)]  # fmt: skip
     preds = s.select(
         pl.lit(sm.MODULE).alias("module"),
@@ -305,7 +306,8 @@ def _why(text: str | None) -> str:
 
 
 def _chance(r: Mapping[str, Any]) -> str:
-    return sc.band_text(r["chance"], r["band_lo"], r["band_hi"], r["position"])
+    idle = r["position"] == "K" and r["band_from"] is None
+    return sc.band_text(r["chance"], r["band_lo"], r["band_hi"], r["position"], idle)
 
 
 def _tier_lines(conf: Any, position: str) -> list[str]:

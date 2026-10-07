@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { SITEMAP_PATHS, pageMetadata, siteOrigin, sitePublic, sitemapEntries } from "../../lib/seo";
+import { SITE_DESCRIPTION, SITEMAP_PATHS, pageMetadata, playerLabel, siteOrigin, sitePublic, sitemapEntries } from "../../lib/seo";
 
 test("the origin: SITE_URL, else Vercel's production domain, else localhost; only the origin", () => {
   assert.equal(siteOrigin({ SITE_URL: "https://example.org/some/path?x=1" }), "https://example.org");
@@ -33,4 +33,20 @@ test("the sitemap only once the site is public (else /sitemap.xml answers 404), 
   assert.equal(e[0].url, "https://example.org");
   assert.deepEqual(e.find((x) => x.url.endsWith("/methodology"))?.changeFrequency, "monthly");
   assert.ok(e.filter((x) => !x.url.endsWith("/methodology")).every((x) => x.changeFrequency === "weekly"));
+});
+
+test("the default description fits in 200 characters and names every module", () => {
+  assert.ok(SITE_DESCRIPTION.length <= 200, `${SITE_DESCRIPTION.length} characters`);
+  const modules = ["Waiver Radar", "streamers", "Regression Watch", "Questionable", "Teammate out", "Playoff planner", "Decision Report Card", "Hot-Seat Meter", "Cliff board", "coach tendencies"];
+  for (const m of modules) assert.ok(SITE_DESCRIPTION.includes(m), m);
+});
+
+test("a player's title tells namesakes apart: position and years", () => {
+  const mw = { name: "Mike Williams", position: "WR" };
+  assert.equal(playerLabel({ ...mw, rookieSeason: 2017, seasons: [2024, 2017, 2020] }), "Mike Williams (WR, 2017–2024)");
+  assert.equal(playerLabel({ ...mw, rookieSeason: 2010, seasons: [2013, 2014] }), "Mike Williams (WR, 2010–2014)");
+  assert.equal(playerLabel({ ...mw, rookieSeason: 2005, seasons: [] }), "Mike Williams (WR, rookie season 2005)");
+  assert.equal(playerLabel({ ...mw, rookieSeason: null, seasons: [2025] }), "Mike Williams (WR, 2025)");
+  assert.equal(playerLabel({ ...mw, rookieSeason: 2026, seasons: [2026] }), "Mike Williams (WR, 2026)");
+  assert.equal(playerLabel({ name: "X", position: null, rookieSeason: null, seasons: [] }), "X");
 });

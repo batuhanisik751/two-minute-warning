@@ -390,8 +390,8 @@ export default async function MethodologyPage() {
   return (
     <>
       <PageHeader title="Methodology" kicker="How it works">
-        How the Waiver Radar, the K and D/ST streamer, Regression Watch, the Decision Report Card and the Hot-Seat Meter work, what data they use, how they were tested
-        and what the tests found. Every result on this page is read from the published track records, the priority table,
+        How the Waiver Radar, the K and D/ST streamer, Regression Watch, Questionable outcomes, Teammate out, the Playoff planner, the Decision Report Card, Coach
+        tendencies, the Hot-Seat Meter and the Cliff board work, what data they use, how they were tested and what the tests found. Every result on this page is read from the published track records, the priority table,
         the frozen parameters and the glossary; none is typed in by hand. Each module&apos;s results season by season, its
         calibration and its live lists are on <Link href="/track-record">the Track record page</Link>.
       </PageHeader>
@@ -476,8 +476,14 @@ export default async function MethodologyPage() {
               <a href="https://github.com/dynastyprocess/data">DynastyProcess</a>: the cross-platform player id map and
               the archive of <a href="https://www.fantasypros.com/">FantasyPros</a> expert rankings. The preseason
               expert ranks decide part of the candidate pool (from the 2020 season on), the in-season ranks are the
-              experts&apos; baseline in the results, and a &ldquo;ranked before the season&rdquo; reason quotes them.
-              {showThirdPartyRanks() ? null : <>{" "}<span data-testid="third-party-note">{THIRD_PARTY_NOTE}</span></>}
+              experts&apos; baseline in the results
+              {showThirdPartyRanks() ? (
+                <>, and a &ldquo;ranked before the season&rdquo; reason quotes them.</>
+              ) : (
+                <>
+                  .{" "}<span data-testid="third-party-note">{THIRD_PARTY_NOTE}</span>
+                </>
+              )}
             </li>
             <li>
               <a href="https://www.pro-football-reference.com/">Pro Football Reference</a>: the original source of

@@ -3,6 +3,7 @@
 // lead_time_* tables (src/twm/publish/lead_time.py): aggregates only, never a player. The fixed
 // rules below (thresholds, the momentum rise) mirror src/twm/modules/lead_time/__init__.py; the
 // unit test reads that file so they cannot drift.
+import { MINUS } from "@/lib/format";
 
 /** The crowd "adds" a player when his ESPN rostered % crosses this (headline, secondary). */
 export const PRIMARY = 50;
@@ -47,10 +48,11 @@ export function share(x: number | null | undefined): string {
   return x === null || x === undefined ? "–" : `${(100 * x).toFixed(1)}%`;
 }
 
-/** A lead in weeks as published: "3", "6.25", "-2"; an en dash when suppressed. */
+/** A lead in weeks as published: "3", "6.25", "−2" (the site's minus sign); an en dash when suppressed. */
 export function weeks(x: number | null | undefined): string {
   if (x === null || x === undefined) return "–";
-  return String(Number.isInteger(x) ? x : Number(x.toFixed(2)));
+  const s = String(Number.isInteger(x) ? Math.abs(x) : Number(Math.abs(x).toFixed(2)));
+  return x < 0 && s !== "0" ? `${MINUS}${s}` : s;
 }
 
 const byThreshold = <T extends { threshold: number }>(rows: T[], t: number) => rows.filter((r) => r.threshold === t);
@@ -117,6 +119,25 @@ export function h2hOf(h2h: LTH2hRow[], level: string, threshold: number = PRIMAR
   const out: Partial<Record<(typeof H2H_KINDS)[number], LTH2hRow>> = {};
   for (const r of byThreshold(h2h, threshold)) if (r.level === level) out[r.h2h as (typeof H2H_KINDS)[number]] = r;
   return out;
+}
+
+/** The study's verdict, stated from the pooled rows at both thresholds: which flagged more of
+ *  the crowd adds before the crowd, the Radar's lists or the momentum baseline (null when a
+ *  threshold's pair is not published). */
+export function verdict(summary: LTSummaryRow[]): string | null {
+  const parts: string[] = [];
+  for (const t of [PRIMARY, SECONDARY]) {
+    const radar = pooledRow(summary, "listed", t)?.shareBefore;
+    const mom = pooledRow(summary, "momentum", t)?.shareBefore;
+    if (radar === null || radar === undefined || mom === null || mom === undefined) return null;
+    const nums = `${share(Math.max(radar, mom))} vs ${share(Math.min(radar, mom))}`;
+    parts.push(
+      radar === mom
+        ? `at the ${t}% mark the Radar's lists and the momentum baseline flagged the same share before the crowd (${share(radar)})`
+        : `at the ${t}% mark ${radar > mom ? "the Radar's lists" : "the momentum baseline"} flagged more crowd adds before the crowd (${nums})`,
+    );
+  }
+  return `In short: ${parts.join("; ")}.`;
 }
 
 /** Whether anything of the study is published (the summary's pooled rows at the headline threshold). */

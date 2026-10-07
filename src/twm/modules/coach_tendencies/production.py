@@ -64,6 +64,7 @@ def constants() -> dict[str, Any]:
             "min_sample_ranked": dict(season.MIN_SAMPLE_RANKED),
             "min_plays_pair": persistence.MIN_PLAYS_PAIR, "n_boot": persistence.N_BOOT,
             "seed": persistence.SEED, "max_pair_seconds": plays.MAX_PAIR_SECONDS,
+            "clock_min_share": plays.CLOCK_MIN_SHARE,
             "fantasy_seasons": [fantasy.FANTASY_FIRST, fantasy.FANTASY_LAST]}  # fmt: skip
 
 

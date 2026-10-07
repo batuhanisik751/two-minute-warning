@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { seasonWeek } from "@/lib/format";
 import { getPlayerTeammateOut } from "@/lib/queries/teammate-out";
-import { gainText, pointsWithRange, reasonLabel, teammateOutHref } from "@/lib/teammate-out";
+import { efficiencyText, gainText, pointsWithRange, reasonLabel, teammateOutHref } from "@/lib/teammate-out";
 
 /** On a player page: "Teammate out (X): predicted 11.0 (7.0–17.0) PPR points as the RB2; his bigger
- *  share is worth +5.0" when he is a
+ *  share is worth +5.0" (plus the efficiency pull, worded as on the list, when it is half a
+ *  point or more) when he is a
  *  predicted gainer on the newest Teammate-out list of the week whose games are next, or "Starter
  *  out" when he is one of its absent starters (links to that list); nothing otherwise. */
 export default async function PlayerBadge({ gsisId }: { gsisId: string }) {
@@ -12,7 +13,7 @@ export default async function PlayerBadge({ gsisId }: { gsisId: string }) {
   if (!t) return null;
   const text =
     t.kind === "gainer"
-      ? `Teammate out (${t.outNames}): predicted ${pointsWithRange(t)} PPR points as the ${t.role}; his bigger share is worth ${gainText(t.predGain)}`
+      ? `Teammate out (${t.outNames}): predicted ${pointsWithRange(t)} PPR points as the ${t.role}; his bigger share is worth ${gainText(t.predGain)}${efficiencyText(t)}`
       : `Starter out: ${reasonLabel(t.reason)}; see who gets his work`;
   return (
     <p className="mb-6" data-testid="to-badge" data-kind={t.kind}>

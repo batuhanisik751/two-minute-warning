@@ -1,5 +1,6 @@
 {
  "constants": {
+  "clock_min_share": 0.75,
   "fantasy_seasons": [
    2013,
    2025
@@ -29,7 +30,7 @@
   "seed": 20261005
  },
  "format": 1,
- "model_version": "history-3e0284a5594f3899",
+ "model_version": "history-311a51539649c2ff",
  "module": "coach_tendencies",
  "season": 2026,
  "seasons": "1999-2025",
@@ -44,11 +45,11 @@
   },
   "tendency_persistence": {
    "rows": 24,
-   "sha256": "b227fccca3a6654bb300b1cdf1d9eedc116ec2554c417afff49695e5dc44e3c0"
+   "sha256": "e0ddc515343ab2bce0dbb38c0e9230b1d684f4aff9d1b4c72a1875289edcbe6b"
   },
   "tendency_seasons": {
    "rows": 913,
-   "sha256": "c90d69ba3cb26df204053d069ecb05e4287cbf42dc67c7a07f24f18a601b12f5"
+   "sha256": "b71243decb01922dcc235666a91df2acacbd8375bfe974acd617b9d1d9180e9d"
   }
  }
 }

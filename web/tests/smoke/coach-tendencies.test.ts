@@ -21,7 +21,9 @@ const VET = `/coach/${T.veteran}`;
 const UNRANKED = `/coach/${T.unranked}`;
 const NONE = `/coach/${H.firedAfter}`;
 const PACE = "/decisions?tsort=neutral_sec_per_play";
-const PATHS = ["/decisions", "/methodology", ...(seedOnly ? [VET, UNRANKED, NONE, PACE] : [])];
+/** a season without graded decisions (G2.7): the sort links must not keep it */
+const UNGRADED = "/decisions?season=1999";
+const PATHS = ["/decisions", "/methodology", ...(seedOnly ? [VET, UNRANKED, NONE, PACE, UNGRADED] : [])];
 
 before(
   async () => {
@@ -65,7 +67,7 @@ describe("/coach/[id]: how his offense plays", () => {
     for (const c of ["proe", "no_huddle_rate"]) assert.match(prose(oldest.querySelector(`[data-cell=${c}]`)!), /not charted/);
     for (const r of rows) assert.equal(all(r, "td[data-cell]").length, TENDENCY_METRICS.length);
     assert.match(prose(rows[1].querySelector("[data-cell=neutral_sec_per_play]")!), /^\d+\.\d s faster than \d+%$/);
-    assert.match(prose(rows[1].querySelector("[data-cell=proe]")!), /^[+-]?\d+\.\d pts \d+(st|nd|rd|th) percentile$/);
+    assert.match(prose(rows[1].querySelector("[data-cell=proe]")!), /^[+−]?\d+\.\d pts \d+(st|nd|rd|th) percentile$/);
     const head = m.querySelector("[data-testid=tendency-seasons] thead")!;
     for (const x of TENDENCY_METRICS) assert.ok(head.querySelector(`a[href='/methodology#term-${x}']`), `header term ${x}`);
     assert.equal(all(head, "[role=button][aria-expanded=false]").length, TENDENCY_METRICS.length, "every metric header is a term");
@@ -79,7 +81,8 @@ describe("/coach/[id]: how his offense plays", () => {
     assert.equal(all(career, "tbody tr[data-row]").length, TENDENCY_METRICS.length);
     const note = prose(m.querySelector("[data-testid=tendency-persistence-note]")!);
     assert.match(note, /Style persists when the coach and the team both stay/);
-    assert.match(note, /At a new team, only no-huddle rate \(r 0\.53\) and shotgun rate \(r 0\.46\) carry over/);
+    // G4.12: only a tendency whose interval clears 0 carries over; no-huddle's includes 0
+    assert.match(note, /At a new team, only shotgun rate \(r 0\.46, 95% interval 0\.36 to 0\.56\) carries over; no-huddle rate \(r 0\.53, 95% interval −0\.05 to 0\.95\) looks high, but its interval includes 0: uncertain;/);
   });
 
   test("a season too short to rank, and a coach without a play-by-play season", (t) => {
@@ -125,6 +128,10 @@ describe("/decisions: how each offense plays", () => {
     assert.equal(active.getAttribute("aria-sort"), "ascending");
     const href = m.querySelector("[data-testid=tendency-league] a[data-sort=shotgun_rate]")!.getAttribute("href");
     assert.equal(href, "/decisions?tsort=shotgun_rate#tendencies");
+    // an ungraded season asked for: the warning once, and sort links without it (no repeated warning)
+    const u = main(UNGRADED);
+    assert.match(prose(u), /There are no graded decisions for 1999/);
+    assert.equal(u.querySelector("[data-testid=tendency-league] a[data-sort=shotgun_rate]")!.getAttribute("href"), "/decisions?tsort=shotgun_rate#tendencies");
   });
 
   test("any data: each row has every metric", (t) => {
@@ -148,7 +155,7 @@ describe("/methodology: coach tendencies", () => {
     assert.equal(rowsOf(s, "tendency-link").length, TENDENCY_METRICS.length);
     if (!seedOnly) return;
     assert.equal(prose(s.querySelector("[data-metric=fourth_short_go_rate] [data-cell=same_coach_new_team]")!), "– 0 pairs");
-    assert.match(prose(s.querySelector("[data-testid=tendency-persistence-text]")!), /only no-huddle rate \(r 0\.53\) and shotgun rate \(r 0\.46\) carry over/);
+    assert.match(prose(s.querySelector("[data-testid=tendency-persistence-text]")!), /only shotgun rate \(r 0\.46, 95% interval 0\.36 to 0\.56\) carries over; no-huddle rate .* uncertain/);
     assert.match(prose(s.querySelector("[data-testid=tendency-link-text]")!), new RegExp(`r = ${T.proe.same.toFixed(2)}`));
   });
 

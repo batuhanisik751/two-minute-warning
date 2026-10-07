@@ -1,11 +1,11 @@
 import { FoldTable } from "@/components/Fold";
 import Term from "@/components/Term";
-import { fmtInt, pct } from "@/lib/format";
+import { fmtInt, pct, signedNum } from "@/lib/format";
 import { TRACK_INTERVAL_LEVEL } from "@/lib/method";
 import type { WpSeason } from "@/lib/track-record";
 
 type Num = WpSeason["brier"];
-const f4 = (x: number, signed = false) => `${signed && x > 0 ? "+" : ""}${x.toFixed(4)}`;
+const f4 = (x: number, signed = false) => (signed ? signedNum(x, 4) : x.toFixed(4));
 
 function Diff({ d }: { d: Num }) {
   if (!d) return <>–</>;

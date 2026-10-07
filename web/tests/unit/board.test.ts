@@ -57,6 +57,11 @@ test("drivers in words; missing inputs say so", () => {
   assert.equal(boardDriverValue(d("pos_rank_s", 22)), "22nd by points per game at his position last season");
   assert.equal(boardDriverValue(d("age_curve_ratio", 0.79)), "at his age, players at his position kept 79% of their points per game on average");
   assert.equal(boardDriverValue(d("vacated_targets_share_s1", null, true)), "not available (the model fills it in)");
+  // a real minus sign, never "-0.0" (Joe Webb's 2015: -0.04 points per game); the source is in the label only
+  assert.equal(boardDriverValue(d("ppg_s", -0.04)), "0.0 points per game last season");
+  assert.equal(boardDriverValue(d("ppg_change", -2.04)), "\u22122.0 points per game against the season before");
+  assert.equal(boardDriverValue(d("yards_per_touch_s", -1.25)), "\u22121.3 yards per touch");
+  assert.equal(boardDriverValue(d("ngs_separation_s", 3.71)), "3.7 yards of separation");
 });
 
 test("outcomes: missed time, Cliff, no Cliff, pending", () => {
@@ -66,6 +71,8 @@ test("outcomes: missed time, Cliff, no Cliff, pending", () => {
   const c = boardOutcomeWords({ ...f, gamesS1: 12, ppgS1: 6.5, yCliff: true, yMissed: false }, 10);
   assert.deepEqual([c.tone, c.long], ["cliff", "6.5 points per game in 12 games (−35% from 10.0): a drop of 30% or more"]);
   assert.equal(boardOutcomeWords({ ...f, gamesS1: 16, ppgS1: 11, yCliff: false, yMissed: false }, 10).long, "11.0 points per game in 16 games (+10% from 10.0)");
+  // from a season at (or below) zero points per game a percent change means nothing: "0% from -0.0" before
+  assert.equal(boardOutcomeWords({ ...f, gamesS1: 9, ppgS1: 0.1, yCliff: false, yMissed: false }, -0.04).long, "0.1 points per game in 9 games (from 0.0)");
   assert.equal(boardOutcomeWords({ labelStatus: "pending", gamesS1: null, ppgS1: null, yCliff: null, yMissed: null }, 10).short, "Pending");
 });
 

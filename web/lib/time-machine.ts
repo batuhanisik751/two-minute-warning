@@ -62,8 +62,9 @@ export function pickerIndex(cal: readonly CalendarWeek[]): (ListKey & { position
   );
 }
 
-/** The chosen week: the asked one when published; else the asked season's newest week; else
- *  the newest week (params.chooseList's rules, without a kind). */
+/** The chosen week: the asked one when published; else the published week nearest to it (in the
+ *  asked season the nearest week, a tie going to the earlier one; the season's newest week when no
+ *  week is asked for); else the newest week (params.chooseList's rules, without a kind). */
 export function chooseWeek(cal: readonly CalendarWeek[], season: number | null, week: number | null): { chosen: CalendarWeek | null; exact: boolean } {
   const { chosen, exact } = chooseList(pickerIndex(cal), season, week, null);
   if (!chosen) return { chosen: null, exact: false };

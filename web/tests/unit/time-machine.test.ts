@@ -29,15 +29,21 @@ test("calendar: the union of every module's weeks, newest first, modules in page
   assert.equal(pickerIndex(cal).filter((r) => r.season === 2026 && r.week === 3).length, 2);
 });
 
-test("chooseWeek: asked week, else the season's newest, else the newest; week 0 is a week", () => {
+test("chooseWeek: asked week, else the nearest published one, else the newest; week 0 is a week", () => {
   const cal = calendar(ROWS);
   assert.deepEqual(chooseWeek(cal, null, null).chosen && whenName(chooseWeek(cal, null, null).chosen!), "2026 week 3");
   assert.equal(chooseWeek(cal, 2025, 0).chosen?.week, 0);
   assert.equal(chooseWeek(cal, 2025, 0).exact, true);
+  // a week the season does not have: its nearest week (5 is 4 away from 9, 20 is 11)
   const missing = chooseWeek(cal, 2025, 9);
-  assert.equal(missing.chosen?.week, 20);
+  assert.equal(missing.chosen?.week, 5);
   assert.equal(missing.exact, false);
-  assert.equal(chooseWeek(cal, 1999, 1).chosen?.season, 2026);
+  assert.equal(chooseWeek(cal, 2025, 17).chosen?.week, 20);
+  assert.equal(chooseWeek(cal, 2025, null).chosen?.week, 20);
+  // a season with nothing published: the nearest season's end facing it
+  assert.equal(chooseWeek(cal, 1999, 1).chosen && whenName(chooseWeek(cal, 1999, 1).chosen!), "2005 week 4");
+  assert.equal(chooseWeek(cal, 2030, 1).chosen && whenName(chooseWeek(cal, 2030, 1).chosen!), "2026 week 3");
+  assert.equal(chooseWeek(cal, 2030, 1).exact, false);
   assert.deepEqual(chooseWeek([], 2025, 5), { chosen: null, exact: false });
 });
 

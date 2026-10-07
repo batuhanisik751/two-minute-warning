@@ -410,14 +410,16 @@ in step F2.
   has a public page and a quote of at most 25 words, `checked_by` = `claude: source`; module
   `twm.warehouse.coach_corrections`), applied to `fact_game.home_coach` / `away_coach` before
   `coach_game`, `dim_coach` and `coach_team_season` are built, so the Decision Report Card and
-  the Hot-Seat candidates use the corrected coaches. 16 rows: in-season firings the schedule
+  the Hot-Seat candidates use the corrected coaches. 19 rows: in-season firings the schedule
   misses (2015 MIA Philbin -> Dan Campbell, 2015 TEN Whisenhunt -> Mike Mularkey, 2016 LA Fisher
   -> John Fassel, 2019 CAR Rivera -> Perry Fewell, 2024 NYJ/NO/CHI, 2025 TEN/NYG), one change
   the schedule records a game early (2007 ATL: Petrino coached the 12-10 game, resigned 12-11),
+  three 2000 changes it records weeks off (added 2026-10-06: ARI Tobin -> Dave McGinnis 10-23,
+  DET Ross -> Gary Moeller 11-06, WAS Turner -> Terry Robiskie 12-04; 14 team-games),
   the 2026 schedule's fired coaches (ARI Gannon -> Mike LaFleur, ATL Morris -> Kevin Stefanski,
   BUF McDermott -> Joe Brady) and three names (Klint Kubliak -> Kubiak, Jay -> Jerry Rosburg,
   and IND 1999-2001 Jim Mora -> Jim E. Mora, a different man from Jim L. Mora of ATL/SEA who
-  shared the slug `jim_mora`); 192 team-games change. Every other in-season change in the owner
+  shared the slug `jim_mora`); 206 team-games change (192 before the 2000 rows). Every other in-season change in the owner
   file was checked against the pages: the schedule's week is right. NOT corrected (not
   departures, not checked game by game): stand-ins during a medical leave (e.g. 2012 IND
   Arians, 2013 DEN Del Rio; the schedule keeps the head coach, but switches 2005 LA Martz ->

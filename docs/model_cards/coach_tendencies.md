@@ -1,7 +1,7 @@
 # Model card: Coach tendencies (`coach_tendencies`)
 
 Source: `config/production_models.yaml`
-Pin key `coach_tendencies`, pin id (model_version) `history-3e0284a5594f3899`, `model: history`,
+Pin key `coach_tendencies`, pin id (model_version) `history-311a51539649c2ff`, `model: history`,
 approved 2026-10-06, frozen for season 2026: the completed regular seasons 1999-2025 (913
 coach-team seasons, 179 coaches) with their persistence (24 rows) and fantasy link (32 rows).
 Every number below is copied from the file named on the `Source:` line above it
@@ -39,9 +39,10 @@ newly built seasons. Persistence is a Pearson r with a season-block bootstrap in
 
 Source: `reports/coach_tendencies/report.md`, "## persistence"
 Year-over-year persistence, relative to the league (r, its interval, pairs): neutral pass rate
-same coach and team 0.473332 (0.416954 to 0.527182), 635 pairs; same coach, new team 0.219189,
-60 pairs; new coach, same team 0.221887, 194 pairs. Shotgun 0.726688 / 0.438242 / 0.212605;
-no-huddle 0.681691 / 0.545575 / 0.162180; fourth-down go rate 0.377202 / 0.092451 / 0.011408.
+same coach and team 0.471841 (0.415651 to 0.524880), 637 pairs; same coach, new team 0.247673,
+60 pairs; new coach, same team 0.225316, 192 pairs. Shotgun 0.726229 / 0.432793 / 0.218124;
+no-huddle 0.681691 / 0.545575 / 0.162180; fourth-down go rate 0.377892 / 0.086787 / 0.013325;
+pace (from 2000: 1999's clock is too coarse) 0.604739 / 0.225834 / 0.152478.
 
 Source: `reports/coach_tendencies/report.md`, "## fantasy_link"
 Fantasy link (team-seasons, season-relative): PROE with targets per game, same season r
@@ -57,7 +58,9 @@ Not applicable: the module states counted rates and correlations; it predicts no
 
 Source: `docs/coach_tendencies.md`, "Limits"
 Head coach, not play-caller; a mid-season firing splits a team's season between two coaches;
-early-season rows of the season in progress have small samples. Until the yearly re-freeze, a
+early-season rows of the season in progress have small samples. Pace is not charted for a
+team-game whose clock is too coarse (fewer than 75% distinct clock values over its snaps): no
+1999 pace, and 2000-2001 pace from the charted games only. Until the yearly re-freeze, a
 season completed after the pin joins the career lines (built from the warehouse) but not the
 persistence or the fantasy link, which stay the pinned seasons'.
 

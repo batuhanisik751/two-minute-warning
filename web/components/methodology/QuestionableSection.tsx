@@ -7,7 +7,12 @@ import { getQuestionableModel, getQuestionableTables } from "@/lib/queries/quest
 import { INACTIVES_NOTE } from "@/lib/questionable";
 import { docUrl } from "@/lib/site";
 
-const KEY_WORDS: Record<string, string> = { report_status: "the tag", missed_prev: "whether he missed his team's previous game", position: "his position" };
+const KEY_WORDS: Record<string, string> = { report_status: "tag", missed_prev: "status in his team's previous game (played or missed)", position: "position" };
+
+/** "a", "a and b", "a, b and c". */
+function andList(xs: readonly string[]): string {
+  return xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}` : (xs[0] ?? "");
+}
 
 /** /methodology's Questionable section: what the chance counts, why practice status is not used,
  *  the "if he plays" line, the walk-forward score and the limits. Numbers from the pinned table's
@@ -32,7 +37,7 @@ export default async function QuestionableSection() {
           <p>
             For a QB, RB, WR or TE tagged <Term name="questionable">Questionable</Term> or <Term name="doubtful">Doubtful</Term> on his team&apos;s final injury report, the{" "}
             <Term name="play_chance">chance he plays</Term> is a counted rate: of the past players with the same{" "}
-            {model.featureList.map((k) => KEY_WORDS[k] ?? k).join(", ")} (seasons {seasons}), the share who took at least one offensive snap. Each group is pulled
+            {andList(model.featureList.map((k) => KEY_WORDS[k] ?? k))} (seasons {seasons}), the share who took at least one offensive snap. Each group is pulled
             toward the larger group it belongs to by {p.pseudo_count ?? "–"} pseudo-players, so small groups do not swing. No machine learning, and the table is frozen
             before the season (<span className="font-mono text-xs">{model.modelVersion}</span>).
           </p>

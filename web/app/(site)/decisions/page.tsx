@@ -103,8 +103,9 @@ export default async function DecisionsPage({ searchParams }: PageProps<"/decisi
         ) : null}
       </section>
       <TossUps name={name} league={league} />
+      {/* the sort links keep the season only when it was asked for and graded: an ungraded ?season= would repeat its warning (G2.7) */}
       {tSeason !== null && tRows.length ? (
-        <LeagueTendencies season={tSeason} rows={tRows} link={studies.link} sort={parseTendencySort(sp.tsort)} query={asked !== null ? { season: String(asked) } : {}} />
+        <LeagueTendencies season={tSeason} rows={tRows} link={studies.link} sort={parseTendencySort(sp.tsort)} query={asked === season ? { season: String(season) } : {}} />
       ) : null}
       <section aria-labelledby="worst-heading" className="mt-10">
         <h2 id="worst-heading" className="section-title mb-2 scroll-mt-24">

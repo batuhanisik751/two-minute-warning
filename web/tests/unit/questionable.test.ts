@@ -10,9 +10,11 @@ import {
   WHEN_LISTS_FILL,
   backtestScore,
   chancePct,
+  bucketLabel,
   bucketRange,
   calibrationPoints,
   chooseWeek,
+  listMayCome,
   historyRows,
   ifPlaysText,
   kickoffGroups,
@@ -42,6 +44,12 @@ test("chooseWeek: the asked week, else the week whose games are next, else the n
   assert.deepEqual(chooseWeek({ season: 2026, week: null }, { season: 2026, week: 5 }, index), { season: 2026, week: 5 });
   assert.deepEqual(chooseWeek({ season: null, week: null }, null, index), { season: 2026, week: 4 });
   assert.equal(chooseWeek({ season: null, week: null }, null, []), null);
+  // G4.10: only the week being played or a later week of its season can still get a list
+  const cur = { season: 2026, week: 5 };
+  assert.deepEqual([5, 6, 18].map((week) => listMayCome({ season: 2026, week }, cur)), [true, true, true]);
+  assert.deepEqual([4, 1, 19, 99].map((week) => listMayCome({ season: 2026, week }, cur)), [false, false, false, false]);
+  assert.equal(listMayCome({ season: 2025, week: 10 }, cur), false);
+  assert.equal(listMayCome({ season: 2026, week: 5 }, null), false);
   assert.equal(questionableHref({ season: 2026, week: 5 }), "/questionable?season=2026&week=5");
   assert.equal(questionableHref(), "/questionable");
 });
@@ -89,6 +97,8 @@ test("calibration buckets: ranges, and only buckets with players are plotted", (
   assert.deepEqual(bucketRange("30-50%"), { lo: 0.3, hi: 0.5 });
   assert.deepEqual(bucketRange("85%+"), { lo: 0.85, hi: 1 });
   assert.equal(bucketRange("high"), null);
+  // G4.13: the table, the plot's table and the empty-bucket note use one label style
+  assert.deepEqual(["<30%", "30-50%", "85%+", "high"].map(bucketLabel), ["0–30%", "30–50%", "85–100%", "high"]);
   const pts = calibrationPoints([
     { line: 2, bucket: "30-50%", n: 552, predicted: 0.452471, actual: 0.423913 },
     { line: 1, bucket: "<30%", n: 408, predicted: 0.014606, actual: 0.012255 },

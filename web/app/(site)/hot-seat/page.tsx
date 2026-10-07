@@ -99,7 +99,8 @@ export default async function HotSeatPage({ searchParams }: PageProps<"/hot-seat
         hrefFor={(w) => hotSeatHref({ season: w.season, week: w.week })}
         weekName={weekName}
       />
-      {notStarted ? <NotStarted s={notStarted} newest={newest} /> : null}
+      {/* "Shown below: the newest published list" only when it is (no season or week asked for: G2.6) */}
+      {notStarted ? <NotStarted s={notStarted} newest={asked ? null : newest} /> : null}
       {asked && !picked.exact ? (
         <div className="mt-4">
           <Note tone="warn">There is no list for that week; showing the nearest published one instead.</Note>

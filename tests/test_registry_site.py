@@ -80,3 +80,13 @@ def test_web_fallback_is_generated_and_in_sync():
     for e in rg.REGISTRY.values():
         for text in (e.reason_template, e.reason_if_false):
             assert text is None or json.dumps(text)[1:-1] not in committed, e.name
+
+
+def test_shared_texts_name_no_single_module_and_no_measured_numbers():
+    """Audit 2026-10-06 (G3.6, G4.13): list_kind is shown on the streamer, Regression and
+    Hot-Seat pages too, so it names no one module or weekday; the allocation example carries no
+    measured number (the published table holds those)."""
+    kind = rg.get("list_kind").explanation
+    assert not re.search(r"\b(Radar|Tuesday)\b", kind), kind
+    assert "as-of" in kind and "never changed" in kind
+    assert not re.search(r"\d\.\d|\d%", rg.get("allocation").explanation)

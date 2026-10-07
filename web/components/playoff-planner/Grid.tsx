@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { FoldTable } from "@/components/Fold";
 import RatingCell from "@/components/playoff-planner/RatingCell";
-import Term from "@/components/Term";
 import { Note } from "@/components/ui";
 import { gridFor, plannerHref, PP_POSITIONS, sortGrid, type PPRow, type SortKey } from "@/lib/playoff-planner";
 import { positionShort } from "@/lib/positions";
@@ -73,7 +72,7 @@ export default function Grid({ rows, weeks, pos, sort, unrated }: { rows: PPRow[
                   <SortHeader label="Team" sortKey="team" pos={pos} sort={sort} />
                   {weeks.map((w) => (g.rated ? <SortHeader key={w} label={`Week ${w}`} sortKey={`w${w}`} pos={pos} sort={sort} /> : <th key={w} scope="col">{`Week ${w}`}</th>))}
                   {g.rated ? (
-                    <SortHeader term={<Term name="strength_of_schedule">{`${weeks.length}-week total`}</Term>} label="sort by total" sortKey="total" pos={pos} sort={sort} className="num" />
+                    <SortHeader term={`${weeks.length}-week total`} label="sort by total" sortKey="total" pos={pos} sort={sort} className="num" />
                   ) : null}
                 </tr>
               </thead>

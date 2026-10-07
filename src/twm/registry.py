@@ -1857,7 +1857,8 @@ def _teammate_out_entries() -> list[Entry]:
             f"toward its position group with {tb.PSEUDO_COUNT:g} teammate-games; carries only "
             "when a RB is out",
             explanation="How much of the missing starter's work a teammate in that role took "
-            "on average: 0.46 means the backup RB got about 46% of the RB1's carries.",
+            "on average, as a share of that work: for the backup RB, the part of the RB1's "
+            "carries that went to him.",
             source=src,
         ),
         Entry(
@@ -1989,7 +1990,9 @@ def _coach_tendencies_entries() -> list[Entry]:
         "field position, score, clock and win probability",
         "neutral_sec_per_play": f"pace pair: a neutral snap and the same offense's next snap "
         f"of the drive and quarter with nothing between and no timeout charged; gaps over "
-        f"{cp.MAX_PAIR_SECONDS} seconds are clock glitches and dropped",
+        f"{cp.MAX_PAIR_SECONDS} seconds are clock glitches and dropped; a team-game whose clock "
+        f"is too coarse (distinct clock values on fewer than {cp.CLOCK_MIN_SHARE:.0%} of its "
+        "offensive snaps, as in the earliest seasons) gives no pairs: its pace is not charted",
         "fourth_go_rate": f"fourth-down choice: play_type {', '.join(cp.FOURTH_CHOICES)} with "
         "fact_play.is_neutral, any quarter; fakes count as going",
     }
@@ -2251,10 +2254,10 @@ def _site_entries() -> list[Entry]:
             formula="live: scored on the real clock after its as-of and before the next kickoff, "
             "stored once and never rescored (append-only); backtest (reconstructed): scored later "
             "from the data public at the as-of, through the same point-in-time view",
-            explanation="A live list was made in real time on the Tuesday and is never changed "
-            "afterwards. A reconstructed (backtest) list was made later from the data as it stood "
-            "on that Tuesday: what the Radar would have said then, not a list anyone saw at the "
-            "time.",
+            explanation="A live list was made in real time, at its as-of and before the games it "
+            "is about, and is never changed afterwards. A reconstructed (backtest) list was made "
+            "later from the data as it stood at that as-of: what the model would have said then, "
+            "not a list anyone saw at the time.",
             source="kind column of the predictions store and of the published lists",
         ),
         Entry(

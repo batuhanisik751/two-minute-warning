@@ -273,6 +273,14 @@ def test_the_publish_family(tmp_path: Path, pinned) -> None:
     outcomes = hs.frozen_outcomes(snap, coaches)
     assert outcomes.height == 10_361 and outcomes["coach_id"].null_count() == 0
     assert outcomes["label_status"].unique().to_list() == ["final"]
+    # an imputed day (no source gives it: the team's last game) is never published as
+    # 'announced' (audit 2026-10-06, G2.4): NULL on those departures, the real days kept
+    imputed = snap["outcomes"]["date_imputed"]
+    gone = outcomes.filter(pl.col("departed") | pl.col("censored"))
+    assert imputed.sum() == 542 and outcomes.filter(imputed)["announced"].null_count() == 542
+    assert gone.filter(pl.col("announced").is_null()).height == 542
+    real = snap["outcomes"].filter(~imputed)["announced"]
+    assert outcomes.filter(~imputed)["announced"].equals(real)
     data = col.ListData(lists, out, outcomes, out.select("season", "week", "coach_id"))
     teams, ids = set(out["team"]), set(coaches["coach_id"])
     assert col._hot_seat_problems(data, teams, ids) == []

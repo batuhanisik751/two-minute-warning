@@ -107,7 +107,7 @@ async function getTeammateOutModelRaw(): Promise<TeammateOutModel | null> {
 export const getTeammateOutModel = cached("teammateOut.getTeammateOutModel", getTeammateOutModelRaw);
 
 export type PlayerTeammateOut = TOWeek &
-  ({ kind: "gainer"; team: string; role: string; predPoints: number; pointsLo: number | null; pointsHi: number | null; predGain: number | null; outNames: string } | { kind: "absent"; team: string; reason: string | null });
+  ({ kind: "gainer"; team: string; role: string; predPoints: number; pointsLo: number | null; pointsHi: number | null; predGain: number | null; basePoints: number | null; outNames: string } | { kind: "absent"; team: string; reason: string | null });
 
 /** The player's place in the newest snapshot of the week whose games are next: a predicted
  *  gainer (a listed teammate whose bigger share is worth points: pred_gain > 0) or an absent
@@ -120,7 +120,7 @@ async function getPlayerTeammateOutRaw(gsisId: string): Promise<PlayerTeammateOu
   const mate = snap.rows.find((r) => r.gsisId === gsisId && r.predGain !== null && r.predGain > 0);
   if (mate) {
     const outNames = mate.outPlayers ?? mate.outIds;
-    return { ...wk, kind: "gainer", team: mate.team, role: mate.role, predPoints: mate.predPoints, pointsLo: mate.pointsLo, pointsHi: mate.pointsHi, predGain: mate.predGain, outNames };
+    return { ...wk, kind: "gainer", team: mate.team, role: mate.role, predPoints: mate.predPoints, pointsLo: mate.pointsLo, pointsHi: mate.pointsHi, predGain: mate.predGain, basePoints: mate.basePoints, outNames };
   }
   for (const r of snap.rows) {
     const ids = r.outIds.split(",");

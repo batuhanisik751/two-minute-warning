@@ -1,5 +1,5 @@
 import Term from "@/components/Term";
-import { fmtInt, pct } from "@/lib/format";
+import { fmtInt, fmtNum, pct, signedNum } from "@/lib/format";
 import { nfl4th, submodelLines, verdict, type Cell, type SubmodelLine, type TrackRow } from "@/lib/decisions-track";
 
 const WHAT: Record<SubmodelLine["key"], { name: React.ReactNode; rows: string; base: string }> = {
@@ -11,8 +11,8 @@ const WHAT: Record<SubmodelLine["key"], { name: React.ReactNode; rows: string; b
 };
 
 const v = (c: Cell | null, d = 4) => (c ? c.value.toFixed(d) : "–");
-const signed = (c: Cell | null, d = 4) => (c ? `${c.value > 0 ? "+" : ""}${c.value.toFixed(d)}` : "–");
-const ci = (c: Cell | null, d = 4) => (c && c.lo !== null && c.hi !== null ? ` (95%: ${c.lo.toFixed(d)} to ${c.hi.toFixed(d)})` : "");
+const signed = (c: Cell | null, d = 4) => (c ? signedNum(c.value, d) : "–");
+const ci = (c: Cell | null, d = 4) => (c && c.lo !== null && c.hi !== null ? ` (95%: ${fmtNum(c.lo, d)} to ${fmtNum(c.hi, d)})` : "");
 
 /** One line per sub-model, with its honest metric against a simple baseline. */
 export function Submodels({ rows }: { rows: TrackRow[] }) {

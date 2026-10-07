@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { fmtPoints } from "@/lib/format";
-import { rangeText, signed, statsOf, type RegressionRow } from "@/lib/regression";
+import { rangeText, reasonText, signed, statsOf, type RegressionRow } from "@/lib/regression";
 import { teamStyle } from "@/lib/team-colors";
 import { FoldList } from "./Fold";
 import Term from "./Term";
@@ -120,7 +120,7 @@ function Row({ r, withGarbage, reasons, outcomes }: { r: RegressionRow; withGarb
       </dl>
       {(reasons && r.tagReason) || final ? (
         <div data-cell="reason" className="min-w-0 space-y-1 text-sm [grid-area:reason]">
-          {reasons && r.tagReason ? <p className="[overflow-wrap:anywhere]">{r.tagReason}</p> : null}
+          {reasons && r.tagReason ? <p className="[overflow-wrap:anywhere]">{reasonText(r.tagReason, withGarbage)}</p> : null}
           {final ? (
             <p className="text-muted" data-testid="rw-outcome">
               {o.rosPpg !== null

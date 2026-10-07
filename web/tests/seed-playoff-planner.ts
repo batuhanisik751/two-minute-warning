@@ -91,7 +91,7 @@ export async function seedPlayoffPlanner(db: Db): Promise<void> {
   await db.insert(s.playoffPlannerEffects).values(
     [...POS, "all"].flatMap((position) => ["4", "14", "all"].map((horizon) => {
       const [rated, realized, survived] = P.effects[position] ?? [6, 1.5, 0.25];
-      return { position, horizon, nWorst: 900, nBest: 800, ratedGap: rated, shrunkGap: realized, realizedGap: realized, survived };
+      return { position, horizon, nWorst: 900, nBest: 800, ratedGap: rated, shrunkGap: Math.round((realized + 0.3) * 10) / 10, realizedGap: realized, survived };
     })),
   );
   await db.insert(s.playoffPlannerStability).values(

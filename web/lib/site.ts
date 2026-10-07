@@ -17,7 +17,9 @@ export function docUrl(path: string): string {
 /**
  * The model cards (docs/model_cards/, step I4a), one per production model, in the order of
  * their index (docs/model_cards/README.md). tests/unit/site.test.ts checks this list against
- * the folder, so a new card cannot be left off /methodology.
+ * the folder, so a new card cannot be left off /methodology; the cards of local-only features
+ * (the owner's start/sit report) stay in the docs but not on the site (G5.1), an exclusion the
+ * test names.
  */
 export const MODEL_CARDS = [
   { file: "waiver_radar.md", title: "Waiver Radar" },
@@ -28,10 +30,19 @@ export const MODEL_CARDS = [
   { file: "hot_seat.md", title: "Hot-Seat Meter" },
   { file: "board_cliff.md", title: "Cliff board (with the Breakout research note)" },
   { file: "questionable.md", title: "Questionable outcomes" },
-  { file: "startsit.md", title: "Start/sit odds (the owner's local report only, not on this site)" },
   { file: "teammate_out.md", title: "Teammate out (who gains when a starter sits)" },
   { file: "playoff_planner.md", title: "Playoff planner (matchups in fantasy weeks 15-17)" },
   { file: "coach_tendencies.md", title: "Coach tendencies (a frozen history of counted rates, not a model)" },
 ] as const;
 
 export const MODEL_CARDS_INDEX = "docs/model_cards/README.md";
+
+/** Registry modules that exist only on the owner's computer (My League): their glossary rows are
+ *  not shown on the site (G5.1). */
+export const LOCAL_ONLY_MODULES = ["my_league"] as const;
+
+/** The glossary rows the site shows: every row except those of local-only modules alone. */
+export function siteGlossary<T extends { modules: readonly string[] }>(rows: T[]): T[] {
+  const local: readonly string[] = LOCAL_ONLY_MODULES;
+  return rows.filter((r) => !(r.modules.length > 0 && r.modules.every((m) => local.includes(m))));
+}

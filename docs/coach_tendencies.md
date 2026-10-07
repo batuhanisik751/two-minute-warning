@@ -67,7 +67,14 @@ Regular seasons 1999-2026, 945 coach-team-seasons (31-36 a season: a team has tw
 its coach changed mid-season), plus the current season to date (2026 through week 4 on
 2026-10-05, 32 rows). `proe` and `no_huddle_rate` start in 2006: nflfastR's `xpass`/`pass_oe`
 are NULL before, and no-huddle is barely charted before (league 0-1.6% in 1999-2005). Earlier
-seasons have no row for those two metrics; the others cover every season.
+seasons have no row for those two metrics. **Pace is not charted where the clock is too
+coarse** (audit 2026-10-06): the early play-by-play repeats `game_seconds_remaining` for many
+snaps (1999's league pace came out 0.007 s, 2000's 25.8 s against 30.7 s in 2001), so a
+team-game whose offensive snaps carry distinct clock values for fewer than 75% of them gives no
+pace pairs (`plays.CLOCK_MIN_SHARE`). That drops every 1999 team-game (all at most 50%), 62 of
+2000's 492 and 3 of 2001's; no team-game of 2002-2025 is below 77%. So 1999 has no pace row
+(like PROE before 2006) and 2000-2001 pace rests on the charted games (2000 league 29.8 s). The
+other metrics cover every season.
 
 ## Persistence: is it the coach or the team?
 
@@ -78,20 +85,20 @@ games). Values are relative to the league that season, so league-wide drift (sho
 
 | metric | same coach, same team | same coach, new team | new coach, same team |
 |---|---|---|---|
-| neutral pass rate | 0.47 (0.42 to 0.53), 635 pairs | 0.22 (-0.07 to 0.53), 60 | 0.22 (0.05 to 0.38), 194 |
-| early-down pass rate | 0.49 (0.44 to 0.54) | 0.25 (-0.03 to 0.53) | 0.23 (0.07 to 0.37) |
+| neutral pass rate | 0.47 (0.42 to 0.52), 637 pairs | 0.25 (-0.04 to 0.54), 60 | 0.23 (0.05 to 0.38), 192 |
+| early-down pass rate | 0.49 (0.44 to 0.54) | 0.25 (-0.02 to 0.53) | 0.22 (0.06 to 0.37) |
 | PROE (2006+) | 0.52 (0.47 to 0.57), 464 | 0.11 (-0.25 to 0.45), 41 | 0.11 (-0.07 to 0.27), 144 |
-| neutral pace | 0.53 (0.40 to 0.64) | 0.19 (-0.08 to 0.42) | 0.15 (0.06 to 0.26) |
+| neutral pace (2000+) | 0.60 (0.53 to 0.68), 615 | 0.23 (-0.07 to 0.45), 56 | 0.15 (0.04 to 0.27), 183 |
 | no-huddle (2006+) | 0.68 (0.56 to 0.78) | 0.55 (-0.07 to 0.92) | 0.16 (-0.01 to 0.29) |
-| shotgun | 0.73 (0.67 to 0.78) | 0.44 (0.11 to 0.69) | 0.21 (0.05 to 0.36) |
-| fourth-down go rate | 0.38 (0.29 to 0.45) | 0.09 (-0.15 to 0.32) | 0.01 (-0.07 to 0.10) |
-| 4th-and-1-2 go rate | 0.28 (0.20 to 0.37) | 0.18 (-0.07 to 0.40) | 0.09 (-0.05 to 0.22) |
+| shotgun | 0.73 (0.67 to 0.78) | 0.43 (0.10 to 0.68) | 0.22 (0.05 to 0.36) |
+| fourth-down go rate | 0.38 (0.29 to 0.45) | 0.09 (-0.16 to 0.31) | 0.01 (-0.07 to 0.11) |
+| 4th-and-1-2 go rate | 0.28 (0.20 to 0.37) | 0.17 (-0.08 to 0.39) | 0.09 (-0.05 to 0.23) |
 
 Plainly: a tendency carries over (r about 0.5) when the coach AND the team stay. Change either
 and pass rate, PROE, pace and fourth-down aggressiveness keep only a fifth or less (r 0.0-0.25):
 it is the combination (quarterback, play-caller, roster), not the head coach alone. The
 exceptions are formation and tempo habits: shotgun and no-huddle rates follow the coach to a new
-team (0.44, 0.55) much more than they stay with the team after he leaves (0.21, 0.16), though
+team (0.43, 0.55) much more than they stay with the team after he leaves (0.22, 0.16), though
 only 41-60 coaches moved, so those intervals are wide. A fourth-down go rate does not stay with
 the team at all once the coach leaves (0.01).
 
@@ -127,7 +134,8 @@ anything about coaching changes.
   and 10-20 fourth-down choices: show `sample` and `through_week`; percentiles need 150 snaps
   (10 fourth-down choices, 5 short ones) and are among that season's rows to date.
 - **Pace is game-clock pace.** Incompletions and out-of-bounds plays shorten the gap, so pace
-  mixes tempo with play mix; no-huddle is the cleaner tempo signal.
+  mixes tempo with play mix; no-huddle is the cleaner tempo signal. The early clock is coarse:
+  no pace in 1999, and 2000-2001 pace from the team-games whose clock is charted (Coverage).
 - **nflfastR model columns.** `xpass`/`pass_oe` are model outputs (PROJECT_SPEC 6.3 caveat).
 
 ## Frames

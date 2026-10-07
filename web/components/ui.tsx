@@ -1,6 +1,6 @@
 // Small shared pieces of UI (server components).
 import type { Outcome } from "@/lib/format";
-import { kindLabel, outcomeLabel, pct, pctRange, tierLabel } from "@/lib/format";
+import { chancePct, kindLabel, outcomeLabel, pctRange, tierLabel } from "@/lib/format";
 import { positionShort } from "@/lib/positions";
 
 export function PageHeader({
@@ -137,7 +137,7 @@ export function ChanceCell({
   const w = (x: number) => `${Math.max(0, Math.min(1, x)) * 100}%`;
   return (
     <span className="block tnum">
-      <span className="big-number block text-[1.875rem]">{pct(chance)}</span>
+      <span className="big-number block text-[1.875rem]">{chancePct(chance)}</span>
       <span className="meter mt-1 block" aria-hidden="true">
         {low !== null && high !== null ? <span className="meter-range" style={{ left: w(low), width: w(high - low) }} /> : null}
         <span className="meter-fill" style={{ width: w(chance) }} />

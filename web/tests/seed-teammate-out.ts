@@ -42,6 +42,10 @@ const GAMES: [string, string, number, string[], string, string, number, number, 
   ["EVP", "WLF", 1, T.absentTwo, "WR, TE", "roster RES, Doubtful", 0, 0.44, [[31, "WR", "WR2", 8, 10, 3.5, 17.2], [43, "TE", "TE2", 3.2, 4.7, 0.6, 10.1], [35, "WR", "WR3", 5.5, 6.3, 1.4, 12.8]]],
 ];
 
+/** The featured back's share change is worth less than his whole rise (14.2 - 9.0): the rest,
+ *  +0.7, is the efficiency pull that the list and his badge both word (G3.7). */
+const GAIN: Record<number, number> = { 13: 4.5 };
+
 function snapshotRows(asOf: string, week: number, games = GAMES): Row[] {
   const back = (T.week.week - week) * 7 * 86_400_000;
   return games.flatMap(([team, opponent, k, ids, poss, reasons, vc, vt, mates]) =>
@@ -53,7 +57,7 @@ function snapshotRows(asOf: string, week: number, games = GAMES): Row[] {
       baseTeamCarries: 26, baseTeamTargets: 34, predCarryShare: position === "RB" ? 0.25 + (pred - base) / 40 : 0.02,
       predTargetShare: position === "RB" ? 0.09 : 0.18 + (pred - base) / 60, carryShareChange: position === "RB" ? (pred - base) / 40 : 0,
       targetShareChange: position === "RB" ? 0.01 : (pred - base) / 60, predPoints: pred, pointsLo: lo, pointsHi: hi,
-      predGain: Math.round((pred - base) * 10) / 10, allocCarryShare: null, allocTargetShare: null,
+      predGain: GAIN[n] ?? Math.round((pred - base) * 10) / 10, allocCarryShare: null, allocTargetShare: null,
     })),
   );
 }

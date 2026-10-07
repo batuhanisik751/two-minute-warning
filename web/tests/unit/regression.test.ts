@@ -15,6 +15,7 @@ import {
   regressionHref,
   reliability,
   shrinkRows,
+  reasonText,
   signed,
   statsOf,
   tagRows,
@@ -72,10 +73,22 @@ test("the garbage-time toggle: gt=off shows the no-garbage values", () => {
   assert.equal(regressionHref({ anchor: "tag-buy_low" }), "/regression#tag-buy_low");
 });
 
+test("a reason sentence: the site's minus sign, and whose numbers it quotes without garbage time", () => {
+  const raw = "Buy-low: his -3.5 points over expected per game are in the bottom 10% of his position, and the projection (10.6) is 3.0 points per game above his 7.6 PPG (the cutoff is 3).";
+  const shown = reasonText(raw, true);
+  assert.ok(shown.startsWith("Buy-low: his \u22123.5 points"), shown);
+  assert.ok(!/(^|[\s(])-\d/.test(shown));
+  assert.ok(!shown.includes("garbage time"));
+  assert.equal(reasonText("Sell-high: FPOE (-1.2) on 2026-09-30", true), "Sell-high: FPOE (\u22121.2) on 2026-09-30");
+  const off = reasonText(raw, false);
+  assert.ok(off.startsWith(shown));
+  assert.match(off, /include garbage time/);
+});
+
 test("signed numbers", () => {
   assert.equal(signed(4.26), "+4.3");
   assert.equal(signed(-0.04), "0.0");
-  assert.equal(signed(-1.25, 2), "-1.25");
+  assert.equal(signed(-1.25, 2), "\u22121.25");
 });
 
 const t = (p: Partial<RegressionTrackRow>): RegressionTrackRow => ({
@@ -140,7 +153,9 @@ test("the backtest's as-of weeks: its lists in the published test seasons, not t
 
 test("the 80% range: '12.3 (9.1–15.6)', the projection alone without both bounds", () => {
   assert.equal(projectionText(r("00-1", { projection: 12.34, projectionLo: 9.07, projectionHi: 15.62 })), "12.3 (9.1–15.6)");
-  assert.equal(projectionText(r("00-1", { projection: 3.0, projectionLo: -2.54, projectionHi: 9.1 })), "3.0 (-2.5–9.1)");
+  assert.equal(projectionText(r("00-1", { projection: 3.0, projectionLo: -2.54, projectionHi: 9.1 })), "3.0 (0.0–9.1)");
+  // the lower end is clamped at 0 for display only: a rest-of-season PPG cannot be negative
+  assert.equal(rangeText(-1.6, 8.9), "0.0–8.9");
   assert.equal(projectionText(r("00-1", { projection: 12.34 })), "12.3");
   assert.equal(rangeText(9.1, null), null);
   assert.equal(rangeText(undefined, 3), null);

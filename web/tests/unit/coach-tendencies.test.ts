@@ -40,7 +40,9 @@ test("values, differences and percentiles read as the pages show them", () => {
   assert.equal(fmtVsLeague("neutral_sec_per_play", -1.24), "1.2 s faster");
   assert.equal(fmtVsLeague("neutral_sec_per_play", 0.6), "0.6 s slower");
   assert.equal(fmtVsLeague("neutral_pass_rate", 0.061), "+6.1 pts");
-  assert.equal(fmtVsLeague("proe", -2.25), "-2.3 pts");
+  assert.equal(fmtVsLeague("proe", -2.25), "−2.3 pts");
+  assert.equal(fmtVsLeague("neutral_pass_rate", -0.0004), "0.0 pts", "never -0.0");
+  assert.equal(fmtTendency("proe", -3.14), "−3.1 pts");
   assert.equal(percentileText("shotgun_rate", 71.4), "71st percentile");
   assert.equal(percentileText("proe", 12.2), "12th percentile");
   assert.equal(percentileText("neutral_sec_per_play", 10), "faster than 90%");
@@ -69,15 +71,25 @@ test("seasons group newest first; the current coach of a team is the one of its 
   assert.equal(parseTendencySort(undefined), "proe");
 });
 
-const P = (metric: string, rs: (number | null)[]): PersistenceRow[] =>
-  COMPARISONS.map((comparison, i) => ({ metric, comparison, nPairs: [600, 50, 190][i], nSeasons: 25, firstSeason: 1999, lastSeason: 2024, r: rs[i], ciLow: null, ciHigh: null }));
+// `ci`: the moved coaches' 95% interval (same_coach_new_team); the other comparisons have none here
+const P = (metric: string, rs: (number | null)[], ci: [number, number] | null = null): PersistenceRow[] =>
+  COMPARISONS.map((comparison, i) => ({ metric, comparison, nPairs: [600, 50, 190][i], nSeasons: 25, firstSeason: 1999, lastSeason: 2024, r: rs[i], ciLow: ci && i === 1 ? ci[0] : null, ciHigh: ci && i === 1 ? ci[1] : null }));
 
 test("the persistence note comes from the rows: what persists, what follows the coach", () => {
   assert.equal(persistenceNote([]), null);
-  const rows = [...P("neutral_pass_rate", [0.47, 0.22, 0.22]), ...P("proe", [0.52, 0.11, 0.11]), ...P("no_huddle_rate", [0.68, 0.55, 0.16]), ...P("shotgun_rate", [0.73, 0.44, 0.21])];
+  const rows = [...P("neutral_pass_rate", [0.47, 0.22, 0.22]), ...P("proe", [0.52, 0.11, 0.11]), ...P("no_huddle_rate", [0.68, 0.55, 0.16], [-0.07, 0.92]), ...P("shotgun_rate", [0.73, 0.44, 0.21], [0.11, 0.69])];
   const n = persistenceNote(rows)!;
   assert.match(n.stays, /coach and the team both stay: season to season, r 0\.47 to 0\.73 across the 4 tendencies\./);
-  assert.equal(n.moves, "At a new team, only no-huddle rate (r 0.55) and shotgun rate (r 0.44) carry over; the others keep r 0.11 to 0.22.");
+  // G4.12: carried over only when the 95% interval clears 0; no-huddle's reaches below it
+  assert.equal(
+    n.moves,
+    "At a new team, only shotgun rate (r 0.44, 95% interval 0.11 to 0.69) carries over; no-huddle rate (r 0.55, 95% interval −0.07 to 0.92) looks high, but its interval includes 0: uncertain; the others keep r 0.11 to 0.22.",
+  );
+  const unsure = persistenceNote([...P("proe", [0.5, 0.1, 0.1]), ...P("no_huddle_rate", [0.68, 0.55, 0.16], [-0.07, 0.92])])!;
+  assert.equal(
+    unsure.moves,
+    "At a new team, no tendency clearly carries over: no-huddle rate (r 0.55, 95% interval −0.07 to 0.92) looks high, but its interval includes 0: uncertain; the others keep r 0.10 to 0.10.",
+  );
   assert.equal(n.team, "A team that changes coach keeps little of its style: r 0.11 to 0.22.");
   assert.equal(n.sample, "Coaches who moved: 50 pairs of seasons, so those intervals are wide.");
   // nothing above the reading rule: said so, with the numbers

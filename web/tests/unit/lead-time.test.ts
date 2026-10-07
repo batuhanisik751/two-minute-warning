@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { HIST_HI, HIST_LO, MOMENTUM_POINTS, PRIMARY, SECONDARY, h2hOf, histBins, leadLabel, pooled, reverseOf, seasonsOf, share, weeks, type LTCoverageRow, type LTSummaryRow } from "../../lib/lead-time";
+import { HIST_HI, HIST_LO, MOMENTUM_POINTS, PRIMARY, SECONDARY, h2hOf, histBins, leadLabel, pooled, reverseOf, seasonsOf, share, verdict, weeks, type LTCoverageRow, type LTSummaryRow } from "../../lib/lead-time";
 import { LEAD_TIME_LICENSE, LEAD_TIME_SOURCE } from "../../lib/third-party";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -23,7 +23,7 @@ test("the fixed rules are the Python study's", () => {
 test("shares and leads read as published, suppressed cells as a dash", () => {
   assert.equal(share(0.6124), "61.2%");
   assert.equal(share(null), "–");
-  assert.deepEqual([weeks(3), weeks(6.25), weeks(-2), weeks(null)], ["3", "6.25", "-2", "–"]);
+  assert.deepEqual([weeks(3), weeks(6.25), weeks(-2), weeks(null)], ["3", "6.25", "−2", "–"]);
   assert.deepEqual([leadLabel(3), leadLabel(1), leadLabel(0), leadLabel(-1), leadLabel(10), leadLabel(-6)], ["3 weeks before", "1 week before", "same week", "1 week after", "10+ weeks before", "6+ weeks after"]);
 });
 
@@ -36,6 +36,17 @@ test("pooled rows are the complete seasons at one threshold, in the signals' ord
   const rows = [row("momentum", 50, 1), row("listed", 50, 2), row("listed", 25, 1), row("listed", 50, 0, "season")];
   assert.deepEqual(pooled(rows).map((r) => r.signal), ["listed", "momentum"]);
   assert.deepEqual(pooled(rows, 25).map((r) => r.signal), ["listed"]);
+});
+
+test("the verdict: who flagged more crowd adds before the crowd, at both thresholds (G4.11)", () => {
+  const at = (signal: string, threshold: number, shareBefore: number) => ({ ...row(signal, threshold, 0), shareBefore });
+  const rows = [at("listed", 50, 0.6124), at("momentum", 50, 0.6744), at("listed", 25, 0.5614), at("momentum", 25, 0.3099)];
+  assert.equal(
+    verdict(rows),
+    "In short: at the 50% mark the momentum baseline flagged more crowd adds before the crowd (67.4% vs 61.2%); at the 25% mark the Radar's lists flagged more crowd adds before the crowd (56.1% vs 31.0%).",
+  );
+  assert.match(verdict([at("listed", 50, 0.5), at("momentum", 50, 0.5), at("listed", 25, 0.5), at("momentum", 25, 0.4)])!, /^In short: at the 50% mark the Radar's lists and the momentum baseline flagged the same share before the crowd \(50\.0%\);/);
+  assert.equal(verdict(rows.slice(0, 3)), null, "a threshold's pair missing: no verdict");
 });
 
 test("the histogram fills empty leads with zeros and ends with the never bin", () => {

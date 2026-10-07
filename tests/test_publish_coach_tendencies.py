@@ -94,3 +94,20 @@ def test_the_synthetic_tendencies_pass_and_broken_rows_are_caught(data: col.Publ
     d.tables = good
     assert data.tables["dim_coach"].filter(pl.col("coach_id") == "renee-d-arcy").height == 1
     assert data.meta["coach_tendency_season"] == "2026"
+
+
+def test_dim_coach_holds_only_coaches_a_published_row_names() -> None:
+    """Audit 2026-10-06: a coach no published row names (decisions, Hot-Seat rows, coach
+    tendencies) is not upserted into dim_coach (the runner's partial build added two)."""
+    tables, coaches = ct.site_tables(pcs.frames(), pcs.NAMES)
+    orphan = pl.DataFrame({"coach_id": ["jay-sample"], "name": ["Jay Sample"]})
+    hot_rows = pl.DataFrame({"season": [2026], "coach_id": ["pat-example"]})
+    decision = pl.DataFrame({"game_id": ["g1"], "coach_id": ["kim-decider"]})
+    dim = col.merge_coaches(
+        col.merge_coaches(coaches, orphan),
+        pl.DataFrame({"coach_id": ["kim-decider"], "name": ["Kim Decider"]}),
+    )
+    kept = col.referenced_coaches(dim, [decision, hot_rows, coaches, pl.DataFrame({"x": [1]})])
+    assert kept["coach_id"].to_list() == sorted([*coaches["coach_id"], "kim-decider"])
+    assert "jay-sample" not in set(kept["coach_id"]) and kept.columns == ["coach_id", "name"]
+    assert col.referenced_coaches(dim, []).height == 0

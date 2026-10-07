@@ -4,8 +4,9 @@
 // no PROE or no-huddle: not charted), Avery O'Hollis (SRO) 2024-2026, Quinn Fairway (EVP)
 // 2025-2026 with a 2026 too short to rank (the partial season), the long-named coach (WLF)
 // 2024-2026 and Robin Interim (WLF, 3 games of 2025). 2026 is the season in progress, through
-// week 3. The persistence table makes shotgun and no-huddle the tendencies that follow a coach to
-// a new team; the fantasy link has PROE's numbers. Typed against db/schema.ts.
+// week 3. The persistence table makes shotgun the tendency that follows a coach to a new team and
+// no-huddle a high r whose interval includes 0 (uncertain, as in the real table); the fantasy link
+// has PROE's numbers. Typed against db/schema.ts.
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { COMPARISONS, TENDENCY_METRICS } from "../lib/coach-tendencies";
 import * as s from "../db/schema";
@@ -24,7 +25,9 @@ export const TENDENCY_SEED = {
   /** the 2026 row below the ranking minimum: every percentile NULL */
   unranked: C[2].id,
   /** what follows a coach to a new team in the seeded persistence table */
-  carries: ["no_huddle_rate", "shotgun_rate"],
+  carries: ["shotgun_rate"],
+  /** high r at a new team, but its 95% interval includes 0 */
+  uncertain: ["no_huddle_rate"],
   proe: { same: 0.68, next: 0.29, xSd: 3.9, targets: 2.4, nextTargets: 0.9, ppr: 5.1 },
 };
 const T = TENDENCY_SEED;
@@ -104,7 +107,8 @@ export async function seedCoachTendencies(db: Db): Promise<void> {
       COMPARISONS.map((comparison, i) => {
         const r = PERSIST[metric][i];
         const nPairs = r === null ? 0 : [600, 55, 190][i];
-        return { metric, comparison, nPairs, nSeasons: r === null ? 0 : 25, firstSeason: r === null ? null : 2000, lastSeason: r === null ? null : 2024, r, ciLow: r === null ? null : r4(r - 0.1), ciHigh: r === null ? null : r4(r + 0.1) };
+        const wide = metric === "no_huddle_rate" && comparison === "same_coach_new_team";
+        return { metric, comparison, nPairs, nSeasons: r === null ? 0 : 25, firstSeason: r === null ? null : 2000, lastSeason: r === null ? null : 2024, r, ciLow: r === null ? null : wide ? -0.05 : r4(r - 0.1), ciHigh: r === null ? null : wide ? 0.95 : r4(r + 0.1) };
       }),
     ),
   );

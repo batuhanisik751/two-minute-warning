@@ -2,6 +2,7 @@ import Link from "next/link";
 import { FoldList } from "@/components/Fold";
 import { EstimateCell } from "@/components/hot-seat/parts";
 import { PosBadge } from "@/components/ui";
+import { fmtPoints } from "@/lib/format";
 import { boardDriverValue, driverEffect, posRank, type Disagree, type Driver } from "@/lib/board";
 import type { BoardEntry } from "@/lib/queries/board";
 import { BoardOutcomeTag, DisagreeTag } from "./parts";
@@ -60,7 +61,7 @@ function Drivers({ title, drivers, who }: { title: string; drivers: Driver[]; wh
 function LastSeason({ r, ecr }: { r: BoardEntry; ecr: boolean }) {
   const parts: React.ReactNode[] = [
     <>
-      Last season, with the {r.teamName ?? r.team}: <span className="tnum font-semibold">{r.ppgS.toFixed(1)}</span> points per game ({posRank(r.position, r.posRankS)}) in{" "}
+      Last season, with the {r.teamName ?? r.team}: <span className="tnum font-semibold">{fmtPoints(r.ppgS)}</span> points per game ({posRank(r.position, r.posRankS)}) in{" "}
       <span className="tnum">{r.gamesS}</span> games
     </>,
   ];

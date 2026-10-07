@@ -96,7 +96,7 @@ export default async function BoardSection() {
           <H3 id="board-backtest">The backtest</H3>
           <p>
             Every past board reconstructed by models that learned only from earlier boards
-            {graded.from !== null && graded.to !== null ? ` (${fmtInt(graded.boards)} boards, ${graded.from}–${graded.to})` : ""}. <Term name="pr_auc">PR-AUC</Term>
+            {graded.from !== null && graded.to !== null ? ` (${fmtInt(graded.boards)} boards, ${graded.from}–${graded.to})` : ""}. <Term name="pr_auc">PR-AUC</Term>{" "}
             measures how well the order puts the players who really had the outcome near the top; differences are paired, with{" "}
             {pct(TRACK_INTERVAL_LEVEL)} intervals from redrawing whole seasons. The experts&apos; era is the boards from{" "}
             {BOARD_ECR_FIRST_SEASON} on.

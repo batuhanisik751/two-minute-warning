@@ -53,7 +53,7 @@
     },
     "allocation": {
       "title": "Allocation",
-      "explanation": "How much of the missing starter's work a teammate in that role took on average: 0.46 means the backup RB got about 46% of the RB1's carries.",
+      "explanation": "How much of the missing starter's work a teammate in that role took on average, as a share of that work: for the backup RB, the part of the RB1's carries that went to him.",
       "formula": "over past single-starter-out games (2013 on): sum of a role's share changes (game share minus his baseline share) / sum of the vacated shares; shrunk toward its position group with 20 teammate-games; carries only when a RB is out"
     },
     "as_of": {
@@ -783,7 +783,7 @@
     },
     "list_kind": {
       "title": "Live or reconstructed",
-      "explanation": "A live list was made in real time on the Tuesday and is never changed afterwards. A reconstructed (backtest) list was made later from the data as it stood on that Tuesday: what the Radar would have said then, not a list anyone saw at the time.",
+      "explanation": "A live list was made in real time, at its as-of and before the games it is about, and is never changed afterwards. A reconstructed (backtest) list was made later from the data as it stood at that as-of: what the model would have said then, not a list anyone saw at the time.",
       "formula": "live: scored on the real clock after its as-of and before the next kickoff, stored once and never rescored (append-only); backtest (reconstructed): scored later from the data public at the as-of, through the same point-in-time view"
     },
     "listed_position": {
@@ -864,7 +864,7 @@
     "neutral_sec_per_play": {
       "title": "Neutral pace",
       "explanation": "Game-clock seconds between snaps in close games. Lower = faster: more plays, more chances for your players. The site shows it as faster than N% of offenses.",
-      "formula": "game-clock seconds between consecutive snaps of a drive, neutral; pace pair: a neutral snap and the same offense's next snap of the drive and quarter with nothing between and no timeout charged; gaps over 60 seconds are clock glitches and dropped"
+      "formula": "game-clock seconds between consecutive snaps of a drive, neutral; pace pair: a neutral snap and the same offense's next snap of the drive and quarter with nothing between and no timeout charged; gaps over 60 seconds are clock glitches and dropped; a team-game whose clock is too coarse (distinct clock values on fewer than 75% of its offensive snaps, as in the earliest seasons) gives no pairs: its pace is not charted"
     },
     "new_competitor_s1": {
       "title": "New competition",

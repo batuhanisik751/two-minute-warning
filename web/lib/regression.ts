@@ -2,7 +2,7 @@
 // Every number comes from the database (regression_row, regression_outcome,
 // regression_track_record, model_versions.params); this file only picks rows and words.
 
-import { fmtPoints } from "./format";
+import { MINUS, fmtPoints, signedNum } from "./format";
 
 /** The tags the site shows. A third tag (legit) was tested and dropped (owner decision,
  *  2026-09-30: it predicted nothing better than its base rate); see DROPPED_TAGS. */
@@ -105,17 +105,27 @@ export function regressionHref(q: { season?: number; week?: number; kind?: strin
   return `/regression${s ? `?${s}` : ""}${q.anchor ? `#${q.anchor}` : ""}`;
 }
 
-/** Signed points per game with one decimal: 4.26 -> "+4.3", -0.04 -> "0.0". */
+/** Signed points per game with one decimal and a real minus sign: 4.26 -> "+4.3", -1.25 -> "−1.3",
+ *  -0.04 -> "0.0" (lib/format.ts signedNum). */
 export function signed(x: number, digits = 1): string {
-  const s = x.toFixed(digits);
-  if (Number(s) === 0) return (0).toFixed(digits);
-  return x > 0 ? `+${s}` : s;
+  return signedNum(x, digits);
 }
 
-/** An 80% range as the site writes it: (9.1, 15.62) -> "9.1–15.6"; null without both bounds. */
+/** A tag's reason sentence as a row shows it. The pipeline writes it once, from the numbers WITH
+ *  garbage time (the tag is made from those), with ASCII minus signs: the site's minus sign is
+ *  put in, and the view without garbage time says whose numbers the sentence quotes. */
+export function reasonText(reason: string, withGarbage: boolean): string {
+  const text = reason.replace(/(^|[\s(])-(?=\d)/g, `$1${MINUS}`);
+  return withGarbage ? text : `${text} (These numbers include garbage time: the tag is made from them.)`;
+}
+
+/** An 80% range as the site writes it: (9.1, 15.62) -> "9.1–15.6"; null without both bounds. A
+ *  points-per-game range ends at 0 on the screen: the model's interval can dip below zero
+ *  (-2.5), a rest-of-season PPG cannot, so the lower end shows as "0.0" (the stored bound and
+ *  the coverage check keep the raw value). */
 export function rangeText(lo: number | null | undefined, hi: number | null | undefined): string | null {
   if (lo === null || lo === undefined || hi === null || hi === undefined) return null;
-  return `${fmtPoints(lo)}–${fmtPoints(hi)}`;
+  return `${fmtPoints(Math.max(0, lo))}–${fmtPoints(Math.max(0, hi))}`;
 }
 
 /** The projection with its 80% range: "12.3 (9.1–15.6)"; the projection alone without one. */

@@ -8,7 +8,7 @@ import { EmptyState, Note, PageHeader } from "@/components/ui";
 import { fmtInt, fmtUtc, seasonWeek } from "@/lib/format";
 import { parseInt4 } from "@/lib/params";
 import { getQuestionableIndex, getQuestionableSnapshot, getQuestionableTables, getQuestionableWeek } from "@/lib/queries/questionable";
-import { INACTIVES_NOTE, WHEN_LISTS_FILL, chooseWeek, questionableHref, type QWeek } from "@/lib/questionable";
+import { INACTIVES_NOTE, WHEN_LISTS_FILL, chooseWeek, listMayCome, questionableHref, type QWeek } from "@/lib/questionable";
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata(
@@ -80,10 +80,16 @@ export default async function QuestionablePage({ searchParams }: PageProps<"/que
           </>
         ) : (
           <div className="mt-3" data-testid="q-empty">
-            <EmptyState title={chosen ? `No tagged player listed for ${seasonWeek(chosen.season, chosen.week)} yet` : "No week is being played right now"}>
-              <p>{WHEN_LISTS_FILL}</p>
-              <p className="mt-2">{INACTIVES_NOTE}</p>
-            </EmptyState>
+            {chosen && !listMayCome(chosen, current) ? (
+              <EmptyState title={`No list for ${seasonWeek(chosen.season, chosen.week)}`}>
+                <p>A list is made only for the week whose games are next{index.length ? "; the weeks that have one are linked above" : ""}.</p>
+              </EmptyState>
+            ) : (
+              <EmptyState title={chosen ? `No tagged player listed for ${seasonWeek(chosen.season, chosen.week)} yet` : "No week is being played right now"}>
+                <p>{WHEN_LISTS_FILL}</p>
+                <p className="mt-2">{INACTIVES_NOTE}</p>
+              </EmptyState>
+            )}
           </div>
         )}
       </section>

@@ -176,7 +176,11 @@ owner approved, and writes `reports/streamer/weekly/<season>-W<nn>.md`:
 - **Chance and its range**: read off the frozen backtest of the seasons BEFORE the list's
   season (a reconstructed 2020 list never uses 2020-2025 results). Kickers: how often kickers
   the model scored alike (bins of at least 200 backtest picks) started, with a 90% interval.
-  D/STs: how often the rule's pick at that rank started (bins of ranks with at least 100 picks;
+  A kicker who did not kick in his team's latest game (practice squad, camp, released) instead
+  shows how often such pool kickers of those seasons started (flags from the streamer
+  dataset): each season's model has its own probability scale, and the 2026 model scores such
+  a kicker inside a kicking kicker's bin (audit 2026-10-06; lists made before keep their
+  chance). D/STs: how often the rule's pick at that rank started (bins of ranks with at least 100 picks;
   a better rank never shows a lower chance). For 2026 the rule's #1 pick started 52.1% of the
   time, #2 and #3 36.9% (C1, the league's D/ST scoring; before: 49.8%, 41.3%, 39.2%).
 - **Priority** from the chance, as on the Waiver Radar: must-add 50%+, speculative 25-50%,

@@ -3,6 +3,7 @@
 // league table's sort and its "current head coaches", and the two sentences the pages state from
 // the published tables (the persistence note, the fantasy link). No number here is measured:
 // every one comes from coach_tendency_* (src/twm/publish/coach_tendencies.py).
+import { fmtNum, signedNum } from "@/lib/format";
 
 export const TENDENCY_METRICS = [
   "neutral_pass_rate",
@@ -36,10 +37,7 @@ export function isTendencyMetric(x: string): x is TendencyMetric {
 /** A value as the pages show it: rates "62%", PROE "+4.6 pts", pace "27.0 s". */
 export function fmtTendency(metric: string, value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "–";
-  if (metric === "proe") {
-    const s = value.toFixed(1);
-    return `${Number(s) > 0 ? "+" : ""}${Number(s) === 0 ? "0.0" : s} pts`;
-  }
+  if (metric === "proe") return `${signedNum(value)} pts`;
   if (metric === PACE) return `${value.toFixed(1)} s`;
   return `${Math.round(value * 100)}%`;
 }
@@ -52,9 +50,7 @@ export function fmtVsLeague(metric: string, diff: number | null): string {
     const s = Math.abs(diff).toFixed(1);
     return Number(s) === 0 ? "same pace" : `${s} s ${diff < 0 ? "faster" : "slower"}`;
   }
-  const v = metric === "proe" ? diff : diff * 100;
-  const s = v.toFixed(1);
-  return Number(s) === 0 ? "0.0 pts" : `${v > 0 ? "+" : ""}${s} pts`;
+  return `${signedNum(metric === "proe" ? diff : diff * 100)} pts`;
 }
 
 /** "1st", "2nd", "23rd", "11th". */
@@ -161,8 +157,8 @@ export const COMPARISON_TEXT: Record<string, string> = {
  *  rule for the words, not a measured number). */
 export const CARRY_R = 0.4;
 
-/** A correlation: 0.4712 -> "0.47", -0.2 -> "-0.20". */
-export const fmtR = (r: number): string => (Math.abs(r) < 0.005 ? "0.00" : r.toFixed(2));
+/** A correlation: 0.4712 -> "0.47", -0.2 -> "−0.20" (the site's minus sign), -0.001 -> "0.00". */
+export const fmtR = (r: number): string => fmtNum(r, 2);
 const span = (xs: number[]) => (xs.length ? `${fmtR(Math.min(...xs))} to ${fmtR(Math.max(...xs))}` : "–");
 const words = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
@@ -180,13 +176,22 @@ export function persistenceNote(rows: readonly PersistenceRow[]): { stays: strin
     `Style persists when the coach and the team both stay: season to season, r ${span(same.map((x) => x.row.r))} across the ${same.length} tendencies` +
     (strong.length === same.length ? "." : `; ${strong.length} of ${same.length} reach ${fmtR(CARRY_R)}.`);
   const newR = new Map(newCoach.map((x) => [x.m, x.row.r]));
-  const carry = moved.filter((x) => x.row.r >= CARRY_R && x.row.r > (newR.get(x.m) ?? -1));
-  const rest = moved.filter((x) => !carry.includes(x));
+  // high enough to read as carried over; it does only when its published 95% interval clears 0 (G4.12)
+  const high = moved.filter((x) => x.row.r >= CARRY_R && x.row.r > (newR.get(x.m) ?? -1));
+  const carry = high.filter((x) => x.row.ciLow === null || x.row.ciLow > 0);
+  const unsure = high.filter((x) => !carry.includes(x));
+  const rest = moved.filter((x) => !high.includes(x));
+  const one = (x: (typeof moved)[number]) =>
+    `${METRIC_TEXT[x.m].long} (r ${fmtR(x.row.r)}${x.row.ciLow !== null && x.row.ciHigh !== null ? `, 95% interval ${fmtR(x.row.ciLow)} to ${fmtR(x.row.ciHigh)}` : ""})`;
+  const unsureText = unsure.length ? `${words(unsure.map(one))} ${unsure.length === 1 ? "looks high, but its interval includes" : "look high, but their intervals include"} 0: uncertain` : "";
+  const tail = [unsureText, rest.length ? `the others keep r ${span(rest.map((x) => x.row.r))}` : ""].filter(Boolean);
   const moves = !moved.length
     ? "No coach has moved to a new team in the published seasons."
     : carry.length
-      ? `At a new team, only ${words(carry.map((x) => `${METRIC_TEXT[x.m].long} (r ${fmtR(x.row.r)})`))} carry over${rest.length ? `; the others keep r ${span(rest.map((x) => x.row.r))}` : ""}.`
-      : `At a new team, no tendency carries over: r ${span(moved.map((x) => x.row.r))}.`;
+      ? `At a new team, only ${words(carry.map(one))} ${carry.length === 1 ? "carries" : "carry"} over${tail.map((t) => `; ${t}`).join("")}.`
+      : unsure.length
+        ? `At a new team, no tendency clearly carries over: ${tail.join("; ")}.`
+        : `At a new team, no tendency carries over: r ${span(moved.map((x) => x.row.r))}.`;
   const team = newCoach.length ? `A team that changes coach keeps little of its style: r ${span(newCoach.map((x) => x.row.r))}.` : "";
   const pairs = moved.map((x) => x.row.nPairs);
   const sample = pairs.length ? `Coaches who moved: ${Math.min(...pairs) === Math.max(...pairs) ? Math.min(...pairs) : `${Math.min(...pairs)}–${Math.max(...pairs)}`} pairs of seasons, so those intervals are wide.` : "";
@@ -196,7 +201,6 @@ export function persistenceNote(rows: readonly PersistenceRow[]): { stays: strin
 export const TARGET_TEXT: Record<string, string> = { targets_per_game: "targets per game", recv_ppr_per_game: "receiving PPR points per game" };
 export const HORIZON_TEXT: Record<string, string> = { same_season: "Same season", next_season: "Next season" };
 
-const signed = (x: number, digits = 1) => `${x > 0 ? "+" : ""}${x.toFixed(digits)}`;
 
 /** The fantasy link stated plainly, from the published coach_tendency_fantasy_link rows: PROE
  *  against the team's pass-catchers' targets per game, the same season and the next. NULL when
@@ -210,12 +214,12 @@ export function fantasyLinkText(rows: readonly LinkRow[]): { same: string; next:
   const ci = (r: LinkRow) => (r.ciLow !== null && r.ciHigh !== null ? ` (95% interval ${fmtR(r.ciLow)} to ${fmtR(r.ciHigh)})` : "");
   const sameText =
     `The same season, a team's pass rate over expected and its pass-catchers' targets per game go together: r = ${fmtR(same.r)}${ci(same)} over ${same.n} team-seasons. ` +
-    `One standard deviation of PROE (${same.xSd.toFixed(1)} points) comes with ${signed(same.yPerXSd)} targets per game` +
-    (ppr?.yPerXSd != null ? ` and ${signed(ppr.yPerXSd)} receiving PPR points per game` : "") +
+    `One standard deviation of PROE (${same.xSd.toFixed(1)} points) comes with ${signedNum(same.yPerXSd)} targets per game` +
+    (ppr?.yPerXSd != null ? ` and ${signedNum(ppr.yPerXSd)} receiving PPR points per game` : "") +
     ". Partly mechanical: more passes are more targets.";
   const nextText =
     next && next.r !== null && next.yPerXSd !== null
-      ? `The next season (the same team, whoever coaches) the link is weaker: r = ${fmtR(next.r)}${ci(next)}, about ${signed(next.yPerXSd)} targets per game per standard deviation.`
+      ? `The next season (the same team, whoever coaches) the link is weaker: r = ${fmtR(next.r)}${ci(next)}, about ${signedNum(next.yPerXSd)} targets per game per standard deviation.`
       : "No next-season link is published.";
   return { same: sameText, next: nextText };
 }

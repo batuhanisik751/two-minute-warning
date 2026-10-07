@@ -2178,8 +2178,8 @@ def score(
 
             streamer_score(
                 season=season, week=week, allow_incomplete=allow_incomplete, limit=limit, db=db,
-                store=store, backtest_csv=Path("reports/streamer/backtest.csv"), out=None,
-                now=None,
+                store=store, backtest_csv=Path("reports/streamer/backtest.csv"),
+                dataset=Path("data/streamer/dataset.parquet"), out=None, now=None,
             )  # fmt: skip
             continue
         radar_score(

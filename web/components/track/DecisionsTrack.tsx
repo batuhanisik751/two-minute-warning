@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Term from "@/components/Term";
-import { fmtInt, pct } from "@/lib/format";
+import { fmtInt, pct, signedNum } from "@/lib/format";
 import { TRACK_INTERVAL_LEVEL } from "@/lib/method";
 import { wpComparison, type Cell } from "@/lib/decisions-track";
 import { getDecisionsMeta, getDecisionsTrack } from "@/lib/queries/decisions";
@@ -9,7 +9,7 @@ import CalibrationFigure from "./CalibrationFigure";
 import { H4, NotPublished, Panel, StatTiles } from "./parts";
 import WpSeasons from "./WpSeasons";
 
-const f4 = (x: number, signed = false) => `${signed && x > 0 ? "+" : ""}${x.toFixed(4)}`;
+const f4 = (x: number, signed = false) => (signed ? signedNum(x, 4) : x.toFixed(4));
 const iv = (c: Pick<Cell, "lo" | "hi">, signed = false) =>
   c.lo !== null && c.hi !== null ? `${pct(TRACK_INTERVAL_LEVEL)} interval ${f4(c.lo, signed)} to ${f4(c.hi, signed)}` : null;
 /** A log-loss difference (ours minus theirs) in words: lower is better. */

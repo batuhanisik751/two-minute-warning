@@ -369,15 +369,16 @@ def streamer_backtest(
     typer.echo(f"wrote {csv_path}")
 
 
-def _approved(season: int):
+def _approved(season: int, dataset: Path):
     """(K model, D/ST rule, K confidence, D/ST confidence) from the committed pins; every file's
-    sha256 checked before it is opened (twm.pins.PinError otherwise)."""
+    sha256 checked before it is opened (twm.pins.PinError otherwise). ``dataset``: the streamer
+    dataset, whose flags give a kicker who did not kick his chance (ValueError when missing)."""
     from twm.modules.streamer import confidence as sc
     from twm.modules.streamer import production as sp
 
     pm, kpin = sp.load_pinned_k(season)
     rule, dpin = sp.load_pinned_rule(season)
-    k_conf = sc.k_confidence(sp.load_k_snapshot(kpin), season)
+    k_conf = sc.k_confidence(sp.load_k_snapshot(kpin), season, flags=sc.kicker_flags(dataset))
     d_conf = sc.dst_confidence(sp.load_hit_rates(dpin), season)
     return pm, rule, k_conf, d_conf
 
@@ -405,6 +406,12 @@ def streamer_score(
         Path("reports/streamer/backtest.csv"),
         "--backtest-csv",
         help="The committed backtest (the list's notes on each method quote it).",
+    ),  # fmt: skip
+    dataset: Path = typer.Option(
+        Path("data/streamer/dataset.parquet"),
+        "--dataset",
+        help="The streamer dataset (`twm streamer dataset`): which backtest kickers had not "
+        "kicked, for the chance of a kicker who did not kick.",
     ),  # fmt: skip
     out: Path | None = typer.Option(
         None, "--out", help="Report (default: reports/streamer/weekly/<season>-W<nn>.md)."
@@ -444,7 +451,7 @@ def streamer_score(
         raise typer.Exit(code=sw.EXIT_NOT_READY)
     store_path = _project_path(store if store is not None else pr.default_path())
     try:
-        pm, rule, k_conf, d_conf = _approved(chosen)
+        pm, rule, k_conf, d_conf = _approved(chosen, _project_path(dataset))
         run = sw.run_week(
             path, chosen, wk, k_model=pm, rule=rule, k_conf=k_conf, d_conf=d_conf, now=clock,
             allow_incomplete=allow_incomplete, real_clock=now is None,

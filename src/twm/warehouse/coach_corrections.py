@@ -2,12 +2,13 @@
 
 nflverse's schedule names a head coach per team and game (``home_coach`` / ``away_coach``), but
 it is wrong in places: a fired coach listed all season (2015 MIA/TEN, 2016 LA, 2019 CAR,
-2024 NYJ/NO/CHI, 2025 TEN/NYG), a change one game early (2007 ATL), a 2026 schedule listing
-coaches fired in January, misspelled names, and one name shared by two people (Jim E. Mora,
-IND 1999-2001, and Jim L. Mora). The build applies this committed file to ``fact_game`` BEFORE
-the coach tables, so ``coach_game``, ``dim_coach``, ``coach_team_season``, the Decision Report
-Card and the hot-seat candidates all agree. Every row cites a public page (``source_url`` and a
-``quote`` of at most 25 words); nothing is filled from memory.
+2024 NYJ/NO/CHI, 2025 TEN/NYG), a change one game early (2007 ATL) or weeks off (2000
+ARI/DET/WAS), a 2026 schedule listing coaches fired in January, misspelled names, and one name
+shared by two people (Jim E. Mora, IND 1999-2001, and Jim L. Mora). The build applies this
+committed file to ``fact_game`` BEFORE the coach tables, so ``coach_game``, ``dim_coach``,
+``coach_team_season``, the Decision Report Card and the hot-seat candidates all agree. Every row
+cites a public page (``source_url`` and a ``quote`` of at most 25 words); nothing is filled from
+memory.
 
 Kinds (``coach_out`` exactly as the schedule spells it; ``coach_in`` as the source does):
 

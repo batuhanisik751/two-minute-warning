@@ -4,7 +4,8 @@ import { MODEL_WORDS, top5Slices, trackCell, type TrackCell, type TrackCellRow }
 import { TRACK_INTERVAL_LEVEL } from "@/lib/method";
 
 // `term`: the metric's name, a glossary term (the entry is named like the metric); `label` follows it
-const COLUMNS: { slice: string; metric: string; term?: string; label: string; digits: number }[] = [
+// `share`: a share of the coaches let go, shown as a percentage like the tiles (lib/hot-seat.ts headlineStats)
+const COLUMNS: { slice: string; metric: string; term?: string; label: string; digits: number; share?: boolean }[] = [
   { slice: "all", metric: "roc_auc", term: "ROC-AUC", label: ", every row", digits: 3 },
   { slice: "all", metric: "pr_auc", term: "PR-AUC", label: ", every row", digits: 3 },
   { slice: "all", metric: "brier", term: "Brier", label: ", every row (lower is better)", digits: 4 },
@@ -14,17 +15,18 @@ const COLUMNS: { slice: string; metric: string; term?: string; label: string; di
  *  (week 12 beside the season's end, lib/hot-seat.ts top5Slices). */
 const columns = (rows: TrackCellRow[]): typeof COLUMNS => [
   ...COLUMNS,
-  ...top5Slices(rows).map((t) => ({ slice: t.slice, metric: "top5_hit_rate", label: `Top-5 hit rate, ${t.when}`, digits: 3 })),
+  ...top5Slices(rows).map((t) => ({ slice: t.slice, metric: "top5_hit_rate", label: `Top-5 hit rate, ${t.when}`, digits: 0, share: true })),
 ];
 
-function Cell({ c, digits }: { c: TrackCell | null; digits: number }) {
+function Cell({ c, digits, share = false }: { c: TrackCell | null; digits: number; share?: boolean }) {
   if (!c) return <td className="num text-muted">–</td>;
+  const f = (x: number) => (share ? pct(x, digits) : x.toFixed(digits));
   return (
     <td className="num">
-      <span className="font-semibold">{c.value.toFixed(digits)}</span>
+      <span className="font-semibold">{f(c.value)}</span>
       {c.lo !== null && c.hi !== null ? (
         <span className="block text-xs text-muted">
-          {c.lo.toFixed(digits)} to {c.hi.toFixed(digits)}
+          {f(c.lo)} to {f(c.hi)}
         </span>
       ) : null}
     </td>
@@ -59,7 +61,7 @@ export default function HotSeatModels({ rows }: { rows: TrackCellRow[] }) {
               <tr key={m} data-model={m}>
                 <th scope="row">{MODEL_WORDS[m]}</th>
                 {cols.map((c) => (
-                  <Cell key={`${c.slice}-${c.metric}`} c={trackCell(rows, { model: m, slice: c.slice, metric: c.metric })} digits={c.digits} />
+                  <Cell key={`${c.slice}-${c.metric}`} c={trackCell(rows, { model: m, slice: c.slice, metric: c.metric })} digits={c.digits} share={c.share} />
                 ))}
               </tr>
             ))}

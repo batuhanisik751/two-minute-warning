@@ -13,7 +13,7 @@ import Term from "@/components/Term";
 import { PageHeader } from "@/components/ui";
 import { isCoachId } from "@/lib/decisions";
 import { getBestCalls, getClockCases, getCoach, getDecisionsMeta, getWorstCalls, type CoachSeasonRow } from "@/lib/queries/decisions";
-import { getCoachHotSeat, getHotSeatMeta } from "@/lib/queries/hot-seat";
+import { getCoachHotSeat, getCoachRegGames, getHotSeatMeta } from "@/lib/queries/hot-seat";
 import { pageMetadata } from "@/lib/seo";
 
 // No loading.tsx above this route on purpose (as /player/[id]): an unknown id must answer with a
@@ -22,16 +22,25 @@ import { pageMetadata } from "@/lib/seo";
 const WORST = 20;
 const BEST = 10;
 
+/** The first graded season, from the frozen history's span in site_meta ("2006-2025"), or null. */
+const gradedFrom = (history: string | null): number | null => {
+  const m = /^(\d{4})/.exec(history ?? "");
+  return m ? Number(m[1]) : null;
+};
+
+/** For a coach with no graded season (his seasons are before grading starts): why the decision
+ *  sections are empty, so they do not read as a clean record (G2.5). */
+const ungradedText = (from: number | null) => `Nothing graded: the Decision Report Card grades the seasons from ${from ?? "its first graded season"} on.`;
+
 export async function generateMetadata({ params }: PageProps<"/coach/[id]">): Promise<Metadata> {
   const { id } = await params;
   if (!isCoachId(id)) return { title: "Coach not found" };
-  const c = await getCoach(id);
+  const [c, meta] = await Promise.all([getCoach(id), getDecisionsMeta()]);
   if (!c) return { title: "Coach not found" };
-  return pageMetadata(
-    `/coach/${id}`,
-    c.name,
-    `${c.name}: graded fourth-down, two-point and clock decisions, the worst and best calls, how his offense plays, record vs expectation and the Hot-Seat Meter's history.`,
-  );
+  const description = c.seasons.length
+    ? `${c.name}: graded fourth-down, two-point and clock decisions, the worst and best calls, how his offense plays, record vs expectation and the Hot-Seat Meter's history.`
+    : `${c.name}: how his offense played, season by season. ${ungradedText(gradedFrom(meta.history))}`;
+  return pageMetadata(`/coach/${id}`, c.name, description);
 }
 
 function SeasonsTable({ rows, name, current }: { rows: CoachSeasonRow[]; name: string; current: { season: number | null; week: number | null } }) {
@@ -76,17 +85,19 @@ export default async function CoachPage({ params }: PageProps<"/coach/[id]">) {
   if (!isCoachId(id)) notFound();
   const coach = await getCoach(id);
   if (!coach) notFound();
-  const [meta, worst, best, clock, hotSeat, hotSeatMeta] = await Promise.all([
+  const [meta, worst, best, clock, hotSeat, hotSeatMeta, coached] = await Promise.all([
     getDecisionsMeta(),
     getWorstCalls(null, id, null, WORST),
     getBestCalls(null, id, null, BEST),
     getClockCases(null, id),
     getCoachHotSeat(id),
     getHotSeatMeta(),
+    getCoachRegGames(id),
   ]);
   const s = coach.seasons;
   const span = s.length ? (s[0].season === s[s.length - 1].season ? `${s[0].season}` : `${s[0].season}–${s[s.length - 1].season}`) : null;
   const teams = [...new Set(s.map((r) => r.team))];
+  const ungraded = s.length ? null : ungradedText(gradedFrom(meta.history));
   return (
     <>
       <PageHeader title={coach.name} kicker="Head coach · Decision Report Card">
@@ -97,7 +108,7 @@ export default async function CoachPage({ params }: PageProps<"/coach/[id]">) {
             <Link href="/decisions">All coaches</Link>
           </>
         ) : (
-          <>No graded season yet.</>
+          <span data-testid="coach-ungraded">{ungraded}</span>
         )}
       </PageHeader>
       <section aria-labelledby="seasons-heading" data-testid="coach-seasons-section">
@@ -112,11 +123,11 @@ export default async function CoachPage({ params }: PageProps<"/coach/[id]">) {
             </div>
           </>
         ) : (
-          <p className="text-muted">No season row published for this coach.</p>
+          <p className="text-muted">{ungraded}</p>
         )}
       </section>
       <CoachTendencies coachId={id} name={coach.name} />
-      <CoachRecord rows={hotSeat} name={coach.name} />
+      <CoachRecord rows={hotSeat} name={coach.name} coached={coached} />
       <CoachHotSeat rows={hotSeat} name={coach.name} season={hotSeatMeta.latest?.season ?? null} />
       <section aria-labelledby="coach-worst-heading" className="mt-10">
         <h2 id="coach-worst-heading" className="section-title mb-2 scroll-mt-24">
@@ -129,7 +140,7 @@ export default async function CoachPage({ params }: PageProps<"/coach/[id]">) {
         {worst.length ? (
           <DecisionList rows={worst} label={`${coach.name}: worst calls`} testId="worst-calls" value="lost" showCoach={false} />
         ) : (
-          <p className="text-muted">No clearly wrong call.</p>
+          <p className="text-muted">{ungraded ?? "No clearly wrong call."}</p>
         )}
       </section>
       <section aria-labelledby="coach-best-heading" className="mt-10">
@@ -143,7 +154,7 @@ export default async function CoachPage({ params }: PageProps<"/coach/[id]">) {
         {best.length ? (
           <DecisionList rows={best} label={`${coach.name}: best calls against convention`} testId="best-calls" value="gain" showCoach={false} />
         ) : (
-          <p className="text-muted">No clear go call that was taken.</p>
+          <p className="text-muted">{ungraded ?? "No clear go call that was taken."}</p>
         )}
       </section>
       <section aria-labelledby="coach-clock-heading" className="mt-10">
@@ -158,7 +169,7 @@ export default async function CoachPage({ params }: PageProps<"/coach/[id]">) {
           <ClockCaseList rows={clock} label={`${coach.name}: clock cases`} showCoach={false} />
         ) : (
           <p className="text-muted" data-testid="no-clock-cases">
-            No clock case.
+            {ungraded ?? "No clock case."}
           </p>
         )}
       </section>

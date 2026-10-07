@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Term from "@/components/Term";
-import { fmtInt, pct } from "@/lib/format";
+import { fmtInt, fmtNum, pct } from "@/lib/format";
 import { STABILITY_INTERVAL_LEVEL, STABILITY_MIN_GAMES, STABILITY_RESAMPLES } from "@/lib/method";
 import { extremes, shrinkGames, shrinkTable, splitHalf, studyWindow, type Cell, type StabilityRow } from "@/lib/stability";
 
@@ -8,11 +8,8 @@ import { extremes, shrinkGames, shrinkTable, splitHalf, studyWindow, type Cell, 
 // the split-half correlations of opportunity and efficiency, the parts of efficiency, and the
 // shrinkage table r(g) the projection uses. Every number is a row of the table.
 
-/** Two decimals, and no "-0.00". */
-const r2 = (x: number) => {
-  const s = x.toFixed(2);
-  return Number(s) === 0 ? (0).toFixed(2) : s;
-};
+/** Two decimals, the site's minus sign, and no "-0.00". */
+const r2 = (x: number) => fmtNum(x, 2);
 const span = (s: string) => s.replace("-", "–");
 
 /** A correlation with its interval under it (and its own n where the column's n differs). */

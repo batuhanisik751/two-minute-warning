@@ -35,27 +35,27 @@ board:
       rows: 94
 coach_tendencies:
   season: 2026
-  model_version: history-3e0284a5594f3899
-  file: artifacts/production_models/coach_tendencies/history-3e0284a5594f3899.json
-  sha256: 86ca2804e09d4bd83c968200042d2bd3252695d7dba3f88920b62e9dbe29d8af
+  model_version: history-311a51539649c2ff
+  file: artifacts/production_models/coach_tendencies/history-311a51539649c2ff.json
+  sha256: 7ab1d8e757ed8fd4b59b0ffd65624325249ad567bf8df99391a816b7780885e4
   model: history
   approved: '2026-10-06'
   backtest:
     seasons: 1999-2025
     tendency_seasons:
-      file: artifacts/production_models/coach_tendencies/history-3e0284a5594f3899/tendency_seasons.parquet
-      sha256: c90d69ba3cb26df204053d069ecb05e4287cbf42dc67c7a07f24f18a601b12f5
+      file: artifacts/production_models/coach_tendencies/history-311a51539649c2ff/tendency_seasons.parquet
+      sha256: b71243decb01922dcc235666a91df2acacbd8375bfe974acd617b9d1d9180e9d
       rows: 913
     tendency_coaches:
-      file: artifacts/production_models/coach_tendencies/history-3e0284a5594f3899/tendency_coaches.parquet
+      file: artifacts/production_models/coach_tendencies/history-311a51539649c2ff/tendency_coaches.parquet
       sha256: 42bd93d9014282ffc8d0e101479c24250ea0536fb87999dcecf1ec30071ca1fd
       rows: 179
     tendency_persistence:
-      file: artifacts/production_models/coach_tendencies/history-3e0284a5594f3899/tendency_persistence.parquet
-      sha256: b227fccca3a6654bb300b1cdf1d9eedc116ec2554c417afff49695e5dc44e3c0
+      file: artifacts/production_models/coach_tendencies/history-311a51539649c2ff/tendency_persistence.parquet
+      sha256: e0ddc515343ab2bce0dbb38c0e9230b1d684f4aff9d1b4c72a1875289edcbe6b
       rows: 24
     tendency_fantasy_link:
-      file: artifacts/production_models/coach_tendencies/history-3e0284a5594f3899/tendency_fantasy_link.parquet
+      file: artifacts/production_models/coach_tendencies/history-311a51539649c2ff/tendency_fantasy_link.parquet
       sha256: 71f3679e136b2f5717707ce17cbdbbdffbc13d7e41e1add13edcf27db1bed57a
       rows: 32
 decisions:

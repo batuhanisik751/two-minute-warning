@@ -4,11 +4,13 @@ import { getPlannerMeta, getPlayerPlayoffWeeks } from "@/lib/queries/playoff-pla
 
 /** On a player page: "Playoff weeks: 15 vs KC 1.08 easy · 16 @ BUF 0.97 neutral · 17 Bye" from
  *  the newest playoff-planner snapshot, when his position is rated (QB, RB, WR, D/ST in the 2026
- *  pin); nothing otherwise. Links to the grid of his position. */
-export default async function PlayerLine({ team, position }: { team: string | null; position: string | null }) {
+ *  pin) and he has a published row in the snapshot's season (`seasons`: the page's seasons; a
+ *  retired player's last team is not his matchups); nothing otherwise. Links to the grid of his
+ *  position. */
+export default async function PlayerLine({ team, position, seasons }: { team: string | null; position: string | null; seasons: readonly number[] }) {
   if (!team || !position) return null;
   const [got, meta] = await Promise.all([getPlayerPlayoffWeeks(team, position), getPlannerMeta()]);
-  if (!got) return null;
+  if (!got || !seasons.includes(got.header.season)) return null;
   const parts = meta.weeks.map((w) => {
     const r = got.rows.find((x) => x.week === w);
     const opp = opponentLabel({ opponent: r?.opponent ?? null, home: r?.home ?? null });

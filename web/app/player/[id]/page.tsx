@@ -6,8 +6,9 @@ import type { Series } from "@/components/charts/WeeklyChart";
 import { FoldTable } from "@/components/Fold";
 import Term from "@/components/Term";
 import { EmptyState, KindBadge, OutcomeBadge, PageHeader, PosBadge, TierBadge } from "@/components/ui";
-import { fmtPoints, fmtShare, outcomeOf, pct, pctRange, windowSummary } from "@/lib/format";
-import { isGsisId, parseInt4, waiversHref } from "@/lib/params";
+import { chancePct, fmtPoints, fmtShare, outcomeOf, pctRange, windowSummary } from "@/lib/format";
+import { WEEKLY_FIRST_SEASON, isGsisId, parseInt4, waiversHref } from "@/lib/params";
+import { getSiteMeta } from "@/lib/queries/meta";
 import { getPlayer, getPlayerSeasons, getPlayerWeeks, type WeekRow } from "@/lib/queries/player";
 import { getPlayerHistory } from "@/lib/queries/radar";
 import { getPlayerRegressionHistory } from "@/lib/queries/regression";
@@ -16,7 +17,7 @@ import QuestionableBadge from "@/components/questionable/PlayerBadge";
 import PlayoffPlayerLine from "@/components/playoff-planner/PlayerLine";
 import TeammateOutBadge from "@/components/teammate-out/PlayerBadge";
 import { parseGarbage } from "@/lib/regression";
-import { pageMetadata } from "@/lib/seo";
+import { pageMetadata, playerLabel } from "@/lib/seo";
 
 // No loading.tsx above this route on purpose: an unknown id must answer with a real 404
 // status, which needs notFound() before the response starts streaming.
@@ -26,11 +27,19 @@ export async function generateMetadata({ params }: PageProps<"/player/[id]">): P
   if (!isGsisId(id)) return { title: "Player not found" };
   const p = await getPlayer(id);
   if (!p) return { title: "Player not found" };
+  // position and years tell namesakes apart (three Mike Williams); the reads are the page's own
+  const label = playerLabel({ ...p, seasons: await playerSeasons(id) });
   return pageMetadata(
     `/player/${id}`,
-    p.name,
-    `${p.name}: weekly fantasy points against expected points, snap and target shares, and his Waiver Radar and Regression Watch history.`,
+    label,
+    `${label}: weekly fantasy points against expected points, snap and target shares, and his Waiver Radar and Regression Watch history.`,
   );
+}
+
+/** Every season the page has something for (weekly rows, Radar lists, Regression Watch rows), newest first. */
+async function playerSeasons(id: string): Promise<number[]> {
+  const [weekSeasons, history, rwHistory] = await Promise.all([getPlayerSeasons(id), getPlayerHistory(id), getPlayerRegressionHistory(id)]);
+  return [...new Set([...weekSeasons, ...history.map((h) => h.season), ...rwHistory.map((h) => h.season)])].sort((a, b) => b - a);
 }
 
 const points = (v: number | null) => (v === null ? "no data" : fmtPoints(v));
@@ -82,8 +91,11 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
 
   const sp = await searchParams;
   const withGarbage = parseGarbage(sp.gt);
-  const [weekSeasons, history, rwHistory] = await Promise.all([getPlayerSeasons(id), getPlayerHistory(id), getPlayerRegressionHistory(id)]);
-  const seasons = [...new Set([...weekSeasons, ...history.map((h) => h.season), ...rwHistory.map((h) => h.season)])].sort((a, b) => b - a);
+  const [seasons, history, rwHistory, meta] = await Promise.all([playerSeasons(id), getPlayerHistory(id), getPlayerRegressionHistory(id), getSiteMeta()]);
+  // the newest season with published data: a player without a row in it is not active now, so
+  // his team is his last one (a retired player's DEN is not today's team)
+  const dataSeason = meta.dataThrough?.season ?? meta.currentSeason;
+  const active = dataSeason === null || seasons.includes(dataSeason);
   const asked = parseInt4(sp.season);
   const season = asked !== null && seasons.includes(asked) ? asked : (seasons[0] ?? null);
   const weeks: WeekRow[] = season !== null ? await getPlayerWeeks(id, season) : [];
@@ -122,7 +134,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
             <dd className="inline font-medium">{player.position ?? "none"}</dd>
           </div>
           <div>
-            <dt className="inline text-muted">Team: </dt>
+            <dt className="inline text-muted">{active ? "Team: " : "Last team: "}</dt>
             <dd className="inline font-medium">
               {player.team ? `${player.team}${player.teamName ? ` · ${player.teamName}` : ""}` : "none listed"}
             </dd>
@@ -141,7 +153,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
       </PageHeader>
       <QuestionableBadge gsisId={id} />
       <TeammateOutBadge gsisId={id} />
-      <PlayoffPlayerLine team={player.team} position={player.position} />
+      <PlayoffPlayerLine team={player.team} position={player.position} seasons={seasons} />
 
       {seasons.length === 0 || season === null ? (
         <EmptyState title="No published weeks for this player">
@@ -218,6 +230,13 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
                   />
                 </div>
               </>
+            ) : season < WEEKLY_FIRST_SEASON ? (
+              <EmptyState title={`No week-by-week data before ${WEEKLY_FIRST_SEASON}`}>
+                <p>
+                  The site&apos;s weekly data (snaps and stat lines) starts in {WEEKLY_FIRST_SEASON}, when snap counts begin. For {season}, only
+                  the lists below are published.
+                </p>
+              </EmptyState>
             ) : (
               <EmptyState title={`No regular-season weeks in ${season}`}>
                 <p>He has no snaps or stat line in the published {season} regular-season data.</p>
@@ -282,7 +301,7 @@ export default async function PlayerPage({ params, searchParams }: PageProps<"/p
                           <td className="tnum">
                             {h.chance !== null ? (
                               <>
-                                {pct(h.chance)}
+                                {chancePct(h.chance)}
                                 {h.chanceLow !== null && h.chanceHigh !== null ? (
                                   <span className="block text-xs text-muted">
                                     similar players hit {pctRange(h.chanceLow, h.chanceHigh)}

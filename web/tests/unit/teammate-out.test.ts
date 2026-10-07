@@ -13,6 +13,7 @@ import {
   allocationGroups,
   best,
   chooseWeek,
+  listMayCome,
   coverageRows,
   disclosure,
   gainText,
@@ -75,6 +76,9 @@ test("shares, points and gains in words", () => {
   assert.equal(gainText(0.01), "±0.0");
   assert.equal(teammateOutHref({ season: 2024, week: 10 }), "/teammate-out?season=2024&week=10");
   assert.deepEqual(chooseWeek({ season: null, week: null }, null, [{ season: 2024, week: 10 }]), { season: 2024, week: 10 });
+  // G4.10: a past or impossible week never gets a list (its empty state says so, not "yet")
+  assert.deepEqual([4, 5, 18, 3, 19, 99].map((week) => listMayCome({ season: 2026, week }, { season: 2026, week: 4 })), [true, true, true, false, false, false]);
+  assert.equal(listMayCome({ season: 2026, week: 4 }, null), false);
 });
 
 const bt = (candidate: string, season: string, maePoints: number, extra: Partial<TOBacktestRow> = {}): TOBacktestRow => ({

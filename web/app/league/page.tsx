@@ -12,14 +12,18 @@ import { myLeagueEnabled } from "@/lib/my-league";
 // No loading.tsx above this route: notFound() must run before the response streams (real 404).
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "My League (local)",
-  robots: { index: false, follow: false },
-};
+const enabled = () =>
+  process.env.NODE_ENV === "development" && myLeagueEnabled({ ENABLE_MY_LEAGUE: process.env.ENABLE_MY_LEAGUE, NODE_ENV: process.env.NODE_ENV });
+
+// The 404's payload carries this route's metadata: a fixed "My League (local)" title would become
+// the tab title after hydration on the public site, so the title names the page only where it shows.
+export function generateMetadata(): Metadata {
+  return { title: enabled() ? "My League (local)" : "Not found", robots: { index: false, follow: false } };
+}
 
 export default async function LeaguePage() {
   if (process.env.NODE_ENV !== "development") notFound();
-  if (!myLeagueEnabled({ ENABLE_MY_LEAGUE: process.env.ENABLE_MY_LEAGUE, NODE_ENV: process.env.NODE_ENV })) notFound();
+  if (!enabled()) notFound();
   const { readNewestReport } = await import("@/lib/my-league-fs");
   const report = await readNewestReport();
   return (

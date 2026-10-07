@@ -23,6 +23,8 @@ describe("/league on the production server", () => {
       const p = await fetchPage(path);
       assert.equal(p.status, 404, `${path} returned ${p.status}`);
       for (const s of [NEWEST_MARK, OLDER_MARK, FAKE_TEAM]) assert.ok(!p.html.includes(s), `${path}: ${s} leaked`);
+      // the title (also in the payload the browser renders) is the 404's, not the local page's
+      assert.ok(!p.html.includes("My League"), `${path}: the local page's title leaked`);
     }
   });
 

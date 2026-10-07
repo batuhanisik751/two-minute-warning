@@ -124,7 +124,8 @@ function outcomeOf(r: Row): Outcome {
   const no = { ...key, departed: false, censored: false, departureType: null, announced: null, labelStatus: "final" };
   if (r.season !== H.past) return no;
   if (r.coachId === H.firedAfter) return { ...no, departed: true, departureType: "fired_after_season", announced: "2026-01-05" };
-  if (r.coachId === H.firedDuring) return { ...no, departed: true, departureType: "fired_in_season", announced: "2025-09-30" };
+  // no source gives the day: the labels imputed it, so it is published as NULL (G2.4)
+  if (r.coachId === H.firedDuring) return { ...no, departed: true, departureType: "fired_in_season", announced: null };
   if (r.coachId === H.retired) return { ...no, censored: true, departureType: "retired", announced: "2026-01-08" };
   if (r.coachId === H.interim) return { ...no, censored: true, departureType: "interim_not_retained", announced: "2026-01-06" };
   return no;

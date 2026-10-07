@@ -873,6 +873,18 @@ def merge_coaches(current: pl.DataFrame | None, more: pl.DataFrame) -> pl.DataFr
     return both
 
 
+def referenced_coaches(dim: pl.DataFrame, used: list[pl.DataFrame]) -> pl.DataFrame:
+    """The dim_coach rows that some published row names (``used``: the decisions' tables, the
+    Hot-Seat rows, the coach-tendency coaches; frames without ``coach_id`` are ignored). A
+    coach nothing points at is never upserted (audit 2026-10-06: the runner's partial build
+    added two such rows on every publish)."""
+    ids: set[str] = set()
+    for f in used:
+        if "coach_id" in f.columns:
+            ids |= set(f.get_column("coach_id").drop_nulls().to_list())
+    return dim.filter(pl.col("coach_id").is_in(sorted(ids)))
+
+
 def radar(inputs: Inputs) -> tuple[ListData, pl.DataFrame]:
     """The Waiver Radar's lists and outcomes (module docstring) and its dataset's (gsis_id,
     name) for player names."""
@@ -1006,6 +1018,13 @@ def collect(inputs: Inputs) -> PublishData:
         tables["dim_coach"] = merge_coaches(tables.get("dim_coach"), hot_coaches)
     if ctd is not None:  # feature #10: the coach-tendency coaches too (same slugs)
         tables["dim_coach"] = merge_coaches(tables.get("dim_coach"), ctd.coaches)
+    if "dim_coach" in tables:  # only the coaches a published row names
+        used = [f for part in (dec.history, dec.current) for f in part.values()] if dec else []
+        if "hot_seat" in families:
+            used.append(families["hot_seat"].rows)
+        if ctd is not None:
+            used.append(ctd.coaches)
+        tables["dim_coach"] = referenced_coaches(tables["dim_coach"], used)
     ids = families[MODULE].outcome_keys.get_column("gsis_id").to_list()
     ids += pws.get_column("gsis_id").to_list()
     if "regression_watch" in families:

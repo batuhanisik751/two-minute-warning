@@ -1,7 +1,7 @@
 // The Questionable page's pure helpers (feature #1, docs/questionable.md; unit-tested in
 // tests/unit/questionable.test.ts). They only pick, order and word published rows: every number
 // comes from the questionable_* tables (src/twm/publish/questionable.py).
-import { pct } from "@/lib/format";
+import { pct, pctRange } from "@/lib/format";
 import type { CalPoint } from "@/lib/track-record";
 
 /** src/twm/modules/questionable/weekly.py INACTIVES_NOTE, word for word (a unit test checks). */
@@ -69,6 +69,13 @@ export function chooseWeek(asked: { season: number | null; week: number | null }
   return current ?? index[0] ?? null;
 }
 
+/** Whether a week with no list may still get one: the week whose games are next or a later
+ *  regular-season week (18 at most) of the same season. A past or impossible week (week 99)
+ *  never will, so its empty state must not say "yet". */
+export function listMayCome(w: QWeek, current: QWeek | null): boolean {
+  return current !== null && w.season === current.season && w.week >= current.week && w.week <= 18;
+}
+
 /** By kickoff (earliest first), then the chance he plays (highest first), then name. */
 export function sortRows<T extends Pick<QRow, "kickoff" | "playChance" | "name">>(rows: readonly T[]): T[] {
   return [...rows].sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff) || b.playChance - a.playChance || a.name.localeCompare(b.name));
@@ -116,6 +123,12 @@ export function bucketRange(bucket: string): { lo: number; hi: number } | null {
   if (m) return { lo: Number(m[1]) / 100, hi: Number(m[2]) / 100 };
   m = /^(\d{1,3})%\+$/.exec(bucket);
   return m ? { lo: Number(m[1]) / 100, hi: 1 } : null;
+}
+
+/** A bucket in the calibration figure's label style: "<30%" -> "0–30%", "85%+" -> "85–100%". */
+export function bucketLabel(bucket: string): string {
+  const r = bucketRange(bucket);
+  return r ? pctRange(r.lo, r.hi) : bucket;
 }
 
 /** The calibration plot's points: buckets with rows and published numbers only. */

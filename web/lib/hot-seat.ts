@@ -1,25 +1,14 @@
 // The Hot-Seat Meter's pure helpers (no database, no React): rounding, drivers in plain English,
 // outcomes in words, the early-season calibration grid and the weekly timelines. Unit-tested in
 // tests/unit/hot-seat.test.ts. The wording is careful on purpose: these are real people's jobs.
+import { pct, signedNum, wholePct } from "./format";
 import { HOT_SEAT_BANDS, HOT_SEAT_FIRST_WEEK, HOT_SEAT_PHASES, HOT_SEAT_WINDOW_DAYS, TRACK_INTERVAL_LEVEL } from "./method";
 import { docUrl } from "./site";
 
-const MINUS = "−";
-
-/** A probability as a whole percent. Never "0%" for a positive chance, never "100%" below 1. */
-export function wholePct(p: number): string {
-  const v = Math.round(p * 100);
-  if (v <= 0 && p > 0) return "<1%";
-  if (v >= 100 && p < 1) return ">99%";
-  return `${v}%`;
-}
-
-/** A signed number with a real minus sign ("+1.6", "−1.6", "0.0"). */
-export function signedNum(x: number, digits = 1): string {
-  const s = Math.abs(x).toFixed(digits);
-  if (Number(s) === 0) return s;
-  return `${x > 0 ? "+" : MINUS}${s}`;
-}
+// A probability as a whole percent (never "0%" for a positive chance, never "100%" below 1) and a
+// signed number with the site's minus sign: the shared formatters of lib/format.ts, re-exported
+// for the Hot-Seat's callers.
+export { signedNum, wholePct };
 
 export type Driver = { feature: string; label: string; contribution: number; value: number | null; missing: boolean };
 
@@ -148,7 +137,8 @@ export function outcomeWords(o: OutcomeRow | null): { tone: OutcomeTone; short: 
     return { tone: "pending", short: "Pending", long: "pending until the season's departures are labelled" };
   }
   const type = o.departureType ? (DEPARTURE_WORDS[o.departureType] ?? DEPARTURE_WORDS.other) : null;
-  const when = o.announced ? `, announced ${o.announced}` : "";
+  // NULL announced on a final departure: the labels imputed the day (no source gives it), G2.4
+  const when = o.announced ? `, announced ${o.announced}` : ", announcement date not reported";
   if (o.departed) return { tone: "let-go", short: "Let go", long: `${type ?? "let go"}${when}` };
   if (o.censored) return { tone: "other", short: "Left another way", long: `${type ?? "another departure"}${when}: not counted as let go` };
   return { tone: "not-let-go", short: "Not let go", long: `no firing or mutual parting announced by ${HOT_SEAT_WINDOW_DAYS} days after the season` };
@@ -262,14 +252,17 @@ export type RecordSeason = {
   record: string;
   expectedWins: number | null;
   winsVsExpected: number | null;
+  /** an interim coach's row: the record and the expectation are the TEAM's season, not his */
+  interim: boolean;
 };
 
 /** The coach page's record vs expectation, newest season first: per season his regular-season
  *  record and the market's expected wins from his published Hot-Seat rows (the end-of-season
  *  snapshot; the season in progress, or a coach let go during it: his newest weekly row). A
- *  season without a row has no entry; a NULL expectation stays NULL (shown as not known). */
+ *  season without a row has no entry; a NULL expectation stays NULL (shown as not known). The
+ *  rows count the TEAM's games: for an interim coach (`interim`) that is not his own record. */
 export function recordPerSeason(
-  rows: { season: number; week: number; snapshot: string; kind: string; team: string; regWins: number; regGamesPlayed: number; expectedWins: number | null; winsVsExpected: number | null }[],
+  rows: { season: number; week: number; snapshot: string; kind: string; team: string; regWins: number; regGamesPlayed: number; expectedWins: number | null; winsVsExpected: number | null; isInterim?: boolean }[],
 ): RecordSeason[] {
   return lastPerSeason(rows).map((r) => ({
     season: r.season,
@@ -278,15 +271,17 @@ export function recordPerSeason(
     record: recordWords(r.regWins, r.regGamesPlayed),
     expectedWins: r.expectedWins,
     winsVsExpected: r.expectedWins === null ? null : r.winsVsExpected,
+    interim: r.isInterim === true,
   }));
 }
 
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 
 /** The current season has no published weekly Hot-Seat list yet (the newest published list is
- *  from an earlier season): the season and when the NEXT weekly list is due -- the next weekly
- *  as-of (Tuesday 14:00 UTC) after the site's current one, and never before the week of the first
- *  weekly list (HOT_SEAT_FIRST_WEEK), counted in whole weeks from the site's current weekly as-of
+ *  from an earlier season): the season and when its list is due -- from the first weekly week
+ *  (HOT_SEAT_FIRST_WEEK) on, the site's current weekly as-of is itself a list's as-of (Tuesday
+ *  14:00 UTC), so that list is due then (a week-4 as-of with no list: overdue); before it, the
+ *  first weekly week's as-of, counted in whole weeks from the site's current weekly as-of
  *  (site_meta's current week and its lists' as-of); `overdue` when that time had already passed at
  *  the publish. null when the newest list is from the current season (or nothing says which season
  *  is current). dueAt null: no weekly as-of of the season is known yet (before week 1's lists). */
@@ -298,7 +293,7 @@ export function seasonNotStarted(
   if (season === null || (newestListSeason !== null && newestListSeason >= season)) return null;
   const a = meta.asOf;
   const base = a && a.week.season === season && a.week.week >= 1 ? Date.parse(a.at) : NaN;
-  const ahead = a ? Math.max(HOT_SEAT_FIRST_WEEK - a.week.week, 1) : 0;
+  const ahead = a ? Math.max(HOT_SEAT_FIRST_WEEK - a.week.week, 0) : 0;
   const dueAt = Number.isNaN(base) ? null : new Date(base + ahead * WEEK_MS).toISOString();
   const published = meta.generatedAt ? Date.parse(meta.generatedAt) : NaN;
   return { season, firstWeek: HOT_SEAT_FIRST_WEEK, dueAt, overdue: dueAt !== null && !Number.isNaN(published) && Date.parse(dueAt) <= published };
@@ -352,28 +347,30 @@ export function top5Slices(rows: TrackCellRow[]): { slice: string; when: string 
 }
 
 /** The backtest's headline numbers as tiles (main run, the model's own probability), each with
- *  its interval and the rows behind it. */
+ *  its interval and what it counts: the rows for a score, the coaches let go for a top-5 hit
+ *  rate (a share of them, shown as a percentage like the site's other shares). */
 export function headlineStats(
   rows: TrackCellRow[],
   level: number = TRACK_INTERVAL_LEVEL,
 ): { label: string; term?: { name: string; text: string }; value: string; interval: string | null; note: string }[] {
   // `term`: the glossary entry the label names (components/track/parts.tsx makes it a Term)
-  const tiles: { label: string; term?: { name: string; text: string }; slice: string; metric: string; digits: number }[] = [
+  const tiles: { label: string; term?: { name: string; text: string }; slice: string; metric: string; digits: number; share?: boolean }[] = [
     { label: "ROC-AUC, every list", term: { name: "roc_auc", text: "ROC-AUC" }, slice: "all", metric: "roc_auc", digits: 3 },
     { label: "Brier score, every list (lower is better)", term: { name: "brier", text: "Brier score" }, slice: "all", metric: "brier", digits: 4 },
-    ...top5Slices(rows).map((t) => ({ label: `Coaches let go who were in their season's top 5 at ${t.when}`, slice: t.slice, metric: "top5_hit_rate", digits: 3 })),
+    ...top5Slices(rows).map((t) => ({ label: `Coaches let go who were in their season's top 5 at ${t.when}`, slice: t.slice, metric: "top5_hit_rate", digits: 0, share: true })),
   ];
   const out = [];
   for (const t of tiles) {
     const c = trackCell(rows, { model: "logit", slice: t.slice, metric: t.metric });
     if (!c) continue;
-    const f = (x: number) => x.toFixed(t.digits);
+    const f = (x: number) => (t.share ? pct(x, t.digits) : x.toFixed(t.digits));
     out.push({
       label: t.label,
       term: t.term,
       value: f(c.value),
       interval: c.lo !== null && c.hi !== null ? `${Math.round(level * 100)}% interval ${f(c.lo)} to ${f(c.hi)}` : null,
-      note: `${c.nRows.toLocaleString("en-US")} rows, ${c.nSeasons} test seasons`,
+      // a top-5 hit rate is a share of the coaches let go (the slice's positives), not of its rows
+      note: `${(t.share ? c.nPos : c.nRows).toLocaleString("en-US")} ${t.share ? "coaches let go" : "rows"}, ${c.nSeasons} test seasons`,
     });
   }
   return out;

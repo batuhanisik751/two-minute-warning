@@ -79,12 +79,27 @@ def flag_plays(plays: pl.DataFrame) -> pl.DataFrame:
 # breaks the pair, as do two-minute warnings, quarter ends and pre-snap penalty rows). Seconds =
 # game clock elapsed between the two snaps (a stopped clock after an incompletion counts as it
 # ran: the usual seconds-per-play convention). Pairs over MAX_PAIR_SECONDS are clock glitches.
+# Pace is "not charted" for a team-game whose clock is too coarse (audit 2026-10-06): fewer than
+# CLOCK_MIN_SHARE of its offensive snaps carry distinct game_seconds_remaining values (every
+# 1999 team-game is at most 0.5; below the cutoff: 62 of 2000's 492 team-games, weeks 1-11, and
+# 3 of 2001's; from 2002 to 2025 none is below 0.77). Such games give no pairs, so a team-season
+# without a charted game has no pace (NULL, like PROE before 2006).
 MAX_PAIR_SECONDS = 60
+CLOCK_MIN_SHARE = 0.75
+
+
+def charted_games(plays: pl.DataFrame) -> pl.DataFrame:
+    """(game_id, posteam) of the team-games whose clock is charted (see CLOCK_MIN_SHARE)."""
+    off = plays.filter(pl.col("is_off") & pl.col("posteam").is_not_null())
+    share = off.group_by("game_id", "posteam").agg(
+        (pl.col("game_seconds_remaining").n_unique() / pl.len()).alias("share")
+    )
+    return share.filter(pl.col("share") >= CLOCK_MIN_SHARE).select("game_id", "posteam")
 
 
 def pace_pairs(plays: pl.DataFrame) -> pl.DataFrame:
     """One row per pace pair of :func:`flag_plays` output (all rows of the games, in any order):
-    the first snap's keys and ``seconds``."""
+    the first snap's keys and ``seconds``; none from a team-game whose clock is not charted."""
     d = plays.sort("game_id", "play_id")
 
     def nxt(c: str) -> pl.Expr:
@@ -103,6 +118,6 @@ def pace_pairs(plays: pl.DataFrame) -> pl.DataFrame:
     out = d.with_columns(seconds.alias("seconds"), ok.fill_null(False).alias("_pair"))
     out = out.filter(
         pl.col("_pair") & pl.col("seconds").is_between(0, MAX_PAIR_SECONDS, closed="both")
-    )
+    ).join(charted_games(d), on=["game_id", "posteam"], how="semi")
     keep = [c for c in ("game_id", "play_id", "season", "week", "posteam", "coach_id") if c in d]
     return out.select(*keep, "seconds")

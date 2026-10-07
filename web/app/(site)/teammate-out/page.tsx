@@ -8,7 +8,7 @@ import { fmtInt, fmtUtc, seasonWeek } from "@/lib/format";
 import { parseInt4 } from "@/lib/params";
 import { getTeammateOutIndex, getTeammateOutModel, getTeammateOutSnapshot, getTeammateOutTables, getTeammateOutWeek } from "@/lib/queries/teammate-out";
 import { pageMetadata } from "@/lib/seo";
-import { INACTIVES_NOTE, WHEN_LISTS_FILL, chooseWeek, teammateOutHref, type TOWeek } from "@/lib/teammate-out";
+import { INACTIVES_NOTE, WHEN_LISTS_FILL, chooseWeek, listMayCome, teammateOutHref, type TOWeek } from "@/lib/teammate-out";
 
 export const metadata = pageMetadata(
   "/teammate-out",
@@ -76,10 +76,16 @@ export default async function TeammateOutPage({ searchParams }: PageProps<"/team
           </>
         ) : (
           <div className="mt-3" data-testid="to-empty">
-            <EmptyState title={chosen ? `No starter listed out for ${seasonWeek(chosen.season, chosen.week)} yet` : "No week is being played right now"}>
-              <p>{WHEN_LISTS_FILL}</p>
-              <p className="mt-2">{INACTIVES_NOTE}</p>
-            </EmptyState>
+            {chosen && !listMayCome(chosen, current) ? (
+              <EmptyState title={`No list for ${seasonWeek(chosen.season, chosen.week)}`}>
+                <p>A list is made only for the week whose games are next{index.length ? "; the weeks that have one are linked above" : ""}.</p>
+              </EmptyState>
+            ) : (
+              <EmptyState title={chosen ? `No starter listed out for ${seasonWeek(chosen.season, chosen.week)} yet` : "No week is being played right now"}>
+                <p>{WHEN_LISTS_FILL}</p>
+                <p className="mt-2">{INACTIVES_NOTE}</p>
+              </EmptyState>
+            )}
           </div>
         )}
       </section>
